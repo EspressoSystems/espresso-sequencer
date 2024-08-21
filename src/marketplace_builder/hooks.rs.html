@@ -161,16 +161,14 @@
 <a href="#161" id="161">161</a>
 <a href="#162" id="162">162</a>
 <a href="#163" id="163">163</a>
-<a href="#164" id="164">164</a>
-<a href="#165" id="165">165</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashSet;
 
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>espresso_types::v0_3::BidTxBody;
 
 <span class="kw">use </span>espresso_types::v0_3::RollupRegistration;
+<span class="kw">use </span>espresso_types::BaseVersion;
 <span class="kw">use </span>espresso_types::SeqTypes;
-<span class="kw">use </span>espresso_types::SequencerVersions;
 <span class="kw">use </span>hotshot::types::EventType;
 
 <span class="kw">use </span>hotshot::types::Event;
@@ -201,10 +199,8 @@
     </span><span class="kw">pub </span>amount: FeeAmount,
 }
 
-<span class="kw">pub async fn </span>connect_to_solver(
-    solver_api_url: Url,
-) -&gt; <span class="prelude-ty">Option</span>&lt;Client&lt;SolverError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;&gt; {
-    <span class="kw">let </span>client = Client::&lt;SolverError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::new(
+<span class="kw">pub async fn </span>connect_to_solver(solver_api_url: Url) -&gt; <span class="prelude-ty">Option</span>&lt;Client&lt;SolverError, BaseVersion&gt;&gt; {
+    <span class="kw">let </span>client = Client::&lt;SolverError, BaseVersion&gt;::new(
         solver_api_url.join(<span class="string">"marketplace-solver/"</span>).unwrap(),
     );
 

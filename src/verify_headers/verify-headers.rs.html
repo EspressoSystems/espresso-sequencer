@@ -213,18 +213,15 @@
 <a href="#213" id="213">213</a>
 <a href="#214" id="214">214</a>
 <a href="#215" id="215">215</a>
-<a href="#216" id="216">216</a>
-<a href="#217" id="217">217</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to verify properties of headers sequenced by HotShot.
 
 </span><span class="kw">use </span>std::{cmp::max, process::exit, time::Duration};
 
 <span class="kw">use </span>async_std::{sync::Arc, task::sleep};
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::{Header, L1BlockInfo, SequencerVersions};
+<span class="kw">use </span>espresso_types::{BaseVersion, Header, L1BlockInfo};
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::future::join_all;
-<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
 <span class="kw">use </span>itertools::Itertools;
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>surf_disco::Url;
@@ -387,8 +384,7 @@
     <span class="kw">let </span>opt = Arc::new(Options::parse());
     opt.logging.init();
 
-    <span class="kw">let </span>seq =
-        Arc::new(SequencerClient::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::new(opt.url.clone()));
+    <span class="kw">let </span>seq = Arc::new(SequencerClient::&lt;BaseVersion&gt;::new(opt.url.clone()));
 
     <span class="kw">let </span>block_height: usize = seq.get(<span class="string">"status/latest_block_height"</span>).send().<span class="kw">await</span>.unwrap();
     <span class="kw">let </span>from = opt.from.unwrap_or(<span class="number">0</span>);

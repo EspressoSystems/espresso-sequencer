@@ -180,19 +180,15 @@
 <a href="#180" id="180">180</a>
 <a href="#181" id="181">181</a>
 <a href="#182" id="182">182</a>
-<a href="#183" id="183">183</a>
-<a href="#184" id="184">184</a>
-<a href="#185" id="185">185</a>
-<a href="#186" id="186">186</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Should probably rename this to "external" or something
 
 </span><span class="kw">use </span><span class="kw">crate</span>::context::TaskList;
 <span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>async_compatibility_layer::channel::{Receiver, Sender};
-<span class="kw">use </span>espresso_types::{PubKey, SeqTypes, SequencerVersions};
+<span class="kw">use </span>espresso_types::{PubKey, SeqTypes};
 <span class="kw">use </span>hotshot::types::{BLSPubKey, Message};
 <span class="kw">use </span>hotshot_types::{
-    message::{MessageKind, UpgradeLock},
+    message::MessageKind,
     traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -332,12 +328,8 @@
             kind: MessageKind::&lt;SeqTypes&gt;::External(response_bytes),
         };
 
-        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
-
-        <span class="kw">let </span>response_bytes = upgrade_lock
-            .serialize(<span class="kw-2">&amp;</span>message)
-            .<span class="kw">await
-            </span>.with_context(|| <span class="string">"Failed to serialize roll call response"</span>)<span class="question-mark">?</span>;
+        <span class="kw">let </span>response_bytes = bincode::serialize(<span class="kw-2">&amp;</span>message)
+            .with_context(|| <span class="string">"Failed to serialize roll call response"</span>)<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(response_bytes)
     }

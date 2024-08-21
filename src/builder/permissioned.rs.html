@@ -667,98 +667,10 @@
 <a href="#667" id="667">667</a>
 <a href="#668" id="668">668</a>
 <a href="#669" id="669">669</a>
-<a href="#670" id="670">670</a>
-<a href="#671" id="671">671</a>
-<a href="#672" id="672">672</a>
-<a href="#673" id="673">673</a>
-<a href="#674" id="674">674</a>
-<a href="#675" id="675">675</a>
-<a href="#676" id="676">676</a>
-<a href="#677" id="677">677</a>
-<a href="#678" id="678">678</a>
-<a href="#679" id="679">679</a>
-<a href="#680" id="680">680</a>
-<a href="#681" id="681">681</a>
-<a href="#682" id="682">682</a>
-<a href="#683" id="683">683</a>
-<a href="#684" id="684">684</a>
-<a href="#685" id="685">685</a>
-<a href="#686" id="686">686</a>
-<a href="#687" id="687">687</a>
-<a href="#688" id="688">688</a>
-<a href="#689" id="689">689</a>
-<a href="#690" id="690">690</a>
-<a href="#691" id="691">691</a>
-<a href="#692" id="692">692</a>
-<a href="#693" id="693">693</a>
-<a href="#694" id="694">694</a>
-<a href="#695" id="695">695</a>
-<a href="#696" id="696">696</a>
-<a href="#697" id="697">697</a>
-<a href="#698" id="698">698</a>
-<a href="#699" id="699">699</a>
-<a href="#700" id="700">700</a>
-<a href="#701" id="701">701</a>
-<a href="#702" id="702">702</a>
-<a href="#703" id="703">703</a>
-<a href="#704" id="704">704</a>
-<a href="#705" id="705">705</a>
-<a href="#706" id="706">706</a>
-<a href="#707" id="707">707</a>
-<a href="#708" id="708">708</a>
-<a href="#709" id="709">709</a>
-<a href="#710" id="710">710</a>
-<a href="#711" id="711">711</a>
-<a href="#712" id="712">712</a>
-<a href="#713" id="713">713</a>
-<a href="#714" id="714">714</a>
-<a href="#715" id="715">715</a>
-<a href="#716" id="716">716</a>
-<a href="#717" id="717">717</a>
-<a href="#718" id="718">718</a>
-<a href="#719" id="719">719</a>
-<a href="#720" id="720">720</a>
-<a href="#721" id="721">721</a>
-<a href="#722" id="722">722</a>
-<a href="#723" id="723">723</a>
-<a href="#724" id="724">724</a>
-<a href="#725" id="725">725</a>
-<a href="#726" id="726">726</a>
-<a href="#727" id="727">727</a>
-<a href="#728" id="728">728</a>
-<a href="#729" id="729">729</a>
-<a href="#730" id="730">730</a>
-<a href="#731" id="731">731</a>
-<a href="#732" id="732">732</a>
-<a href="#733" id="733">733</a>
-<a href="#734" id="734">734</a>
-<a href="#735" id="735">735</a>
-<a href="#736" id="736">736</a>
-<a href="#737" id="737">737</a>
-<a href="#738" id="738">738</a>
-<a href="#739" id="739">739</a>
-<a href="#740" id="740">740</a>
-<a href="#741" id="741">741</a>
-<a href="#742" id="742">742</a>
-<a href="#743" id="743">743</a>
-<a href="#744" id="744">744</a>
-<a href="#745" id="745">745</a>
-<a href="#746" id="746">746</a>
-<a href="#747" id="747">747</a>
-<a href="#748" id="748">748</a>
-<a href="#749" id="749">749</a>
-<a href="#750" id="750">750</a>
-<a href="#751" id="751">751</a>
-<a href="#752" id="752">752</a>
-<a href="#753" id="753">753</a>
-<a href="#754" id="754">754</a>
-<a href="#755" id="755">755</a>
-<a href="#756" id="756">756</a>
-<a href="#757" id="757">757</a>
-<a href="#758" id="758">758</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     alloc::System,
     any,
+    collections::VecDeque,
     fmt::{Debug, Display},
     marker::PhantomData,
     mem,
@@ -784,8 +696,8 @@
 <span class="kw">use </span>espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, SequencerVersions,
-    SolverAuctionResultsProvider, ValidatedState,
+    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, SolverAuctionResultsProvider,
+    ValidatedState,
 };
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -1060,7 +972,7 @@
 
     <span class="kw">let </span>ctx = BuilderContext::init(
         Arc::new(hotshot_handle),
-        state_signer,
+        Arc::new(state_signer),
         node_index,
         eth_key_pair,
         bootstrapped_view,
@@ -1097,10 +1009,7 @@
     stake_table_commit: StakeTableCommitmentType,
     <span class="kw">_</span>: Ver,
     persistence: P,
-) -&gt; (
-    SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;, SequencerVersions&gt;,
-    StateSigner&lt;Ver&gt;,
-) {
+) -&gt; (Consensus&lt;N, P&gt;, StateSigner&lt;Ver&gt;) {
     <span class="kw">let </span>combined_known_nodes_with_stake = <span class="kw">match </span>stake_table_entries_for_non_voting_nodes {
         <span class="prelude-val">Some</span>(stake_table_entries) =&gt; {
             <span class="kw">let </span>combined_entries = config
@@ -1174,7 +1083,7 @@
     </span><span class="attr">#[allow(clippy::too_many_arguments)]
     </span><span class="kw">pub async fn </span>init(
         hotshot_handle: Arc&lt;Consensus&lt;N, P&gt;&gt;,
-        state_signer: StateSigner&lt;Ver&gt;,
+        state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
         node_index: u64,
         eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
@@ -1248,7 +1157,7 @@
             qc_receiver,
             req_receiver,
             tx_receiver,
-            Vec::new() <span class="comment">/* tx_queue */</span>,
+            VecDeque::new() <span class="comment">/* tx_queue */</span>,
             global_state_clone,
             NonZeroUsize::new(<span class="number">1</span>).unwrap(),
             maximize_txns_count_timeout_duration,
@@ -1261,14 +1170,15 @@
         );
 
         <span class="kw">let </span>hotshot_handle_clone = Arc::clone(<span class="kw-2">&amp;</span>hotshot_handle);
+        <span class="kw">let </span>global_state_clone = global_state.clone();
         <span class="comment">// spawn the builder service
         </span>async_spawn(<span class="kw">async move </span>{
             run_permissioned_standalone_builder_service(
-                tx_sender,
                 da_sender,
                 qc_sender,
                 decide_sender,
                 hotshot_handle_clone,
+                global_state_clone,
             )
             .<span class="kw">await</span>;
         });
@@ -1291,7 +1201,7 @@
         <span class="kw">let </span>ctx = <span class="self">Self </span>{
             hotshot_handle: Arc::clone(<span class="kw-2">&amp;</span>hotshot_handle),
             node_index,
-            state_signer: Arc::new(state_signer),
+            state_signer,
             wait_for_orchestrator: <span class="prelude-val">None</span>,
             global_state,
             hotshot_builder_api_url,
@@ -1320,7 +1230,8 @@
     <span class="kw">use </span>async_lock::RwLock;
     <span class="kw">use </span>async_std::task;
 
-    <span class="kw">use </span>espresso_types::{FeeAccount, NamespaceId, Transaction};
+    <span class="kw">use </span>espresso_types::{BaseVersion, FeeAccount, NamespaceId, Transaction};
+    <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -1341,177 +1252,88 @@
             signature_key::SignatureKey,
         },
     };
-    <span class="kw">use </span>sequencer::persistence::no_storage::{<span class="self">self</span>, NoStorage};
+    <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>sequencer::{
+        api::{
+            options::HotshotEvents,
+            test_helpers::{TestNetwork, TestNetworkConfigBuilder},
+            Options,
+        },
+        persistence::{
+            <span class="self">self</span>,
+            no_storage::{<span class="self">self</span>, NoStorage},
+        },
+        testing::TestConfigBuilder,
+    };
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
+    <span class="kw">use </span>tempfile::TempDir;
     <span class="kw">use </span>vbs::version::StaticVersion;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use crate</span>::{
         non_permissioned,
         testing::{
-            hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
-            PermissionedBuilderTestConfig,
+            hotshot_builder_url, test_builder_impl, HotShotTestConfig,
+            NonPermissionedBuilderTestConfig, PermissionedBuilderTestConfig,
         },
     };
 
-    <span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_permissioned_builder() {
-        setup_test();
+    <span class="comment">// TODO: Re-enable when permissioned builder accepts Arc&lt;RwLock&lt;Context&gt;&gt; instead of Arc&lt;Context&gt;
+    // #[async_std::test]
+    // async fn test_permissioned_builder() {
+    //     setup_test();
 
-        <span class="kw">let </span>ver = StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance();
+    //     let query_port = pick_unused_port().expect("No ports free");
 
-        <span class="comment">// Hotshot Test Config
-        </span><span class="kw">let </span>hotshot_config = HotShotTestConfig::default();
+    //     let event_port = pick_unused_port().expect("No ports free");
+    //     let event_service_url: Url = format!("http://localhost:{event_port}").parse().unwrap();
 
-        <span class="comment">// Get the handle for all the nodes, including both the non-builder and builder nodes
-        </span><span class="kw">let </span><span class="kw-2">mut </span>handles = hotshot_config.init_nodes(ver, no_storage::Options).<span class="kw">await</span>;
+    //     let builder_port = pick_unused_port().expect("No ports free");
+    //     let builder_api_url: Url = format!("http://localhost:{builder_port}").parse().unwrap();
 
-        <span class="comment">// start consensus for all the nodes
-        </span><span class="kw">for </span>(handle, ..) <span class="kw">in </span>handles.iter() {
-            handle.hotshot.start_consensus().<span class="kw">await</span>;
-        }
+    //     // Set up and start the network
+    //     let anvil = Anvil::new().spawn();
+    //     let l1 = anvil.endpoint().parse().unwrap();
+    //     let network_config = TestConfigBuilder::default().l1_url(l1).build();
 
-        <span class="kw">let </span>total_nodes = HotShotTestConfig::total_nodes();
+    //     let tmpdir = TempDir::new().unwrap();
 
-        <span class="kw">let </span>node_id = total_nodes - <span class="number">1</span>;
-        <span class="comment">// non-staking node handle
-        </span><span class="kw">let </span>hotshot_context_handle = Arc::clone(<span class="kw-2">&amp;</span>handles[node_id].<span class="number">0</span>);
-        <span class="kw">let </span>state_signer = handles[node_id].<span class="number">1</span>.take().unwrap();
+    //     let config = TestNetworkConfigBuilder::default()
+    //         .api_config(
+    //             Options::with_port(query_port)
+    //                 .submit(Default::default())
+    //                 .query_fs(
+    //                     Default::default(),
+    //                     persistence::fs::Options::new(tmpdir.path().to_owned()),
+    //                 )
+    //                 .hotshot_events(HotshotEvents {
+    //                     events_service_port: event_port,
+    //                 }),
+    //         )
+    //         .network_config(network_config)
+    //         .build();
+    //     let network = TestNetwork::new(config, BaseVersion::instance()).await;
+    //     let consensus_handle = network.peers[0].consensus();
+    //     let node_id = network.peers[0].config().node_index;
+    //     let state_signer = network.peers[0].state_signer();
 
-        <span class="comment">// builder api url
-        </span><span class="kw">let </span>hotshot_builder_api_url = hotshot_config.config.builder_urls[<span class="number">0</span>].clone();
-        <span class="kw">let </span>builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
-            hotshot_config,
-            hotshot_context_handle,
-            node_id <span class="kw">as </span>u64,
-            state_signer,
-            hotshot_builder_api_url.clone(),
-        )
-        .<span class="kw">await</span>;
+    //     let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
+    //         consensus_handle,
+    //         node_id,
+    //         state_signer,
+    //         builder_api_url.clone(),
+    //     )
+    //     .await;
 
-        <span class="kw">let </span>builder_pub_key = builder_config.fee_account;
+    //     let subscribed_events = consensus_handle.event_stream();
 
-        <span class="comment">// Start a builder api client
-        </span><span class="kw">let </span>builder_client =
-            Client::&lt;hotshot_builder_api::v0_1::builder::Error, StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;&gt;::new(
-                hotshot_builder_api_url.clone(),
-            );
-        <span class="macro">assert!</span>(builder_client.connect(<span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">60</span>))).<span class="kw">await</span>);
-
-        <span class="kw">let </span>seed = [<span class="number">207_u8</span>; <span class="number">32</span>];
-
-        <span class="comment">// Hotshot client Public, Private key
-        </span><span class="kw">let </span>(hotshot_client_pub_key, hotshot_client_private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, <span class="number">2011_u64</span>);
-
-        <span class="kw">let </span>parent_commitment = vid_commitment(<span class="kw-2">&amp;</span>[], GENESIS_VID_NUM_STORAGE_NODES);
-
-        <span class="comment">// sign the parent_commitment using the client_private_key
-        </span><span class="kw">let </span>encoded_signature = &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey::sign(
-            <span class="kw-2">&amp;</span>hotshot_client_private_key,
-            parent_commitment.as_ref(),
-        )
-        .expect(<span class="string">"Claim block signing failed"</span>);
-
-        <span class="kw">let </span>test_view_num = <span class="number">0</span>;
-        <span class="comment">// test getting available blocks
-        </span><span class="macro">tracing::info!</span>(
-                <span class="string">"block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            </span>);
-        <span class="comment">// sleep and wait for builder service to startup
-        </span>async_sleep(Duration::from_millis(<span class="number">3000</span>)).<span class="kw">await</span>;
-        <span class="kw">let </span>available_block_info = <span class="kw">match </span>builder_client
-            .get::&lt;Vec&lt;AvailableBlockInfo&lt;SeqTypes&gt;&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-                <span class="string">"block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            </span>))
-            .send()
-            .<span class="kw">await
-        </span>{
-            <span class="prelude-val">Ok</span>(response) =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"Received Available Blocks: {:?}"</span>, response);
-                <span class="macro">assert!</span>(!response.is_empty());
-                response
-            }
-            <span class="prelude-val">Err</span>(e) =&gt; {
-                <span class="macro">panic!</span>(<span class="string">"Error getting available blocks {:?}"</span>, e);
-            }
-        };
-
-        <span class="kw">let </span>builder_commitment = available_block_info[<span class="number">0</span>].block_hash.clone();
-
-        <span class="comment">// sign the builder_commitment using the client_private_key
-        </span><span class="kw">let </span>encoded_signature = &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey::sign(
-            <span class="kw-2">&amp;</span>hotshot_client_private_key,
-            builder_commitment.as_ref(),
-        )
-        .expect(<span class="string">"Claim block signing failed"</span>);
-
-        <span class="comment">// Test claiming blocks
-        </span><span class="kw">let </span>_available_block_data = <span class="kw">match </span>builder_client
-            .get::&lt;AvailableBlockData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-                <span class="string">"block_info/claimblock/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            </span>))
-            .send()
-            .<span class="kw">await
-        </span>{
-            <span class="prelude-val">Ok</span>(response) =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"Received Block Data: {:?}"</span>, response);
-                response
-            }
-            <span class="prelude-val">Err</span>(e) =&gt; {
-                <span class="macro">panic!</span>(<span class="string">"Error while claiming block {:?}"</span>, e);
-            }
-        };
-
-        <span class="comment">// Test claiming block header input
-        </span><span class="kw">let </span>_available_block_header = <span class="kw">match </span>builder_client
-            .get::&lt;AvailableBlockHeaderInput&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-                <span class="string">"block_info/claimheaderinput/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            </span>))
-            .send()
-            .<span class="kw">await
-        </span>{
-            <span class="prelude-val">Ok</span>(response) =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"Received Block Header : {:?}"</span>, response);
-                response
-            }
-            <span class="prelude-val">Err</span>(e) =&gt; {
-                <span class="macro">panic!</span>(<span class="string">"Error getting claiming block header {:?}"</span>, e);
-            }
-        };
-
-        <span class="comment">// test getting builder key
-        </span><span class="kw">match </span>builder_client
-            .get::&lt;FeeAccount&gt;(<span class="string">"block_info/builderaddress"</span>)
-            .send()
-            .<span class="kw">await
-        </span>{
-            <span class="prelude-val">Ok</span>(response) =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"Received Builder Key : {:?}"</span>, response);
-                <span class="macro">assert_eq!</span>(response, builder_pub_key);
-            }
-            <span class="prelude-val">Err</span>(e) =&gt; {
-                <span class="macro">panic!</span>(<span class="string">"Error getting builder key {:?}"</span>, e);
-            }
-        }
-
-        <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1_u32</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
-        <span class="kw">match </span>builder_client
-            .post::&lt;()&gt;(<span class="string">"txn_submit/submit"</span>)
-            .body_json(<span class="kw-2">&amp;</span>txn)
-            .unwrap()
-            .send()
-            .<span class="kw">await
-        </span>{
-            <span class="prelude-val">Ok</span>(response) =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"Received txn submitted response : {:?}"</span>, response);
-                <span class="kw">return</span>;
-            }
-            <span class="prelude-val">Err</span>(e) =&gt; {
-                <span class="macro">panic!</span>(<span class="string">"Error submitting private transaction {:?}"</span>, e);
-            }
-        }
-    }
-}
+    //     test_builder_impl(
+    //         builder_api_url,
+    //         subscribed_events,
+    //         builder_config.fee_account,
+    //     )
+    //     .await;
+    // }
+</span>}
 </code></pre></div></section></main></body></html>

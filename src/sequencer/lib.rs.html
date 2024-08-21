@@ -941,12 +941,6 @@
 <a href="#941" id="941">941</a>
 <a href="#942" id="942">942</a>
 <a href="#943" id="943">943</a>
-<a href="#944" id="944">944</a>
-<a href="#945" id="945">945</a>
-<a href="#946" id="946">946</a>
-<a href="#947" id="947">947</a>
-<a href="#948" id="948">948</a>
-<a href="#949" id="949">949</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -964,8 +958,8 @@
 <span class="kw">use </span>catchup::StatePeers;
 <span class="kw">use </span>context::SequencerContext;
 <span class="kw">use </span>espresso_types::{
-    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SequencerVersions,
-    SolverAuctionResultsProvider, ValidatedState,
+    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
+    UpgradeVersion, ValidatedState,
 };
 <span class="kw">use </span>ethers::types::U256;
 <span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
@@ -1008,7 +1002,7 @@
     traits::{
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{NodeImplementation, NodeType, Versions},
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
     utils::BuilderCommitment,
@@ -1221,10 +1215,7 @@
         }
     };
 
-    <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = genesis
-        .upgrades
-        .get(<span class="kw-2">&amp;</span>&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION)
-    {
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = genesis.upgrades.get(<span class="kw-2">&amp;</span>UpgradeVersion::VERSION) {
         upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span>config.config);
     }
 
@@ -1380,7 +1371,7 @@
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade, UpgradeVersion,
     };
     <span class="kw">use </span>futures::{
         future::join_all,
@@ -1468,10 +1459,7 @@
         </span>}
 
         <span class="kw">pub fn </span>build(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; TestConfig&lt;NUM_NODES&gt; {
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = <span class="self">self
-                </span>.upgrades
-                .get(<span class="kw-2">&amp;</span>&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION)
-            {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = <span class="self">self</span>.upgrades.get(<span class="kw-2">&amp;</span>UpgradeVersion::VERSION) {
                 upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config)
             }
 
@@ -1762,7 +1750,7 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
 
-    <span class="kw">use </span>espresso_types::{Header, NamespaceId, Payload, Transaction};
+    <span class="kw">use </span>espresso_types::{BaseVersion, Header, NamespaceId, Payload, Transaction};
     <span class="kw">use </span>futures::StreamExt;
     <span class="kw">use </span>hotshot::types::EventType::Decide;
     <span class="kw">use </span>hotshot_types::{
@@ -1780,7 +1768,7 @@
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_skeleton_instantiation() {
         setup_test();
-        <span class="kw">let </span>ver = &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance();
+        <span class="kw">let </span>ver = BaseVersion::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();
@@ -1822,7 +1810,7 @@
         setup_test();
 
         <span class="kw">let </span>success_height = <span class="number">30</span>;
-        <span class="kw">let </span>ver = &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance();
+        <span class="kw">let </span>ver = BaseVersion::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();

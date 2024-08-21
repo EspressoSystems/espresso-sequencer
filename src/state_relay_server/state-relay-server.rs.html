@@ -51,12 +51,10 @@
 <a href="#51" id="51">51</a>
 <a href="#52" id="52">52</a>
 <a href="#53" id="53">53</a>
-<a href="#54" id="54">54</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::SequencerVersions;
+<span class="kw">use </span>espresso_types::BaseVersion;
 <span class="kw">use </span>ethers::types::U256;
 <span class="kw">use </span>hotshot_state_prover::service::one_honest_threshold;
-<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
 <span class="kw">use </span>sequencer::state_signature::relay_server::run_relay_server;
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -101,7 +99,7 @@
         <span class="prelude-val">None</span>,
         threshold,
         <span class="macro">format!</span>(<span class="string">"http://0.0.0.0:{}"</span>, args.port).parse().unwrap(),
-        &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
+        BaseVersion::instance(),
     )
     .<span class="kw">await
     </span>.unwrap();

@@ -1766,33 +1766,6 @@
 <a href="#1766" id="1766">1766</a>
 <a href="#1767" id="1767">1767</a>
 <a href="#1768" id="1768">1768</a>
-<a href="#1769" id="1769">1769</a>
-<a href="#1770" id="1770">1770</a>
-<a href="#1771" id="1771">1771</a>
-<a href="#1772" id="1772">1772</a>
-<a href="#1773" id="1773">1773</a>
-<a href="#1774" id="1774">1774</a>
-<a href="#1775" id="1775">1775</a>
-<a href="#1776" id="1776">1776</a>
-<a href="#1777" id="1777">1777</a>
-<a href="#1778" id="1778">1778</a>
-<a href="#1779" id="1779">1779</a>
-<a href="#1780" id="1780">1780</a>
-<a href="#1781" id="1781">1781</a>
-<a href="#1782" id="1782">1782</a>
-<a href="#1783" id="1783">1783</a>
-<a href="#1784" id="1784">1784</a>
-<a href="#1785" id="1785">1785</a>
-<a href="#1786" id="1786">1786</a>
-<a href="#1787" id="1787">1787</a>
-<a href="#1788" id="1788">1788</a>
-<a href="#1789" id="1789">1789</a>
-<a href="#1790" id="1790">1790</a>
-<a href="#1791" id="1791">1791</a>
-<a href="#1792" id="1792">1792</a>
-<a href="#1793" id="1793">1793</a>
-<a href="#1794" id="1794">1794</a>
-<a href="#1795" id="1795">1795</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -1804,14 +1777,14 @@
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
     v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, NodeState, PubKey, SequencerVersions, Transaction,
+    FeeAccountProof, NodeState, PubKey, Transaction,
 };
 <span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
 };
-<span class="kw">use </span>hotshot::types::{Event, SystemContextHandle};
+<span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
@@ -1819,17 +1792,15 @@
 <span class="kw">use </span>hotshot_query_service::data_source::ExtensibleDataSource;
 <span class="kw">use </span>hotshot_state_prover::service::light_client_genesis_from_stake_table;
 <span class="kw">use </span>hotshot_types::{
-    data::ViewNumber,
-    light_client::StateSignatureRequestBody,
-    traits::{network::ConnectedNetwork, node_implementation::Versions},
+    data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
 };
 <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
-    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
-    SequencerContext,
+    context::Consensus, network, persistence::ChainConfigPersistence, state_signature::StateSigner,
+    SeqTypes, SequencerContext,
 };
 
 <span class="kw">pub mod </span>data_source;
@@ -1844,8 +1815,6 @@
 <span class="kw">pub type </span>BlocksFrontier = &lt;BlockMerkleTree <span class="kw">as </span>MerkleTreeScheme&gt;::MembershipProof;
 
 <span class="kw">type </span>BoxLazy&lt;T&gt; = Pin&lt;Arc&lt;Lazy&lt;T, BoxFuture&lt;<span class="lifetime">'static</span>, T&gt;&gt;&gt;&gt;;
-<span class="kw">type </span>HotshotSystemContextHandle&lt;N&gt; =
-    Arc&lt;RwLock&lt;SystemContextHandle&lt;SeqTypes, N, SequencerVersions&gt;&gt;&gt;;
 
 <span class="attr">#[derive(Derivative)]
 #[derivative(Debug(bound = <span class="string">""</span>))]
@@ -1857,7 +1826,7 @@
     config: NetworkConfig&lt;PubKey&gt;,
 
     <span class="attr">#[derivative(Debug = <span class="string">"ignore"</span>)]
-    </span>handle: HotshotSystemContextHandle&lt;Node&lt;N, P&gt;&gt;,
+    </span>handle: Arc&lt;RwLock&lt;Consensus&lt;N, P&gt;&gt;&gt;,
 }
 
 <span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
@@ -1909,9 +1878,7 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().event_streamer
     }
 
-    <span class="kw">async fn </span>consensus(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-    ) -&gt; Arc&lt;RwLock&lt;SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;, SequencerVersions&gt;&gt;&gt; {
+    <span class="kw">async fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;RwLock&lt;Consensus&lt;N, P&gt;&gt;&gt; {
         Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().handle)
     }
 
@@ -2189,7 +2156,7 @@
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        NamespaceId, SequencerVersions, ValidatedState,
+        BaseVersion, NamespaceId, ValidatedState,
     };
     <span class="kw">use </span>ethers::{prelude::Address, utils::Anvil};
     <span class="kw">use </span>futures::{
@@ -2198,7 +2165,6 @@
     };
     <span class="kw">use </span>hotshot::types::{Event, EventType};
     <span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
-
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -2445,7 +2411,7 @@
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; = Client::new(url);
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::with_port(port).status(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -2455,8 +2421,7 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>_network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>_network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// The status API is well tested in the query service repo. Here we are just smoke testing
@@ -2498,7 +2463,7 @@
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
 
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; = Client::new(url);
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::with_port(port).submit(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -2508,8 +2473,7 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
@@ -2534,7 +2498,7 @@
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
 
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; = Client::new(url);
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::with_port(port));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -2544,8 +2508,7 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>height: u64;
         <span class="comment">// Wait for block &gt;=2 appears
@@ -2577,7 +2540,7 @@
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; = Client::new(url);
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::with_port(port).catchup(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -2587,8 +2550,7 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// Wait for a few blocks to be decided.
@@ -2669,11 +2631,10 @@
     <span class="kw">use </span>data_source::testing::TestableSequencerDataSource;
     <span class="kw">use </span>endpoints::NamespaceProofQueryData;
 
-    <span class="kw">use </span>espresso_types::{Header, NamespaceId, SequencerVersions};
+    <span class="kw">use </span>espresso_types::{BaseVersion, Header, NamespaceId};
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::stream::StreamExt;
     <span class="kw">use </span>hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
-
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
@@ -2723,12 +2684,11 @@
             .api_config(D::options(<span class="kw-2">&amp;</span>storage, Options::with_port(port)).submit(Default::default()))
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
 
         <span class="comment">// Connect client.
-        </span><span class="kw">let </span>client: Client&lt;ServerError, &lt;espresso_types::SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        </span><span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
@@ -2827,7 +2787,7 @@
             events_service_port: hotshot_event_streaming_port,
         };
 
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; = Client::new(url);
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
 
@@ -2838,8 +2798,7 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>_network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>_network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = client
             .socket(<span class="string">"hotshot-events/events"</span>)
@@ -2876,8 +2835,8 @@
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
-        UpgradeType, ValidatedState,
+        BaseVersion, FeeAccount, FeeAmount, Header, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, UpgradeVersion, ValidatedState,
     };
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::{
@@ -2922,7 +2881,7 @@
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; = Client::new(url);
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url);
         <span class="kw">let </span>options = Options::with_port(port);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
@@ -2931,8 +2890,7 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>_network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>_network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         <span class="kw">let </span>health = client.get::&lt;AppHealth&gt;(<span class="string">"healthcheck"</span>).send().<span class="kw">await</span>.unwrap();
@@ -2980,10 +2938,9 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; = Client::new(url);
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url);
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
@@ -3046,14 +3003,13 @@
             .api_config(Options::with_port(port).catchup(Default::default()))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .catchups(std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::from_urls(
+                StatePeers::&lt;BaseVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
             }))
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="comment">// Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
         </span><span class="kw">let </span><span class="kw-2">mut </span>events = network.peers[<span class="number">0</span>].event_stream().<span class="kw">await</span>;
@@ -3091,13 +3047,13 @@
                 <span class="number">1</span>,
                 ValidatedState::default(),
                 no_storage::Options,
-                StatePeers::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::from_urls(
+                StatePeers::&lt;BaseVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 ),
                 <span class="kw-2">&amp;</span>NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
-                &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
+                BaseVersion::instance(),
                 Default::default(),
             )
             .<span class="kw">await</span>;
@@ -3154,7 +3110,7 @@
             .api_config(Options::with_port(port).catchup(Default::default()))
             .states(states)
             .catchups(std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::from_urls(
+                StatePeers::&lt;BaseVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
@@ -3162,8 +3118,7 @@
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
-        <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="comment">// Wait for few blocks to be decided.
         </span>network
@@ -3232,7 +3187,7 @@
             )
             .states(states)
             .catchups(std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::from_urls(
+                StatePeers::&lt;BaseVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
@@ -3240,8 +3195,7 @@
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
-        <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="comment">// Wait for a few blocks to be decided.
         </span>network
@@ -3303,7 +3257,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>upgrades = std::collections::BTreeMap::new();
 
         upgrades.insert(
-            &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION,
+            UpgradeVersion::VERSION,
             Upgrade {
                 mode,
                 upgrade_type: UpgradeType::Fee {
@@ -3325,7 +3279,7 @@
                 .status(Default::default()),
             )
             .catchups(std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::from_urls(
+                StatePeers::&lt;BaseVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
@@ -3338,8 +3292,7 @@
             )
             .build();
 
-        <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
         <span class="kw">loop </span>{
@@ -3349,17 +3302,14 @@
                 EventType::UpgradeProposal { proposal, .. } =&gt; {
                     <span class="kw">let </span>upgrade = proposal.data.upgrade_proposal;
                     <span class="kw">let </span>new_version = upgrade.new_version;
-                    <span class="macro">assert_eq!</span>(
-                        new_version,
-                        &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION
-                    );
+                    <span class="macro">assert_eq!</span>(new_version, UpgradeVersion::VERSION);
                     <span class="kw">break</span>;
                 }
                 <span class="kw">_ </span>=&gt; <span class="kw">continue</span>,
             }
         }
 
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         <span class="macro">tracing::info!</span>(port, <span class="string">"server running"</span>);
@@ -3417,11 +3367,10 @@
             .persistences(persistence)
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
-        <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="comment">// Connect client.
-        </span><span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        </span><span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         <span class="macro">tracing::info!</span>(port, <span class="string">"server running"</span>);
@@ -3488,16 +3437,15 @@
                 <span class="comment">// Catchup using node 0 as a peer. Node 0 was running the archival state service
                 // before the restart, so it should be able to resume without catching up by loading
                 // state from storage.
-                </span>StatePeers::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::from_urls(
+                </span>StatePeers::&lt;BaseVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
-        <span class="kw">let </span>_network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        <span class="kw">let </span>_network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         <span class="macro">tracing::info!</span>(port, <span class="string">"server running"</span>);
@@ -3538,8 +3486,7 @@
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url: surf_disco::Url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
-            Client::new(url.clone());
+        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; = Client::new(url.clone());
 
         <span class="kw">let </span>options = Options::with_port(port).config(Default::default());
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -3549,13 +3496,12 @@
             .api_config(options)
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// Fetch a network config from the API server. The first peer URL is bogus, to test the
         // failure/retry case.
-        </span><span class="kw">let </span>peers = StatePeers::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::from_urls(
+        </span><span class="kw">let </span>peers = StatePeers::&lt;BaseVersion&gt;::from_urls(
             <span class="macro">vec!</span>[<span class="string">"https://notarealnode.network"</span>.parse().unwrap(), url],
             Default::default(),
         );

@@ -771,6 +771,113 @@
 <a href="#771" id="771">771</a>
 <a href="#772" id="772">772</a>
 <a href="#773" id="773">773</a>
+<a href="#774" id="774">774</a>
+<a href="#775" id="775">775</a>
+<a href="#776" id="776">776</a>
+<a href="#777" id="777">777</a>
+<a href="#778" id="778">778</a>
+<a href="#779" id="779">779</a>
+<a href="#780" id="780">780</a>
+<a href="#781" id="781">781</a>
+<a href="#782" id="782">782</a>
+<a href="#783" id="783">783</a>
+<a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a>
+<a href="#788" id="788">788</a>
+<a href="#789" id="789">789</a>
+<a href="#790" id="790">790</a>
+<a href="#791" id="791">791</a>
+<a href="#792" id="792">792</a>
+<a href="#793" id="793">793</a>
+<a href="#794" id="794">794</a>
+<a href="#795" id="795">795</a>
+<a href="#796" id="796">796</a>
+<a href="#797" id="797">797</a>
+<a href="#798" id="798">798</a>
+<a href="#799" id="799">799</a>
+<a href="#800" id="800">800</a>
+<a href="#801" id="801">801</a>
+<a href="#802" id="802">802</a>
+<a href="#803" id="803">803</a>
+<a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
+<a href="#818" id="818">818</a>
+<a href="#819" id="819">819</a>
+<a href="#820" id="820">820</a>
+<a href="#821" id="821">821</a>
+<a href="#822" id="822">822</a>
+<a href="#823" id="823">823</a>
+<a href="#824" id="824">824</a>
+<a href="#825" id="825">825</a>
+<a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
+<a href="#829" id="829">829</a>
+<a href="#830" id="830">830</a>
+<a href="#831" id="831">831</a>
+<a href="#832" id="832">832</a>
+<a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a>
+<a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
+<a href="#843" id="843">843</a>
+<a href="#844" id="844">844</a>
+<a href="#845" id="845">845</a>
+<a href="#846" id="846">846</a>
+<a href="#847" id="847">847</a>
+<a href="#848" id="848">848</a>
+<a href="#849" id="849">849</a>
+<a href="#850" id="850">850</a>
+<a href="#851" id="851">851</a>
+<a href="#852" id="852">852</a>
+<a href="#853" id="853">853</a>
+<a href="#854" id="854">854</a>
+<a href="#855" id="855">855</a>
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a>
+<a href="#870" id="870">870</a>
+<a href="#871" id="871">871</a>
+<a href="#872" id="872">872</a>
+<a href="#873" id="873">873</a>
+<a href="#874" id="874">874</a>
+<a href="#875" id="875">875</a>
+<a href="#876" id="876">876</a>
+<a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
+<a href="#880" id="880">880</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -877,7 +984,11 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">pub mod </span>testing {
     <span class="kw">use </span>core::num;
-    <span class="kw">use </span>std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+    <span class="kw">use </span>std::{
+        collections::HashSet,
+        num::NonZeroUsize,
+        time::{Duration, Instant},
+    };
 
     <span class="comment">//use sequencer::persistence::NoStorage;
     </span><span class="kw">use </span>async_broadcast::{
@@ -893,8 +1004,8 @@
     <span class="kw">use </span>committable::Committable;
 
     <span class="kw">use </span>espresso_types::{
-        mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
-        PubKey, SequencerVersions, Transaction, ValidatedState,
+        mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NamespaceId,
+        NodeState, PrivKey, PubKey, Transaction, ValidatedState,
     };
     <span class="kw">use </span>ethers::{
         types::spoof::State,
@@ -909,10 +1020,16 @@
             implementations::{MasterMap, MemoryNetwork},
             BlockPayload,
         },
-        types::{EventType::Decide, Message},
+        types::{
+            EventType::{<span class="self">self</span>, Decide},
+            Message,
+        },
     };
-    <span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
-        BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
+    <span class="kw">use </span>hotshot_builder_api::{
+        v0_1::builder::{
+            BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
+        },
+        v0_2::block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     };
     <span class="kw">use </span>hotshot_builder_core::{
         builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
@@ -936,8 +1053,9 @@
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     <span class="kw">use </span>portpicker::pick_unused_port;
-    <span class="kw">use </span>sequencer::state_signature::StateSignatureMemStorage;
+    <span class="kw">use </span>sequencer::{state_signature::StateSignatureMemStorage, testing::TestConfig};
     <span class="kw">use </span>serde::{Deserialize, Serialize};
+    <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>vbs::version::StaticVersion;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
@@ -1111,10 +1229,7 @@
             <span class="kw-2">&amp;</span><span class="self">self</span>,
             bind_version: Ver,
             options: <span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;,
-        ) -&gt; Vec&lt;(
-            Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;&gt;,
-            <span class="prelude-ty">Option</span>&lt;StateSigner&lt;Ver&gt;&gt;,
-        )&gt; {
+        ) -&gt; Vec&lt;(Arc&lt;Consensus&lt;network::Memory, P&gt;&gt;, <span class="prelude-ty">Option</span>&lt;StateSigner&lt;Ver&gt;&gt;)&gt; {
             <span class="kw">let </span>num_staked_nodes = <span class="self">self</span>.num_staked_nodes();
             <span class="kw">let </span><span class="kw-2">mut </span>is_staked = <span class="bool-val">false</span>;
             <span class="kw">let </span>stake_table_commit = static_stake_table_commitment(
@@ -1152,10 +1267,7 @@
             metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
             bind_version: Ver,
             persistence: P,
-        ) -&gt; (
-            SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;,
-            StateSigner&lt;Ver&gt;,
-        ) {
+        ) -&gt; (Consensus&lt;network::Memory, P&gt;, StateSigner&lt;Ver&gt;) {
             <span class="kw">let </span><span class="kw-2">mut </span>config = <span class="self">self</span>.config.clone();
 
             <span class="kw">let </span>num_staked_nodes = <span class="self">self</span>.num_staked_nodes();
@@ -1238,9 +1350,7 @@
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec&lt;PeerConfig&lt;VerKey&gt;&gt;,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: Arc&lt;
-                SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;,
-            &gt;,
+            hotshot_context_handle: Arc&lt;Consensus&lt;network::Memory, P&gt;&gt;,
         ) {
             <span class="comment">// create a event streamer
             </span><span class="kw">let </span>events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -1309,23 +1419,10 @@
         <span class="kw">pub const </span>SUBSCRIBED_DA_NODE_ID: usize = <span class="number">5</span>;
 
         <span class="kw">pub async fn </span>init_non_permissioned_builder(
-            hotshot_test_config: <span class="kw-2">&amp;</span>HotShotTestConfig,
             hotshot_events_streaming_api_url: Url,
             hotshot_builder_api_url: Url,
+            num_nodes: usize,
         ) -&gt; <span class="self">Self </span>{
-            <span class="comment">// setup the instance state
-            </span><span class="kw">let </span>node_state = NodeState::new(
-                u64::MAX,
-                ChainConfig::default(),
-                L1Client::new(
-                    hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
-                    <span class="number">1</span>,
-                ),
-                MockStateCatchup::default(),
-            )
-            .with_current_version(StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::VERSION)
-            .with_genesis(ValidatedState::default());
-
             <span class="comment">// generate builder keys
             </span><span class="kw">let </span>seed = [<span class="number">201_u8</span>; <span class="number">32</span>];
             <span class="kw">let </span>(fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, <span class="number">2011_u64</span>);
@@ -1337,7 +1434,7 @@
             // A new builder can use this view number to start building blocks from this view number
             </span><span class="kw">let </span>bootstrapped_view = ViewNumber::new(<span class="number">0</span>);
 
-            <span class="kw">let </span>node_count = NonZeroUsize::new(HotShotTestConfig::total_nodes()).unwrap();
+            <span class="kw">let </span>node_count = NonZeroUsize::new(num_nodes).unwrap();
 
             <span class="kw">let </span>builder_config = BuilderConfig::init(
                 key_pair,
@@ -1345,7 +1442,7 @@
                 tx_channel_capacity,
                 event_channel_capacity,
                 node_count,
-                node_state,
+                NodeState::default(),
                 ValidatedState::default(),
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
@@ -1376,26 +1473,13 @@
         PermissionedBuilderTestConfig&lt;P, Ver&gt;
     {
         <span class="kw">pub async fn </span>init_permissioned_builder(
-            hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: Arc&lt;
-                SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;,
-            &gt;,
+            hotshot_handle: Arc&lt;Consensus&lt;network::Memory, P&gt;&gt;,
             node_id: u64,
-            state_signer: StateSigner&lt;Ver&gt;,
+            state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
             hotshot_builder_api_url: Url,
         ) -&gt; <span class="self">Self </span>{
             <span class="comment">// setup the instance state
-            </span><span class="kw">let </span>node_state = NodeState::new(
-                node_id,
-                ChainConfig::default(),
-                L1Client::new(
-                    hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
-                    <span class="number">1</span>,
-                ),
-                MockStateCatchup::default(),
-            )
-            .with_current_version(Ver::VERSION)
-            .with_genesis(ValidatedState::default());
+            </span><span class="kw">let </span>node_state = NodeState::default();
 
             <span class="comment">// generate builder keys
             </span><span class="kw">let </span>seed = [<span class="number">201_u8</span>; <span class="number">32</span>];
@@ -1443,6 +1527,136 @@
             Url::parse(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).as_str()).unwrap();
 
         hotshot_builder_api_url
+    }
+
+    <span class="kw">pub async fn </span>test_builder_impl(
+        hotshot_builder_api_url: Url,
+        <span class="kw-2">mut </span>subscribed_events: <span class="kw">impl </span>Stream&lt;Item = Event&gt; + Unpin,
+        builder_pub_key: FeeAccount,
+    ) {
+        <span class="comment">// Start a builder api client
+        </span><span class="kw">let </span>builder_client =
+            Client::&lt;hotshot_builder_api::v0_1::builder::Error, StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;&gt;::new(
+                hotshot_builder_api_url.clone(),
+            );
+        <span class="macro">assert!</span>(builder_client.connect(<span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">60</span>))).<span class="kw">await</span>);
+
+        <span class="comment">// Test submitting transactions
+        </span><span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1_u32</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
+        <span class="kw">match </span>builder_client
+            .post::&lt;()&gt;(<span class="string">"txn_submit/submit"</span>)
+            .body_json(<span class="kw-2">&amp;</span>txn)
+            .unwrap()
+            .send()
+            .<span class="kw">await
+        </span>{
+            <span class="prelude-val">Ok</span>(response) =&gt; {
+                <span class="macro">tracing::info!</span>(<span class="string">"Received txn submitted response : {:?}"</span>, response);
+            }
+            <span class="prelude-val">Err</span>(e) =&gt; {
+                <span class="macro">panic!</span>(<span class="string">"Error submitting private transaction {:?}"</span>, e);
+            }
+        }
+
+        <span class="kw">let </span>seed = [<span class="number">207_u8</span>; <span class="number">32</span>];
+
+        <span class="comment">// Hotshot client Public, Private key
+        </span><span class="kw">let </span>(hotshot_client_pub_key, hotshot_client_private_key) =
+            &lt;BLSPubKey <span class="kw">as </span>SignatureKey&gt;::generated_from_seed_indexed(seed, <span class="number">2011_u64</span>);
+
+        <span class="kw">let </span>start = Instant::now();
+        <span class="kw">let </span>(available_block_info, view_num) = <span class="kw">loop </span>{
+            <span class="kw">if </span>start.elapsed() &gt; Duration::from_secs(<span class="number">10</span>) {
+                <span class="macro">panic!</span>(<span class="string">"Didn't get a quorum proposal in 10 seconds"</span>);
+            }
+
+            <span class="kw">let </span>event = subscribed_events.next().<span class="kw">await</span>.unwrap();
+            <span class="macro">tracing::warn!</span>(<span class="string">"Event: {:?}"</span>, event.event);
+            <span class="kw">if let </span>EventType::QuorumProposal { proposal, .. } = event.event {
+                <span class="kw">let </span>parent_view_number = <span class="kw-2">*</span>proposal.data.view_number;
+                <span class="kw">let </span>parent_commitment =
+                    Leaf::from_quorum_proposal(<span class="kw-2">&amp;</span>proposal.data).payload_commitment();
+                <span class="kw">let </span>encoded_signature = &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey::sign(
+                    <span class="kw-2">&amp;</span>hotshot_client_private_key,
+                    parent_commitment.as_ref(),
+                )
+                .expect(<span class="string">"Claim block signing failed"</span>);
+                <span class="kw">let </span>available_blocks = builder_client
+                        .get::&lt;Vec&lt;AvailableBlockInfo&lt;SeqTypes&gt;&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+                            <span class="string">"block_info/availableblocks/{parent_commitment}/{parent_view_number}/{hotshot_client_pub_key}/{encoded_signature}"
+                        </span>))
+                        .send()
+                        .<span class="kw">await</span>.expect(<span class="string">"Error getting available blocks"</span>);
+                <span class="macro">assert!</span>(!available_blocks.is_empty());
+                <span class="kw">break </span>(available_blocks, parent_view_number);
+            }
+        };
+
+        <span class="kw">let </span>builder_commitment = available_block_info[<span class="number">0</span>].block_hash.clone();
+
+        <span class="comment">// sign the builder_commitment using the client_private_key
+        </span><span class="kw">let </span>encoded_signature = &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey::sign(
+            <span class="kw-2">&amp;</span>hotshot_client_private_key,
+            builder_commitment.as_ref(),
+        )
+        .expect(<span class="string">"Claim block signing failed"</span>);
+
+        <span class="comment">// Test claiming blocks
+        </span><span class="kw">let </span>available_block_data = <span class="kw">match </span>builder_client
+                .get::&lt;AvailableBlockData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+                    <span class="string">"block_info/claimblock/{builder_commitment}/{view_num}/{hotshot_client_pub_key}/{encoded_signature}"
+                </span>))
+                .send()
+                .<span class="kw">await
+            </span>{
+                <span class="prelude-val">Ok</span>(response) =&gt; {
+                    <span class="macro">tracing::info!</span>(<span class="string">"Received Block Data: {:?}"</span>, response);
+                    response
+                }
+                <span class="prelude-val">Err</span>(e) =&gt; {
+                    <span class="macro">panic!</span>(<span class="string">"Error while claiming block {:?}"</span>, e);
+                }
+            };
+
+        <span class="macro">assert_eq!</span>(
+            available_block_data
+                .block_payload
+                .transactions(<span class="kw-2">&amp;</span>available_block_data.metadata)
+                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
+            <span class="macro">vec!</span>[txn]
+        );
+
+        <span class="comment">// Test claiming block header input
+        </span><span class="kw">let </span>_available_block_header = <span class="kw">match </span>builder_client
+                .get::&lt;AvailableBlockHeaderInput&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+                    <span class="string">"block_info/claimheaderinput/{builder_commitment}/{view_num}/{hotshot_client_pub_key}/{encoded_signature}"
+                </span>))
+                .send()
+                .<span class="kw">await
+            </span>{
+                <span class="prelude-val">Ok</span>(response) =&gt; {
+                    <span class="macro">tracing::info!</span>(<span class="string">"Received Block Header : {:?}"</span>, response);
+                    response
+                }
+                <span class="prelude-val">Err</span>(e) =&gt; {
+                    <span class="macro">panic!</span>(<span class="string">"Error getting claiming block header {:?}"</span>, e);
+                }
+            };
+
+        <span class="comment">// test getting builder key
+        </span><span class="kw">match </span>builder_client
+            .get::&lt;FeeAccount&gt;(<span class="string">"block_info/builderaddress"</span>)
+            .send()
+            .<span class="kw">await
+        </span>{
+            <span class="prelude-val">Ok</span>(response) =&gt; {
+                <span class="macro">tracing::info!</span>(<span class="string">"Received Builder Key : {:?}"</span>, response);
+                <span class="macro">assert_eq!</span>(response, builder_pub_key);
+            }
+            <span class="prelude-val">Err</span>(e) =&gt; {
+                <span class="macro">panic!</span>(<span class="string">"Error getting builder key {:?}"</span>, e);
+            }
+        }
     }
 }
 

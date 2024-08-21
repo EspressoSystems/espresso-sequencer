@@ -1683,7 +1683,7 @@
 <span class="kw">use </span>hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BuilderFee},
-        node_implementation::{NodeType, Versions},
+        node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
         BlockPayload, ValidatedState <span class="kw">as _</span>,
     },
@@ -1706,7 +1706,7 @@
     v0_1, v0_2,
     v0_3::{<span class="self">self</span>, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, SequencerVersions,
+    Header, L1BlockInfo, L1Snapshot, Leaf, MarketplaceVersion, NamespaceId, NsTable, SeqTypes,
     UpgradeType,
 };
 
@@ -2103,7 +2103,7 @@
             fee_amount,
         } <span class="kw">in </span><span class="kw-2">&amp;</span>builder_fee
         {
-            <span class="kw">if </span>version &lt; &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Marketplace::version() {
+            <span class="kw">if </span>version &lt; MarketplaceVersion::version() {
                 <span class="macro">ensure!</span>(
                     fee_account.validate_fee_signature(
                         fee_signature,

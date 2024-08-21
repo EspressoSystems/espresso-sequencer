@@ -400,6 +400,34 @@
 <a href="#400" id="400">400</a>
 <a href="#401" id="401">401</a>
 <a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
+<a href="#410" id="410">410</a>
+<a href="#411" id="411">411</a>
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -583,6 +611,7 @@
         </span><span class="kw">let </span>proxy_global_state = ProxyGlobalState::new(
             global_state.clone(),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            max_api_timeout_duration,
         );
 
         <span class="comment">// start the hotshot api service
@@ -605,10 +634,9 @@
             };
 
             async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;
-                    SeqTypes,
-                    SequencerVersions,
-                &gt;(hooks, senders, events_url)
+                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerVersions&gt;(
+                    hooks, senders, events_url,
+                )
                 .<span class="kw">await</span>;
                 <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Reserve builder service exited"</span>);
                 <span class="kw">if </span>res.is_err() {
@@ -621,10 +649,9 @@
             <span class="kw">let </span>hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;
-                    SeqTypes,
-                    SequencerVersions,
-                &gt;(hooks, senders, events_url)
+                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerVersions&gt;(
+                    hooks, senders, events_url,
+                )
                 .<span class="kw">await</span>;
                 <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Fallback builder service exited"</span>);
                 <span class="kw">if </span>res.is_err() {
@@ -645,7 +672,7 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>std::time::Duration;
+    <span class="kw">use </span>std::time::{Duration, Instant};
 
     <span class="kw">use </span>async_compatibility_layer::{
         art::{async_sleep, async_spawn},
@@ -655,17 +682,17 @@
     <span class="kw">use </span>async_std::{stream::StreamExt, task};
     <span class="kw">use </span>committable::Commitment;
     <span class="kw">use </span>espresso_types::{
-        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, SequencerVersions,
-        Transaction,
+        mock::MockStateCatchup, BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey,
+        SeqTypes, Transaction,
     };
     <span class="kw">use </span>ethers::utils::Anvil;
-    <span class="kw">use </span>hotshot::types::BLSPrivKey;
+    <span class="kw">use </span>hotshot::types::{BLSPrivKey, Event, EventType};
     <span class="kw">use </span>hotshot_builder_api::v0_3::builder::BuildError;
     <span class="kw">use </span>hotshot_events_service::{
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    <span class="kw">use </span>hotshot_query_service::availability::LeafQueryData;
+    <span class="kw">use </span>hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     <span class="kw">use </span>hotshot_types::{
         bundle::Bundle,
         light_client::StateKeyPair,
@@ -731,8 +758,7 @@
             )
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network =
-            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
 
         <span class="comment">// Start the builder
         </span><span class="kw">let </span>init = BuilderConfig::init(
@@ -759,8 +785,7 @@
         <span class="kw">let </span>_builder_config = init.<span class="kw">await</span>;
 
         <span class="comment">// Wait for at least one empty block to be sequenced (after consensus starts VID).
-        </span><span class="kw">let </span>sequencer_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
-            Client::new(query_api_url);
+        </span><span class="kw">let </span>sequencer_client: Client&lt;ServerError, BaseVersion&gt; = Client::new(query_api_url);
         sequencer_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         sequencer_client
             .socket(<span class="string">"availability/stream/leaves/0"</span>)
@@ -773,21 +798,13 @@
             .unwrap();
 
         <span class="comment">//  Connect to builder
-        </span><span class="kw">let </span>builder_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Marketplace&gt; =
+        </span><span class="kw">let </span>builder_client: Client&lt;ServerError, MarketplaceVersion&gt; =
             Client::new(builder_api_url.clone());
         builder_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">//  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        </span><span class="kw">let </span>submission_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
-            Client::new(builder_api_url);
+        </span><span class="kw">let </span>submission_client: Client&lt;ServerError, BaseVersion&gt; = Client::new(builder_api_url);
         submission_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
-
-        <span class="comment">// Test getting a bundle
-        </span><span class="kw">let </span>_bundle = builder_client
-            .get::&lt;Bundle&lt;SeqTypes&gt;&gt;(<span class="string">"block_info/bundle/1"</span>)
-            .send()
-            .<span class="kw">await
-            </span>.unwrap();
 
         <span class="comment">// Test submitting transactions
         </span><span class="kw">let </span>transactions = (<span class="number">0</span>..<span class="number">10</span>)
@@ -800,6 +817,45 @@
             .send()
             .<span class="kw">await
             </span>.unwrap();
+
+        <span class="kw">let </span>events_service_client =
+            Client::&lt;hotshot_events_service::events::Error, BaseVersion&gt;::new(
+                event_service_url.clone(),
+            );
+        events_service_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
+
+        <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = events_service_client
+            .socket(<span class="string">"hotshot-events/events"</span>)
+            .subscribe::&lt;Event&lt;SeqTypes&gt;&gt;()
+            .<span class="kw">await
+            </span>.unwrap();
+
+        <span class="kw">let </span>start = Instant::now();
+        <span class="kw">loop </span>{
+            <span class="kw">if </span>start.elapsed() &gt; Duration::from_secs(<span class="number">10</span>) {
+                <span class="macro">panic!</span>(<span class="string">"Didn't get a quorum proposal in 10 seconds"</span>);
+            }
+
+            <span class="kw">let </span>event = subscribed_events.next().<span class="kw">await</span>.unwrap().unwrap();
+            <span class="kw">if let </span>EventType::QuorumProposal { proposal, .. } = event.event {
+                <span class="kw">let </span>parent_view_number = <span class="kw-2">*</span>proposal.data.view_number;
+                <span class="kw">let </span>parent_commitment =
+                    Leaf::from_quorum_proposal(<span class="kw-2">&amp;</span>proposal.data).payload_commitment();
+                <span class="kw">let </span>bundle = builder_client
+                    .get::&lt;Bundle&lt;SeqTypes&gt;&gt;(
+                        <span class="macro">format!</span>(
+                            <span class="string">"block_info/bundle/{parent_view_number}/{parent_commitment}/{}"</span>,
+                            parent_view_number + <span class="number">1
+                        </span>)
+                        .as_str(),
+                    )
+                    .send()
+                    .<span class="kw">await
+                    </span>.unwrap();
+                <span class="macro">assert_eq!</span>(bundle.transactions, transactions);
+                <span class="kw">break</span>;
+            }
+        }
     }
 }
 </code></pre></div></section></main></body></html>

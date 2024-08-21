@@ -1007,17 +1007,13 @@
 <a href="#1007" id="1007">1007</a>
 <a href="#1008" id="1008">1008</a>
 <a href="#1009" id="1009">1009</a>
-<a href="#1010" id="1010">1010</a>
-<a href="#1011" id="1011">1011</a>
-<a href="#1012" id="1012">1012</a>
-<a href="#1013" id="1013">1013</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>contract_bindings::light_client_mock::LightClientMock;
-<span class="kw">use </span>espresso_types::{parse_duration, SequencerVersions};
+<span class="kw">use </span>espresso_types::{parse_duration, BaseVersion};
 <span class="kw">use </span>ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -1028,10 +1024,7 @@
 <span class="kw">use </span>hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
-<span class="kw">use </span>hotshot_types::traits::{
-    node_implementation::Versions,
-    stake_table::{SnapshotVersion, StakeTableScheme},
-};
+<span class="kw">use </span>hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
 <span class="kw">use </span>portpicker::pick_unused_port;
 <span class="kw">use </span>sequencer::{
     api::{
@@ -1203,7 +1196,7 @@
         .network_config(network_config)
         .build();
 
-    <span class="kw">let </span>network = TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
+    <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
     <span class="kw">let </span>st = network.cfg.stake_table();
     <span class="kw">let </span>total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     <span class="kw">let </span>config = network.cfg.hotshot_config();
@@ -1301,7 +1294,7 @@
 
         <span class="kw">let </span>prover_handle = spawn(run_prover_service_with_stake_table(
             prover_config,
-            &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
+            BaseVersion::instance(),
             Arc::new(st.clone()),
         ));
         handles.push(prover_handle);
@@ -1314,7 +1307,7 @@
             <span class="macro">format!</span>(<span class="string">"http://0.0.0.0:{relay_server_port}"</span>)
                 .parse()
                 .unwrap(),
-            &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
+            BaseVersion::instance(),
         )
         .<span class="kw">await</span>;
 
@@ -1353,7 +1346,7 @@
         dev_node_port,
         mock_contracts,
         dev_info,
-        &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
+        BaseVersion::instance(),
     ));
     handles.push(dev_node_handle);
 
@@ -1516,14 +1509,13 @@
     <span class="kw">use </span>committable::{Commitment, Committable};
     <span class="kw">use </span>contract_bindings::light_client::LightClient;
     <span class="kw">use </span>escargot::CargoBuild;
-    <span class="kw">use </span>espresso_types::{BlockMerkleTree, Header, SeqTypes, SequencerVersions, Transaction};
+    <span class="kw">use </span>espresso_types::{BaseVersion, BlockMerkleTree, Header, SeqTypes, Transaction};
     <span class="kw">use </span>ethers::{providers::Middleware, types::U256};
     <span class="kw">use </span>futures::TryStreamExt;
     <span class="kw">use </span>hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
-    <span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
     <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>rand::Rng;
@@ -1594,7 +1586,7 @@
 
         <span class="kw">let </span>process = BackgroundProcess(process);
 
-        <span class="kw">let </span>api_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        <span class="kw">let </span>api_client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{api_port}"</span>).parse().unwrap());
         api_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
@@ -1768,7 +1760,7 @@
             }
         }
 
-        <span class="kw">let </span>dev_node_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        <span class="kw">let </span>dev_node_client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{dev_node_port}"</span>).parse().unwrap());
         dev_node_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
@@ -1912,7 +1904,7 @@
 
         <span class="kw">let </span>process = BackgroundProcess(process);
 
-        <span class="kw">let </span>api_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        <span class="kw">let </span>api_client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{api_port}"</span>).parse().unwrap());
         api_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
@@ -1927,7 +1919,7 @@
             .<span class="kw">await
             </span>.unwrap();
 
-        <span class="kw">let </span>dev_node_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
+        <span class="kw">let </span>dev_node_client: Client&lt;ServerError, BaseVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{dev_node_port}"</span>).parse().unwrap());
         dev_node_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 

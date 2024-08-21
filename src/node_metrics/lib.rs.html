@@ -418,7 +418,7 @@
     CdnMetricsValue, CdnTopic, PushCdnNetwork, WrappedSignatureKey,
 };
 <span class="kw">use </span>hotshot_query_service::metrics::PrometheusMetrics;
-<span class="kw">use </span>hotshot_types::traits::signature_key::BuilderSignatureKey;
+<span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey};
 <span class="kw">use </span>tide_disco::App;
 <span class="kw">use </span>url::Url;
 
@@ -567,7 +567,7 @@
 
     <span class="kw">let </span>_cdn_tasks = <span class="kw">if let </span><span class="prelude-val">Some</span>(cdn_broker_url_string) = options.cdn_marshal_endpoint() {
         <span class="kw">let </span>(public_key, private_key) = PubKey::generated_from_seed_indexed([<span class="number">1</span>; <span class="number">32</span>], <span class="number">0</span>);
-        <span class="kw">let </span>cdn_network_result = PushCdnNetwork::&lt;SeqTypes&gt;::new(
+        <span class="kw">let </span>cdn_network_result = PushCdnNetwork::&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;::new(
             cdn_broker_url_string.to_string(),
             <span class="macro">vec!</span>[CdnTopic::Global],
             hotshot::traits::implementations::KeyPair {

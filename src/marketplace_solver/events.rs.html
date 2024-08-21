@@ -235,28 +235,24 @@
 <a href="#235" id="235">235</a>
 <a href="#236" id="236">236</a>
 <a href="#237" id="237">237</a>
-<a href="#238" id="238">238</a>
-<a href="#239" id="239">239</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{pin::Pin, sync::Arc};
 
 <span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::sync::RwLock;
-<span class="kw">use </span>espresso_types::{SeqTypes, SequencerVersions};
+<span class="kw">use </span>espresso_types::{BaseVersion, SeqTypes};
 <span class="kw">use </span>futures::{Stream, StreamExt <span class="kw">as _</span>};
 <span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_events_service::{events, events_source::StartupInfo};
-<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
 <span class="kw">use </span>surf_disco::Client;
 <span class="kw">use </span>tide_disco::Url;
 
 <span class="kw">use </span><span class="kw">crate</span>::state::GlobalState;
 
-<span class="kw">pub struct </span>EventsServiceClient(Client&lt;events::Error, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;);
+<span class="kw">pub struct </span>EventsServiceClient(Client&lt;events::Error, BaseVersion&gt;);
 
 <span class="kw">impl </span>EventsServiceClient {
     <span class="kw">pub async fn </span>new(url: Url) -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>client =
-            Client::&lt;events::Error, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::new(url.clone());
+        <span class="kw">let </span>client = Client::&lt;events::Error, BaseVersion&gt;::new(url.clone());
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
