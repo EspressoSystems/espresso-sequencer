@@ -1611,8 +1611,6 @@ mod test {
         }
 
         network.server.shut_down().await;
-        // TODO I don't think this drop does anything.
-        drop(network);
     }
 
     #[async_std::test]
