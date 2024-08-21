@@ -99,6 +99,55 @@ contract LightClientContractUpgradeScript is Script {
     }
 }
 
+/// @notice upgrade the LightClient contract by deploying the new implementation using the deployer
+/// and then
+/// using the SAFE SDK to call the upgrade via the Safe Multisig wallet
+/// @dev this is used when upgrading to the same base contract file which is being actively modified
+/// before we go live
+contract LightClientContractUpgradeSameContractScript is Script {
+    string internal originalContractName = "LightClient.sol";
+    string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
+
+    function run() public returns (address implementationAddress, bytes memory result) {
+        Options memory opts;
+        opts.referenceContract = originalContractName;
+
+        // validate that the new implementation contract is upgrade safe
+        Upgrades.validateUpgrade(upgradeContractName, opts);
+
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        // deploy the new implementation contract
+        LC implementationContract = new LC();
+
+        vm.stopBroadcast();
+
+        bytes memory initData = abi.encodeWithSignature("setNewField(uint256)", 2);
+
+        // call upgradeToAndCall command so that the proxy can be upgraded to call from the new
+        // implementation above and
+        // execute the command via the Safe Multisig wallet
+        string[] memory cmds = new string[](3);
+        cmds[0] = "bash";
+        cmds[1] = "-c";
+        cmds[2] = string(
+            abi.encodePacked(
+                "source .env.contracts && ts-node contracts/script/multisigTransactionProposals/safeSDK/upgradeProxy.ts upgradeProxy ",
+                vm.toString(vm.envAddress("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS")),
+                " ",
+                vm.toString(address(implementationContract)),
+                " ",
+                vm.toString(initData)
+            )
+        );
+
+        result = vm.ffi(cmds);
+
+        return (address(implementationContract), result);
+    }
+}
+
 contract LightClientDefenderDeployScript is Script {
     string public contractName = "LightClient.sol";
     UtilsScript public utils = new UtilsScript();
