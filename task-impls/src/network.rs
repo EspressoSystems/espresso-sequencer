@@ -209,6 +209,12 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
             .await;
         }
     }
+
+    /// Gets the name of the current task
+    #[must_use]
+    pub fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<NetworkMessageTaskState<TYPES>>()
+    }
 }
 
 /// network event task state
@@ -259,6 +265,10 @@ impl<
     }
 
     async fn cancel_subtasks(&mut self) {}
+
+    fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>>()
+    }
 }
 
 impl<

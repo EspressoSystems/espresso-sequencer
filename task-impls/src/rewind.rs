@@ -70,4 +70,8 @@ impl<TYPES: NodeType> TaskState for RewindTaskState<TYPES> {
             }
         }
     }
+
+    fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<RewindTaskState<TYPES>>()
+    }
 }

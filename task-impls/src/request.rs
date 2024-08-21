@@ -146,6 +146,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
             }
         }
     }
+
+    fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<NetworkRequestState<TYPES, I>>()
+    }
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I> {

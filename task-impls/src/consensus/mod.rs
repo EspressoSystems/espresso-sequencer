@@ -773,4 +773,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
             }
         }
     }
+
+    fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<ConsensusTaskState<TYPES, I, V>>()
+    }
 }

@@ -22,6 +22,7 @@ use hotshot_types::{
     error::HotShotError,
     traits::{election::Membership, network::ConnectedNetwork, node_implementation::NodeType},
 };
+use rand::Rng;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
@@ -68,13 +69,32 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
 {
     /// Adds a hotshot consensus-related task to the `SystemContextHandle`.
     pub fn add_task<S: TaskState<Event = HotShotEvent<TYPES>> + 'static>(&mut self, task_state: S) {
+        let task_name = task_state.get_task_name();
         let task = Task::new(
             task_state,
             self.internal_event_stream.0.clone(),
             self.internal_event_stream.1.activate_cloned(),
+            self.generate_task_id(task_name),
         );
 
         self.consensus_registry.run_task(task);
+    }
+
+    #[must_use]
+    /// generate a task id for a task
+    pub fn generate_task_id(&self, task_name: &str) -> String {
+        let random = rand::thread_rng().gen_range(0..=9999);
+        let tasks_spawned =
+            self.consensus_registry.task_handles.len() + self.network_registry.handles.len();
+        format!("{task_name}_{tasks_spawned}_{random}")
+    }
+
+    #[must_use]
+    /// Get a list of all the running tasks ids
+    pub fn get_task_ids(&self) -> Vec<String> {
+        let mut task_ids = self.consensus_registry.get_task_ids();
+        task_ids.extend(self.network_registry.get_task_ids());
+        task_ids
     }
 
     /// obtains a stream to expose to the user

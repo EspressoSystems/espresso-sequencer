@@ -172,4 +172,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
 
     /// Joins all subtasks.
     async fn cancel_subtasks(&mut self) {}
+
+    fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<Consensus2TaskState<TYPES, I, V>>()
+    }
 }

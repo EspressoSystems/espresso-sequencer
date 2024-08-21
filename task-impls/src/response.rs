@@ -6,12 +6,13 @@
 
 use std::{sync::Arc, time::Duration};
 
-use async_broadcast::Receiver;
+use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use futures::{FutureExt, StreamExt};
-use hotshot_task::dependency::{Dependency, EventDependency};
+use hotshot_task::{
+    dependency::{Dependency, EventDependency},
+    task::{NetworkHandle, Task},
+};
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState, OuterConsensus},
     data::VidDisperseShare,
@@ -28,11 +29,9 @@ use hotshot_types::{
     },
 };
 use sha2::{Digest, Sha256};
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
 use tracing::instrument;
 
-use crate::events::HotShotEvent;
+use crate::{events::HotShotEvent, health_check::HealthCheckTaskState, helpers::broadcast_event};
 /// Time to wait for txns before sending `ResponseMessage::NotFound`
 const TXNS_TIMEOUT: Duration = Duration::from_millis(100);
 
@@ -76,8 +75,16 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
 
     /// Run the request response loop until a `HotShotEvent::Shutdown` is received.
     /// Or the stream is closed.
-    async fn run_loop(mut self, shutdown: EventDependency<Arc<HotShotEvent<TYPES>>>) {
+    async fn run_loop(
+        mut self,
+        shutdown: EventDependency<Arc<HotShotEvent<TYPES>>>,
+        sender: Sender<Arc<HotShotEvent<TYPES>>>,
+        task_name: String,
+    ) {
         let mut shutdown = Box::pin(shutdown.completed().fuse());
+        let heartbeat_interval =
+            Task::<HealthCheckTaskState<TYPES>>::get_periodic_interval_in_secs();
+        futures::pin_mut!(heartbeat_interval);
         loop {
             futures::select! {
                 req = self.receiver.next() => {
@@ -85,6 +92,9 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                         Some((msg, chan)) => self.handle_message(msg, chan).await,
                         None => return,
                     }
+                },
+                _ = Task::<HealthCheckTaskState<TYPES>>::handle_periodic_delay(&mut heartbeat_interval) => {
+                    broadcast_event(Arc::new(HotShotEvent::HeartBeat(task_name.clone())), &sender).await;
                 },
                 _ = shutdown => {
                     return;
@@ -231,6 +241,11 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             None => ResponseMessage::NotFound,
         }
     }
+
+    /// Get the task name
+    pub fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<NetworkResponseState<TYPES>>()
+    }
 }
 
 /// Check the signature
@@ -249,11 +264,14 @@ fn valid_signature<TYPES: NodeType>(
 /// on the `event_stream` arg.
 pub fn run_response_task<TYPES: NodeType>(
     task_state: NetworkResponseState<TYPES>,
-    event_stream: Receiver<Arc<HotShotEvent<TYPES>>>,
-) -> JoinHandle<()> {
-    let dep = EventDependency::new(
-        event_stream,
+    sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
+    task_id: String,
+) -> NetworkHandle {
+    let shutdown = EventDependency::new(
+        receiver,
         Box::new(|e| matches!(e.as_ref(), HotShotEvent::Shutdown)),
     );
-    async_spawn(task_state.run_loop(dep))
+    let handle = async_spawn(task_state.run_loop(shutdown, sender, task_id.clone()));
+    NetworkHandle { handle, task_id }
 }

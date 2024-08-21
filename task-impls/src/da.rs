@@ -379,4 +379,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for DaTaskState<TY
     }
 
     async fn cancel_subtasks(&mut self) {}
+
+    fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<DaTaskState<TYPES, I>>()
+    }
 }

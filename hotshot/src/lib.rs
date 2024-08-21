@@ -17,6 +17,7 @@ use hotshot_types::{
     traits::{network::BroadcastDelay, node_implementation::Versions},
 };
 use rand::Rng;
+use tasks::add_health_check_task;
 use url::Url;
 
 /// Contains traits consumed by [`SystemContext`]
@@ -634,6 +635,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
 
         add_network_tasks::<TYPES, I, V>(&mut handle).await;
         add_consensus_tasks::<TYPES, I, V>(&mut handle).await;
+        add_health_check_task::<TYPES, I, V>(&mut handle).await;
 
         handle
     }

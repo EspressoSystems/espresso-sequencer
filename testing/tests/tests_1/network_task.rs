@@ -4,13 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{sync::Arc, time::Duration};
-
 use async_broadcast::Sender;
 use async_compatibility_layer::art::async_timeout;
 use async_lock::RwLock;
 use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
+use hotshot_task::task::TaskState;
 use hotshot_task::task::{ConsensusTaskRegistry, Task};
 use hotshot_task_impls::{
     events::HotShotEvent,
@@ -28,6 +27,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
+use std::{sync::Arc, time::Duration};
 
 // Test that the event task sends a message, and the message task receives it
 // and emits the proper event
@@ -74,7 +74,8 @@ async fn test_network_task() {
     let (tx, rx) = async_broadcast::broadcast(10);
     let mut task_reg = ConsensusTaskRegistry::new();
 
-    let task = Task::new(network_state, tx.clone(), rx);
+    let task_name = network_state.get_task_name();
+    let task = Task::new(network_state, tx.clone(), rx, task_name.to_string());
     task_reg.run_task(task);
 
     let mut generator = TestViewGenerator::generate(membership.clone(), membership);
@@ -150,7 +151,12 @@ async fn test_network_storage_fail() {
     let (tx, rx) = async_broadcast::broadcast(10);
     let mut task_reg = ConsensusTaskRegistry::new();
 
-    let task = Task::new(network_state, tx.clone(), rx);
+    let task = Task::new(
+        network_state,
+        tx.clone(),
+        rx,
+        "NetworkEventTaskState_0".to_string(),
+    );
     task_reg.run_task(task);
 
     let mut generator = TestViewGenerator::generate(membership.clone(), membership);

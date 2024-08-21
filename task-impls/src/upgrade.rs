@@ -358,4 +358,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
     }
 
     async fn cancel_subtasks(&mut self) {}
+
+    fn get_task_name(&self) -> &'static str {
+        std::any::type_name::<UpgradeTaskState<TYPES, I, V>>()
+    }
 }
