@@ -7,7 +7,10 @@ use espresso_types::{
     V0_2, V0_3,
 };
 use hotshot::traits::ValidatedState;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::{ConsensusTime, Versions}};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::node_implementation::{ConsensusTime, Versions},
+};
 use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
