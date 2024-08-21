@@ -282,10 +282,13 @@ impl HasUrls for SolverAuctionResults {
 type SurfClient = surf_disco::Client<ServerError, BaseVersion>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-/// Auction Results provider holding the Url of the solver in order to fetch auction results.
+/// Auction Results provider. holding the Url of the solver in order to fetch auction results.
 pub struct SolverAuctionResultsProvider {
+    /// Url of the solver from which we will fetch auction results.
     pub url: Url,
+    /// Base path of marketplace API
     pub marketplace_path: String,
+    /// Path for fetching `AuctionResults`, relative to `marketplace_path`.
     pub results_path: String,
 }
 
