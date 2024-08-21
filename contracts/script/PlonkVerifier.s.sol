@@ -7,7 +7,7 @@ import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { PlonkVerifier as PV } from "../src/libraries/PlonkVerifier.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
-contract PlonkVerifierDefenderDeployScript is Script {
+contract DeployPlonkVerifierWithDefenderScript is Script {
     string public contractName = "PlonkVerifier.sol";
     UtilsScript public utils = new UtilsScript();
     uint256 public contractSalt = uint256(vm.envInt("PLONK_VERIFIER_SALT"));
@@ -53,7 +53,7 @@ contract PlonkVerifierDefenderDeployScript is Script {
     }
 }
 
-contract PlonkVerifierDeployScript is Script {
+contract DeployPlonkVerifierScript is Script {
     string public contractName = "PlonkVerifier.sol";
 
     function run() public returns (address contractAddress) {

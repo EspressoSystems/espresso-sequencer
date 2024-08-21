@@ -16,7 +16,7 @@ import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy
 /// @notice use this script to deploy the upgradeable light client contract
 /// without openzepelin defender
 /// @dev be sure to pass the multisig wallet as the owner of this contract
-contract LightClientDeployScript is Script {
+contract DeployLightClientScript is Script {
     string public contractName = "LightClient.sol";
 
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address owner)
@@ -110,7 +110,7 @@ contract LightClientContractUpgradeScript is Script {
 /// using the SAFE SDK to call the upgrade via the Safe Multisig wallet
 /// @dev this is used when upgrading to the same base contract file which is being actively modified
 /// before we go live
-contract LightClientContractUpgradeSameContractScript is Script {
+contract UpgradeLightClientContractWithSameContractScript is Script {
     string internal originalContractName = "LightClient.sol";
     string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
 
@@ -157,7 +157,7 @@ contract LightClientContractUpgradeSameContractScript is Script {
     }
 }
 
-contract LightClientDefenderDeployScript is Script {
+contract DeployLightClientDefenderScript is Script {
     string public contractName = "LightClient.sol";
     UtilsScript public utils = new UtilsScript();
     uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
@@ -220,7 +220,11 @@ contract LightClientDefenderDeployScript is Script {
     }
 }
 
-contract LightClientDefenderUpgradeScript is Script {
+/// @notice upgrade the LightClient contract by deploying the new implementation using
+/// OpenZeppelin Defender
+/// @dev it depends on the `LIGHT_CLIENT_UPGRADE_NAME` in the environment file to determine
+/// which implementation it's being upgraded to
+contract UpgradeLightClientWithDefenderScript is Script {
     string public originalContractName = "LightClient.sol";
     string public upgradeContractName = vm.envString("LIGHT_CLIENT_UPGRADE_NAME");
     uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
@@ -274,7 +278,7 @@ contract LightClientDefenderUpgradeScript is Script {
     }
 }
 
-contract DeployLightClientContractScriptWithoutMultiSig is Script {
+contract DeployLightClientContractWithoutMultiSigScript is Script {
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)

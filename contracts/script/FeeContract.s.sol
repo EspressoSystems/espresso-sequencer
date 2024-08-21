@@ -13,7 +13,7 @@ import { UtilsScript } from "./Utils.s.sol";
 /// @notice use this script to deploy the upgradeable fee contract
 /// without openzepelin defender
 /// @dev be sure to pass the multisig wallet as the owner of this contract
-contract FeeContractDeployScript is Script {
+contract DeployFeeContractScript is Script {
     string internal contractName = "FeeContract.sol";
 
     function run(address owner)
@@ -39,7 +39,7 @@ contract FeeContractDeployScript is Script {
 
 /// @notice upgrade fee contract by deploying the new implementation using the deployer and then
 /// using the SAFE SDK to call the upgrade via the Safe Multisig wallet
-contract FeeContractUpgradeScript is Script {
+contract UpgradeFeeContractScript is Script {
     string internal originalContractName = "FeeContract.sol";
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
 
@@ -88,7 +88,7 @@ contract FeeContractUpgradeScript is Script {
     }
 }
 
-contract FeeContractDefenderDeployScript is Script {
+contract DeployFeeContractWithDefenderScript is Script {
     string internal contractName = "FeeContract.sol";
     UtilsScript internal utils = new UtilsScript();
     uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
@@ -131,7 +131,7 @@ contract FeeContractDefenderDeployScript is Script {
     }
 }
 
-contract FeeContractDefenderUpgradeScript is Script {
+contract UpgradeFeeContractWithDefenderScript is Script {
     string internal originalContractName = "FeeContract.sol";
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
     uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
@@ -139,7 +139,7 @@ contract FeeContractDefenderUpgradeScript is Script {
 
     function run() public returns (string memory proposalId, string memory proposalUrl) {
         //get the previous salt from the salt history - this assumes there was first a deployment
-        // using `FeeContractDefenderDeployScript`
+        // using `DeployFeeContractWithDefenderScript`
         (string memory saltFilePath,) = utils.generateSaltFilePath(originalContractName);
         (, string memory saltData) = utils.readFile(saltFilePath);
         uint256 prevContractSalt = vm.parseJsonUint(saltData, ".previousSalt");
