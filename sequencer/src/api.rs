@@ -1579,34 +1579,37 @@ mod test {
         client.connect(None).await;
         tracing::info!(port, "server running");
 
-        'outer: loop {
+        let expected_height = 10usize;
+        let expected: Vec<ChainConfig> = (0..NUM_NODES).map(|_| chain_config_upgrade).collect();
+
+        loop {
             let height = client
                 .get::<usize>("status/block-height")
                 .send()
                 .await
                 .unwrap();
-            for peer in &network.peers {
-                let state = peer.consensus().read().await.decided_state().await;
 
-                match state.chain_config.resolve() {
-                    Some(cf) => {
-                        // Fail test if we've waited long enough
-                        if height as u64 > stop_voting_view {
-                            panic!("failed to upgrade `ChainConfig`")
-                        }
-                        // if state.chain_config is not upgraded return to the outer loop
-                        // and check the peers again
-                        if cf != chain_config_upgrade {
-                            continue 'outer;
-                        }
-                    }
-                    None => continue 'outer,
+            let states: Vec<_> = network
+                .peers
+                .iter()
+                .map(|peer| async { peer.consensus().read().await.decided_state().await })
+                .collect();
+
+            let configs: Option<Vec<ChainConfig>> = join_all(states)
+                .await
+                .iter()
+                .map(|state| state.chain_config.resolve())
+                .collect();
+
+            // ChainConfig will eventually be resolved
+            if let Some(configs) = configs {
+                if height > expected_height {
+                    assert_eq!(expected, configs);
+                    break;
                 }
+            } else {
+                continue;
             }
-            // if we make it here that means all chain_configs for a
-            // set of peers have been upgraded. Test is therefore
-            // successful and we can exit the loop.
-            break;
         }
 
         network.server.shut_down().await;
