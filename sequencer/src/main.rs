@@ -46,7 +46,9 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
-        _ => panic!("invalid versions"),
+        _ => panic!(
+            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
+        ),
     }
 }
 

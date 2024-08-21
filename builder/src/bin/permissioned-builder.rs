@@ -319,6 +319,8 @@ async fn main() -> anyhow::Result<()> {
         (V0_2::VERSION, V0_3::VERSION) => {
             run(genesis, opt, SequencerVersions::<V0_2, V0_3>::new()).await
         }
-        _ => panic!("invalid versions"),
+        _ => panic!(
+            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
+        ),
     }
 }
