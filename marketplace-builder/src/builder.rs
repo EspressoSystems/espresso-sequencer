@@ -11,7 +11,7 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, BaseV01UpgradeV02, FeeAmount, L1Client,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
     NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
@@ -333,7 +333,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, BaseV01UpgradeV02::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
@@ -356,7 +356,7 @@ mod test {
                 amount: FeeAmount::from(10),
             }),
             format!("http://localhost:{}", 3000).parse().unwrap(),
-            BaseV01UpgradeV02::new(),
+            MockSequencerVersions::new(),
         );
         let _builder_config = init.await;
 

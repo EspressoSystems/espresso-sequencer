@@ -431,7 +431,7 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        BaseV01UpgradeV02, Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, MockSequencerVersions, PubKey, SeqTypes, Transaction, Upgrade,
     };
     use futures::{
         future::join_all,
@@ -521,7 +521,7 @@ pub mod testing {
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
             if let Some(upgrade) = self
                 .upgrades
-                .get(&<BaseV01UpgradeV02 as Versions>::Upgrade::VERSION)
+                .get(&<MockSequencerVersions as Versions>::Upgrade::VERSION)
             {
                 upgrade.set_hotshot_config_parameters(&mut self.config)
             }
@@ -814,7 +814,7 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use espresso_types::{BaseV01UpgradeV02, Header, NamespaceId, Payload, Transaction};
+    use espresso_types::{Header, MockSequencerVersions, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
@@ -844,7 +844,7 @@ mod test {
 
         config.set_builder_urls(vec1::vec1![builder_url]);
 
-        let handles = config.init_nodes(BaseV01UpgradeV02::new()).await;
+        let handles = config.init_nodes(MockSequencerVersions::new()).await;
 
         let handle_0 = &handles[0];
 
@@ -884,7 +884,7 @@ mod test {
         let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
 
         config.set_builder_urls(vec1::vec1![builder_url]);
-        let handles = config.init_nodes(BaseV01UpgradeV02::new()).await;
+        let handles = config.init_nodes(MockSequencerVersions::new()).await;
 
         let handle_0 = &handles[0];
 

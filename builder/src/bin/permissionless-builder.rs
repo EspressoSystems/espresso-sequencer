@@ -3,7 +3,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, SequencerVersions, V0_1, V0_2, V0_3,
+    eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
+    SequencerVersions, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -103,11 +104,16 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (V0_1::VERSION, V0_2::VERSION) => {
-            run(genesis, opt, SequencerVersions::<V0_1, V0_2>::new()).await
+        (V0_1::VERSION, FeeVersion::VERSION) => {
+            run(genesis, opt, SequencerVersions::<V0_1, FeeVersion>::new()).await
         }
-        (V0_2::VERSION, V0_3::VERSION) => {
-            run(genesis, opt, SequencerVersions::<V0_2, V0_3>::new()).await
+        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+            run(
+                genesis,
+                opt,
+                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+            )
+            .await
         }
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."

@@ -1,7 +1,9 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{SequencerVersions, SolverAuctionResultsProvider, V0_1, V0_2, V0_3};
+use espresso_types::{
+    FeeVersion, MarketplaceVersion, SequencerVersions, SolverAuctionResultsProvider, V0_1,
+};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
@@ -28,21 +30,21 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (V0_1::VERSION, V0_2::VERSION) => {
+        (V0_1::VERSION, FeeVersion::VERSION) => {
             run(
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<V0_1, V0_2>::new(),
+                SequencerVersions::<V0_1, FeeVersion>::new(),
             )
             .await
         }
-        (V0_2::VERSION, V0_3::VERSION) => {
+        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run(
                 genesis,
                 modules,
                 opt,
-                SequencerVersions::<V0_2, V0_3>::new(),
+                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
             )
             .await
         }
@@ -218,7 +220,7 @@ mod test {
 
     use async_std::task::spawn;
 
-    use espresso_types::{BaseV01UpgradeV02, PubKey};
+    use espresso_types::{MockSequencerVersions, PubKey};
     use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
@@ -282,7 +284,7 @@ mod test {
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                BaseV01UpgradeV02::new(),
+                MockSequencerVersions::new(),
             )
             .await
             {

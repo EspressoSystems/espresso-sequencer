@@ -10,7 +10,7 @@ use async_compatibility_layer::{
 };
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, BaseV01UpgradeV02, FeeAmount, L1Client,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
     NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
@@ -313,13 +313,13 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, BaseV01UpgradeV02::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
             event_service_url.clone(),
             builder_api_url.clone(),
             network.cfg.num_nodes(),
-            BaseV01UpgradeV02::new(),
+            MockSequencerVersions::new(),
         )
         .await;
 
