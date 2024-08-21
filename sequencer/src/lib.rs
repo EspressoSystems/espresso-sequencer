@@ -15,8 +15,8 @@ use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::{
-    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SequencerVersions,
-    SolverAuctionResultsProvider, ValidatedState,
+    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
+    UpgradeVersion, ValidatedState,
 };
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
@@ -59,7 +59,7 @@ use hotshot_types::{
     traits::{
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{NodeImplementation, NodeType, Versions},
+        node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
     utils::BuilderCommitment,
@@ -272,10 +272,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         }
     };
 
-    if let Some(upgrade) = genesis
-        .upgrades
-        .get(&<SequencerVersions as Versions>::Upgrade::VERSION)
-    {
+    if let Some(upgrade) = genesis.upgrades.get(&UpgradeVersion::VERSION) {
         upgrade.set_hotshot_config_parameters(&mut config.config);
     }
 
@@ -431,7 +428,7 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade, UpgradeVersion,
     };
     use futures::{
         future::join_all,
@@ -519,10 +516,7 @@ pub mod testing {
         }
 
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrade) = self
-                .upgrades
-                .get(&<SequencerVersions as Versions>::Upgrade::VERSION)
-            {
+            if let Some(upgrade) = self.upgrades.get(&UpgradeVersion::VERSION) {
                 upgrade.set_hotshot_config_parameters(&mut self.config)
             }
 
@@ -813,7 +807,7 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use espresso_types::{Header, NamespaceId, Payload, Transaction};
+    use espresso_types::{BaseVersion, Header, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
@@ -831,7 +825,7 @@ mod test {
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_test();
-        let ver = <SequencerVersions as Versions>::Base::instance();
+        let ver = BaseVersion::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -873,7 +867,7 @@ mod test {
         setup_test();
 
         let success_height = 30;
-        let ver = <SequencerVersions as Versions>::Base::instance();
+        let ver = BaseVersion::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();

@@ -3,10 +3,10 @@
 use crate::context::TaskList;
 use anyhow::{Context, Result};
 use async_compatibility_layer::channel::{Receiver, Sender};
-use espresso_types::{PubKey, SeqTypes, SequencerVersions};
+use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
-    message::{MessageKind, UpgradeLock},
+    message::MessageKind,
     traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
 };
 use serde::{Deserialize, Serialize};
@@ -146,11 +146,7 @@ impl ExternalEventHandler {
             kind: MessageKind::<SeqTypes>::External(response_bytes),
         };
 
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
-
-        let response_bytes = upgrade_lock
-            .serialize(&message)
-            .await
+        let response_bytes = bincode::serialize(&message)
             .with_context(|| "Failed to serialize roll call response")?;
 
         Ok(response_bytes)
