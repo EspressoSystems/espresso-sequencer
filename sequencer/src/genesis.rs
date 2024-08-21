@@ -645,6 +645,13 @@ mod test {
             stop_proposing_view = 10
 
             [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
 
             [[upgrade]]
             version = "0.2"
