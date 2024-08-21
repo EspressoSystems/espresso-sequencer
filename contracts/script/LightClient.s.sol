@@ -13,12 +13,18 @@ import { UtilsScript } from "./Utils.s.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-/// @notice use this script to deploy the upgradeable light client contract
-/// without openzepelin defender
-/// @dev be sure to pass the multisig wallet as the owner of this contract
+/// @notice Deploy the upgradeable light client contract using the OpenZeppelin Upgrades plugin.
 contract DeployLightClientScript is Script {
     string public contractName = "LightClient.sol";
 
+    /// @dev Deploys both the proxy and the implementation contract.
+    /// The proxy admin is set as the owner of the contract upon deployment.
+    /// The `owner` parameter should be the address of the multisig wallet to ensure proper
+    /// ownership management.
+    /// @param numBlocksPerEpoch the number of blocks per epoch
+    /// @param numInitValidators number of the validators initially
+    /// @param owner The address that will be set as the owner of the proxy (typically a multisig
+    /// wallet).
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address owner)
         public
         returns (
@@ -55,13 +61,15 @@ contract DeployLightClientScript is Script {
     }
 }
 
-/// @notice upgrade the LightClient contract by deploying the new implementation using the deployer
-/// and then
-/// using the SAFE SDK to call the upgrade via the Safe Multisig wallet
+/// @notice Upgrades the light client contract first by deploying the new implementation
+/// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 contract LightClientContractUpgradeScript is Script {
     string internal originalContractName = "LightClient.sol";
     string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
 
+    /// @dev First the new implementation contract is deployed via the deployer wallet.
+    /// It then uses the SAFE SDK via an ffi command to perform the upgrade through a Safe Multisig
+    /// wallet.
     function run() public returns (address implementationAddress, bytes memory result) {
         Options memory opts;
         opts.referenceContract = originalContractName;
@@ -105,11 +113,10 @@ contract LightClientContractUpgradeScript is Script {
     }
 }
 
-/// @notice upgrade the LightClient contract by deploying the new implementation using the deployer
-/// and then
-/// using the SAFE SDK to call the upgrade via the Safe Multisig wallet
+/// @notice Upgrades the light client contract first by deploying the new implementation
+/// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 /// @dev this is used when upgrading to the same base contract file which is being actively modified
-/// before we go live
+/// before mainnet
 contract UpgradeLightClientContractWithSameContractScript is Script {
     string internal originalContractName = "LightClient.sol";
     string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
@@ -157,11 +164,18 @@ contract UpgradeLightClientContractWithSameContractScript is Script {
     }
 }
 
+/// @notice Deploys an upgradeable LightClient Contract using OpenZeppelin Defender.
+/// the deployment environment details are set in OpenZeppelin Defender which is
+/// identified via the Defender Key and Secret in the environment file
 contract DeployLightClientDefenderScript is Script {
     string public contractName = "LightClient.sol";
     UtilsScript public utils = new UtilsScript();
     uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
 
+    /// @dev When this function is run, a transaction to deploy the implementation is submitted to
+    /// Defender
+    /// This transaction must be signed via OpenZeppelin Defender's UI and once it completes
+    /// another transaction is available to sign for the deployment of the proxy
     function run()
         public
         returns (address proxy, address multisig, LC.LightClientState memory state)
@@ -220,16 +234,22 @@ contract DeployLightClientDefenderScript is Script {
     }
 }
 
-/// @notice upgrade the LightClient contract by deploying the new implementation using
-/// OpenZeppelin Defender
-/// @dev it depends on the `LIGHT_CLIENT_UPGRADE_NAME` in the environment file to determine
-/// which implementation it's being upgraded to
+/// @notice Upgrades the LightClient Contract using OpenZeppelin Defender.
+/// the deployment environment details are set in OpenZeppelin Defender which is
+/// identified via the Defender Key and Secret in the environment file
+
 contract UpgradeLightClientWithDefenderScript is Script {
     string public originalContractName = "LightClient.sol";
     string public upgradeContractName = vm.envString("LIGHT_CLIENT_UPGRADE_NAME");
     uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
     UtilsScript public utils = new UtilsScript();
 
+    /// @dev it depends on the `LIGHT_CLIENT_UPGRADE_NAME` in the environment file to determine
+    /// which implementation it's being upgraded to
+    /// When this function is run, a transaction to deploy the new implementation is submitted to
+    /// Defender
+    /// This transaction must be signed via OpenZeppelin Defender's UI and once it completes
+    /// another transaction is available to sign to call the upgrade method on the proxy
     function run() public returns (string memory proposalId, string memory proposalUrl) {
         //get the previous salt from the salt history - this assumes there was first a deployment
         (string memory saltFilePath,) = utils.generateSaltFilePath(originalContractName);
@@ -342,5 +362,42 @@ contract DeployLightClientContractWithoutMultiSigScript is Script {
         proxyAddress = payable(address(proxy));
 
         return (proxyAddress, admin, state);
+    }
+}
+
+/// @notice Upgrades the light client contract first by deploying the new implementation
+/// and then calling the upgradeToAndCall method of the proxy
+/// @dev This is used when the admin is not a multisig wallet
+contract UpgradeLightClientWithoutMultisigAdminScript is Script {
+    /// @notice runs the upgrade
+    /// @param mostRecentlyDeployedProxy address of deployed proxy
+    /// @return address of the proxy
+    /// TODO get the most recent deployment from the devops tooling
+    function run(address mostRecentlyDeployedProxy) external returns (address) {
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
+
+        address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()));
+        return proxy;
+    }
+
+    /// @notice upgrades the light client contract by calling the upgrade function the
+    /// implementation contract via
+    /// the proxy
+    /// @param proxyAddress address of proxy
+    /// @param newLightClient address of new implementation
+    /// @return address of the proxy
+    function upgradeLightClient(address proxyAddress, address newLightClient)
+        public
+        returns (address)
+    {
+        LC proxy = LC(proxyAddress); //make the function call on the previous implementation
+        proxy.upgradeToAndCall(newLightClient, ""); //proxy address now points to the new
+            // implementation
+        vm.stopBroadcast();
+        return address(proxy);
     }
 }

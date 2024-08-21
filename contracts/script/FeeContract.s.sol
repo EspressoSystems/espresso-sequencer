@@ -10,12 +10,16 @@ import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { FeeContract as FC } from "../src/FeeContract.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
-/// @notice use this script to deploy the upgradeable fee contract
-/// without openzepelin defender
-/// @dev be sure to pass the multisig wallet as the owner of this contract
+/// @notice Deploys an upgradeable Fee Contract using the OpenZeppelin Upgrades plugin.
 contract DeployFeeContractScript is Script {
     string internal contractName = "FeeContract.sol";
 
+    /// @dev Deploys both the proxy and the implementation contract.
+    /// The proxy admin is set as the owner of the contract upon deployment.
+    /// The `owner` parameter should be the address of the multisig wallet to ensure proper
+    /// ownership management.
+    /// @param owner The address that will be set as the owner of the proxy (typically a multisig
+    /// wallet).
     function run(address owner)
         public
         returns (address payable proxy, address implementationAddress)
@@ -37,12 +41,15 @@ contract DeployFeeContractScript is Script {
     }
 }
 
-/// @notice upgrade fee contract by deploying the new implementation using the deployer and then
-/// using the SAFE SDK to call the upgrade via the Safe Multisig wallet
+/// @notice Upgrades the fee contract first by deploying the new implementation
+/// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 contract UpgradeFeeContractScript is Script {
     string internal originalContractName = "FeeContract.sol";
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
 
+    /// @dev This function first deploys the new implementation contract using the deployer wallet.
+    /// It then uses the SAFE SDK via an ffi command to perform the upgrade through a Safe Multisig
+    /// wallet.
     function run() public returns (address implementationAddress, bytes memory result) {
         Options memory opts;
         opts.referenceContract = originalContractName;
@@ -88,11 +95,18 @@ contract UpgradeFeeContractScript is Script {
     }
 }
 
+/// @notice Deploys an upgradeable Fee Contract using OpenZeppelin Defender.
+/// the deployment environment details are set in OpenZeppelin Defender which is
+/// identified via the Defender Key and Secret in the environment file
 contract DeployFeeContractWithDefenderScript is Script {
     string internal contractName = "FeeContract.sol";
     UtilsScript internal utils = new UtilsScript();
     uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
 
+    /// @dev When this function is run, a transaction to deploy the implementation is submitted to
+    /// Defender
+    /// This transaction must be signed via OpenZeppelin Defender's UI and once it completes
+    /// another transaction is available to sign for the deployment of the proxy
     function run() public returns (address payable proxy, address multisig) {
         ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
         multisig = upgradeApprovalProcess.via;
@@ -131,12 +145,19 @@ contract DeployFeeContractWithDefenderScript is Script {
     }
 }
 
+/// @notice Upgrades the Fee Contract using OpenZeppelin Defender.
+/// the deployment environment details are set in OpenZeppelin Defender which is
+/// identified via the Defender Key and Secret in the environment file
 contract UpgradeFeeContractWithDefenderScript is Script {
     string internal originalContractName = "FeeContract.sol";
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
     uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
     UtilsScript internal utils = new UtilsScript();
 
+    /// @dev When this function is run, a transaction to deploy the new implementation is submitted
+    /// to Defender
+    /// This transaction must be signed via OpenZeppelin Defender's UI and once it completes
+    /// another transaction is available to sign to call the upgrade method on the proxy
     function run() public returns (string memory proposalId, string memory proposalUrl) {
         //get the previous salt from the salt history - this assumes there was first a deployment
         // using `DeployFeeContractWithDefenderScript`

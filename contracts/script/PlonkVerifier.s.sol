@@ -7,6 +7,9 @@ import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { PlonkVerifier as PV } from "../src/libraries/PlonkVerifier.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
+/// @notice Deployed the PlonkVerifier library Contract using OpenZeppelin Defender.
+/// the deployment environment details are set in OpenZeppelin Defender which is
+/// identified via the Defender Key and Secret in the environment file
 contract DeployPlonkVerifierWithDefenderScript is Script {
     string public contractName = "PlonkVerifier.sol";
     UtilsScript public utils = new UtilsScript();
@@ -53,6 +56,8 @@ contract DeployPlonkVerifierWithDefenderScript is Script {
     }
 }
 
+/// @notice Deploys an upgradeable Plonk Verifier Contract using the OpenZeppelin Upgrades plugin.
+/// @dev The Upgrades library has a deployImplementation function which is used here
 contract DeployPlonkVerifierScript is Script {
     string public contractName = "PlonkVerifier.sol";
 

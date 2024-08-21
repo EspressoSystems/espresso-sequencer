@@ -324,7 +324,7 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientContractWithout
 To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
 
 ```bash
-forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mostRecentlyDeployedProxy \
+forge script contracts/script/LightClient.s.sol:UpgradeLightClientWithoutMultisigAdminScript $mostRecentlyDeployedProxy \
 --sig 'run(address)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
@@ -409,7 +409,7 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientContractWithout
 To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
 
 ```bash
-forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mostRecentlyDeployedProxy \
+forge script contracts/script/LightClient.s.sol:UpgradeLightClientWithoutMultisigAdminScript $mostRecentlyDeployedProxy \
 --sig 'run(address)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
