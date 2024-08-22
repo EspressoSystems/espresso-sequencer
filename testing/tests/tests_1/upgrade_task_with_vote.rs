@@ -81,7 +81,7 @@ async fn test_upgrade_task_with_vote() {
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
-        votes.push(view.create_quorum_vote(&handle));
+        votes.push(view.create_quorum_vote(&handle).await);
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
         leaders.push(view.leader_public_key);
@@ -100,7 +100,7 @@ async fn test_upgrade_task_with_vote() {
 
     for view in generator.take(4).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
-        votes.push(view.create_quorum_vote(&handle));
+        votes.push(view.create_quorum_vote(&handle).await);
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
         leaders.push(view.leader_public_key);

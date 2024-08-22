@@ -130,7 +130,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState<TYPES, I, V>
-    for DaTaskState<TYPES, I>
+    for DaTaskState<TYPES, I, V>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
         Self {
@@ -145,13 +145,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             private_key: handle.private_key().clone(),
             id: handle.hotshot.id,
             storage: Arc::clone(&handle.storage),
+            upgrade_lock: handle.hotshot.upgrade_lock.clone(),
         }
     }
 }
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState<TYPES, I, V>
-    for ViewSyncTaskState<TYPES, I>
+    for ViewSyncTaskState<TYPES, I, V>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
         let cur_view = handle.cur_view().await;
@@ -176,6 +177,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             view_sync_timeout: handle.hotshot.config.view_sync_timeout,
             id: handle.hotshot.id,
             last_garbage_collected_view: TYPES::Time::new(0),
+            upgrade_lock: handle.hotshot.upgrade_lock.clone(),
         }
     }
 }

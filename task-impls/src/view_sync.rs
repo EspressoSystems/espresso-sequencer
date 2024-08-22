@@ -21,7 +21,7 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    message::GeneralConsensusMessage,
+    message::{GeneralConsensusMessage, UpgradeLock},
     simple_certificate::{
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
@@ -31,7 +31,7 @@ use hotshot_types::{
     },
     traits::{
         election::Membership,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber, Vote},
@@ -61,11 +61,13 @@ pub enum ViewSyncPhase {
 }
 
 /// Type alias for a map from View Number to Relay to Vote Task
-type RelayMap<TYPES, VOTE, CERT> =
-    HashMap<<TYPES as NodeType>::Time, BTreeMap<u64, VoteCollectionTaskState<TYPES, VOTE, CERT>>>;
+type RelayMap<TYPES, VOTE, CERT, V> = HashMap<
+    <TYPES as NodeType>::Time,
+    BTreeMap<u64, VoteCollectionTaskState<TYPES, VOTE, CERT, V>>,
+>;
 
 /// Main view sync task state
-pub struct ViewSyncTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct ViewSyncTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// View HotShot is currently in
     pub current_view: TYPES::Time,
     /// View HotShot wishes to be in
@@ -85,27 +87,34 @@ pub struct ViewSyncTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub num_timeouts_tracked: u64,
 
     /// Map of running replica tasks
-    pub replica_task_map: RwLock<HashMap<TYPES::Time, ViewSyncReplicaTaskState<TYPES, I>>>,
+    pub replica_task_map: RwLock<HashMap<TYPES::Time, ViewSyncReplicaTaskState<TYPES, I, V>>>,
 
     /// Map of pre-commit vote accumulates for the relay
-    pub pre_commit_relay_map:
-        RwLock<RelayMap<TYPES, ViewSyncPreCommitVote<TYPES>, ViewSyncPreCommitCertificate2<TYPES>>>,
+    pub pre_commit_relay_map: RwLock<
+        RelayMap<TYPES, ViewSyncPreCommitVote<TYPES>, ViewSyncPreCommitCertificate2<TYPES>, V>,
+    >,
     /// Map of commit vote accumulates for the relay
     pub commit_relay_map:
-        RwLock<RelayMap<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>>>,
+        RwLock<RelayMap<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>, V>>,
     /// Map of finalize vote accumulates for the relay
-    pub finalize_relay_map:
-        RwLock<RelayMap<TYPES, ViewSyncFinalizeVote<TYPES>, ViewSyncFinalizeCertificate2<TYPES>>>,
+    pub finalize_relay_map: RwLock<
+        RelayMap<TYPES, ViewSyncFinalizeVote<TYPES>, ViewSyncFinalizeCertificate2<TYPES>, V>,
+    >,
 
     /// Timeout duration for view sync rounds
     pub view_sync_timeout: Duration,
 
     /// Last view we garbage collected old tasks
     pub last_garbage_collected_view: TYPES::Time,
+
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for ViewSyncTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for ViewSyncTaskState<TYPES, I, V>
+{
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(
@@ -122,12 +131,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for ViewSyncTaskSt
     async fn cancel_subtasks(&mut self) {}
 
     fn get_task_name(&self) -> &'static str {
-        std::any::type_name::<ViewSyncTaskState<TYPES, I>>()
+        std::any::type_name::<ViewSyncTaskState<TYPES, I, V>>()
     }
 }
 
 /// State of a view sync replica task
-pub struct ViewSyncReplicaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct ViewSyncReplicaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Timeout for view sync rounds
     pub view_sync_timeout: Duration,
     /// Current round HotShot is in
@@ -153,11 +162,13 @@ pub struct ViewSyncReplicaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES
     pub public_key: TYPES::SignatureKey,
     /// Our Private Key
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
-    for ViewSyncReplicaTaskState<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for ViewSyncReplicaTaskState<TYPES, I, V>
 {
     type Event = HotShotEvent<TYPES>;
 
@@ -175,11 +186,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
     async fn cancel_subtasks(&mut self) {}
 
     fn get_task_name(&self) -> &'static str {
-        std::any::type_name::<ViewSyncReplicaTaskState<TYPES, I>>()
+        std::any::type_name::<ViewSyncReplicaTaskState<TYPES, I, V>>()
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskState<TYPES, I, V> {
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Main Task", level = "error")]
     #[allow(clippy::type_complexity)]
     /// Handles incoming events for the main view sync task
@@ -215,7 +226,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
         }
 
         // We do not have a replica task already running, so start one
-        let mut replica_state: ViewSyncReplicaTaskState<TYPES, I> = ViewSyncReplicaTaskState {
+        let mut replica_state: ViewSyncReplicaTaskState<TYPES, I, V> = ViewSyncReplicaTaskState {
             current_view: view,
             next_view: view,
             relay: 0,
@@ -228,6 +239,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
             private_key: self.private_key.clone(),
             view_sync_timeout: self.view_sync_timeout,
             id: self.id,
+            upgrade_lock: self.upgrade_lock.clone(),
         };
 
         let result = replica_state
@@ -307,7 +319,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
                     view: vote_view,
                     id: self.id,
                 };
-                let vote_collector = create_vote_accumulator(&info, event, &event_stream).await;
+                let vote_collector =
+                    create_vote_accumulator(&info, event, &event_stream, self.upgrade_lock.clone())
+                        .await;
                 if let Some(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }
@@ -344,7 +358,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
                     view: vote_view,
                     id: self.id,
                 };
-                let vote_collector = create_vote_accumulator(&info, event, &event_stream).await;
+                let vote_collector =
+                    create_vote_accumulator(&info, event, &event_stream, self.upgrade_lock.clone())
+                        .await;
                 if let Some(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }
@@ -381,7 +397,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
                     view: vote_view,
                     id: self.id,
                 };
-                let vote_collector = create_vote_accumulator(&info, event, &event_stream).await;
+                let vote_collector =
+                    create_vote_accumulator(&info, event, &event_stream, self.upgrade_lock.clone())
+                        .await;
                 if let Some(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }
@@ -472,7 +490,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
+    ViewSyncReplicaTaskState<TYPES, I, V>
+{
     #[instrument(skip_all, fields(id = self.id, view = *self.current_view), name = "View Sync Replica Task", level = "error")]
     /// Handle incoming events for the view sync replica task
     pub async fn handle(
@@ -492,7 +512,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                 }
 
                 // If certificate is not valid, return current state
-                if !certificate.is_valid_cert(self.membership.as_ref()) {
+                if !certificate
+                    .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
+                    .await
+                {
                     error!("Not valid view sync cert! {:?}", certificate.date());
 
                     return None;
@@ -516,7 +539,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                     self.next_view,
                     &self.public_key,
                     &self.private_key,
-                ) else {
+                    &self.upgrade_lock,
+                )
+                .await
+                else {
                     error!("Failed to sign ViewSyncCommitData!");
                     return None;
                 };
@@ -568,7 +594,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                 }
 
                 // If certificate is not valid, return current state
-                if !certificate.is_valid_cert(self.membership.as_ref()) {
+                if !certificate
+                    .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
+                    .await
+                {
                     error!("Not valid view sync cert! {:?}", certificate.date());
 
                     return None;
@@ -592,7 +621,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                     self.next_view,
                     &self.public_key,
                     &self.private_key,
-                ) else {
+                    &self.upgrade_lock,
+                )
+                .await
+                else {
                     error!("Failed to sign view sync finalized vote!");
                     return None;
                 };
@@ -654,7 +686,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                 }
 
                 // If certificate is not valid, return current state
-                if !certificate.is_valid_cert(self.membership.as_ref()) {
+                if !certificate
+                    .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
+                    .await
+                {
                     error!("Not valid view sync cert! {:?}", certificate.date());
 
                     return None;
@@ -697,7 +732,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                     view_number,
                     &self.public_key,
                     &self.private_key,
-                ) else {
+                    &self.upgrade_lock,
+                )
+                .await
+                else {
                     error!("Failed to sign pre commit vote!");
                     return None;
                 };
@@ -752,7 +790,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                                 self.next_view,
                                 &self.public_key,
                                 &self.private_key,
-                            ) else {
+                                &self.upgrade_lock,
+                            )
+                            .await
+                            else {
                                 error!("Failed to sign ViewSyncPreCommitData!");
                                 return None;
                             };

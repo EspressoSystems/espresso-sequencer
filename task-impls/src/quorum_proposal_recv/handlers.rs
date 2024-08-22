@@ -144,13 +144,21 @@ pub(crate) async fn handle_quorum_proposal_recv<
         task_state.cur_view,
         &task_state.quorum_membership,
         &task_state.timeout_membership,
+        &task_state.upgrade_lock,
     )
+    .await
     .context("Failed to validate proposal view or attached certs")?;
 
     let view_number = proposal.data.view_number();
     let justify_qc = proposal.data.justify_qc.clone();
 
-    if !justify_qc.is_valid_cert(task_state.quorum_membership.as_ref()) {
+    if !justify_qc
+        .is_valid_cert(
+            task_state.quorum_membership.as_ref(),
+            &task_state.upgrade_lock,
+        )
+        .await
+    {
         let consensus = task_state.consensus.read().await;
         consensus.metrics.invalid_qc.update(1);
         bail!("Invalid justify_qc in proposal for view {}", *view_number);
@@ -185,6 +193,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
             // This is because the key that we receive is for the prior leader, so the payload would be routed
             // incorrectly.
             task_state.public_key.clone(),
+            &task_state.upgrade_lock,
         )
         .await
         .ok(),
@@ -246,6 +255,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
         quorum_proposal_sender_key,
         task_state.output_event_stream.clone(),
         task_state.id,
+        task_state.upgrade_lock.clone(),
     )
     .await?;
 

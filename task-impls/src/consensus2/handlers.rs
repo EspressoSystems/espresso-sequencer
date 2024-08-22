@@ -12,7 +12,6 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use chrono::Utc;
 use hotshot_types::{
     event::{Event, EventType},
-    simple_certificate::{QuorumCertificate, TimeoutCertificate},
     simple_vote::{QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         election::Membership,
@@ -59,10 +58,8 @@ pub(crate) async fn handle_quorum_vote_recv<
             view: vote.view_number(),
             id: task_state.id,
         };
-        *collector = create_vote_accumulator::<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>(
-            &info, event, sender,
-        )
-        .await;
+        *collector =
+            create_vote_accumulator(&info, event, sender, task_state.upgrade_lock.clone()).await;
     } else {
         let result = collector
             .as_mut()
@@ -107,10 +104,7 @@ pub(crate) async fn handle_timeout_vote_recv<
             id: task_state.id,
         };
         *collector =
-            create_vote_accumulator::<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>(
-                &info, event, sender,
-            )
-            .await;
+            create_vote_accumulator(&info, event, sender, task_state.upgrade_lock.clone()).await;
     } else {
         let result = collector
             .as_mut()
@@ -250,7 +244,9 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
         view_number,
         &task_state.public_key,
         &task_state.private_key,
+        &task_state.upgrade_lock,
     )
+    .await
     .context("Failed to sign TimeoutData")?;
 
     broadcast_event(Arc::new(HotShotEvent::TimeoutVoteSend(vote)), sender).await;

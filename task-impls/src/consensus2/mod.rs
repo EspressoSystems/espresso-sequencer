@@ -34,7 +34,8 @@ use self::handlers::{
 use crate::{events::HotShotEvent, vote_collection::VoteCollectionTaskState};
 
 /// Alias for Optional type for Vote Collectors
-type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
+type VoteCollectorOption<TYPES, VOTE, CERT, V> =
+    Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
 
 /// Event handlers for use in the `handle` method.
 mod handlers;
@@ -64,11 +65,11 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
 
     /// Current Vote collection task, with it's view.
     pub vote_collector:
-        RwLock<VoteCollectorOption<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>>,
+        RwLock<VoteCollectorOption<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>, V>>,
 
     /// Current timeout vote collection task with its view
     pub timeout_vote_collector:
-        RwLock<VoteCollectorOption<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>>,
+        RwLock<VoteCollectorOption<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>, V>>,
 
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,

@@ -127,7 +127,7 @@ async fn test_quorum_vote_task_miss_dependency() {
     for view in (&mut generator).take(5).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_quorum_vote(&handle));
+        votes.push(view.create_quorum_vote(&handle).await);
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
         leaves.push(view.leaf.clone());

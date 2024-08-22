@@ -183,6 +183,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
         quorum_membership,
         public_key.clone(),
         OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
+        &upgrade_lock,
     )
     .await?;
 
@@ -323,13 +324,21 @@ pub(crate) async fn handle_quorum_proposal_recv<
         task_state.cur_view,
         &task_state.quorum_membership,
         &task_state.timeout_membership,
+        &task_state.upgrade_lock,
     )
+    .await
     .context("Failed to validate proposal view and attached certs")?;
 
     let view = proposal.data.view_number();
     let justify_qc = proposal.data.justify_qc.clone();
 
-    if !justify_qc.is_valid_cert(task_state.quorum_membership.as_ref()) {
+    if !justify_qc
+        .is_valid_cert(
+            task_state.quorum_membership.as_ref(),
+            &task_state.upgrade_lock,
+        )
+        .await
+    {
         let consensus = task_state.consensus.read().await;
         consensus.metrics.invalid_qc.update(1);
         bail!("Invalid justify_qc in proposal for view {}", *view);
@@ -370,6 +379,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
             Arc::clone(&task_state.quorum_membership),
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             task_state.public_key.clone(),
+            &task_state.upgrade_lock,
         )
         .await
         .ok(),
@@ -521,6 +531,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
                 sender,
                 task_state.output_event_stream.clone(),
                 task_state.id,
+                task_state.upgrade_lock.clone(),
             )
             .map(AnyhowTracing::err_as_debug),
         ));
@@ -691,6 +702,7 @@ pub async fn update_state_and_vote_if_able<
     instance_state: Arc<TYPES::InstanceState>,
     vote_info: VoteInfo<TYPES, V>,
     id: u64,
+    upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> bool {
     use hotshot_types::simple_vote::QuorumVote;
 
@@ -754,6 +766,7 @@ pub async fn update_state_and_vote_if_able<
             Arc::clone(&quorum_membership),
             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
             public_key.clone(),
+            upgrade_lock,
         )
         .await
         .ok(),
@@ -807,7 +820,10 @@ pub async fn update_state_and_vote_if_able<
     }
 
     // Validate the DAC.
-    let message = if cert.is_valid_cert(vote_info.da_membership.as_ref()) {
+    let message = if cert
+        .is_valid_cert(vote_info.da_membership.as_ref(), upgrade_lock)
+        .await
+    {
         // Validate the block payload commitment for non-genesis DAC.
         if cert.date().payload_commit != proposal.block_header.payload_commitment() {
             warn!(
@@ -823,7 +839,10 @@ pub async fn update_state_and_vote_if_able<
             view,
             &public_key,
             &vote_info.private_key,
-        ) {
+            &vote_info.upgrade_lock,
+        )
+        .await
+        {
             GeneralConsensusMessage::<TYPES>::Vote(vote)
         } else {
             error!("Unable to sign quorum vote!");

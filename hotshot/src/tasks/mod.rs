@@ -206,9 +206,9 @@ pub fn add_network_event_task<
 pub async fn add_consensus_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     handle: &mut SystemContextHandle<TYPES, I, V>,
 ) {
-    handle.add_task(ViewSyncTaskState::<TYPES, I>::create_from(handle).await);
+    handle.add_task(ViewSyncTaskState::<TYPES, I, V>::create_from(handle).await);
     handle.add_task(VidTaskState::<TYPES, I>::create_from(handle).await);
-    handle.add_task(DaTaskState::<TYPES, I>::create_from(handle).await);
+    handle.add_task(DaTaskState::<TYPES, I, V>::create_from(handle).await);
     handle.add_task(TransactionTaskState::<TYPES, I, V>::create_from(handle).await);
 
     // only spawn the upgrade task if we are actually configured to perform an upgrade.
@@ -614,6 +614,45 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
                 self.validated_proposals.push(proposal.clone());
             }
             _ => {}
+        }
+        vec![event.clone()]
+    }
+}
+
+#[derive(Debug)]
+/// An `EventHandlerState` that modifies view number on the certificate of `DacSend` event to that of a future view
+pub struct DishonestDa {
+    /// How many times current node has been elected leader and sent Da Cert
+    pub total_da_certs_sent_from_node: u64,
+    /// Which proposals to be dishonest at
+    pub dishonest_at_da_cert_sent_numbers: HashSet<u64>,
+    /// When leader how many times we will send DacSend and increment view number
+    pub total_views_add_to_cert: u64,
+}
+
+#[async_trait]
+impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Versions>
+    EventTransformerState<TYPES, I, V> for DishonestDa
+{
+    async fn recv_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>> {
+        vec![event.clone()]
+    }
+
+    async fn send_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>> {
+        if let HotShotEvent::DacSend(cert, sender) = event {
+            self.total_da_certs_sent_from_node += 1;
+            if self
+                .dishonest_at_da_cert_sent_numbers
+                .contains(&self.total_da_certs_sent_from_node)
+            {
+                let mut result = vec![HotShotEvent::DacSend(cert.clone(), sender.clone())];
+                for i in 1..=self.total_views_add_to_cert {
+                    let mut bad_cert = cert.clone();
+                    bad_cert.view_number = cert.view_number + i;
+                    result.push(HotShotEvent::DacSend(bad_cert, sender.clone()));
+                }
+                return result;
+            }
         }
         vec![event.clone()]
     }

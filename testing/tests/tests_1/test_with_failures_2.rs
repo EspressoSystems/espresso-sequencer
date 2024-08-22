@@ -11,8 +11,12 @@ use std::{
     time::Duration,
 };
 
+use hotshot::tasks::DishonestDa;
 use hotshot_example_types::{
-    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestVersions},
+    node_types::{
+        Libp2pImpl, MarketplaceTestVersions, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes,
+        TestVersions,
+    },
     state_types::TestTypes,
 };
 use hotshot_macros::cross_tests;
@@ -105,6 +109,41 @@ cross_tests!(
             (ViewNumber::new(7), false),
             (ViewNumber::new(12), false)
         ]);
+        metadata
+    },
+);
+
+cross_tests!(
+    TestName: dishonest_da,
+    Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
+    Types: [TestTypes],
+    Versions: [MarketplaceTestVersions],
+    Ignore: false,
+    Metadata: {
+        let behaviour = Rc::new(|node_id| {
+                let dishonest_da = DishonestDa {
+                    dishonest_at_da_cert_sent_numbers: HashSet::from([2]),
+                    total_da_certs_sent_from_node: 0,
+                    total_views_add_to_cert: 4
+                };
+                match node_id {
+                    2 => Behaviour::Byzantine(Box::new(dishonest_da)),
+                    _ => Behaviour::Standard,
+                }
+            });
+
+        let mut metadata = TestDescription {
+            // allow more time to pass in CI
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                                             TimeBasedCompletionTaskDescription {
+                                                 duration: Duration::from_secs(60),
+                                             },
+                                         ),
+            behaviour,
+            ..TestDescription::default()
+        };
+
+        metadata.num_nodes_with_stake = 10;
         metadata
     },
 );

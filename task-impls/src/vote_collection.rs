@@ -10,6 +10,7 @@ use async_broadcast::Sender;
 use async_trait::async_trait;
 use either::Either::{self, Left, Right};
 use hotshot_types::{
+    message::UpgradeLock,
     simple_certificate::{
         DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
@@ -18,7 +19,10 @@ use hotshot_types::{
         DaVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
-    traits::{election::Membership, node_implementation::NodeType},
+    traits::{
+        election::Membership,
+        node_implementation::{NodeType, Versions},
+    },
     vote::{Certificate, HasViewNumber, Vote, VoteAccumulator},
 };
 use tracing::{debug, error};
@@ -33,6 +37,7 @@ pub struct VoteCollectionTaskState<
     TYPES: NodeType,
     VOTE: Vote<TYPES>,
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Debug,
+    V: Versions,
 > {
     /// Public key for this node.
     pub public_key: TYPES::SignatureKey,
@@ -41,7 +46,7 @@ pub struct VoteCollectionTaskState<
     pub membership: Arc<TYPES::Membership>,
 
     /// accumulator handles aggregating the votes
-    pub accumulator: Option<VoteAccumulator<TYPES, VOTE, CERT>>,
+    pub accumulator: Option<VoteAccumulator<TYPES, VOTE, CERT, V>>,
 
     /// The view which we are collecting votes for
     pub view: TYPES::Time,
@@ -68,7 +73,8 @@ impl<
         TYPES: NodeType,
         VOTE: Vote<TYPES> + AggregatableVote<TYPES, VOTE, CERT>,
         CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Debug,
-    > VoteCollectionTaskState<TYPES, VOTE, CERT>
+        V: Versions,
+    > VoteCollectionTaskState<TYPES, VOTE, CERT, V>
 {
     /// Take one vote and accumulate it. Returns either the cert or the updated state
     /// after the vote is accumulated
@@ -93,7 +99,7 @@ impl<
         }
 
         let accumulator = self.accumulator.as_mut()?;
-        match accumulator.accumulate(vote, &self.membership) {
+        match accumulator.accumulate(vote, &self.membership).await {
             Either::Left(()) => None,
             Either::Right(cert) => {
                 debug!("Certificate Formed! {:?}", cert);
@@ -144,11 +150,12 @@ pub struct AccumulatorInfo<TYPES: NodeType> {
 /// Generic function for spawning a vote task.  Returns the event stream id of the spawned task if created
 /// # Panics
 /// Calls unwrap but should never panic.
-pub async fn create_vote_accumulator<TYPES, VOTE, CERT>(
+pub async fn create_vote_accumulator<TYPES, VOTE, CERT, V>(
     info: &AccumulatorInfo<TYPES>,
     event: Arc<HotShotEvent<TYPES>>,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-) -> Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>
+    upgrade_lock: UpgradeLock<TYPES, V>,
+) -> Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>
 where
     TYPES: NodeType,
     VOTE: Vote<TYPES>
@@ -161,15 +168,17 @@ where
         + std::marker::Send
         + std::marker::Sync
         + 'static,
-    VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
+    V: Versions,
+    VoteCollectionTaskState<TYPES, VOTE, CERT, V>: HandleVoteEvent<TYPES, VOTE, CERT>,
 {
     let new_accumulator = VoteAccumulator {
         vote_outcomes: HashMap::new(),
         signers: HashMap::new(),
         phantom: PhantomData,
+        upgrade_lock,
     };
 
-    let mut state = VoteCollectionTaskState::<TYPES, VOTE, CERT> {
+    let mut state = VoteCollectionTaskState::<TYPES, VOTE, CERT, V> {
         membership: Arc::clone(&info.membership),
         public_key: info.public_key.clone(),
         accumulator: Some(new_accumulator),
@@ -188,30 +197,32 @@ where
 }
 
 /// Alias for Quorum vote accumulator
-type QuorumVoteState<TYPES> =
-    VoteCollectionTaskState<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>;
+type QuorumVoteState<TYPES, V> =
+    VoteCollectionTaskState<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>, V>;
 /// Alias for DA vote accumulator
-type DaVoteState<TYPES> = VoteCollectionTaskState<TYPES, DaVote<TYPES>, DaCertificate<TYPES>>;
+type DaVoteState<TYPES, V> = VoteCollectionTaskState<TYPES, DaVote<TYPES>, DaCertificate<TYPES>, V>;
 /// Alias for Timeout vote accumulator
-type TimeoutVoteState<TYPES> =
-    VoteCollectionTaskState<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>;
+type TimeoutVoteState<TYPES, V> =
+    VoteCollectionTaskState<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>, V>;
 /// Alias for upgrade vote accumulator
-type UpgradeVoteState<TYPES> =
-    VoteCollectionTaskState<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>;
+type UpgradeVoteState<TYPES, V> =
+    VoteCollectionTaskState<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>, V>;
 /// Alias for View Sync Pre Commit vote accumulator
-type ViewSyncPreCommitState<TYPES> = VoteCollectionTaskState<
+type ViewSyncPreCommitState<TYPES, V> = VoteCollectionTaskState<
     TYPES,
     ViewSyncPreCommitVote<TYPES>,
     ViewSyncPreCommitCertificate2<TYPES>,
+    V,
 >;
 /// Alias for View Sync Commit vote accumulator
-type ViewSyncCommitVoteState<TYPES> =
-    VoteCollectionTaskState<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>>;
+type ViewSyncCommitVoteState<TYPES, V> =
+    VoteCollectionTaskState<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>, V>;
 /// Alias for View Sync Finalize vote accumulator
-type ViewSyncFinalizeVoteState<TYPES> = VoteCollectionTaskState<
+type ViewSyncFinalizeVoteState<TYPES, V> = VoteCollectionTaskState<
     TYPES,
     ViewSyncFinalizeVote<TYPES>,
     ViewSyncFinalizeCertificate2<TYPES>,
+    V,
 >;
 
 impl<TYPES: NodeType> AggregatableVote<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>
@@ -317,8 +328,9 @@ impl<TYPES: NodeType>
 
 // Handlers for all vote accumulators
 #[async_trait]
-impl<TYPES: NodeType> HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>
-    for QuorumVoteState<TYPES>
+impl<TYPES: NodeType, V: Versions>
+    HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>
+    for QuorumVoteState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,
@@ -337,8 +349,9 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificat
 
 // Handlers for all vote accumulators
 #[async_trait]
-impl<TYPES: NodeType> HandleVoteEvent<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>
-    for UpgradeVoteState<TYPES>
+impl<TYPES: NodeType, V: Versions>
+    HandleVoteEvent<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>
+    for UpgradeVoteState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,
@@ -356,8 +369,8 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, UpgradeVote<TYPES>, UpgradeCertific
 }
 
 #[async_trait]
-impl<TYPES: NodeType> HandleVoteEvent<TYPES, DaVote<TYPES>, DaCertificate<TYPES>>
-    for DaVoteState<TYPES>
+impl<TYPES: NodeType, V: Versions> HandleVoteEvent<TYPES, DaVote<TYPES>, DaCertificate<TYPES>>
+    for DaVoteState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,
@@ -375,8 +388,9 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, DaVote<TYPES>, DaCertificate<TYPES>
 }
 
 #[async_trait]
-impl<TYPES: NodeType> HandleVoteEvent<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>
-    for TimeoutVoteState<TYPES>
+impl<TYPES: NodeType, V: Versions>
+    HandleVoteEvent<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>
+    for TimeoutVoteState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,
@@ -394,9 +408,9 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, TimeoutVote<TYPES>, TimeoutCertific
 }
 
 #[async_trait]
-impl<TYPES: NodeType>
+impl<TYPES: NodeType, V: Versions>
     HandleVoteEvent<TYPES, ViewSyncPreCommitVote<TYPES>, ViewSyncPreCommitCertificate2<TYPES>>
-    for ViewSyncPreCommitState<TYPES>
+    for ViewSyncPreCommitState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,
@@ -416,9 +430,9 @@ impl<TYPES: NodeType>
 }
 
 #[async_trait]
-impl<TYPES: NodeType>
+impl<TYPES: NodeType, V: Versions>
     HandleVoteEvent<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>>
-    for ViewSyncCommitVoteState<TYPES>
+    for ViewSyncCommitVoteState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,
@@ -436,9 +450,9 @@ impl<TYPES: NodeType>
 }
 
 #[async_trait]
-impl<TYPES: NodeType>
+impl<TYPES: NodeType, V: Versions>
     HandleVoteEvent<TYPES, ViewSyncFinalizeVote<TYPES>, ViewSyncFinalizeCertificate2<TYPES>>
-    for ViewSyncFinalizeVoteState<TYPES>
+    for ViewSyncFinalizeVoteState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,

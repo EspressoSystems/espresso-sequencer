@@ -164,7 +164,7 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
     );
 
     // We need a private key
-    let (private_key, _) = key_pair_for_id(0);
+    let (private_key, _) = key_pair_for_id::<TestTypes>(0);
 
     // Fire up the solver.
     let solver_url: Url = format!(
@@ -220,7 +220,7 @@ async fn test_fake_solver_fetch_permissioned_with_errors() {
         FakeSolverState::new(Some(0.5), vec!["http://localhost:1111".parse().unwrap()]);
 
     // We need a private key
-    let (private_key, _) = key_pair_for_id(0);
+    let (private_key, _) = key_pair_for_id::<TestTypes>(0);
 
     // Fire up the solver.
     let solver_url: Url = format!(

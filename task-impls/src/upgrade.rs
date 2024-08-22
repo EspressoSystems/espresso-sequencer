@@ -41,7 +41,8 @@ use crate::{
 };
 
 /// Alias for Optional type for Vote Collectors
-type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
+type VoteCollectorOption<TYPES, VOTE, CERT, V> =
+    Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
 
 /// Tracks state of a DA task
 pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
@@ -58,7 +59,7 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ve
 
     /// The current vote collection task, if there is one.
     pub vote_collector:
-        RwLock<VoteCollectorOption<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>>,
+        RwLock<VoteCollectorOption<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>, V>>,
 
     /// This Nodes public key
     pub public_key: TYPES::SignatureKey,
@@ -210,7 +211,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     view,
                     &self.public_key,
                     &self.private_key,
-                ) else {
+                    &self.upgrade_lock,
+                )
+                .await
+                else {
                     error!("Failed to sign UpgradeVote!");
                     return None;
                 };
@@ -243,12 +247,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                         view: vote.view_number(),
                         id: self.id,
                     };
-                    *collector = create_vote_accumulator::<
-                        TYPES,
-                        UpgradeVote<TYPES>,
-                        UpgradeCertificate<TYPES>,
-                    >(&info, event, &tx)
-                    .await;
+                    *collector =
+                        create_vote_accumulator(&info, event, &tx, self.upgrade_lock.clone()).await;
                 } else {
                     let result = collector
                         .as_mut()

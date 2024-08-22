@@ -19,15 +19,16 @@ use committable::{Commitment, Committable};
 use ethereum_types::U256;
 use serde::{Deserialize, Serialize};
 
+use crate::message::UpgradeLock;
 use crate::{
     data::serialize_signature2,
     simple_vote::{
-        DaData, QuorumData, TimeoutData, UpgradeProposalData, ViewSyncCommitData,
-        ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
+        DaData, QuorumData, TimeoutData, UpgradeProposalData, VersionedVoteData,
+        ViewSyncCommitData, ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
     },
     traits::{
         election::Membership,
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vote::{Certificate, HasViewNumber},
@@ -75,13 +76,34 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Thr
     /// The data this certificate is for.  I.e the thing that was voted on to create this Certificate
     pub data: VOTEABLE,
     /// commitment of all the votes this cert should be signed over
-    pub vote_commitment: Commitment<VOTEABLE>,
+    vote_commitment: Commitment<VOTEABLE>,
     /// Which view this QC relates to
     pub view_number: TYPES::Time,
     /// assembled signature for certificate aggregation
     pub signatures: Option<<TYPES::SignatureKey as SignatureKey>::QcType>,
     /// phantom data for `THRESHOLD` and `TYPES`
     pub _pd: PhantomData<(TYPES, THRESHOLD)>,
+}
+
+impl<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Threshold<TYPES>>
+    SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
+{
+    /// Creates a new instance of `SimpleCertificate`
+    pub fn new(
+        data: VOTEABLE,
+        vote_commitment: Commitment<VOTEABLE>,
+        view_number: TYPES::Time,
+        signatures: Option<<TYPES::SignatureKey as SignatureKey>::QcType>,
+        pd: PhantomData<(TYPES, THRESHOLD)>,
+    ) -> Self {
+        Self {
+            data,
+            vote_commitment,
+            view_number,
+            signatures,
+            _pd: pd,
+        }
+    }
 }
 
 impl<TYPES: NodeType, VOTEABLE: Voteable + Committable, THRESHOLD: Threshold<TYPES>> Committable
@@ -107,21 +129,27 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
     type Voteable = VOTEABLE;
     type Threshold = THRESHOLD;
 
-    fn create_signed_certificate(
-        vote_commitment: Commitment<VOTEABLE>,
+    fn create_signed_certificate<V: Versions>(
+        vote_commitment: Commitment<VersionedVoteData<TYPES, VOTEABLE, V>>,
         data: Self::Voteable,
         sig: <TYPES::SignatureKey as SignatureKey>::QcType,
         view: TYPES::Time,
     ) -> Self {
+        let vote_commitment_bytes: [u8; 32] = vote_commitment.into();
+
         SimpleCertificate {
             data,
-            vote_commitment,
+            vote_commitment: Commitment::from_raw(vote_commitment_bytes),
             view_number: view,
             signatures: Some(sig),
             _pd: PhantomData,
         }
     }
-    fn is_valid_cert<MEMBERSHIP: Membership<TYPES>>(&self, membership: &MEMBERSHIP) -> bool {
+    async fn is_valid_cert<MEMBERSHIP: Membership<TYPES>, V: Versions>(
+        &self,
+        membership: &MEMBERSHIP,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> bool {
         if self.view_number == TYPES::Time::genesis() {
             return true;
         }
@@ -129,9 +157,12 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
             membership.committee_qc_stake_table(),
             U256::from(Self::threshold(membership)),
         );
+        let Ok(commit) = self.date_commitment(upgrade_lock).await else {
+            return false;
+        };
         <TYPES::SignatureKey as SignatureKey>::check(
             &real_qc_pp,
-            self.vote_commitment.as_ref(),
+            commit.as_ref(),
             self.signatures.as_ref().unwrap(),
         )
     }
@@ -141,8 +172,15 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
     fn date(&self) -> &Self::Voteable {
         &self.data
     }
-    fn date_commitment(&self) -> Commitment<Self::Voteable> {
-        self.vote_commitment
+    async fn date_commitment<V: Versions>(
+        &self,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Result<Commitment<VersionedVoteData<TYPES, VOTEABLE, V>>> {
+        Ok(
+            VersionedVoteData::new(self.data.clone(), self.view_number, upgrade_lock)
+                .await?
+                .commit(),
+        )
     }
 }
 
@@ -206,13 +244,14 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     /// Validate an upgrade certificate.
     /// # Errors
     /// Returns an error when the upgrade certificate is invalid.
-    pub fn validate(
+    pub async fn validate<V: Versions>(
         upgrade_certificate: &Option<Self>,
         quorum_membership: &TYPES::Membership,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         if let Some(ref cert) = upgrade_certificate {
             ensure!(
-                cert.is_valid_cert(quorum_membership),
+                cert.is_valid_cert(quorum_membership, upgrade_lock).await,
                 "Invalid upgrade certificate."
             );
             Ok(())

@@ -487,13 +487,13 @@ impl<TYPES: NodeType> QuorumCertificate<TYPES> {
                 .commit(),
         };
         let commit = data.commit();
-        Self {
+        Self::new(
             data,
-            vote_commitment: commit,
-            view_number: <TYPES::Time as ConsensusTime>::genesis(),
-            signatures: None,
-            _pd: PhantomData,
-        }
+            commit,
+            <TYPES::Time as ConsensusTime>::genesis(),
+            None,
+            PhantomData,
+        )
     }
 }
 
@@ -529,13 +529,13 @@ impl<TYPES: NodeType> Leaf<TYPES> {
             leaf_commit: Commitment::<Leaf<TYPES>>::default_commitment_no_preimage(),
         };
 
-        let justify_qc = QuorumCertificate {
-            data: null_quorum_data.clone(),
-            vote_commitment: null_quorum_data.commit(),
-            view_number: <TYPES::Time as ConsensusTime>::genesis(),
-            signatures: None,
-            _pd: PhantomData,
-        };
+        let justify_qc = QuorumCertificate::new(
+            null_quorum_data.clone(),
+            null_quorum_data.commit(),
+            <TYPES::Time as ConsensusTime>::genesis(),
+            None,
+            PhantomData,
+        );
 
         Self {
             view_number: TYPES::Time::genesis(),

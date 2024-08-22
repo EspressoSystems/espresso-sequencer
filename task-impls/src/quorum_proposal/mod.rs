@@ -423,7 +423,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 );
             }
             HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
-                if !certificate.is_valid_cert(self.quorum_membership.as_ref()) {
+                if !certificate
+                    .is_valid_cert(self.quorum_membership.as_ref(), &self.upgrade_lock)
+                    .await
+                {
                     warn!(
                         "View Sync Finalize certificate {:?} was invalid",
                         certificate.date()

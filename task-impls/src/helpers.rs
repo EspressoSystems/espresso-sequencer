@@ -10,6 +10,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::{events::HotShotEvent, request::REQUEST_TIMEOUT};
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{Receiver, SendError, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
@@ -19,6 +20,8 @@ use async_std::task::JoinHandle;
 use chrono::Utc;
 use committable::{Commitment, Committable};
 use hotshot_task::dependency::{Dependency, EventDependency};
+use hotshot_types::message::UpgradeLock;
+use hotshot_types::traits::node_implementation::Versions;
 use hotshot_types::{
     consensus::{ConsensusUpgradableReadLockGuard, OuterConsensus},
     data::{Leaf, QuorumProposal, ViewChangeEvidence},
@@ -38,17 +41,16 @@ use hotshot_types::{
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::{events::HotShotEvent, request::REQUEST_TIMEOUT};
-
 /// Trigger a request to the network for a proposal for a view and wait for the response or timeout.
 #[instrument(skip_all)]
-pub(crate) async fn fetch_proposal<TYPES: NodeType>(
+pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     view_number: TYPES::Time,
     event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
     event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
     consensus: OuterConsensus<TYPES>,
     sender_key: TYPES::SignatureKey,
+    upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> Result<Leaf<TYPES>> {
     // First, broadcast that we need a proposal to the current leader
     broadcast_event(
@@ -99,7 +101,10 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType>(
     let view_number = proposal.data.view_number();
     let justify_qc = proposal.data.justify_qc.clone();
 
-    if !justify_qc.is_valid_cert(quorum_membership.as_ref()) {
+    if !justify_qc
+        .is_valid_cert(quorum_membership.as_ref(), upgrade_lock)
+        .await
+    {
         bail!("Invalid justify_qc in proposal for view {}", *view_number);
     }
     let mut consensus_write = consensus.write().await;
@@ -318,13 +323,14 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
 
 /// Gets the parent leaf and state from the parent of a proposal, returning an [`anyhow::Error`] if not.
 #[instrument(skip_all)]
-pub(crate) async fn parent_leaf_and_state<TYPES: NodeType>(
+pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
     next_proposal_view_number: TYPES::Time,
     event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
     public_key: TYPES::SignatureKey,
     consensus: OuterConsensus<TYPES>,
+    upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> Result<(Leaf<TYPES>, Arc<<TYPES as NodeType>::ValidatedState>)> {
     ensure!(
         quorum_membership.leader(next_proposal_view_number) == public_key,
@@ -344,6 +350,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType>(
             quorum_membership,
             consensus.clone(),
             public_key.clone(),
+            upgrade_lock,
         )
         .await
         .context("Failed to fetch proposal")?;
@@ -404,7 +411,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType>(
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
 #[instrument(skip_all, fields(id = id, view = *proposal.data.view_number()))]
-pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
+pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType, V: Versions>(
     proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
     parent_leaf: Leaf<TYPES>,
     consensus: OuterConsensus<TYPES>,
@@ -414,6 +421,7 @@ pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
     sender: TYPES::SignatureKey,
     event_sender: Sender<Event<TYPES>>,
     id: u64,
+    upgrade_lock: UpgradeLock<TYPES, V>,
 ) -> Result<()> {
     let view_number = proposal.data.view_number();
 
@@ -453,7 +461,12 @@ pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
     )
     .await;
 
-    UpgradeCertificate::validate(&proposal.data.upgrade_certificate, &quorum_membership)?;
+    UpgradeCertificate::validate(
+        &proposal.data.upgrade_certificate,
+        &quorum_membership,
+        &upgrade_lock,
+    )
+    .await?;
 
     // Validate that the upgrade certificate is re-attached, if we saw one on the parent
     proposed_leaf
@@ -529,11 +542,12 @@ pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
 ///
 /// # Errors
 /// If any validation or view number check fails.
-pub fn validate_proposal_view_and_certs<TYPES: NodeType>(
+pub async fn validate_proposal_view_and_certs<TYPES: NodeType, V: Versions>(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     cur_view: TYPES::Time,
     quorum_membership: &Arc<TYPES::Membership>,
     timeout_membership: &Arc<TYPES::Membership>,
+    upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> Result<()> {
     let view = proposal.data.view_number();
     ensure!(
@@ -561,7 +575,9 @@ pub fn validate_proposal_view_and_certs<TYPES: NodeType>(
                     *view
                 );
                 ensure!(
-                    timeout_cert.is_valid_cert(timeout_membership.as_ref()),
+                    timeout_cert
+                        .is_valid_cert(timeout_membership.as_ref(), upgrade_lock)
+                        .await,
                     "Timeout certificate for view {} was invalid",
                     *view
                 );
@@ -576,7 +592,9 @@ pub fn validate_proposal_view_and_certs<TYPES: NodeType>(
 
                 // View sync certs must also be valid.
                 ensure!(
-                    view_sync_cert.is_valid_cert(quorum_membership.as_ref()),
+                    view_sync_cert
+                        .is_valid_cert(quorum_membership.as_ref(), upgrade_lock)
+                        .await,
                     "Invalid view sync finalize cert provided"
                 );
             }
@@ -585,7 +603,12 @@ pub fn validate_proposal_view_and_certs<TYPES: NodeType>(
 
     // Validate the upgrade certificate -- this is just a signature validation.
     // Note that we don't do anything with the certificate directly if this passes; it eventually gets stored as part of the leaf if nothing goes wrong.
-    UpgradeCertificate::validate(&proposal.data.upgrade_certificate, quorum_membership)?;
+    UpgradeCertificate::validate(
+        &proposal.data.upgrade_certificate,
+        quorum_membership,
+        upgrade_lock,
+    )
+    .await?;
 
     Ok(())
 }

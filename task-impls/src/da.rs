@@ -18,14 +18,14 @@ use hotshot_types::{
     consensus::{Consensus, OuterConsensus, View},
     data::{DaProposal, PackedBundle},
     event::{Event, EventType},
-    message::Proposal,
+    message::{Proposal, UpgradeLock},
     simple_certificate::DaCertificate,
     simple_vote::{DaData, DaVote},
     traits::{
         block_contents::vid_commitment,
         election::Membership,
         network::ConnectedNetwork,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
         storage::Storage,
     },
@@ -46,10 +46,11 @@ use crate::{
 };
 
 /// Alias for Optional type for Vote Collectors
-type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
+type VoteCollectorOption<TYPES, VOTE, CERT, V> =
+    Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
 
 /// Tracks state of a DA task
-pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
@@ -71,7 +72,7 @@ pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub network: Arc<I::Network>,
 
     /// The current vote collection task, if there is one.
-    pub vote_collector: RwLock<VoteCollectorOption<TYPES, DaVote<TYPES>, DaCertificate<TYPES>>>,
+    pub vote_collector: RwLock<VoteCollectorOption<TYPES, DaVote<TYPES>, DaCertificate<TYPES>, V>>,
 
     /// This Nodes public key
     pub public_key: TYPES::SignatureKey,
@@ -84,9 +85,12 @@ pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,
+
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYPES, I, V> {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error", target = "DaTaskState")]
     pub async fn handle(
@@ -195,7 +199,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                     view_number,
                     &self.public_key,
                     &self.private_key,
-                ) else {
+                    &self.upgrade_lock,
+                )
+                .await
+                else {
                     error!("Failed to sign DA Vote!");
                     return None;
                 };
@@ -270,11 +277,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                         view: vote.view_number(),
                         id: self.id,
                     };
-                    *collector = create_vote_accumulator::<
-                        TYPES,
-                        DaVote<TYPES>,
-                        DaCertificate<TYPES>,
-                    >(&info, event, &event_stream)
+                    *collector = create_vote_accumulator(
+                        &info,
+                        event,
+                        &event_stream,
+                        self.upgrade_lock.clone(),
+                    )
                     .await;
                 } else {
                     let result = collector
@@ -364,7 +372,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
 
 #[async_trait]
 /// task state implementation for DA Task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for DaTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for DaTaskState<TYPES, I, V>
+{
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(
@@ -381,6 +391,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for DaTaskState<TY
     async fn cancel_subtasks(&mut self) {}
 
     fn get_task_name(&self) -> &'static str {
-        std::any::type_name::<DaTaskState<TYPES, I>>()
+        std::any::type_name::<DaTaskState<TYPES, I, V>>()
     }
 }

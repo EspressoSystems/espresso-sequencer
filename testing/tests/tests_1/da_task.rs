@@ -64,7 +64,10 @@ async fn test_da_task() {
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
+        votes.push(
+            view.create_da_vote(DaData { payload_commit }, &handle)
+                .await,
+        );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -74,7 +77,10 @@ async fn test_da_task() {
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
+        votes.push(
+            view.create_da_vote(DaData { payload_commit }, &handle)
+                .await,
+        );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -99,7 +105,7 @@ async fn test_da_task() {
         serial![DaProposalRecv(proposals[1].clone(), leaders[1])],
     ];
 
-    let da_state = DaTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let da_state = DaTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
     let mut da_script = TaskScript {
         timeout: Duration::from_millis(35),
         state: da_state,
@@ -153,7 +159,10 @@ async fn test_da_task_storage_failure() {
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
+        votes.push(
+            view.create_da_vote(DaData { payload_commit }, &handle)
+                .await,
+        );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -163,7 +172,10 @@ async fn test_da_task_storage_failure() {
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
+        votes.push(
+            view.create_da_vote(DaData { payload_commit }, &handle)
+                .await,
+        );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -200,7 +212,7 @@ async fn test_da_task_storage_failure() {
         Expectations::from_outputs(vec![]),
     ];
 
-    let da_state = DaTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let da_state = DaTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
     let mut da_script = TaskScript {
         timeout: Duration::from_millis(35),
         state: da_state,

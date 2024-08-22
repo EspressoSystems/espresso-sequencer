@@ -6,15 +6,20 @@
 
 //! Implementations of the simple vote types.
 
-use std::{fmt::Debug, hash::Hash};
+use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
+use anyhow::Result;
 use committable::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
     data::Leaf,
-    traits::{node_implementation::NodeType, signature_key::SignatureKey},
+    message::UpgradeLock,
+    traits::{
+        node_implementation::{NodeType, Versions},
+        signature_key::SignatureKey,
+    },
     vid::VidCommitment,
     vote::{HasViewNumber, Vote},
 };
@@ -151,19 +156,81 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
     /// Creates and signs a simple vote
     /// # Errors
     /// If we are unable to sign the data
-    pub fn create_signed_vote(
+    pub async fn create_signed_vote<V: Versions>(
         data: DATA,
         view: TYPES::Time,
         pub_key: &TYPES::SignatureKey,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    ) -> Result<Self, <TYPES::SignatureKey as SignatureKey>::SignError> {
-        match TYPES::SignatureKey::sign(private_key, data.commit().as_ref()) {
-            Ok(signature) => Ok(Self {
-                signature: (pub_key.clone(), signature),
-                data,
-                view_number: view,
-            }),
-            Err(e) => Err(e),
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Result<Self> {
+        let commit = VersionedVoteData::new(data.clone(), view, upgrade_lock)
+            .await?
+            .commit();
+
+        let signature = (
+            pub_key.clone(),
+            TYPES::SignatureKey::sign(private_key, commit.as_ref())?,
+        );
+
+        Ok(Self {
+            signature,
+            data,
+            view_number: view,
+        })
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// A wrapper for vote data that carries a view number and an `upgrade_lock`, allowing switching the commitment calculation dynamically depending on the version
+pub struct VersionedVoteData<TYPES: NodeType, DATA: Voteable, V: Versions> {
+    /// underlying vote data
+    data: DATA,
+
+    /// view number
+    view: TYPES::Time,
+
+    /// version applied to the view number
+    version: Version,
+
+    /// phantom data
+    _pd: PhantomData<V>,
+}
+
+impl<TYPES: NodeType, DATA: Voteable, V: Versions> VersionedVoteData<TYPES, DATA, V> {
+    /// Create a new `VersionedVoteData` struct
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `upgrade_lock.version(view)` is unable to return a version we support
+    pub async fn new(
+        data: DATA,
+        view: TYPES::Time,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Result<Self> {
+        let version = upgrade_lock.version(view).await?;
+
+        Ok(Self {
+            data,
+            view,
+            version,
+            _pd: PhantomData,
+        })
+    }
+}
+
+impl<TYPES: NodeType, DATA: Voteable, V: Versions> Committable
+    for VersionedVoteData<TYPES, DATA, V>
+{
+    fn commit(&self) -> Commitment<Self> {
+        if self.version < V::Marketplace::VERSION {
+            let bytes: [u8; 32] = self.data.commit().into();
+
+            Commitment::<Self>::from_raw(bytes)
+        } else {
+            committable::RawCommitmentBuilder::new("Vote")
+                .var_size_bytes(self.data.commit().as_ref())
+                .u64(*self.view)
+                .finalize()
         }
     }
 }

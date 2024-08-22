@@ -52,7 +52,8 @@ use crate::{
 pub(crate) mod handlers;
 
 /// Alias for Optional type for Vote Collectors
-type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
+type VoteCollectorOption<TYPES, VOTE, CERT, V> =
+    Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
 
 /// The state for the consensus task.  Contains all of the information for the implementation
 /// of consensus
@@ -92,11 +93,11 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: 
 
     /// Current Vote collection task, with it's view.
     pub vote_collector:
-        RwLock<VoteCollectorOption<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>>,
+        RwLock<VoteCollectorOption<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>, V>>,
 
     /// Current timeout vote collection task with its view
     pub timeout_vote_collector:
-        RwLock<VoteCollectorOption<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>>,
+        RwLock<VoteCollectorOption<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>, V>>,
 
     /// timeout task handle
     pub timeout_task: JoinHandle<()>,
@@ -248,6 +249,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
         let instance_state = Arc::clone(&self.instance_state);
         let id = self.id;
         let handle = async_spawn(async move {
+            let upgrade_lock = upgrade.clone();
             update_state_and_vote_if_able::<TYPES, I, V>(
                 view,
                 proposal,
@@ -264,6 +266,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     event_receiver,
                 },
                 id,
+                &upgrade_lock,
             )
             .await;
         });
@@ -333,11 +336,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                         view: vote.view_number(),
                         id: self.id,
                     };
-                    *collector = create_vote_accumulator::<
-                        TYPES,
-                        QuorumVote<TYPES>,
-                        QuorumCertificate<TYPES>,
-                    >(&info, event, &event_sender)
+                    *collector = create_vote_accumulator(
+                        &info,
+                        event,
+                        &event_sender,
+                        self.upgrade_lock.clone(),
+                    )
                     .await;
                 } else {
                     let result = collector
@@ -372,11 +376,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                         view: vote.view_number(),
                         id: self.id,
                     };
-                    *collector = create_vote_accumulator::<
-                        TYPES,
-                        TimeoutVote<TYPES>,
-                        TimeoutCertificate<TYPES>,
-                    >(&info, event, &event_sender)
+                    *collector = create_vote_accumulator(
+                        &info,
+                        event,
+                        &event_sender,
+                        self.upgrade_lock.clone(),
+                    )
                     .await;
                 } else {
                     let result = collector
@@ -569,7 +574,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     view,
                     &self.public_key,
                     &self.private_key,
-                ) else {
+                    &self.upgrade_lock,
+                )
+                .await
+                else {
                     error!("Failed to sign TimeoutData!");
                     return;
                 };
@@ -667,7 +675,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 }
             }
             HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
-                if !certificate.is_valid_cert(self.quorum_membership.as_ref()) {
+                if !certificate
+                    .is_valid_cert(self.quorum_membership.as_ref(), &self.upgrade_lock)
+                    .await
+                {
                     error!(
                         "View Sync Finalize certificate {:?} was invalid",
                         certificate.date()

@@ -125,6 +125,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
+            &self.upgrade_lock,
         )
         .await?;
 
@@ -263,6 +264,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
             let event_receiver = self.receiver.clone();
             let sender_key = self.public_key.clone();
             let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
+            let upgrade_lock = self.upgrade_lock.clone();
             async_spawn(async move {
                 fetch_proposal(
                     high_qc_view_number,
@@ -271,6 +273,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                     membership,
                     consensus,
                     sender_key,
+                    &upgrade_lock,
                 )
                 .await
             });

@@ -116,6 +116,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                 Arc::clone(&self.quorum_membership),
                 OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                 self.public_key.clone(),
+                &self.upgrade_lock,
             )
             .await
             .ok(),
@@ -212,7 +213,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
             self.view_number,
             &self.public_key,
             &self.private_key,
+            &self.upgrade_lock,
         )
+        .await
         .context("Failed to sign vote")?;
         debug!(
             "sending vote to next quorum leader {:?}",
@@ -556,7 +559,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 }
 
                 // Validate the DAC.
-                if !cert.is_valid_cert(self.da_membership.as_ref()) {
+                if !cert
+                    .is_valid_cert(self.da_membership.as_ref(), &self.upgrade_lock)
+                    .await
+                {
                     return;
                 }
 

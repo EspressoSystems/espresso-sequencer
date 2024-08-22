@@ -25,7 +25,7 @@ use hotshot_types::{
         DaProposal, Leaf, QuorumProposal, VidDisperse, VidDisperseShare, ViewChangeEvidence,
         ViewNumber,
     },
-    message::Proposal,
+    message::{Proposal, UpgradeLock},
     simple_certificate::{
         DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
         ViewSyncFinalizeCertificate2,
@@ -66,6 +66,7 @@ pub struct TestView {
     formed_upgrade_certificate: Option<UpgradeCertificate<TestTypes>>,
     view_sync_finalize_data: Option<ViewSyncFinalizeData<TestTypes>>,
     timeout_cert_data: Option<TimeoutData<TestTypes>>,
+    upgrade_lock: UpgradeLock<TestTypes, TestVersions>,
 }
 
 impl TestView {
@@ -74,6 +75,7 @@ impl TestView {
         da_membership: &<TestTypes as NodeType>::Membership,
     ) -> Self {
         let genesis_view = ViewNumber::new(1);
+        let upgrade_lock = UpgradeLock::new();
 
         let transactions = Vec::new();
 
@@ -91,11 +93,12 @@ impl TestView {
             &metadata,
         );
 
-        let (private_key, public_key) = key_pair_for_id(*genesis_view);
+        let (private_key, public_key) = key_pair_for_id::<TestTypes>(*genesis_view);
 
         let leader_public_key = public_key;
 
-        let payload_commitment = da_payload_commitment(quorum_membership, transactions.clone());
+        let payload_commitment =
+            da_payload_commitment::<TestTypes>(quorum_membership, transactions.clone());
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
             quorum_membership,
@@ -111,7 +114,9 @@ impl TestView {
             transactions.clone(),
             &public_key,
             &private_key,
-        );
+            &upgrade_lock,
+        )
+        .await;
 
         let block_header = TestBlockHeader {
             block_number: 1,
@@ -180,6 +185,7 @@ impl TestView {
             view_sync_finalize_data: None,
             timeout_cert_data: None,
             da_proposal,
+            upgrade_lock,
         }
     }
 
@@ -205,9 +211,9 @@ impl TestView {
             leaf_commit: old.leaf.commit(),
         };
 
-        let (old_private_key, old_public_key) = key_pair_for_id(*old_view);
+        let (old_private_key, old_public_key) = key_pair_for_id::<TestTypes>(*old_view);
 
-        let (private_key, public_key) = key_pair_for_id(*next_view);
+        let (private_key, public_key) = key_pair_for_id::<TestTypes>(*next_view);
 
         let leader_public_key = public_key;
 
@@ -224,7 +230,8 @@ impl TestView {
             &metadata,
         );
 
-        let payload_commitment = da_payload_commitment(quorum_membership, transactions.clone());
+        let payload_commitment =
+            da_payload_commitment::<TestTypes>(quorum_membership, transactions.clone());
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
             quorum_membership,
@@ -233,17 +240,20 @@ impl TestView {
             &private_key,
         );
 
-        let da_certificate = build_da_certificate(
+        let da_certificate = build_da_certificate::<TestTypes, TestVersions>(
             quorum_membership,
             da_membership,
             next_view,
             transactions.clone(),
             &public_key,
             &private_key,
-        );
+            &self.upgrade_lock,
+        )
+        .await;
 
         let quorum_certificate = build_cert::<
             TestTypes,
+            TestVersions,
             QuorumData<TestTypes>,
             QuorumVote<TestTypes>,
             QuorumCertificate<TestTypes>,
@@ -253,11 +263,14 @@ impl TestView {
             old_view,
             &old_public_key,
             &old_private_key,
-        );
+            &self.upgrade_lock,
+        )
+        .await;
 
         let upgrade_certificate = if let Some(ref data) = self.upgrade_data {
             let cert = build_cert::<
                 TestTypes,
+                TestVersions,
                 UpgradeProposalData<TestTypes>,
                 UpgradeVote<TestTypes>,
                 UpgradeCertificate<TestTypes>,
@@ -267,7 +280,9 @@ impl TestView {
                 next_view,
                 &public_key,
                 &private_key,
-            );
+                &self.upgrade_lock,
+            )
+            .await;
 
             Some(cert)
         } else {
@@ -277,6 +292,7 @@ impl TestView {
         let view_sync_certificate = if let Some(ref data) = self.view_sync_finalize_data {
             let cert = build_cert::<
                 TestTypes,
+                TestVersions,
                 ViewSyncFinalizeData<TestTypes>,
                 ViewSyncFinalizeVote<TestTypes>,
                 ViewSyncFinalizeCertificate2<TestTypes>,
@@ -286,7 +302,9 @@ impl TestView {
                 next_view,
                 &public_key,
                 &private_key,
-            );
+                &self.upgrade_lock,
+            )
+            .await;
 
             Some(cert)
         } else {
@@ -296,6 +314,7 @@ impl TestView {
         let timeout_certificate = if let Some(ref data) = self.timeout_cert_data {
             let cert = build_cert::<
                 TestTypes,
+                TestVersions,
                 TimeoutData<TestTypes>,
                 TimeoutVote<TestTypes>,
                 TimeoutCertificate<TestTypes>,
@@ -305,7 +324,9 @@ impl TestView {
                 next_view,
                 &public_key,
                 &private_key,
-            );
+                &self.upgrade_lock,
+            )
+            .await;
 
             Some(cert)
         } else {
@@ -365,6 +386,8 @@ impl TestView {
             _pd: PhantomData,
         };
 
+        let upgrade_lock = UpgradeLock::new();
+
         TestView {
             quorum_proposal,
             leaf,
@@ -385,6 +408,7 @@ impl TestView {
             view_sync_finalize_data: None,
             timeout_cert_data: None,
             da_proposal,
+            upgrade_lock,
         }
     }
 
@@ -392,7 +416,7 @@ impl TestView {
         self.next_view_from_ancestor(self.clone()).await
     }
 
-    pub fn create_quorum_vote(
+    pub async fn create_quorum_vote(
         &self,
         handle: &SystemContextHandle<TestTypes, MemoryImpl, TestVersions>,
     ) -> QuorumVote<TestTypes> {
@@ -403,11 +427,13 @@ impl TestView {
             self.view_number,
             &handle.public_key(),
             handle.private_key(),
+            &handle.hotshot.upgrade_lock,
         )
+        .await
         .expect("Failed to generate a signature on QuorumVote")
     }
 
-    pub fn create_upgrade_vote(
+    pub async fn create_upgrade_vote(
         &self,
         data: UpgradeProposalData<TestTypes>,
         handle: &SystemContextHandle<TestTypes, MemoryImpl, TestVersions>,
@@ -417,11 +443,13 @@ impl TestView {
             self.view_number,
             &handle.public_key(),
             handle.private_key(),
+            &handle.hotshot.upgrade_lock,
         )
+        .await
         .expect("Failed to generate a signature on UpgradVote")
     }
 
-    pub fn create_da_vote(
+    pub async fn create_da_vote(
         &self,
         data: DaData,
         handle: &SystemContextHandle<TestTypes, MemoryImpl, TestVersions>,
@@ -431,7 +459,9 @@ impl TestView {
             self.view_number,
             &handle.public_key(),
             handle.private_key(),
+            &handle.hotshot.upgrade_lock,
         )
+        .await
         .expect("Failed to sign DaData")
     }
 }

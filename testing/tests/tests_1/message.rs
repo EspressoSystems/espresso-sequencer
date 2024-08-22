@@ -41,13 +41,8 @@ fn version_number_at_start_of_serialization() {
         relay: 37,
         round: view_number,
     };
-    let simple_certificate = SimpleCertificate {
-        data: data.clone(),
-        vote_commitment: data.commit(),
-        view_number,
-        signatures: None,
-        _pd: PhantomData,
-    };
+    let simple_certificate =
+        SimpleCertificate::new(data.clone(), data.commit(), view_number, None, PhantomData);
     let message = Message {
         sender,
         kind: MessageKind::Consensus(SequencingMessage::General(
