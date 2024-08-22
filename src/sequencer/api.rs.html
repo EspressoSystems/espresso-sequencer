@@ -1750,6 +1750,20 @@
 <a href="#1750" id="1750">1750</a>
 <a href="#1751" id="1751">1751</a>
 <a href="#1752" id="1752">1752</a>
+<a href="#1753" id="1753">1753</a>
+<a href="#1754" id="1754">1754</a>
+<a href="#1755" id="1755">1755</a>
+<a href="#1756" id="1756">1756</a>
+<a href="#1757" id="1757">1757</a>
+<a href="#1758" id="1758">1758</a>
+<a href="#1759" id="1759">1759</a>
+<a href="#1760" id="1760">1760</a>
+<a href="#1761" id="1761">1761</a>
+<a href="#1762" id="1762">1762</a>
+<a href="#1763" id="1763">1763</a>
+<a href="#1764" id="1764">1764</a>
+<a href="#1765" id="1765">1765</a>
+<a href="#1766" id="1766">1766</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -3231,8 +3245,6 @@
             },
         );
 
-        <span class="kw">let </span>stop_voting_view = u64::MAX;
-
         <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
         <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;NUM_NODES, <span class="kw">_</span>, <span class="kw">_</span>&gt;::with_num_nodes()
             .api_config(
@@ -3260,7 +3272,11 @@
         <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
-        <span class="kw">loop </span>{
+
+        <span class="comment">// First loop to get an `UpgradeProposal`. Note that the
+        // actual upgrade will take several subsequent views for
+        // voting and finally the actual upgrade.
+        </span><span class="kw">let </span>new_version_first_view = <span class="kw">loop </span>{
             <span class="kw">let </span>event = events.next().<span class="kw">await</span>.unwrap();
 
             <span class="kw">match </span>event.event {
@@ -3271,42 +3287,54 @@
                         new_version,
                         &lt;MockSequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION
                     );
-                    <span class="kw">break</span>;
+                    <span class="kw">break </span>upgrade.new_version_first_view;
                 }
                 <span class="kw">_ </span>=&gt; <span class="kw">continue</span>,
             }
-        }
+        };
 
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerApiVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         <span class="macro">tracing::info!</span>(port, <span class="string">"server running"</span>);
 
-        <span class="lifetime">'outer</span>: <span class="kw">loop </span>{
-            <span class="kw">let </span>height = client
-                .get::&lt;usize&gt;(<span class="string">"status/block-height"</span>)
+        <span class="comment">// Loop to wait on the upgrade itself.
+        </span><span class="kw">loop </span>{
+            <span class="comment">// Get height as a proxy for view number. Height is always
+            // &gt;= to view, especially using anvil. As a possible
+            // alternative we might loop on hotshot events here again
+            // and pull the view number off the event.
+            </span><span class="kw">let </span>height = client
+                .get::&lt;ViewNumber&gt;(<span class="string">"status/block-height"</span>)
                 .send()
                 .<span class="kw">await
                 </span>.unwrap();
 
-            <span class="kw">for </span>peer <span class="kw">in </span><span class="kw-2">&amp;</span>network.peers {
-                <span class="kw">let </span>state = peer.consensus().read().<span class="kw">await</span>.decided_state().<span class="kw">await</span>;
+            <span class="kw">let </span>states: Vec&lt;<span class="kw">_</span>&gt; = network
+                .peers
+                .iter()
+                .map(|peer| <span class="kw">async </span>{ peer.consensus().read().<span class="kw">await</span>.decided_state().<span class="kw">await </span>})
+                .collect();
 
-                <span class="kw">match </span>state.chain_config.resolve() {
-                    <span class="prelude-val">Some</span>(cf) =&gt; {
-                        <span class="kw">if </span>cf != chain_config_upgrade &amp;&amp; height <span class="kw">as </span>u64 &gt; stop_voting_view {
-                            <span class="macro">panic!</span>(<span class="string">"failed to upgrade chain config"</span>);
-                        }
+            <span class="kw">let </span>configs: <span class="prelude-ty">Option</span>&lt;Vec&lt;ChainConfig&gt;&gt; = join_all(states)
+                .<span class="kw">await
+                </span>.iter()
+                .map(|state| state.chain_config.resolve())
+                .collect();
+
+            <span class="comment">// ChainConfigs will eventually be resolved
+            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(configs) = configs {
+                <span class="kw">if </span>height &gt;= new_version_first_view {
+                    <span class="kw">for </span>config <span class="kw">in </span>configs {
+                        <span class="macro">assert_eq!</span>(config, chain_config_upgrade);
                     }
-                    <span class="prelude-val">None </span>=&gt; <span class="kw">continue </span><span class="lifetime">'outer</span>,
-                }
+                    <span class="kw">break</span>; <span class="comment">// if assertion did not panic, we need to exit the loop
+                </span>}
             }
-
-            <span class="kw">break</span>;
+            sleep(Duration::from_millis(<span class="number">200</span>)).<span class="kw">await</span>;
         }
 
         network.server.shut_down().<span class="kw">await</span>;
-        drop(network);
     }
 
     <span class="attr">#[async_std::test]
