@@ -213,16 +213,21 @@
 <a href="#213" id="213">213</a>
 <a href="#214" id="214">214</a>
 <a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to verify properties of headers sequenced by HotShot.
 
 </span><span class="kw">use </span>std::{cmp::max, process::exit, time::Duration};
 
 <span class="kw">use </span>async_std::{sync::Arc, task::sleep};
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::{BaseVersion, Header, L1BlockInfo};
+<span class="kw">use </span>espresso_types::{Header, L1BlockInfo};
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::future::join_all;
 <span class="kw">use </span>itertools::Itertools;
+<span class="kw">use </span>sequencer::SequencerApiVersion;
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>surf_disco::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -268,11 +273,11 @@
     </span>logging: logging::Config,
 }
 
-<span class="kw">type </span>SequencerClient&lt;Ver&gt; = surf_disco::Client&lt;hotshot_query_service::Error, Ver&gt;;
+<span class="kw">type </span>SequencerClient&lt;ApiVer&gt; = surf_disco::Client&lt;hotshot_query_service::Error, ApiVer&gt;;
 
-<span class="kw">async fn </span>verify_header&lt;Ver: StaticVersionType&gt;(
+<span class="kw">async fn </span>verify_header&lt;ApiVer: StaticVersionType&gt;(
     opt: <span class="kw-2">&amp;</span>Options,
-    seq: <span class="kw-2">&amp;</span>SequencerClient&lt;Ver&gt;,
+    seq: <span class="kw-2">&amp;</span>SequencerClient&lt;ApiVer&gt;,
     l1: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Provider&lt;Http&gt;&gt;,
     parent: <span class="prelude-ty">Option</span>&lt;Header&gt;,
     height: usize,
@@ -331,7 +336,10 @@
     (header, ok)
 }
 
-<span class="kw">async fn </span>get_header&lt;Ver: StaticVersionType&gt;(seq: <span class="kw-2">&amp;</span>SequencerClient&lt;Ver&gt;, height: usize) -&gt; Header {
+<span class="kw">async fn </span>get_header&lt;ApiVer: StaticVersionType&gt;(
+    seq: <span class="kw-2">&amp;</span>SequencerClient&lt;ApiVer&gt;,
+    height: usize,
+) -&gt; Header {
     <span class="kw">loop </span>{
         <span class="kw">match </span>seq
             .get(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/header/{height}"</span>))
@@ -384,7 +392,7 @@
     <span class="kw">let </span>opt = Arc::new(Options::parse());
     opt.logging.init();
 
-    <span class="kw">let </span>seq = Arc::new(SequencerClient::&lt;BaseVersion&gt;::new(opt.url.clone()));
+    <span class="kw">let </span>seq = Arc::new(SequencerClient::&lt;SequencerApiVersion&gt;::new(opt.url.clone()));
 
     <span class="kw">let </span>block_height: usize = seq.get(<span class="string">"status/latest_block_height"</span>).send().<span class="kw">await</span>.unwrap();
     <span class="kw">let </span>from = opt.from.unwrap_or(<span class="number">0</span>);

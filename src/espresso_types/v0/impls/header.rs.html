@@ -1676,6 +1676,8 @@
 <a href="#1676" id="1676">1676</a>
 <a href="#1677" id="1677">1677</a>
 <a href="#1678" id="1678">1678</a>
+<a href="#1679" id="1679">1679</a>
+<a href="#1680" id="1680">1680</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -1702,12 +1704,14 @@
 <span class="kw">use </span>vbs::version::{StaticVersionType, Version};
 
 <span class="kw">use crate</span>::{
-    v0::header::{EitherOrVersion, VersionedHeader},
+    v0::{
+        header::{EitherOrVersion, VersionedHeader},
+        MarketplaceVersion,
+    },
     v0_1, v0_2,
     v0_3::{<span class="self">self</span>, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, MarketplaceVersion, NamespaceId, NsTable, SeqTypes,
-    UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
 
 <span class="kw">use super</span>::{instance_state::NodeState, state::ValidatedState};

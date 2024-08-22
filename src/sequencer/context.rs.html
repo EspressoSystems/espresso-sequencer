@@ -403,13 +403,6 @@
 <a href="#403" id="403">403</a>
 <a href="#404" id="404">404</a>
 <a href="#405" id="405">405</a>
-<a href="#406" id="406">406</a>
-<a href="#407" id="407">407</a>
-<a href="#408" id="408">408</a>
-<a href="#409" id="409">409</a>
-<a href="#410" id="410">410</a>
-<a href="#411" id="411">411</a>
-<a href="#412" id="412">412</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Display;
 
 <span class="kw">use </span>anyhow::Context;
@@ -419,8 +412,7 @@
 };
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, SequencerVersions, Transaction,
-    ValidatedState,
+    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
 };
 <span class="kw">use </span>futures::{
     future::{join_all, Future},
@@ -442,33 +434,29 @@
         election::Membership,
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
+        node_implementation::Versions,
     },
 };
 <span class="kw">use </span>url::Url;
-<span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="kw">use crate</span>::{
     external_event_handler::{<span class="self">self</span>, ExternalEventHandler},
     state_signature::StateSigner,
-    static_stake_table_commitment, Node, SeqTypes,
+    static_stake_table_commitment, Node, SeqTypes, SequencerApiVersion,
 };
 <span class="doccomment">/// The consensus handle
-</span><span class="kw">pub type </span>Consensus&lt;N, P&gt; = SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;, SequencerVersions&gt;;
+</span><span class="kw">pub type </span>Consensus&lt;N, P, V&gt; = SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;, V&gt;;
 
 <span class="doccomment">/// The sequencer context contains a consensus handle and other sequencer specific information.
 </span><span class="attr">#[derive(Derivative)]
 #[derivative(Debug(bound = <span class="string">""</span>))]
-</span><span class="kw">pub struct </span>SequencerContext&lt;
-    N: ConnectedNetwork&lt;PubKey&gt;,
-    P: SequencerPersistence,
-    Ver: StaticVersionType + <span class="lifetime">'static</span>,
-&gt; {
+</span><span class="kw">pub struct </span>SequencerContext&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, V: Versions&gt; {
     <span class="doccomment">/// The consensus handle
     </span><span class="attr">#[derivative(Debug = <span class="string">"ignore"</span>)]
-    </span>handle: Arc&lt;RwLock&lt;Consensus&lt;N, P&gt;&gt;&gt;,
+    </span>handle: Arc&lt;RwLock&lt;Consensus&lt;N, P, V&gt;&gt;&gt;,
 
     <span class="doccomment">/// Context for generating state signatures.
-    </span>state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
+    </span>state_signer: Arc&lt;StateSigner&lt;SequencerApiVersion&gt;&gt;,
 
     <span class="doccomment">/// An orchestrator to wait for before starting consensus.
     </span><span class="attr">#[derivative(Debug = <span class="string">"ignore"</span>)]
@@ -487,9 +475,7 @@
     config: NetworkConfig&lt;PubKey&gt;,
 }
 
-<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
-    SequencerContext&lt;N, P, Ver&gt;
-{
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, V: Versions&gt; SequencerContext&lt;N, P, V&gt; {
     <span class="attr">#[tracing::instrument(skip_all, fields(node_id = instance_state.node_id))]
     #[allow(clippy::too_many_arguments)]
     </span><span class="kw">pub async fn </span>init(
@@ -501,7 +487,7 @@
         metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
         stake_table_capacity: u64,
         public_api_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
-        <span class="kw">_</span>: Ver,
+        <span class="kw">_</span>: V,
         marketplace_config: MarketplaceConfig&lt;SeqTypes, Node&lt;N, P&gt;&gt;,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>config = <span class="kw-2">&amp;</span>network_config.config;
@@ -595,10 +581,10 @@
 
     <span class="doccomment">/// Constructor
     </span><span class="kw">fn </span>new(
-        handle: Consensus&lt;N, P&gt;,
+        handle: Consensus&lt;N, P, V&gt;,
         persistence: Arc&lt;RwLock&lt;P&gt;&gt;,
-        state_signer: StateSigner&lt;Ver&gt;,
-        external_event_handler: ExternalEventHandler,
+        state_signer: StateSigner&lt;SequencerApiVersion&gt;,
+        external_event_handler: ExternalEventHandler&lt;V&gt;,
         event_streamer: Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;,
         node_state: NodeState,
         config: NetworkConfig&lt;PubKey&gt;,
@@ -642,7 +628,7 @@
     </span>}
 
     <span class="doccomment">/// Return a reference to the consensus state signer.
-    </span><span class="kw">pub fn </span>state_signer(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;StateSigner&lt;Ver&gt;&gt; {
+    </span><span class="kw">pub fn </span>state_signer(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;StateSigner&lt;SequencerApiVersion&gt;&gt; {
         <span class="self">self</span>.state_signer.clone()
     }
 
@@ -662,7 +648,7 @@
     }
 
     <span class="doccomment">/// Return a reference to the underlying consensus handle.
-    </span><span class="kw">pub fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;RwLock&lt;Consensus&lt;N, P&gt;&gt;&gt; {
+    </span><span class="kw">pub fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;RwLock&lt;Consensus&lt;N, P, V&gt;&gt;&gt; {
         Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.handle)
     }
 
@@ -734,8 +720,8 @@
     }
 }
 
-<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt; Drop
-    <span class="kw">for </span>SequencerContext&lt;N, P, Ver&gt;
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, V: Versions&gt; Drop
+    <span class="kw">for </span>SequencerContext&lt;N, P, V&gt;
 {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">if </span>!<span class="self">self</span>.detached {
@@ -744,11 +730,11 @@
     }
 }
 
-<span class="kw">async fn </span>handle_events&lt;Ver: StaticVersionType&gt;(
+<span class="kw">async fn </span>handle_events&lt;V: Versions&gt;(
     <span class="kw-2">mut </span>events: <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; + Unpin,
     persistence: Arc&lt;RwLock&lt;<span class="kw">impl </span>SequencerPersistence&gt;&gt;,
-    state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
-    external_event_handler: ExternalEventHandler,
+    state_signer: Arc&lt;StateSigner&lt;SequencerApiVersion&gt;&gt;,
+    external_event_handler: ExternalEventHandler&lt;V&gt;,
     events_streamer: <span class="prelude-ty">Option</span>&lt;Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;&gt;,
 ) {
     <span class="kw">while let </span><span class="prelude-val">Some</span>(event) = events.next().<span class="kw">await </span>{

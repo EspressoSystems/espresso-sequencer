@@ -558,7 +558,7 @@
 
 <span class="kw">const </span>RETRY_DELAY: Duration = Duration::from_secs(<span class="number">1</span>);
 
-<span class="kw">type </span>HotShotClient&lt;Ver&gt; = surf_disco::Client&lt;hotshot_query_service::Error, Ver&gt;;
+<span class="kw">type </span>HotShotClient&lt;ApiVer&gt; = surf_disco::Client&lt;hotshot_query_service::Error, ApiVer&gt;;
 
 <span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>CommitmentTaskOptions {
@@ -598,9 +598,9 @@
 }
 
 <span class="doccomment">/// main logic for the commitment task, which sync the latest blocks from HotShot to L1 contracts
-</span><span class="kw">pub async fn </span>run_hotshot_commitment_task&lt;Ver: StaticVersionType&gt;(opt: <span class="kw-2">&amp;</span>CommitmentTaskOptions) {
+</span><span class="kw">pub async fn </span>run_hotshot_commitment_task&lt;ApiVer: StaticVersionType&gt;(opt: <span class="kw-2">&amp;</span>CommitmentTaskOptions) {
     <span class="comment">// init a client connecting to HotShot query service
-    </span><span class="kw">let </span>hotshot = HotShotClient::&lt;Ver&gt;::builder(
+    </span><span class="kw">let </span>hotshot = HotShotClient::&lt;ApiVer&gt;::builder(
         opt.query_service_url
             .clone()
             .expect(<span class="string">"query service URL must be specified"</span>),
@@ -623,8 +623,8 @@
     sequence(hotshot, contract, opt.delay).<span class="kw">await</span>;
 }
 
-<span class="kw">async fn </span>sequence&lt;Ver: StaticVersionType&gt;(
-    hotshot: HotShotClient&lt;Ver&gt;,
+<span class="kw">async fn </span>sequence&lt;ApiVer: StaticVersionType&gt;(
+    hotshot: HotShotClient&lt;ApiVer&gt;,
     contract: HotShot&lt;Signer&gt;,
     delay: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
 ) {
@@ -683,7 +683,7 @@
 }
 
 <span class="attr">#[async_trait]
-</span><span class="kw">impl</span>&lt;Ver: StaticVersionType&gt; HotShotDataSource <span class="kw">for </span>HotShotClient&lt;Ver&gt; {
+</span><span class="kw">impl</span>&lt;ApiVer: StaticVersionType&gt; HotShotDataSource <span class="kw">for </span>HotShotClient&lt;ApiVer&gt; {
     <span class="kw">type </span>Error = hotshot_query_service::Error;
 
     <span class="kw">async fn </span>block_height(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;u64, <span class="self">Self</span>::Error&gt; {

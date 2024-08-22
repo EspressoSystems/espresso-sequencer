@@ -878,6 +878,9 @@
 <a href="#878" id="878">878</a>
 <a href="#879" id="879">879</a>
 <a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -945,7 +948,7 @@
     context::{Consensus, SequencerContext},
     network,
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node,
+    L1Params, NetworkParams, Node, SequencerApiVersion,
 };
 <span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
 <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
@@ -978,7 +981,7 @@
     app.register_module(<span class="string">"txn_submit"</span>, private_mempool_api)
         .expect(<span class="string">"Failed to register the private mempool API"</span>);
 
-    async_spawn(app.serve(url, StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance()));
+    async_spawn(app.serve(url, SequencerApiVersion::instance()));
 }
 
 <span class="attr">#[cfg(test)]
@@ -1047,13 +1050,13 @@
             block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
             metrics::NoMetrics,
             network::Topic,
-            node_implementation::ConsensusTime,
+            node_implementation::{ConsensusTime, Versions},
             signature_key::BuilderSignatureKey <span class="kw">as _</span>,
         },
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     <span class="kw">use </span>portpicker::pick_unused_port;
-    <span class="kw">use </span>sequencer::{state_signature::StateSignatureMemStorage, testing::TestConfig};
+    <span class="kw">use </span>sequencer::{state_signature::StateSignatureMemStorage, SequencerApiVersion};
     <span class="kw">use </span>serde::{Deserialize, Serialize};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>vbs::version::StaticVersion;
@@ -1225,11 +1228,14 @@
             }
         }
 
-        <span class="kw">pub async fn </span>init_nodes&lt;P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+        <span class="kw">pub async fn </span>init_nodes&lt;P: SequencerPersistence, V: Versions&gt;(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
-            bind_version: Ver,
+            bind_version: V,
             options: <span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;,
-        ) -&gt; Vec&lt;(Arc&lt;Consensus&lt;network::Memory, P&gt;&gt;, <span class="prelude-ty">Option</span>&lt;StateSigner&lt;Ver&gt;&gt;)&gt; {
+        ) -&gt; Vec&lt;(
+            Arc&lt;Consensus&lt;network::Memory, P, V&gt;&gt;,
+            <span class="prelude-ty">Option</span>&lt;StateSigner&lt;SequencerApiVersion&gt;&gt;,
+        )&gt; {
             <span class="kw">let </span>num_staked_nodes = <span class="self">self</span>.num_staked_nodes();
             <span class="kw">let </span><span class="kw-2">mut </span>is_staked = <span class="bool-val">false</span>;
             <span class="kw">let </span>stake_table_commit = static_stake_table_commitment(
@@ -1259,15 +1265,18 @@
             .<span class="kw">await
         </span>}
 
-        <span class="kw">pub async fn </span>init_node&lt;P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+        <span class="kw">pub async fn </span>init_node&lt;P: SequencerPersistence, V: Versions&gt;(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
             i: usize,
             is_staked: bool,
             stake_table_commit: StakeTableCommitmentType,
             metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
-            bind_version: Ver,
+            bind_version: V,
             persistence: P,
-        ) -&gt; (Consensus&lt;network::Memory, P&gt;, StateSigner&lt;Ver&gt;) {
+        ) -&gt; (
+            Consensus&lt;network::Memory, P, V&gt;,
+            StateSigner&lt;SequencerApiVersion&gt;,
+        ) {
             <span class="kw">let </span><span class="kw-2">mut </span>config = <span class="self">self</span>.config.clone();
 
             <span class="kw">let </span>num_staked_nodes = <span class="self">self</span>.num_staked_nodes();
@@ -1290,8 +1299,8 @@
                 ChainConfig::default(),
                 L1Client::new(<span class="self">self</span>.anvil.endpoint().parse().unwrap(), <span class="number">1</span>),
                 MockStateCatchup::default(),
+                V::Base::VERSION,
             )
-            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             <span class="macro">tracing::info!</span>(<span class="string">"Before init hotshot"</span>);
@@ -1343,14 +1352,14 @@
             app.register_module(<span class="string">"hotshot-events"</span>, hotshot_events_api)
                 .expect(<span class="string">"Failed to register hotshot events API"</span>);
 
-            async_spawn(app.serve(url, StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance()));
+            async_spawn(app.serve(url, SequencerApiVersion::instance()));
         }
         <span class="comment">// enable hotshot event streaming
-        </span><span class="kw">pub fn </span>enable_hotshot_node_event_streaming&lt;P: SequencerPersistence&gt;(
+        </span><span class="kw">pub fn </span>enable_hotshot_node_event_streaming&lt;P: SequencerPersistence, V: Versions&gt;(
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec&lt;PeerConfig&lt;VerKey&gt;&gt;,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: Arc&lt;Consensus&lt;network::Memory, P&gt;&gt;,
+            hotshot_context_handle: Arc&lt;Consensus&lt;network::Memory, P, V&gt;&gt;,
         ) {
             <span class="comment">// create a event streamer
             </span><span class="kw">let </span>events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -1418,10 +1427,11 @@
     <span class="kw">impl </span>NonPermissionedBuilderTestConfig {
         <span class="kw">pub const </span>SUBSCRIBED_DA_NODE_ID: usize = <span class="number">5</span>;
 
-        <span class="kw">pub async fn </span>init_non_permissioned_builder(
+        <span class="kw">pub async fn </span>init_non_permissioned_builder&lt;V: Versions&gt;(
             hotshot_events_streaming_api_url: Url,
             hotshot_builder_api_url: Url,
             num_nodes: usize,
+            versions: V,
         ) -&gt; <span class="self">Self </span>{
             <span class="comment">// generate builder keys
             </span><span class="kw">let </span>seed = [<span class="number">201_u8</span>; <span class="number">32</span>];
@@ -1442,7 +1452,7 @@
                 tx_channel_capacity,
                 event_channel_capacity,
                 node_count,
-                NodeState::default(),
+                NodeState::default().with_current_version(V::Base::VERSION),
                 ValidatedState::default(),
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
@@ -1450,6 +1460,7 @@
                 <span class="number">15</span>,
                 Duration::from_millis(<span class="number">500</span>),
                 ChainConfig::default().base_fee,
+                versions,
             )
             .<span class="kw">await
             </span>.unwrap();
@@ -1461,25 +1472,20 @@
         }
     }
 
-    <span class="kw">pub struct </span>PermissionedBuilderTestConfig&lt;
-        P: SequencerPersistence,
-        Ver: StaticVersionType + <span class="lifetime">'static</span>,
-    &gt; {
-        <span class="kw">pub </span>builder_context: BuilderContext&lt;network::Memory, P, Ver&gt;,
+    <span class="kw">pub struct </span>PermissionedBuilderTestConfig&lt;P: SequencerPersistence, V: Versions&gt; {
+        <span class="kw">pub </span>builder_context: BuilderContext&lt;network::Memory, P, V&gt;,
         <span class="kw">pub </span>fee_account: FeeAccount,
     }
 
-    <span class="kw">impl</span>&lt;P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
-        PermissionedBuilderTestConfig&lt;P, Ver&gt;
-    {
+    <span class="kw">impl</span>&lt;P: SequencerPersistence, V: Versions&gt; PermissionedBuilderTestConfig&lt;P, V&gt; {
         <span class="kw">pub async fn </span>init_permissioned_builder(
-            hotshot_handle: Arc&lt;Consensus&lt;network::Memory, P&gt;&gt;,
+            hotshot_handle: Arc&lt;Consensus&lt;network::Memory, P, V&gt;&gt;,
             node_id: u64,
-            state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
+            state_signer: Arc&lt;StateSigner&lt;SequencerApiVersion&gt;&gt;,
             hotshot_builder_api_url: Url,
         ) -&gt; <span class="self">Self </span>{
             <span class="comment">// setup the instance state
-            </span><span class="kw">let </span>node_state = NodeState::default();
+            </span><span class="kw">let </span>node_state = NodeState::default().with_current_version(V::Base::VERSION);
 
             <span class="comment">// generate builder keys
             </span><span class="kw">let </span>seed = [<span class="number">201_u8</span>; <span class="number">32</span>];
@@ -1664,7 +1670,7 @@
 </span><span class="kw">mod </span>test {
     <span class="kw">use </span>async_std::stream::IntoStream;
     <span class="kw">use </span>clap::builder;
-    <span class="kw">use </span>espresso_types::{Header, NodeState, Payload, ValidatedState};
+    <span class="kw">use </span>espresso_types::{Header, MockSequencerVersions, NodeState, Payload, ValidatedState};
     <span class="kw">use </span>ethers::providers::Quorum;
     <span class="kw">use </span>futures::StreamExt;
     <span class="kw">use </span>hotshot::types::EventType::Decide;
@@ -1691,13 +1697,13 @@
     </span><span class="kw">async fn </span>test_non_voting_hotshot_node() {
         setup_test();
 
-        <span class="kw">let </span>ver = StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance();
-
         <span class="kw">let </span>success_height = <span class="number">5</span>;
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>config = HotShotTestConfig::default();
         <span class="macro">tracing::debug!</span>(<span class="string">"Done with hotshot test config"</span>);
-        <span class="kw">let </span>handles = config.init_nodes(ver, no_storage::Options).<span class="kw">await</span>;
+        <span class="kw">let </span>handles = config
+            .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+            .<span class="kw">await</span>;
         <span class="macro">tracing::debug!</span>(<span class="string">"Done with init nodes"</span>);
         <span class="kw">let </span>total_nodes = HotShotTestConfig::total_nodes();
 

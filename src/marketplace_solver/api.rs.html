@@ -325,11 +325,11 @@
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>load_api&lt;State: <span class="lifetime">'static</span>, Error: <span class="lifetime">'static</span>, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>load_api&lt;State: <span class="lifetime">'static</span>, Error: <span class="lifetime">'static</span>, ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     path: <span class="prelude-ty">Option</span>&lt;<span class="kw">impl </span>AsRef&lt;Path&gt;&gt;,
     default: <span class="kw-2">&amp;</span>str,
     extensions: <span class="kw">impl </span>IntoIterator&lt;Item = Value&gt;,
-) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;State, Error, Ver&gt;, ApiError&gt; {
+) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;State, Error, ApiVer&gt;, ApiError&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>toml = <span class="kw">match </span>path {
         <span class="prelude-val">Some</span>(path) =&gt; load_toml(path.as_ref())<span class="question-mark">?</span>,
         <span class="prelude-val">None </span>=&gt; toml::from_str(default).map_err(|err| ApiError::CannotReadToml {

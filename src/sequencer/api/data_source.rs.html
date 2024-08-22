@@ -448,6 +448,7 @@
 <a href="#448" id="448">448</a>
 <a href="#449" id="449">449</a>
 <a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -471,12 +472,13 @@
     status::StatusDataSource,
 };
 <span class="kw">use </span>hotshot_types::{
-    data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
+    data::ViewNumber,
+    light_client::StateSignatureRequestBody,
+    traits::{network::ConnectedNetwork, node_implementation::Versions},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>tide_disco::Url;
-<span class="kw">use </span>vbs::version::StaticVersionType;
 <span class="kw">use </span>vec1::Vec1;
 
 <span class="kw">use super</span>::{
@@ -486,7 +488,7 @@
 };
 <span class="kw">use crate</span>::{
     persistence::{<span class="self">self</span>},
-    SeqTypes,
+    SeqTypes, SequencerApiVersion,
 };
 
 <span class="kw">pub trait </span>DataSourceOptions: PersistenceOptions {
@@ -534,9 +536,9 @@
 </span><span class="kw">pub type </span>Provider = AnyProvider&lt;SeqTypes&gt;;
 
 <span class="doccomment">/// Create a provider for fetching missing data from a list of peer query services.
-</span><span class="kw">pub fn </span>provider&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+</span><span class="kw">pub fn </span>provider&lt;V: Versions&gt;(
     peers: <span class="kw">impl </span>IntoIterator&lt;Item = Url&gt;,
-    bind_version: Ver,
+    bind_version: SequencerApiVersion,
 ) -&gt; Provider {
     <span class="kw">let </span><span class="kw-2">mut </span>provider = Provider::default();
     <span class="kw">for </span>peer <span class="kw">in </span>peers {

@@ -665,6 +665,75 @@
 <a href="#665" id="665">665</a>
 <a href="#666" id="666">666</a>
 <a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a>
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+<a href="#691" id="691">691</a>
+<a href="#692" id="692">692</a>
+<a href="#693" id="693">693</a>
+<a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
+<a href="#716" id="716">716</a>
+<a href="#717" id="717">717</a>
+<a href="#718" id="718">718</a>
+<a href="#719" id="719">719</a>
+<a href="#720" id="720">720</a>
+<a href="#721" id="721">721</a>
+<a href="#722" id="722">722</a>
+<a href="#723" id="723">723</a>
+<a href="#724" id="724">724</a>
+<a href="#725" id="725">725</a>
+<a href="#726" id="726">726</a>
+<a href="#727" id="727">727</a>
+<a href="#728" id="728">728</a>
+<a href="#729" id="729">729</a>
+<a href="#730" id="730">730</a>
+<a href="#731" id="731">731</a>
+<a href="#732" id="732">732</a>
+<a href="#733" id="733">733</a>
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::{BTreeMap, HashMap},
     path::Path,
@@ -705,13 +774,17 @@
 <span class="doccomment">/// Genesis of an Espresso chain.
 </span><span class="attr">#[derive(Clone, Debug, Deserialize, Serialize)]
 </span><span class="kw">pub struct </span>Genesis {
+    <span class="attr">#[serde(with = <span class="string">"version_ser"</span>)]
+    </span><span class="kw">pub </span>base_version: Version,
+    <span class="attr">#[serde(with = <span class="string">"version_ser"</span>)]
+    </span><span class="kw">pub </span>upgrade_version: Version,
     <span class="kw">pub </span>chain_config: ChainConfig,
     <span class="kw">pub </span>stake_table: StakeTableConfig,
     <span class="attr">#[serde(default)]
     </span><span class="kw">pub </span>accounts: HashMap&lt;FeeAccount, FeeAmount&gt;,
     <span class="kw">pub </span>l1_finalized: <span class="prelude-ty">Option</span>&lt;L1Finalized&gt;,
     <span class="kw">pub </span>header: GenesisHeader,
-    <span class="attr">#[serde(rename = <span class="string">"upgrade"</span>, with = <span class="string">"upgrade_serialization"</span>)]
+    <span class="attr">#[serde(rename = <span class="string">"upgrade"</span>, with = <span class="string">"upgrade_ser"</span>)]
     #[serde(default)]
     </span><span class="kw">pub </span>upgrades: BTreeMap&lt;Version, Upgrade&gt;,
 }
@@ -732,7 +805,41 @@
     }
 }
 
-<span class="kw">mod </span>upgrade_serialization {
+<span class="kw">mod </span>version_ser {
+
+    <span class="kw">use </span>vbs::version::Version;
+
+    <span class="kw">use </span>serde::{de, Deserialize, Deserializer, Serializer};
+
+    <span class="kw">pub fn </span>serialize&lt;S&gt;(ver: <span class="kw-2">&amp;</span>Version, serializer: S) -&gt; <span class="prelude-ty">Result</span>&lt;S::Ok, S::Error&gt;
+    <span class="kw">where
+        </span>S: Serializer,
+    {
+        serializer.serialize_str(<span class="kw-2">&amp;</span>ver.to_string())
+    }
+
+    <span class="kw">pub fn </span>deserialize&lt;<span class="lifetime">'de</span>, D&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;Version, D::Error&gt;
+    <span class="kw">where
+        </span>D: Deserializer&lt;<span class="lifetime">'de</span>&gt;,
+    {
+        <span class="kw">let </span>version_str = String::deserialize(deserializer)<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>version: Vec&lt;<span class="kw">_</span>&gt; = version_str.split(<span class="string">'.'</span>).collect();
+
+        <span class="kw">let </span>version = Version {
+            major: version[<span class="number">0</span>]
+                .parse()
+                .map_err(|<span class="kw">_</span>| de::Error::custom(<span class="string">"invalid version format"</span>))<span class="question-mark">?</span>,
+            minor: version[<span class="number">1</span>]
+                .parse()
+                .map_err(|<span class="kw">_</span>| de::Error::custom(<span class="string">"invalid version format"</span>))<span class="question-mark">?</span>,
+        };
+
+        <span class="prelude-val">Ok</span>(version)
+    }
+}
+
+<span class="kw">mod </span>upgrade_ser {
 
     <span class="kw">use </span>std::{collections::BTreeMap, fmt};
 
@@ -809,8 +916,12 @@
                     </span><span class="kw">let </span>version: Vec&lt;<span class="kw">_</span>&gt; = fields.version.split(<span class="string">'.'</span>).collect();
 
                     <span class="kw">let </span>version = Version {
-                        major: version[<span class="number">0</span>].parse().expect(<span class="string">"invalid version"</span>),
-                        minor: version[<span class="number">1</span>].parse().expect(<span class="string">"invalid version"</span>),
+                        major: version[<span class="number">0</span>]
+                            .parse()
+                            .map_err(|<span class="kw">_</span>| de::Error::custom(<span class="string">"invalid version format"</span>))<span class="question-mark">?</span>,
+                        minor: version[<span class="number">1</span>]
+                            .parse()
+                            .map_err(|<span class="kw">_</span>| de::Error::custom(<span class="string">"invalid version format"</span>))<span class="question-mark">?</span>,
                     };
 
                     <span class="kw">match </span>(fields.time_based, fields.view_based) {
@@ -897,7 +1008,10 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_genesis_from_toml_with_optional_fields() {
         <span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -972,7 +1086,10 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_genesis_from_toml_without_optional_fields() {
         <span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -1012,7 +1129,10 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_genesis_l1_finalized_number_only() {
         <span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -1039,7 +1159,10 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_genesis_from_toml_units() {
         <span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -1070,7 +1193,10 @@
         <span class="comment">// without optional fields
         // with view settings
         </span><span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -1134,7 +1260,10 @@
         <span class="comment">// without optional fields
         // with time settings
         </span><span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -1200,7 +1329,10 @@
         <span class="comment">// set both time and view parameters
         // this should err
         </span><span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -1246,7 +1378,10 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_marketplace_upgrade_toml() {
         <span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]
@@ -1284,7 +1419,10 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_marketplace_and_fee_upgrade_toml() {
         <span class="kw">let </span>toml = <span class="macro">toml!</span> {
-            [stake_table]
+            base_version = <span class="string">"0.1"
+            </span>upgrade_version = <span class="string">"0.2"
+
+            </span>[stake_table]
             capacity = <span class="number">10
 
             </span>[chain_config]

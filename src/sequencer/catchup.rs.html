@@ -310,12 +310,12 @@
 <span class="comment">// This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
 </span><span class="attr">#[derive(Debug, Clone)]
-</span><span class="kw">struct </span>Client&lt;ServerError, Ver: StaticVersionType&gt; {
-    inner: surf_disco::Client&lt;ServerError, Ver&gt;,
+</span><span class="kw">struct </span>Client&lt;ServerError, ApiVer: StaticVersionType&gt; {
+    inner: surf_disco::Client&lt;ServerError, ApiVer&gt;,
     url: Url,
 }
 
-<span class="kw">impl</span>&lt;Ver: StaticVersionType&gt; Client&lt;ServerError, Ver&gt; {
+<span class="kw">impl</span>&lt;ApiVer: StaticVersionType&gt; Client&lt;ServerError, ApiVer&gt; {
     <span class="kw">pub fn </span>new(url: Url) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             inner: surf_disco::Client::new(url.clone()),
@@ -323,7 +323,7 @@
         }
     }
 
-    <span class="kw">pub fn </span>get&lt;T: DeserializeOwned&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, route: <span class="kw-2">&amp;</span>str) -&gt; Request&lt;T, ServerError, Ver&gt; {
+    <span class="kw">pub fn </span>get&lt;T: DeserializeOwned&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, route: <span class="kw-2">&amp;</span>str) -&gt; Request&lt;T, ServerError, ApiVer&gt; {
         <span class="self">self</span>.inner.get(route)
     }
 }
@@ -344,12 +344,12 @@
 }
 
 <span class="attr">#[derive(Debug, Clone, Default)]
-</span><span class="kw">pub struct </span>StatePeers&lt;Ver: StaticVersionType&gt; {
-    clients: Vec&lt;Client&lt;ServerError, Ver&gt;&gt;,
+</span><span class="kw">pub struct </span>StatePeers&lt;ApiVer: StaticVersionType&gt; {
+    clients: Vec&lt;Client&lt;ServerError, ApiVer&gt;&gt;,
     backoff: BackoffParams,
 }
 
-<span class="kw">impl</span>&lt;Ver: StaticVersionType&gt; StatePeers&lt;Ver&gt; {
+<span class="kw">impl</span>&lt;ApiVer: StaticVersionType&gt; StatePeers&lt;ApiVer&gt; {
     <span class="kw">pub fn </span>from_urls(urls: Vec&lt;Url&gt;, backoff: BackoffParams) -&gt; <span class="self">Self </span>{
         <span class="kw">if </span>urls.is_empty() {
             <span class="macro">panic!</span>(<span class="string">"Cannot create StatePeers with no peers"</span>);
@@ -394,7 +394,7 @@
 }
 
 <span class="attr">#[async_trait]
-</span><span class="kw">impl</span>&lt;Ver: StaticVersionType&gt; StateCatchup <span class="kw">for </span>StatePeers&lt;Ver&gt; {
+</span><span class="kw">impl</span>&lt;ApiVer: StaticVersionType&gt; StateCatchup <span class="kw">for </span>StatePeers&lt;ApiVer&gt; {
     <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
     </span><span class="kw">async fn </span>try_fetch_account(
         <span class="kw-2">&amp;</span><span class="self">self</span>,

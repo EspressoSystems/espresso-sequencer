@@ -754,6 +754,7 @@
 <a href="#754" id="754">754</a>
 <a href="#755" id="755">755</a>
 <a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -991,8 +992,8 @@
     pk
 }
 
-<span class="kw">pub async fn </span>fetch_latest_state&lt;Ver: StaticVersionType&gt;(
-    client: <span class="kw-2">&amp;</span>Client&lt;ServerError, Ver&gt;,
+<span class="kw">pub async fn </span>fetch_latest_state&lt;ApiVer: StaticVersionType&gt;(
+    client: <span class="kw-2">&amp;</span>Client&lt;ServerError, ApiVer&gt;,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;StateSignaturesBundle, ServerError&gt; {
     <span class="macro">tracing::info!</span>(<span class="string">"Fetching the latest state signatures bundle from relay server."</span>);
     client
@@ -1063,10 +1064,10 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">pub async fn </span>sync_state&lt;Ver: StaticVersionType&gt;(
+<span class="kw">pub async fn </span>sync_state&lt;ApiVer: StaticVersionType&gt;(
     st: <span class="kw-2">&amp;</span>StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;,
     proving_key: Arc&lt;ProvingKey&gt;,
-    relay_server_client: <span class="kw-2">&amp;</span>Client&lt;ServerError, Ver&gt;,
+    relay_server_client: <span class="kw-2">&amp;</span>Client&lt;ServerError, ApiVer&gt;,
     config: <span class="kw-2">&amp;</span>StateProverConfig,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(), ProverError&gt; {
     <span class="kw">let </span>light_client_address = config.light_client_address;
@@ -1149,16 +1150,16 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">fn </span>start_http_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">fn </span>start_http_server&lt;ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     port: u16,
     light_client_address: Address,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -&gt; io::Result&lt;()&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>app = tide_disco::App::&lt;<span class="kw">_</span>, ServerError&gt;::with_state(());
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::value::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../api/prover-service.toml"</span>))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;<span class="kw">_</span>, ServerError, Ver&gt;::new(toml)
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;<span class="kw">_</span>, ServerError, ApiVer&gt;::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
     api.get(<span class="string">"getlightclientcontract"</span>, <span class="kw">move </span>|<span class="kw">_</span>, <span class="kw">_</span>| {
@@ -1172,9 +1173,9 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">pub async fn </span>run_prover_service&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">pub async fn </span>run_prover_service&lt;ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     config: StateProverConfig,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="kw">let </span>stake_table_capacity = config.stake_table_capacity;
     <span class="macro">tracing::info!</span>(<span class="string">"Stake table capacity: {}"</span>, stake_table_capacity);
@@ -1187,15 +1188,16 @@
     run_prover_service_with_stake_table(config, bind_version, st).<span class="kw">await
 </span>}
 
-<span class="kw">pub async fn </span>run_prover_service_with_stake_table&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">pub async fn </span>run_prover_service_with_stake_table&lt;ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     config: StateProverConfig,
-    bind_version: Ver,
+    bind_version: ApiVer,
     st: Arc&lt;StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;&gt;,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="macro">tracing::info!</span>(<span class="string">"Light client address: {:?}"</span>, config.light_client_address);
 
-    <span class="kw">let </span>relay_server_client =
-        Arc::new(Client::&lt;ServerError, Ver&gt;::new(config.relay_server.clone()));
+    <span class="kw">let </span>relay_server_client = Arc::new(Client::&lt;ServerError, ApiVer&gt;::new(
+        config.relay_server.clone(),
+    ));
 
     <span class="comment">// Start the HTTP server to get a functioning healthcheck before any heavy computations.
     </span><span class="kw">if let </span><span class="prelude-val">Some</span>(port) = config.port {
@@ -1222,9 +1224,9 @@
 }
 
 <span class="doccomment">/// Run light client state prover once
-</span><span class="kw">pub async fn </span>run_prover_once&lt;Ver: StaticVersionType&gt;(
+</span><span class="kw">pub async fn </span>run_prover_once&lt;ApiVer: StaticVersionType&gt;(
     config: StateProverConfig,
-    <span class="kw">_</span>: Ver,
+    <span class="kw">_</span>: ApiVer,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="kw">let </span>st = init_stake_table_from_sequencer(<span class="kw-2">&amp;</span>config.sequencer_url, config.stake_table_capacity)
         .<span class="kw">await
@@ -1232,7 +1234,7 @@
     <span class="kw">let </span>stake_table_capacity = config.stake_table_capacity;
     <span class="kw">let </span>proving_key =
         spawn_blocking(<span class="kw">move </span>|| Arc::new(load_proving_key(stake_table_capacity))).<span class="kw">await</span>;
-    <span class="kw">let </span>relay_server_client = Client::&lt;ServerError, Ver&gt;::new(config.relay_server.clone());
+    <span class="kw">let </span>relay_server_client = Client::&lt;ServerError, ApiVer&gt;::new(config.relay_server.clone());
 
     sync_state(<span class="kw-2">&amp;</span>st, proving_key, <span class="kw-2">&amp;</span>relay_server_client, <span class="kw-2">&amp;</span>config)
         .<span class="kw">await

@@ -687,8 +687,8 @@
 
             <span class="kw">for </span>message <span class="kw">in </span>messages {
                 <span class="comment">// We want to try and decode this message.
-                </span><span class="kw">let </span>message_deserialize_result: <span class="prelude-ty">Result</span>&lt;Message&lt;SeqTypes&gt;, <span class="kw">_</span>&gt; =
-                    bincode::deserialize(<span class="kw-2">&amp;</span>message);
+                </span><span class="kw">let </span>message_deserialize_result =
+                    bincode::deserialize::&lt;Message&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>message);
 
                 <span class="kw">let </span>message = <span class="kw">match </span>message_deserialize_result {
                     <span class="prelude-val">Ok</span>(message) =&gt; message,
@@ -1145,7 +1145,7 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>message_receiver = message_receiver;
         <span class="kw">let </span>next_message = message_receiver.next().<span class="kw">await</span>.unwrap();
-        <span class="kw">let </span>next_message: Message&lt;SeqTypes&gt; = bincode::deserialize(<span class="kw-2">&amp;</span>next_message).unwrap();
+        <span class="kw">let </span>next_message = bincode::deserialize::&lt;Message&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>next_message).unwrap();
 
         <span class="kw">let </span>external_message = <span class="kw">match </span>next_message.kind {
             MessageKind::External(external_message) =&gt; external_message,

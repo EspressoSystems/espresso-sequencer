@@ -478,6 +478,7 @@
 <a href="#478" id="478">478</a>
 <a href="#479" id="479">479</a>
 <a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to submit random transactions to an Espresso Sequencer.
 
 </span><span class="kw">use </span>std::{
@@ -488,7 +489,7 @@
 <span class="kw">use </span>async_std::task::{sleep, spawn};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::{Commitment, Committable};
-<span class="kw">use </span>espresso_types::{parse_duration, parse_size, BaseVersion, SeqTypes, Transaction};
+<span class="kw">use </span>espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
 <span class="kw">use </span>futures::{
     channel::mpsc::{<span class="self">self</span>, Sender},
     sink::SinkExt,
@@ -498,6 +499,7 @@
 <span class="kw">use </span>rand::{Rng, RngCore, SeedableRng};
 <span class="kw">use </span>rand_chacha::ChaChaRng;
 <span class="kw">use </span>rand_distr::Distribution;
+<span class="kw">use </span>sequencer::SequencerApiVersion;
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>surf_disco::{Client, Url};
 <span class="kw">use </span>tide_disco::{error::ServerError, App};
@@ -653,7 +655,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>rng = ChaChaRng::seed_from_u64(seed);
 
     <span class="comment">// Subscribe to block stream so we can check that our transactions are getting sequenced.
-    </span><span class="kw">let </span>client = Client::&lt;Error, BaseVersion&gt;::new(opt.url.clone());
+    </span><span class="kw">let </span>client = Client::&lt;Error, SequencerApiVersion&gt;::new(opt.url.clone());
     <span class="kw">let </span>block_height: usize = client.get(<span class="string">"status/block-height"</span>).send().<span class="kw">await</span>.unwrap();
     <span class="kw">let </span><span class="kw-2">mut </span>blocks = client
         .socket(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/stream/blocks/{}"</span>, block_height - <span class="number">1</span>))
@@ -668,13 +670,13 @@
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(<span class="kw-2">&amp;mut </span>rng).unwrap(),
-            BaseVersion::instance(),
+            SequencerApiVersion::instance(),
         ));
     }
 
     <span class="comment">// Start healthcheck endpoint once tasks are running.
     </span><span class="kw">if let </span><span class="prelude-val">Some</span>(port) = opt.port {
-        spawn(server(port, BaseVersion::instance()));
+        spawn(server(port, SequencerApiVersion::instance()));
     }
 
     <span class="comment">// Keep track of the results.
@@ -860,15 +862,15 @@
     submitted_at: Instant,
 }
 
-<span class="kw">async fn </span>submit_transactions&lt;Ver: StaticVersionType&gt;(
+<span class="kw">async fn </span>submit_transactions&lt;ApiVer: StaticVersionType&gt;(
     opt: Options,
     <span class="kw-2">mut </span>sender: Sender&lt;SubmittedTransaction&gt;,
     <span class="kw-2">mut </span>rng: ChaChaRng,
-    <span class="kw">_</span>: Ver,
+    <span class="kw">_</span>: ApiVer,
 ) {
     <span class="kw">let </span>url = opt.submit_url();
     <span class="macro">tracing::info!</span>(%url, <span class="string">"starting load generator task"</span>);
-    <span class="kw">let </span>client = Client::&lt;Error, Ver&gt;::new(url);
+    <span class="kw">let </span>client = Client::&lt;Error, ApiVer&gt;::new(url);
 
     <span class="comment">// Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -934,7 +936,7 @@
     }
 }
 
-<span class="kw">async fn </span>server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(port: u16, bind_version: Ver) {
+<span class="kw">async fn </span>server&lt;ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(port: u16, bind_version: ApiVer) {
     <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = App::&lt;(), ServerError&gt;::with_state(())
         .serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{port}"</span>), bind_version)
         .<span class="kw">await

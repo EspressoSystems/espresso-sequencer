@@ -213,7 +213,6 @@
 <a href="#213" id="213">213</a>
 <a href="#214" id="214">214</a>
 <a href="#215" id="215">215</a>
-<a href="#216" id="216">216</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::str::FromStr;
 
 <span class="kw">use </span>anyhow::Result;
@@ -221,7 +220,7 @@
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>espresso_types::{
     v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
-    SeqTypes,
+    MarketplaceVersion, SeqTypes,
 };
 <span class="kw">use </span>hotshot::types::BLSPubKey;
 <span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
@@ -229,7 +228,6 @@
 
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>url::Url;
-<span class="kw">use </span>vbs::version::StaticVersion;
 
 <span class="attr">#[derive(Debug, Parser)]
 </span><span class="kw">struct </span>Options {
@@ -326,7 +324,7 @@
         private_key,
     } = opt;
 
-    <span class="kw">let </span>client = surf_disco::Client::&lt;SolverError, StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;&gt;::new(
+    <span class="kw">let </span>client = surf_disco::Client::&lt;SolverError, MarketplaceVersion&gt;::new(
         solver_url.join(<span class="string">"marketplace-solver"</span>).unwrap(),
     );
 
@@ -385,7 +383,7 @@
         private_key,
     } = opt;
 
-    <span class="kw">let </span>client = surf_disco::Client::&lt;SolverError, StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;&gt;::new(
+    <span class="kw">let </span>client = surf_disco::Client::&lt;SolverError, MarketplaceVersion&gt;::new(
         solver_url.join(<span class="string">"marketplace-solver"</span>).unwrap(),
     );
     <span class="kw">let </span>(pubkey, privkey) = <span class="kw">if let </span><span class="prelude-val">Some</span>(privkey) = private_key {

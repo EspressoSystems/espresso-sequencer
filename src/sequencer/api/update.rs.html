@@ -51,7 +51,6 @@
 <a href="#51" id="51">51</a>
 <a href="#52" id="52">52</a>
 <a href="#53" id="53">53</a>
-<a href="#54" id="54">54</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Update loop for query API state.
 
 </span><span class="kw">use </span>async_std::sync::{Arc, RwLock};
@@ -59,14 +58,13 @@
 <span class="kw">use </span>futures::stream::{Stream, StreamExt};
 <span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
-<span class="kw">use </span>hotshot_types::traits::network::ConnectedNetwork;
-<span class="kw">use </span>vbs::version::StaticVersionType;
+<span class="kw">use </span>hotshot_types::traits::{network::ConnectedNetwork, node_implementation::Versions};
 
 <span class="kw">use super</span>::{data_source::SequencerDataSource, StorageState};
 <span class="kw">use </span><span class="kw">crate</span>::SeqTypes;
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>update_loop&lt;N, P, D, Ver: StaticVersionType&gt;(
-    state: Arc&lt;RwLock&lt;StorageState&lt;N, P, D, Ver&gt;&gt;&gt;,
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">async fn </span>update_loop&lt;N, P, D, V: Versions&gt;(
+    state: Arc&lt;RwLock&lt;StorageState&lt;N, P, D, V&gt;&gt;&gt;,
     <span class="kw-2">mut </span>events: <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; + Unpin,
 ) <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
@@ -92,8 +90,8 @@
     <span class="macro">tracing::warn!</span>(<span class="string">"end of HotShot event stream, updater task will exit"</span>);
 }
 
-<span class="kw">async fn </span>update_state&lt;N, P, D, Ver: StaticVersionType&gt;(
-    state: <span class="kw-2">&amp;mut </span>StorageState&lt;N, P, D, Ver&gt;,
+<span class="kw">async fn </span>update_state&lt;N, P, D, V: Versions&gt;(
+    state: <span class="kw-2">&amp;mut </span>StorageState&lt;N, P, D, V&gt;,
     event: <span class="kw-2">&amp;</span>Event&lt;SeqTypes&gt;,
 ) -&gt; anyhow::Result&lt;()&gt;
 <span class="kw">where

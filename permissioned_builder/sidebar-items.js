@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"],"struct":["PermissionedBuilderOptions"]};
+window.SIDEBAR_ITEMS = {"fn":["main","run"],"struct":["PermissionedBuilderOptions"]};

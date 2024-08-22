@@ -1301,7 +1301,6 @@
 <a href="#1301" id="1301">1301</a>
 <a href="#1302" id="1302">1302</a>
 <a href="#1303" id="1303">1303</a>
-<a href="#1304" id="1304">1304</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Adversarial Espresso client.
 //!
 //! This program runs a randomized client for the Espresso query service. It is designed to hit
@@ -1325,8 +1324,7 @@
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
-    parse_duration, v0_3::IterableFeeInfo, BaseVersion, BlockMerkleTree, FeeMerkleTree, Header,
-    SeqTypes,
+    parse_duration, v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes,
 };
 <span class="kw">use </span>futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
@@ -1342,7 +1340,7 @@
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 <span class="kw">use </span>rand::{seq::SliceRandom, RngCore};
-<span class="kw">use </span>sequencer::api::endpoints::NamespaceProofQueryData;
+<span class="kw">use </span>sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>serde::de::DeserializeOwned;
 <span class="kw">use </span>std::{
@@ -1706,7 +1704,7 @@
     }
 }
 
-<span class="kw">type </span>Connection&lt;T&gt; = socket::Connection&lt;T, socket::Unsupported, ClientError, BaseVersion&gt;;
+<span class="kw">type </span>Connection&lt;T&gt; = socket::Connection&lt;T, socket::Unsupported, ClientError, SequencerApiVersion&gt;;
 
 <span class="attr">#[derive(Derivative)]
 #[derivative(Debug)]
@@ -1719,7 +1717,7 @@
 
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">struct </span>ResourceManager&lt;T: Queryable&gt; {
-    client: surf_disco::Client&lt;ClientError, BaseVersion&gt;,
+    client: surf_disco::Client&lt;ClientError, SequencerApiVersion&gt;,
     open_streams: BTreeMap&lt;u64, Subscription&lt;T&gt;&gt;,
     next_stream_id: u64,
     metrics: Arc&lt;Metrics&gt;,
@@ -2564,14 +2562,14 @@
         METHOD = <span class="string">"METRICS"
     </span>};
     <span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, ServerError&gt;::with_state(RwLock::new(metrics));
-    app.module::&lt;ServerError, BaseVersion&gt;(<span class="string">"status"</span>, api)
+    app.module::&lt;ServerError, SequencerApiVersion&gt;(<span class="string">"status"</span>, api)
         .unwrap()
         .metrics(<span class="string">"metrics"</span>, |_req, state| {
             <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(Cow::Borrowed(state)) }.boxed()
         })
         .unwrap();
     <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = app
-        .serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{port}"</span>), BaseVersion::instance())
+        .serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{port}"</span>), SequencerApiVersion::instance())
         .<span class="kw">await
     </span>{
         <span class="macro">tracing::error!</span>(<span class="string">"web server exited unexpectedly: {err:#}"</span>);

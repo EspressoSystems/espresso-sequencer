@@ -136,14 +136,20 @@
 <a href="#136" id="136">136</a>
 <a href="#137" id="137">137</a>
 <a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::{parse_duration, BaseVersion};
+<span class="kw">use </span>espresso_types::parse_duration;
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::FutureExt;
-<span class="kw">use </span>sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
+<span class="kw">use </span>sequencer::{
+    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+    SequencerApiVersion,
+};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>tide_disco::{error::ServerError, Api};
 <span class="kw">use </span>url::Url;
@@ -203,7 +209,7 @@
     opt.logging.init();
 
     <span class="kw">if let </span><span class="prelude-val">Some</span>(port) = opt.port {
-        start_http_server(port, opt.hotshot_address, BaseVersion::instance()).unwrap();
+        start_http_server(port, opt.hotshot_address, SequencerApiVersion::instance()).unwrap();
     }
 
     <span class="kw">let </span>hotshot_contract_options = CommitmentTaskOptions {
@@ -217,19 +223,19 @@
         query_service_url: <span class="prelude-val">Some</span>(opt.sequencer_url),
     };
     <span class="macro">tracing::info!</span>(<span class="string">"Launching HotShot commitment task.."</span>);
-    run_hotshot_commitment_task::&lt;BaseVersion&gt;(<span class="kw-2">&amp;</span>hotshot_contract_options).<span class="kw">await</span>;
+    run_hotshot_commitment_task::&lt;SequencerApiVersion&gt;(<span class="kw-2">&amp;</span>hotshot_contract_options).<span class="kw">await</span>;
 }
 
-<span class="kw">fn </span>start_http_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">fn </span>start_http_server&lt;ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     port: u16,
     hotshot_address: Address,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -&gt; io::Result&lt;()&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>app = tide_disco::App::&lt;(), ServerError&gt;::with_state(());
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::value::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/commitment_task.toml"</span>))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;(), ServerError, Ver&gt;::new(toml)
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;(), ServerError, ApiVer&gt;::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
     api.get(<span class="string">"gethotshotcontract"</span>, <span class="kw">move </span>|<span class="kw">_</span>, <span class="kw">_</span>| {
@@ -246,8 +252,8 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>espresso_types::BaseVersion;
     <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>sequencer::SequencerApiVersion;
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -262,10 +268,10 @@
         <span class="kw">let </span>expected_addr = <span class="string">"0xED15E1FE0789c524398137a066ceb2EF9884E5D8"
             </span>.parse::&lt;Address&gt;()
             .unwrap();
-        start_http_server(port, expected_addr, BaseVersion::instance())
+        start_http_server(port, expected_addr, SequencerApiVersion::instance())
             .expect(<span class="string">"Failed to start the server"</span>);
 
-        <span class="kw">let </span>client: Client&lt;ServerError, BaseVersion&gt; =
+        <span class="kw">let </span>client: Client&lt;ServerError, SequencerApiVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 

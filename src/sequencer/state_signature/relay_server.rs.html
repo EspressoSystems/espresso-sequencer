@@ -431,16 +431,16 @@
 }
 
 <span class="doccomment">/// Set up APIs for relay server
-</span><span class="kw">fn </span>define_api&lt;State, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+</span><span class="kw">fn </span>define_api&lt;State, ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     options: <span class="kw-2">&amp;</span>Options,
-    <span class="kw">_</span>: Ver,
-) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;State, Error, Ver&gt;, ApiError&gt;
+    <span class="kw">_</span>: ApiVer,
+) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;State, Error, ApiVer&gt;, ApiError&gt;
 <span class="kw">where
     </span>State: <span class="lifetime">'static </span>+ Send + Sync + ReadState + WriteState,
     &lt;State <span class="kw">as </span>ReadState&gt;::State: Send + Sync + StateRelayServerDataSource,
 {
     <span class="kw">let </span><span class="kw-2">mut </span>api = <span class="kw">match </span><span class="kw-2">&amp;</span>options.api_path {
-        <span class="prelude-val">Some</span>(path) =&gt; Api::&lt;State, Error, Ver&gt;::from_file(path)<span class="question-mark">?</span>,
+        <span class="prelude-val">Some</span>(path) =&gt; Api::&lt;State, Error, ApiVer&gt;::from_file(path)<span class="question-mark">?</span>,
         <span class="prelude-val">None </span>=&gt; {
             <span class="kw">let </span>toml: toml::Value = toml::from_str(<span class="macro">include_str!</span>(
                 <span class="string">"../../api/state_relay_server.toml"
@@ -448,7 +448,7 @@
             .map_err(|err| ApiError::CannotReadToml {
                 reason: err.to_string(),
             })<span class="question-mark">?</span>;
-            Api::&lt;State, Error, Ver&gt;::new(toml)<span class="question-mark">?
+            Api::&lt;State, Error, ApiVer&gt;::new(toml)<span class="question-mark">?
         </span>}
     };
 
@@ -462,7 +462,7 @@
                 state: lcstate,
                 signature,
             } = req
-                .body_auto::&lt;StateSignatureRequestBody, Ver&gt;(Ver::instance())
+                .body_auto::&lt;StateSignatureRequestBody, ApiVer&gt;(ApiVer::instance())
                 .map_err(Error::from_request_error)<span class="question-mark">?</span>;
             state.post_signature(key, lcstate, signature)
         }
@@ -472,11 +472,11 @@
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">pub async fn </span>run_relay_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">pub async fn </span>run_relay_server&lt;ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     shutdown_listener: <span class="prelude-ty">Option</span>&lt;OneShotReceiver&lt;()&gt;&gt;,
     threshold: U256,
     url: Url,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -&gt; std::io::Result&lt;()&gt; {
     <span class="kw">let </span>options = Options::default();
 

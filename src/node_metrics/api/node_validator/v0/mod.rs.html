@@ -1128,9 +1128,9 @@
     }
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>load_api&lt;State: <span class="lifetime">'static</span>, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>load_api&lt;State: <span class="lifetime">'static</span>, ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     default: <span class="kw-2">&amp;</span>str,
-) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;State, Error, Ver&gt;, LoadApiError&gt; {
+) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;State, Error, ApiVer&gt;, LoadApiError&gt; {
     <span class="kw">let </span>toml: toml::Value = toml::from_str(default)<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(Api::new(toml)<span class="question-mark">?</span>)
 }

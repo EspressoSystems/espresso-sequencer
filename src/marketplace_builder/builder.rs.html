@@ -428,6 +428,8 @@
 <a href="#428" id="428">428</a>
 <a href="#429" id="429">429</a>
 <a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -441,8 +443,8 @@
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, SequencerVersions, ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
+    NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -461,7 +463,7 @@
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
@@ -475,11 +477,11 @@
         ProxyGlobalState, ReceivedTransaction,
     },
 };
-<span class="kw">use </span>sequencer::{catchup::StatePeers, L1Params, NetworkParams};
+<span class="kw">use </span>sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 <span class="kw">use </span>surf::http::headers::ACCEPT;
 <span class="kw">use </span>surf_disco::Client;
 <span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
-<span class="kw">use </span>vbs::version::StaticVersionType;
+<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 
 <span class="kw">use crate</span>::{
     hooks::{<span class="self">self</span>, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
@@ -493,28 +495,29 @@
     <span class="kw">pub </span>hotshot_builder_apis_url: Url,
 }
 
-<span class="kw">pub fn </span>build_instance_state&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="kw">pub fn </span>build_instance_state&lt;V: Versions&gt;(
     chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec&lt;Url&gt;,
-    <span class="kw">_</span>: Ver,
 ) -&gt; anyhow::Result&lt;NodeState&gt; {
     <span class="kw">let </span>l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+
     <span class="kw">let </span>instance_state = NodeState::new(
         u64::MAX, <span class="comment">// dummy node ID, only used for debugging
         </span>chain_config,
         l1_client,
-        Arc::new(StatePeers::&lt;Ver&gt;::from_urls(
+        Arc::new(StatePeers::&lt;SequencerApiVersion&gt;::from_urls(
             state_peers,
             Default::default(),
         )),
+        V::Base::version(),
     );
     <span class="prelude-val">Ok</span>(instance_state)
 }
 
 <span class="kw">impl </span>BuilderConfig {
     <span class="attr">#[allow(clippy::too_many_arguments)]
-    </span><span class="kw">pub async fn </span>init(
+    </span><span class="kw">pub async fn </span>init&lt;V: Versions&gt;(
         is_reserve: bool,
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
@@ -531,6 +534,7 @@
         base_fee: FeeAmount,
         bid_config: <span class="prelude-ty">Option</span>&lt;BidConfig&gt;,
         solver_api_url: Url,
+        <span class="kw">_</span>: V,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="macro">tracing::info!</span>(
             address = %builder_key_pair.fee_account(),
@@ -634,9 +638,10 @@
             };
 
             async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerVersions&gt;(
-                    hooks, senders, events_url,
-                )
+                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;
+                    SeqTypes,
+                    V, <span class="comment">// todo change this function to take only api version
+                </span>&gt;(hooks, senders, events_url)
                 .<span class="kw">await</span>;
                 <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Reserve builder service exited"</span>);
                 <span class="kw">if </span>res.is_err() {
@@ -649,7 +654,7 @@
             <span class="kw">let </span>hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerVersions&gt;(
+                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;SeqTypes, V&gt;(
                     hooks, senders, events_url,
                 )
                 .<span class="kw">await</span>;
@@ -682,8 +687,8 @@
     <span class="kw">use </span>async_std::{stream::StreamExt, task};
     <span class="kw">use </span>committable::Commitment;
     <span class="kw">use </span>espresso_types::{
-        mock::MockStateCatchup, BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey,
-        SeqTypes, Transaction,
+        mock::MockStateCatchup, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
+        SequencerVersions, Transaction,
     };
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>hotshot::types::{BLSPrivKey, Event, EventType};
@@ -712,6 +717,7 @@
         api::test_helpers::TestNetworkConfigBuilder,
         persistence::no_storage::{<span class="self">self</span>, NoStorage},
         testing::TestConfigBuilder,
+        SequencerApiVersion,
     };
     <span class="kw">use </span>sequencer::{
         api::{fs::DataSource, options::HotshotEvents, test_helpers::TestNetwork, Options},
@@ -721,6 +727,7 @@
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tempfile::TempDir;
     <span class="kw">use </span>tide_disco::error::ServerError;
+    <span class="kw">use </span>vbs::version::StaticVersion;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
@@ -758,7 +765,7 @@
             )
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network = TestNetwork::new(config, BaseVersion::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
 
         <span class="comment">// Start the builder
         </span><span class="kw">let </span>init = BuilderConfig::init(
@@ -781,11 +788,12 @@
                 amount: FeeAmount::from(<span class="number">10</span>),
             }),
             <span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, <span class="number">3000</span>).parse().unwrap(),
+            MockSequencerVersions::new(),
         );
         <span class="kw">let </span>_builder_config = init.<span class="kw">await</span>;
 
         <span class="comment">// Wait for at least one empty block to be sequenced (after consensus starts VID).
-        </span><span class="kw">let </span>sequencer_client: Client&lt;ServerError, BaseVersion&gt; = Client::new(query_api_url);
+        </span><span class="kw">let </span>sequencer_client: Client&lt;ServerError, SequencerApiVersion&gt; = Client::new(query_api_url);
         sequencer_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         sequencer_client
             .socket(<span class="string">"availability/stream/leaves/0"</span>)
@@ -802,15 +810,11 @@
             Client::new(builder_api_url.clone());
         builder_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
-        <span class="comment">//  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        </span><span class="kw">let </span>submission_client: Client&lt;ServerError, BaseVersion&gt; = Client::new(builder_api_url);
-        submission_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
-
         <span class="comment">// Test submitting transactions
         </span><span class="kw">let </span>transactions = (<span class="number">0</span>..<span class="number">10</span>)
             .map(|i| Transaction::new(<span class="number">0u32</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, i]))
             .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-        submission_client
+        builder_client
             .post::&lt;Vec&lt;Commitment&lt;Transaction&gt;&gt;&gt;(<span class="string">"txn_submit/batch"</span>)
             .body_json(<span class="kw-2">&amp;</span>transactions)
             .unwrap()
@@ -818,10 +822,10 @@
             .<span class="kw">await
             </span>.unwrap();
 
-        <span class="kw">let </span>events_service_client =
-            Client::&lt;hotshot_events_service::events::Error, BaseVersion&gt;::new(
-                event_service_url.clone(),
-            );
+        <span class="kw">let </span>events_service_client = Client::&lt;
+            hotshot_events_service::events::Error,
+            SequencerApiVersion,
+        &gt;::new(event_service_url.clone());
         events_service_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = events_service_client

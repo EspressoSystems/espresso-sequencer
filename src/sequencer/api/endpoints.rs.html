@@ -348,6 +348,15 @@
 <a href="#348" id="348">348</a>
 <a href="#349" id="349">349</a>
 <a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API endpoint handlers.
 
 </span><span class="kw">use </span>std::{
@@ -371,7 +380,10 @@
 };
 <span class="kw">use </span>hotshot_types::{
     data::ViewNumber,
-    traits::{network::ConnectedNetwork, node_implementation::ConsensusTime},
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{ConsensusTime, Versions},
+    },
 };
 <span class="kw">use </span>serde::{de::Error <span class="kw">as _</span>, Deserialize, Serialize};
 <span class="kw">use </span>snafu::OptionExt;
@@ -389,7 +401,7 @@
     },
     StorageState,
 };
-<span class="kw">use crate</span>::{SeqTypes, SequencerPersistence};
+<span class="kw">use crate</span>::{SeqTypes, SequencerApiVersion, SequencerPersistence};
 
 <span class="attr">#[derive(Clone, Debug, Serialize, Deserialize)]
 </span><span class="kw">pub struct </span>NamespaceProofQueryData {
@@ -397,16 +409,15 @@
     <span class="kw">pub </span>transactions: Vec&lt;Transaction&gt;,
 }
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">type </span>AvailState&lt;N, P, D, Ver&gt; = Arc&lt;RwLock&lt;StorageState&lt;N, P, D, Ver&gt;&gt;&gt;;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">type </span>AvailState&lt;N, P, D, ApiVer&gt; = Arc&lt;RwLock&lt;StorageState&lt;N, P, D, ApiVer&gt;&gt;&gt;;
 
-<span class="kw">type </span>AvailabilityApi&lt;N, P, D, Ver&gt; = Api&lt;AvailState&lt;N, P, D, Ver&gt;, availability::Error, Ver&gt;;
+<span class="kw">type </span>AvailabilityApi&lt;N, P, D, V, ApiVer&gt; = Api&lt;AvailState&lt;N, P, D, V&gt;, availability::Error, ApiVer&gt;;
 
 <span class="comment">// TODO (abdul): replace snafu with `this_error` in  hotshot query service
 // Snafu has been replaced by `this_error` everywhere.
 // However, the query service still uses snafu
-</span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>availability&lt;N, P, D, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
-    bind_version: Ver,
-) -&gt; <span class="prelude-ty">Result</span>&lt;AvailabilityApi&lt;N, P, D, Ver&gt;&gt;
+</span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>availability&lt;N, P, D, V: Versions&gt;(
+) -&gt; <span class="prelude-ty">Result</span>&lt;AvailabilityApi&lt;N, P, D, V, SequencerApiVersion&gt;&gt;
 <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: SequencerDataSource + Send + Sync + <span class="lifetime">'static</span>,
@@ -417,9 +428,9 @@
     options.extensions.push(extension);
     <span class="kw">let </span>timeout = options.fetch_timeout;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>api = availability::define_api::&lt;AvailState&lt;N, P, D, Ver&gt;, SeqTypes, Ver&gt;(
+    <span class="kw">let </span><span class="kw-2">mut </span>api = availability::define_api::&lt;AvailState&lt;N, P, D, <span class="kw">_</span>&gt;, SeqTypes, <span class="kw">_</span>&gt;(
         <span class="kw-2">&amp;</span>options,
-        bind_version,
+        SequencerApiVersion::instance(),
     )<span class="question-mark">?</span>;
 
     api.get(<span class="string">"getnamespaceproof"</span>, <span class="kw">move </span>|req, state| {
@@ -475,37 +486,36 @@
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">type </span>ExplorerApi&lt;N, P, D, Ver&gt; = Api&lt;AvailState&lt;N, P, D, Ver&gt;, explorer::Error, Ver&gt;;
+<span class="kw">type </span>ExplorerApi&lt;N, P, D, V, ApiVer&gt; = Api&lt;AvailState&lt;N, P, D, V&gt;, explorer::Error, ApiVer&gt;;
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>explorer&lt;N, P, D, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
-    bind_version: Ver,
-) -&gt; <span class="prelude-ty">Result</span>&lt;ExplorerApi&lt;N, P, D, Ver&gt;&gt;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>explorer&lt;N, P, D, V: Versions&gt;(
+) -&gt; <span class="prelude-ty">Result</span>&lt;ExplorerApi&lt;N, P, D, V, SequencerApiVersion&gt;&gt;
 <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: ExplorerStorage&lt;SeqTypes&gt; + Send + Sync + <span class="lifetime">'static</span>,
     P: SequencerPersistence,
 {
-    <span class="kw">let </span>api = explorer::define_api::&lt;AvailState&lt;N, P, D, Ver&gt;, SeqTypes, Ver&gt;(bind_version)<span class="question-mark">?</span>;
+    <span class="kw">let </span>api = explorer::define_api::&lt;AvailState&lt;N, P, D, V&gt;, SeqTypes, <span class="kw">_</span>&gt;(
+        SequencerApiVersion::instance(),
+    )<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">type </span>NodeApi&lt;N, P, D, Ver&gt; = Api&lt;AvailState&lt;N, P, D, Ver&gt;, node::Error, Ver&gt;;
+<span class="kw">type </span>NodeApi&lt;N, P, D, V, ApiVer&gt; = Api&lt;AvailState&lt;N, P, D, V&gt;, node::Error, ApiVer&gt;;
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>node&lt;N, P, D, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
-    bind_version: Ver,
-) -&gt; <span class="prelude-ty">Result</span>&lt;NodeApi&lt;N, P, D, Ver&gt;&gt;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>node&lt;N, P, D, V: Versions&gt;() -&gt; <span class="prelude-ty">Result</span>&lt;NodeApi&lt;N, P, D, V, SequencerApiVersion&gt;&gt;
 <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: SequencerDataSource + Send + Sync + <span class="lifetime">'static</span>,
     P: SequencerPersistence,
 {
-    <span class="kw">let </span>api = node::define_api::&lt;AvailState&lt;N, P, D, Ver&gt;, SeqTypes, Ver&gt;(
+    <span class="kw">let </span>api = node::define_api::&lt;AvailState&lt;N, P, D, V&gt;, SeqTypes, <span class="kw">_</span>&gt;(
         <span class="kw-2">&amp;</span>Default::default(),
-        bind_version,
+        SequencerApiVersion::instance(),
     )<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(api)
 }
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>submit&lt;N, P, S, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;() -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, Ver&gt;&gt;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>submit&lt;N, P, S, ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;() -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, ApiVer&gt;&gt;
 <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
     S: <span class="lifetime">'static </span>+ Send + Sync + WriteState,
@@ -513,12 +523,12 @@
     S::State: Send + Sync + SubmitDataSource&lt;N, P&gt;,
 {
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/submit.toml"</span>))<span class="question-mark">?</span>;
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, Ver&gt;::new(toml)<span class="question-mark">?</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, ApiVer&gt;::new(toml)<span class="question-mark">?</span>;
 
     api.at(<span class="string">"submit"</span>, |req, state| {
         <span class="kw">async move </span>{
             <span class="kw">let </span>tx = req
-                .body_auto::&lt;Transaction, Ver&gt;(Ver::instance())
+                .body_auto::&lt;Transaction, ApiVer&gt;(ApiVer::instance())
                 .map_err(Error::from_request_error)<span class="question-mark">?</span>;
 
             <span class="kw">let </span>hash = tx.commit();
@@ -534,16 +544,16 @@
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>state_signature&lt;N, S, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
-    <span class="kw">_</span>: Ver,
-) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, Ver&gt;&gt;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>state_signature&lt;N, S, ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    <span class="kw">_</span>: ApiVer,
+) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, ApiVer&gt;&gt;
 <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
     S: <span class="lifetime">'static </span>+ Send + Sync + ReadState,
     S::State: Send + Sync + StateSignatureDataSource&lt;N&gt;,
 {
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/state_signature.toml"</span>))<span class="question-mark">?</span>;
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, Ver&gt;::new(toml)<span class="question-mark">?</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, ApiVer&gt;::new(toml)<span class="question-mark">?</span>;
 
     api.get(<span class="string">"get_state_signature"</span>, |req, state| {
         <span class="kw">async move </span>{
@@ -564,13 +574,15 @@
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>catchup&lt;S, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(<span class="kw">_</span>: Ver) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, Ver&gt;&gt;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>catchup&lt;S, ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    <span class="kw">_</span>: ApiVer,
+) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, ApiVer&gt;&gt;
 <span class="kw">where
     </span>S: <span class="lifetime">'static </span>+ Send + Sync + ReadState,
     S::State: Send + Sync + CatchupDataSource,
 {
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/catchup.toml"</span>))<span class="question-mark">?</span>;
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, Ver&gt;::new(toml)<span class="question-mark">?</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, ApiVer&gt;::new(toml)<span class="question-mark">?</span>;
 
     api.get(<span class="string">"account"</span>, |req, state| {
         <span class="kw">async move </span>{
@@ -630,10 +642,10 @@
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">type </span>MerklizedStateApi&lt;N, P, D, Ver&gt; = Api&lt;AvailState&lt;N, P, D, Ver&gt;, merklized_state::Error, Ver&gt;;
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>merklized_state&lt;N, P, D, S, Ver: StaticVersionType + <span class="lifetime">'static</span>, <span class="kw">const </span>ARITY: usize&gt;(
-    <span class="kw">_</span>: Ver,
-) -&gt; <span class="prelude-ty">Result</span>&lt;MerklizedStateApi&lt;N, P, D, Ver&gt;&gt;
+<span class="kw">type </span>MerklizedStateApi&lt;N, P, D, V, ApiVer&gt; =
+    Api&lt;AvailState&lt;N, P, D, V&gt;, merklized_state::Error, ApiVer&gt;;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>merklized_state&lt;N, P, D, S, V: Versions, <span class="kw">const </span>ARITY: usize&gt;(
+) -&gt; <span class="prelude-ty">Result</span>&lt;MerklizedStateApi&lt;N, P, D, V, SequencerApiVersion&gt;&gt;
 <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: MerklizedStateDataSource&lt;SeqTypes, S, ARITY&gt;
@@ -645,19 +657,25 @@
     P: SequencerPersistence,
     <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; &lt;S::Commit <span class="kw">as </span>TryFrom&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>TaggedBase64&gt;&gt;::Error: std::fmt::Display,
 {
-    <span class="kw">let </span>api = merklized_state::define_api::&lt;AvailState&lt;N, P, D, Ver&gt;, SeqTypes, S, Ver, ARITY&gt;(
-        <span class="kw-2">&amp;</span>Default::default(),
-    )<span class="question-mark">?</span>;
+    <span class="kw">let </span>api = merklized_state::define_api::&lt;
+        AvailState&lt;N, P, D, V&gt;,
+        SeqTypes,
+        S,
+        SequencerApiVersion,
+        ARITY,
+    &gt;(<span class="kw-2">&amp;</span>Default::default())<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(api)
 }
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>config&lt;S, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(<span class="kw">_</span>: Ver) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, Ver&gt;&gt;
+<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>config&lt;S, ApiVer: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    <span class="kw">_</span>: ApiVer,
+) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, ApiVer&gt;&gt;
 <span class="kw">where
     </span>S: <span class="lifetime">'static </span>+ Send + Sync + ReadState,
     S::State: Send + Sync + HotShotConfigDataSource,
 {
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/config.toml"</span>))<span class="question-mark">?</span>;
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, Ver&gt;::new(toml)<span class="question-mark">?</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, ApiVer&gt;::new(toml)<span class="question-mark">?</span>;
 
     <span class="kw">let </span>env_variables = get_public_env_vars()
         .map_err(|err| Error::catch_all(StatusCode::INTERNAL_SERVER_ERROR, <span class="macro">format!</span>(<span class="string">"{err:#}"</span>)))<span class="question-mark">?</span>;

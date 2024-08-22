@@ -554,6 +554,11 @@
 <a href="#554" id="554">554</a>
 <a href="#555" id="555">555</a>
 <a href="#556" id="556">556</a>
+<a href="#557" id="557">557</a>
+<a href="#558" id="558">558</a>
+<a href="#559" id="559">559</a>
+<a href="#560" id="560">560</a>
+<a href="#561" id="561">561</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API options and initialization.
 
 </span><span class="kw">use </span>anyhow::bail;
@@ -573,6 +578,7 @@
 <span class="kw">use </span>hotshot_types::traits::{
     metrics::{Metrics, NoMetrics},
     network::ConnectedNetwork,
+    node_implementation::Versions,
 };
 <span class="kw">use </span>tide_disco::{
     listener::RateLimitListener,
@@ -594,6 +600,7 @@
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
+    SequencerApiVersion,
 };
 
 <span class="attr">#[derive(Clone, Debug)]
@@ -701,15 +708,14 @@
     /// The function `init_context` is used to create a sequencer context from a metrics object and
     /// optional saved consensus state. The metrics object is created from the API data source, so
     /// that consensus will populuate metrics that can then be read and served by the API.
-    </span><span class="kw">pub async fn </span>serve&lt;N, P, F, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    </span><span class="kw">pub async fn </span>serve&lt;N, P, F, V: Versions + <span class="lifetime">'static</span>&gt;(
         <span class="kw-2">mut </span><span class="self">self</span>,
         init_context: F,
-        bind_version: Ver,
-    ) -&gt; anyhow::Result&lt;SequencerContext&lt;N, P, Ver&gt;&gt;
+    ) -&gt; anyhow::Result&lt;SequencerContext&lt;N, P, V&gt;&gt;
     <span class="kw">where
         </span>N: ConnectedNetwork&lt;PubKey&gt;,
         P: SequencerPersistence,
-        F: FnOnce(Box&lt;<span class="kw">dyn </span>Metrics&gt;) -&gt; BoxFuture&lt;<span class="lifetime">'static</span>, SequencerContext&lt;N, P, Ver&gt;&gt;,
+        F: FnOnce(Box&lt;<span class="kw">dyn </span>Metrics&gt;) -&gt; BoxFuture&lt;<span class="lifetime">'static</span>, SequencerContext&lt;N, P, V&gt;&gt;,
     {
         <span class="comment">// Create a channel to send the context to the web server after it is initialized. This
         // allows the web server to start before initialization can complete, since initialization
@@ -737,11 +743,23 @@
         // we handle the two cases differently.
         </span><span class="kw">let </span>metrics = <span class="kw">if let </span><span class="prelude-val">Some</span>(query_opt) = <span class="self">self</span>.query.take() {
             <span class="kw">if let </span><span class="prelude-val">Some</span>(opt) = <span class="self">self</span>.storage_sql.take() {
-                <span class="self">self</span>.init_with_query_module_sql(query_opt, opt, state, <span class="kw-2">&amp;mut </span>tasks, bind_version)
-                    .<span class="kw">await</span><span class="question-mark">?
+                <span class="self">self</span>.init_with_query_module_sql(
+                    query_opt,
+                    opt,
+                    state,
+                    <span class="kw-2">&amp;mut </span>tasks,
+                    SequencerApiVersion::instance(),
+                )
+                .<span class="kw">await</span><span class="question-mark">?
             </span>} <span class="kw">else if let </span><span class="prelude-val">Some</span>(opt) = <span class="self">self</span>.storage_fs.take() {
-                <span class="self">self</span>.init_with_query_module_fs(query_opt, opt, state, <span class="kw-2">&amp;mut </span>tasks, bind_version)
-                    .<span class="kw">await</span><span class="question-mark">?
+                <span class="self">self</span>.init_with_query_module_fs(
+                    query_opt,
+                    opt,
+                    state,
+                    <span class="kw-2">&amp;mut </span>tasks,
+                    SequencerApiVersion::instance(),
+                )
+                .<span class="kw">await</span><span class="question-mark">?
             </span>} <span class="kw">else </span>{
                 <span class="macro">bail!</span>(<span class="string">"query module requested but not storage provided"</span>);
             }
@@ -755,20 +773,20 @@
             )));
 
             <span class="comment">// Initialize status API.
-            </span><span class="kw">let </span>status_api = status::define_api(<span class="kw-2">&amp;</span>Default::default(), bind_version)<span class="question-mark">?</span>;
+            </span><span class="kw">let </span>status_api =
+                status::define_api(<span class="kw-2">&amp;</span>Default::default(), SequencerApiVersion::instance())<span class="question-mark">?</span>;
             app.register_module(<span class="string">"status"</span>, status_api)<span class="question-mark">?</span>;
 
-            <span class="self">self</span>.init_hotshot_modules::&lt;<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>, Ver&gt;(<span class="kw-2">&amp;mut </span>app)<span class="question-mark">?</span>;
+            <span class="self">self</span>.init_hotshot_modules(<span class="kw-2">&amp;mut </span>app)<span class="question-mark">?</span>;
 
             <span class="kw">if </span><span class="self">self</span>.hotshot_events.is_some() {
-                <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(
-                    state,
-                    <span class="kw-2">&amp;mut </span>tasks,
-                    bind_version,
-                )<span class="question-mark">?</span>;
+                <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(state, <span class="kw-2">&amp;mut </span>tasks)<span class="question-mark">?</span>;
             }
 
-            tasks.spawn(<span class="string">"API server"</span>, <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, bind_version));
+            tasks.spawn(
+                <span class="string">"API server"</span>,
+                <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, SequencerApiVersion::instance()),
+            );
 
             metrics
         } <span class="kw">else </span>{
@@ -780,17 +798,16 @@
             // better have been provided the leaf ahead of time if we want it at all.
             </span><span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, Error&gt;::with_state(RwLock::new(state.clone()));
 
-            <span class="self">self</span>.init_hotshot_modules::&lt;<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>, Ver&gt;(<span class="kw-2">&amp;mut </span>app)<span class="question-mark">?</span>;
+            <span class="self">self</span>.init_hotshot_modules(<span class="kw-2">&amp;mut </span>app)<span class="question-mark">?</span>;
 
             <span class="kw">if </span><span class="self">self</span>.hotshot_events.is_some() {
-                <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(
-                    state,
-                    <span class="kw-2">&amp;mut </span>tasks,
-                    bind_version,
-                )<span class="question-mark">?</span>;
+                <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(state, <span class="kw-2">&amp;mut </span>tasks)<span class="question-mark">?</span>;
             }
 
-            tasks.spawn(<span class="string">"API server"</span>, <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, bind_version));
+            tasks.spawn(
+                <span class="string">"API server"</span>,
+                <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, SequencerApiVersion::instance()),
+            );
 
             Box::new(NoMetrics)
         };
@@ -798,16 +815,16 @@
         <span class="prelude-val">Ok</span>(init_context(metrics).<span class="kw">await</span>.with_task_list(tasks))
     }
 
-    <span class="kw">async fn </span>init_app_modules&lt;N, P, D, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    <span class="kw">async fn </span>init_app_modules&lt;N, P, D, V: Versions&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         ds: D,
-        state: ApiState&lt;N, P, Ver&gt;,
+        state: ApiState&lt;N, P, V&gt;,
         tasks: <span class="kw-2">&amp;mut </span>TaskList,
-        bind_version: Ver,
+        bind_version: SequencerApiVersion,
     ) -&gt; anyhow::Result&lt;(
         Box&lt;<span class="kw">dyn </span>Metrics&gt;,
-        Arc&lt;RwLock&lt;StorageState&lt;N, P, D, Ver&gt;&gt;&gt;,
-        App&lt;Arc&lt;RwLock&lt;StorageState&lt;N, P, D, Ver&gt;&gt;&gt;, Error&gt;,
+        Arc&lt;RwLock&lt;StorageState&lt;N, P, D, V&gt;&gt;&gt;,
+        App&lt;Arc&lt;RwLock&lt;StorageState&lt;N, P, D, V&gt;&gt;&gt;, Error&gt;,
     )&gt;
     <span class="kw">where
         </span>N: ConnectedNetwork&lt;PubKey&gt;,
@@ -815,13 +832,13 @@
         D: SequencerDataSource + CatchupDataSource + Send + Sync + <span class="lifetime">'static</span>,
     {
         <span class="kw">let </span>metrics = ds.populate_metrics();
-        <span class="kw">let </span>ds: endpoints::AvailState&lt;N, P, D, Ver&gt; =
+        <span class="kw">let </span>ds: endpoints::AvailState&lt;N, P, D, V&gt; =
             Arc::new(RwLock::new(ExtensibleDataSource::new(ds, state.clone())));
         <span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, Error&gt;::with_state(ds.clone());
 
         <span class="comment">// Initialize status API
         </span><span class="kw">if </span><span class="self">self</span>.status.is_some() {
-            <span class="kw">let </span>status_api = status::define_api::&lt;endpoints::AvailState&lt;N, P, D, Ver&gt;, Ver&gt;(
+            <span class="kw">let </span>status_api = status::define_api::&lt;endpoints::AvailState&lt;N, P, D, <span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;(
                 <span class="kw-2">&amp;</span>Default::default(),
                 bind_version,
             )<span class="question-mark">?</span>;
@@ -829,10 +846,10 @@
         }
 
         <span class="comment">// Initialize availability and node APIs (these both use the same data source).
-        </span>app.register_module(<span class="string">"availability"</span>, endpoints::availability(bind_version)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-        app.register_module(<span class="string">"node"</span>, endpoints::node(bind_version)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+        </span>app.register_module(<span class="string">"availability"</span>, endpoints::availability()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+        app.register_module(<span class="string">"node"</span>, endpoints::node()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
 
-        <span class="self">self</span>.init_hotshot_modules::&lt;<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>, Ver&gt;(<span class="kw-2">&amp;mut </span>app)<span class="question-mark">?</span>;
+        <span class="self">self</span>.init_hotshot_modules(<span class="kw-2">&amp;mut </span>app)<span class="question-mark">?</span>;
 
         tasks.spawn(
             <span class="string">"query storage updater"</span>,
@@ -842,13 +859,13 @@
         <span class="prelude-val">Ok</span>((metrics, ds, app))
     }
 
-    <span class="kw">async fn </span>init_with_query_module_fs&lt;N, P, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    <span class="kw">async fn </span>init_with_query_module_fs&lt;N, P, V: Versions + <span class="lifetime">'static</span>&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         query_opt: Query,
         mod_opt: persistence::fs::Options,
-        state: ApiState&lt;N, P, Ver&gt;,
+        state: ApiState&lt;N, P, V&gt;,
         tasks: <span class="kw-2">&amp;mut </span>TaskList,
-        bind_version: Ver,
+        bind_version: SequencerApiVersion,
     ) -&gt; anyhow::Result&lt;Box&lt;<span class="kw">dyn </span>Metrics&gt;&gt;
     <span class="kw">where
         </span>N: ConnectedNetwork&lt;PubKey&gt;,
@@ -856,7 +873,7 @@
     {
         <span class="kw">let </span>ds = &lt;fs::DataSource <span class="kw">as </span>SequencerDataSource&gt;::create(
             mod_opt,
-            provider(query_opt.peers, bind_version),
+            provider::&lt;V&gt;(query_opt.peers, bind_version),
             <span class="bool-val">false</span>,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
@@ -866,23 +883,20 @@
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="kw">if </span><span class="self">self</span>.hotshot_events.is_some() {
-            <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)<span class="question-mark">?</span>;
+            <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(state, tasks)<span class="question-mark">?</span>;
         }
 
-        tasks.spawn(
-            <span class="string">"API server"</span>,
-            <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, Ver::instance()),
-        );
+        tasks.spawn(<span class="string">"API server"</span>, <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, bind_version));
         <span class="prelude-val">Ok</span>(metrics)
     }
 
-    <span class="kw">async fn </span>init_with_query_module_sql&lt;N, P, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    <span class="kw">async fn </span>init_with_query_module_sql&lt;N, P, V: Versions + <span class="lifetime">'static</span>&gt;(
         <span class="self">self</span>,
         query_opt: Query,
         mod_opt: persistence::sql::Options,
-        state: ApiState&lt;N, P, Ver&gt;,
+        state: ApiState&lt;N, P, V&gt;,
         tasks: <span class="kw-2">&amp;mut </span>TaskList,
-        bind_version: Ver,
+        bind_version: SequencerApiVersion,
     ) -&gt; anyhow::Result&lt;Box&lt;<span class="kw">dyn </span>Metrics&gt;&gt;
     <span class="kw">where
         </span>N: ConnectedNetwork&lt;PubKey&gt;,
@@ -890,7 +904,7 @@
     {
         <span class="kw">let </span>ds = sql::DataSource::create(
             mod_opt.clone(),
-            provider(query_opt.peers.clone(), bind_version),
+            provider::&lt;V&gt;(query_opt.peers.clone(), bind_version),
             <span class="bool-val">false</span>,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
@@ -899,19 +913,19 @@
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="kw">if </span><span class="self">self</span>.explorer.is_some() {
-            app.register_module(<span class="string">"explorer"</span>, endpoints::explorer(bind_version)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+            app.register_module(<span class="string">"explorer"</span>, endpoints::explorer()<span class="question-mark">?</span>)<span class="question-mark">?</span>;
         }
 
         <span class="kw">if </span><span class="self">self</span>.state.is_some() {
             <span class="comment">// Initialize merklized state module for block merkle tree
             </span>app.register_module(
                 <span class="string">"block-state"</span>,
-                endpoints::merklized_state::&lt;N, P, <span class="kw">_</span>, BlockMerkleTree, <span class="kw">_</span>, <span class="number">3</span>&gt;(bind_version)<span class="question-mark">?</span>,
+                endpoints::merklized_state::&lt;N, P, <span class="kw">_</span>, BlockMerkleTree, <span class="kw">_</span>, <span class="number">3</span>&gt;()<span class="question-mark">?</span>,
             )<span class="question-mark">?</span>;
             <span class="comment">// Initialize merklized state module for fee merkle tree
             </span>app.register_module(
                 <span class="string">"fee-state"</span>,
-                endpoints::merklized_state::&lt;N, P, <span class="kw">_</span>, FeeMerkleTree, <span class="kw">_</span>, <span class="number">256</span>&gt;(bind_version)<span class="question-mark">?</span>,
+                endpoints::merklized_state::&lt;N, P, <span class="kw">_</span>, FeeMerkleTree, <span class="kw">_</span>, <span class="number">256</span>&gt;()<span class="question-mark">?</span>,
             )<span class="question-mark">?</span>;
 
             <span class="kw">let </span>state = state.clone();
@@ -923,12 +937,12 @@
         }
 
         <span class="kw">if </span><span class="self">self</span>.hotshot_events.is_some() {
-            <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)<span class="question-mark">?</span>;
+            <span class="self">self</span>.init_and_spawn_hotshot_event_streaming_module(state, tasks)<span class="question-mark">?</span>;
         }
 
         tasks.spawn(
             <span class="string">"API server"</span>,
-            <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, Ver::instance()),
+            <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, SequencerApiVersion::instance()),
         );
         <span class="prelude-val">Ok</span>(metrics)
     }
@@ -938,10 +952,7 @@
     /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
     /// app. These modules only require a HotShot handle as state, and thus they work with any data
     /// source, so initialization is the same no matter what mode the service is running in.
-    </span><span class="kw">fn </span>init_hotshot_modules&lt;N, P, S, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        app: <span class="kw-2">&amp;mut </span>App&lt;S, Error&gt;,
-    ) -&gt; anyhow::Result&lt;()&gt;
+    </span><span class="kw">fn </span>init_hotshot_modules&lt;N, P, S&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, app: <span class="kw-2">&amp;mut </span>App&lt;S, Error&gt;) -&gt; anyhow::Result&lt;()&gt;
     <span class="kw">where
         </span>S: <span class="lifetime">'static </span>+ Send + Sync + ReadState + WriteState,
         P: SequencerPersistence,
@@ -953,10 +964,10 @@
             + HotShotConfigDataSource,
         N: ConnectedNetwork&lt;PubKey&gt;,
     {
-        <span class="kw">let </span>bind_version = Ver::instance();
+        <span class="kw">let </span>bind_version = SequencerApiVersion::instance();
         <span class="comment">// Initialize submit API
         </span><span class="kw">if </span><span class="self">self</span>.submit.is_some() {
-            <span class="kw">let </span>submit_api = endpoints::submit::&lt;<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>, Ver&gt;()<span class="question-mark">?</span>;
+            <span class="kw">let </span>submit_api = endpoints::submit::&lt;<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>, SequencerApiVersion&gt;()<span class="question-mark">?</span>;
             app.register_module(<span class="string">"submit"</span>, submit_api)<span class="question-mark">?</span>;
         }
 
@@ -981,12 +992,11 @@
     </span><span class="kw">fn </span>init_and_spawn_hotshot_event_streaming_module&lt;
         N,
         P: SequencerPersistence,
-        Ver: StaticVersionType + <span class="lifetime">'static</span>,
+        V: Versions + <span class="lifetime">'static</span>,
     &gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        state: ApiState&lt;N, P, Ver&gt;,
+        state: ApiState&lt;N, P, V&gt;,
         tasks: <span class="kw-2">&amp;mut </span>TaskList,
-        bind_version: Ver,
     ) -&gt; anyhow::Result&lt;()&gt;
     <span class="kw">where
         </span>N: ConnectedNetwork&lt;PubKey&gt;,
@@ -1003,30 +1013,30 @@
             <span class="kw-2">&amp;</span>hotshot_events_service::events::Options::default(),
         )<span class="question-mark">?</span>;
 
-        app.register_module::&lt;<span class="kw">_</span>, Ver&gt;(<span class="string">"hotshot-events"</span>, hotshot_events_api)<span class="question-mark">?</span>;
+        app.register_module::&lt;<span class="kw">_</span>, SequencerApiVersion&gt;(<span class="string">"hotshot-events"</span>, hotshot_events_api)<span class="question-mark">?</span>;
 
         tasks.spawn(
             <span class="string">"Hotshot Events Streaming API server"</span>,
             <span class="self">self</span>.listen(
                 <span class="self">self</span>.hotshot_events.unwrap().events_service_port,
                 app,
-                bind_version,
+                SequencerApiVersion::instance(),
             ),
         );
 
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn </span>listen&lt;S, E, Ver&gt;(
+    <span class="kw">fn </span>listen&lt;S, E, ApiVer&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         port: u16,
         app: App&lt;S, E&gt;,
-        bind_version: Ver,
+        bind_version: ApiVer,
     ) -&gt; <span class="kw">impl </span>Future&lt;Output = anyhow::Result&lt;()&gt;&gt;
     <span class="kw">where
         </span>S: Send + Sync + <span class="lifetime">'static</span>,
         E: Send + Sync + tide_disco::Error,
-        Ver: StaticVersionType + <span class="lifetime">'static</span>,
+        ApiVer: StaticVersionType + <span class="lifetime">'static</span>,
     {
         <span class="kw">let </span>max_connections = <span class="self">self</span>.http.max_connections;
 

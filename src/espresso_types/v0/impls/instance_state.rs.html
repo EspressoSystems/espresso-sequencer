@@ -229,6 +229,10 @@
 <a href="#229" id="229">229</a>
 <a href="#230" id="230">230</a>
 <a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
     Timestamp, Upgrade, UpgradeMode,
@@ -236,10 +240,9 @@
 <span class="kw">use </span>hotshot_types::traits::states::InstanceState;
 <span class="kw">use </span>hotshot_types::HotShotConfig;
 <span class="kw">use </span>std::{collections::BTreeMap, sync::Arc};
-<span class="kw">use </span>vbs::version::{StaticVersionType, Version};
+<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType, Version};
 
 <span class="kw">use </span><span class="kw">super</span>::state::ValidatedState;
-<span class="kw">use </span><span class="kw">super</span>::BaseVersion;
 
 <span class="doccomment">/// Represents the immutable state of a node.
 ///
@@ -278,6 +281,7 @@
         chain_config: ChainConfig,
         l1_client: L1Client,
         catchup: <span class="kw">impl </span>StateCatchup + <span class="lifetime">'static</span>,
+        current_version: Version,
     ) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             node_id,
@@ -291,17 +295,20 @@
             },
             l1_genesis: <span class="prelude-val">None</span>,
             upgrades: Default::default(),
-            current_version: BaseVersion::version(),
+            current_version,
         }
     }
 
     <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
     </span><span class="kw">pub fn </span>mock() -&gt; <span class="self">Self </span>{
+        <span class="kw">use </span>vbs::version::StaticVersion;
+
         <span class="self">Self</span>::new(
             <span class="number">0</span>,
             ChainConfig::default(),
             L1Client::new(<span class="string">"http://localhost:3331"</span>.parse().unwrap(), <span class="number">10000</span>),
             mock::MockStateCatchup::default(),
+            StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version(),
         )
     }
 
@@ -341,6 +348,7 @@
             ChainConfig::default(),
             L1Client::new(<span class="string">"http://localhost:3331"</span>.parse().unwrap(), <span class="number">10000</span>),
             mock::MockStateCatchup::default(),
+            StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version(),
         )
     }
 }

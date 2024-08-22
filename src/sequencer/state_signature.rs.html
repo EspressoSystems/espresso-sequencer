@@ -253,7 +253,7 @@
 </span><span class="kw">const </span>SIGNATURE_STORAGE_CAPACITY: usize = <span class="number">100</span>;
 
 <span class="attr">#[derive(Debug)]
-</span><span class="kw">pub struct </span>StateSigner&lt;Ver: StaticVersionType&gt; {
+</span><span class="kw">pub struct </span>StateSigner&lt;ApiVer: StaticVersionType&gt; {
     <span class="doccomment">/// Key pair for signing a new light client state
     </span>key_pair: StateKeyPair,
 
@@ -264,10 +264,10 @@
     </span>stake_table_comm: StakeTableCommitmentType,
 
     <span class="doccomment">/// The state relay server url
-    </span>relay_server_client: <span class="prelude-ty">Option</span>&lt;Client&lt;ServerError, Ver&gt;&gt;,
+    </span>relay_server_client: <span class="prelude-ty">Option</span>&lt;Client&lt;ServerError, ApiVer&gt;&gt;,
 }
 
-<span class="kw">impl</span>&lt;Ver: StaticVersionType&gt; StateSigner&lt;Ver&gt; {
+<span class="kw">impl</span>&lt;ApiVer: StaticVersionType&gt; StateSigner&lt;ApiVer&gt; {
     <span class="kw">pub fn </span>new(key_pair: StateKeyPair, stake_table_comm: StakeTableCommitmentType) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             key_pair,

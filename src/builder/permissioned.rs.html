@@ -655,18 +655,6 @@
 <a href="#655" id="655">655</a>
 <a href="#656" id="656">656</a>
 <a href="#657" id="657">657</a>
-<a href="#658" id="658">658</a>
-<a href="#659" id="659">659</a>
-<a href="#660" id="660">660</a>
-<a href="#661" id="661">661</a>
-<a href="#662" id="662">662</a>
-<a href="#663" id="663">663</a>
-<a href="#664" id="664">664</a>
-<a href="#665" id="665">665</a>
-<a href="#666" id="666">666</a>
-<a href="#667" id="667">667</a>
-<a href="#668" id="668">668</a>
-<a href="#669" id="669">669</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     alloc::System,
     any,
@@ -757,7 +745,7 @@
         election::Membership,
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
@@ -769,10 +757,9 @@
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
     genesis::L1Finalized,
-    network,
-    network::libp2p::split_off_peer_id,
+    network::{<span class="self">self</span>, libp2p::split_off_peer_id},
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    Genesis, L1Params, NetworkParams, Node,
+    Genesis, L1Params, NetworkParams, Node, SequencerApiVersion,
 };
 <span class="kw">use </span>surf_disco::Client;
 <span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
@@ -780,19 +767,15 @@
 
 <span class="kw">use </span><span class="kw">crate</span>::run_builder_api_service;
 
-<span class="kw">pub struct </span>BuilderContext&lt;
-    N: ConnectedNetwork&lt;PubKey&gt;,
-    P: SequencerPersistence,
-    Ver: StaticVersionType + <span class="lifetime">'static</span>,
-&gt; {
+<span class="kw">pub struct </span>BuilderContext&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, V: Versions&gt; {
     <span class="doccomment">/// The consensus handle
-    </span><span class="kw">pub </span>hotshot_handle: Arc&lt;Consensus&lt;N, P&gt;&gt;,
+    </span><span class="kw">pub </span>hotshot_handle: Arc&lt;Consensus&lt;N, P, V&gt;&gt;,
 
     <span class="doccomment">/// Index of this sequencer node
     </span><span class="kw">pub </span>node_index: u64,
 
     <span class="doccomment">/// Context for generating state signatures.
-    </span><span class="kw">pub </span>state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
+    </span><span class="kw">pub </span>state_signer: Arc&lt;StateSigner&lt;SequencerApiVersion&gt;&gt;,
 
     <span class="doccomment">/// An orchestrator to wait for before starting consensus.
     </span><span class="kw">pub </span>wait_for_orchestrator: <span class="prelude-ty">Option</span>&lt;Arc&lt;OrchestratorClient&gt;&gt;,
@@ -805,7 +788,7 @@
 }
 
 <span class="attr">#[allow(clippy::too_many_arguments)]
-</span><span class="kw">pub async fn </span>init_node&lt;P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+</span><span class="kw">pub async fn </span>init_node&lt;P: SequencerPersistence, V: Versions&gt;(
     genesis: Genesis,
     network_params: NetworkParams,
     metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
@@ -815,13 +798,13 @@
     bootstrapped_view: ViewNumber,
     tx_channel_capacity: NonZeroUsize,
     event_channel_capacity: NonZeroUsize,
-    bind_version: Ver,
+    bind_version: V,
     persistence: P,
     max_api_timeout_duration: Duration,
     buffered_view_num_count: usize,
     is_da: bool,
     maximize_txns_count_timeout_duration: Duration,
-) -&gt; anyhow::Result&lt;BuilderContext&lt;network::Production, P, Ver&gt;&gt; {
+) -&gt; anyhow::Result&lt;BuilderContext&lt;network::Production, P, V&gt;&gt; {
     <span class="comment">// Orchestrator client
     </span><span class="kw">let </span>validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -944,13 +927,13 @@
         genesis_header: genesis.header,
         genesis_state: genesis_state.clone(),
         l1_genesis,
-        peers: Arc::new(StatePeers::&lt;Ver&gt;::from_urls(
+        peers: Arc::new(StatePeers::&lt;SequencerApiVersion&gt;::from_urls(
             network_params.state_peers,
             network_params.catchup_backoff,
         )),
         node_id: node_index,
         upgrades: Default::default(),
-        current_version: Ver::VERSION,
+        current_version: V::Base::VERSION,
     };
 
     <span class="kw">let </span>stake_table_commit =
@@ -992,11 +975,7 @@
 }
 
 <span class="attr">#[allow(clippy::too_many_arguments)]
-</span><span class="kw">pub async fn </span>init_hotshot&lt;
-    N: ConnectedNetwork&lt;PubKey&gt;,
-    P: SequencerPersistence,
-    Ver: StaticVersionType + <span class="lifetime">'static</span>,
-&gt;(
+</span><span class="kw">pub async fn </span>init_hotshot&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, V: Versions&gt;(
     config: HotShotConfig&lt;PubKey&gt;,
     stake_table_entries_for_non_voting_nodes: <span class="prelude-ty">Option</span>&lt;
         Vec&lt;PeerConfig&lt;hotshot_state_prover::QCVerKey&gt;&gt;,
@@ -1007,9 +986,9 @@
     node_id: u64,
     state_relay_server: <span class="prelude-ty">Option</span>&lt;Url&gt;,
     stake_table_commit: StakeTableCommitmentType,
-    <span class="kw">_</span>: Ver,
+    <span class="kw">_</span>: V,
     persistence: P,
-) -&gt; (Consensus&lt;N, P&gt;, StateSigner&lt;Ver&gt;) {
+) -&gt; (Consensus&lt;N, P, V&gt;, StateSigner&lt;SequencerApiVersion&gt;) {
     <span class="kw">let </span>combined_known_nodes_with_stake = <span class="kw">match </span>stake_table_entries_for_non_voting_nodes {
         <span class="prelude-val">Some</span>(stake_table_entries) =&gt; {
             <span class="kw">let </span>combined_entries = config
@@ -1068,7 +1047,7 @@
 
     <span class="macro">tracing::debug!</span>(<span class="string">"Hotshot handle initialized"</span>);
 
-    <span class="kw">let </span><span class="kw-2">mut </span>state_signer: StateSigner&lt;Ver&gt; = StateSigner::new(state_key_pair, stake_table_commit);
+    <span class="kw">let </span><span class="kw-2">mut </span>state_signer = StateSigner::new(state_key_pair, stake_table_commit);
 
     <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = state_relay_server {
         state_signer = state_signer.with_relay_server(url);
@@ -1076,14 +1055,12 @@
     (hotshot_handle, state_signer)
 }
 
-<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
-    BuilderContext&lt;N, P, Ver&gt;
-{
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, V: Versions&gt; BuilderContext&lt;N, P, V&gt; {
     <span class="doccomment">/// Constructor
     </span><span class="attr">#[allow(clippy::too_many_arguments)]
     </span><span class="kw">pub async fn </span>init(
-        hotshot_handle: Arc&lt;Consensus&lt;N, P&gt;&gt;,
-        state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
+        hotshot_handle: Arc&lt;Consensus&lt;N, P, V&gt;&gt;,
+        state_signer: Arc&lt;StateSigner&lt;SequencerApiVersion&gt;&gt;,
         node_index: u64,
         eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
@@ -1230,8 +1207,7 @@
     <span class="kw">use </span>async_lock::RwLock;
     <span class="kw">use </span>async_std::task;
 
-    <span class="kw">use </span>espresso_types::{BaseVersion, FeeAccount, NamespaceId, Transaction};
-    <span class="kw">use </span>ethers::utils::Anvil;
+    <span class="kw">use </span>espresso_types::{FeeAccount, MockSequencerVersions, NamespaceId, Transaction};
     <span class="kw">use </span>hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -1284,13 +1260,13 @@
     // async fn test_permissioned_builder() {
     //     setup_test();
 
-    //     let query_port = pick_unused_port().expect("No ports free");
+    // Hotshot Test Config
+    // let hotshot_config = HotShotTestConfig::default();
 
-    //     let event_port = pick_unused_port().expect("No ports free");
-    //     let event_service_url: Url = format!("http://localhost:{event_port}").parse().unwrap();
-
-    //     let builder_port = pick_unused_port().expect("No ports free");
-    //     let builder_api_url: Url = format!("http://localhost:{builder_port}").parse().unwrap();
+    // // Get the handle for all the nodes, including both the non-builder and builder nodes
+    // let mut handles = hotshot_config
+    //     .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+    //     .await;
 
     //     // Set up and start the network
     //     let anvil = Anvil::new().spawn();

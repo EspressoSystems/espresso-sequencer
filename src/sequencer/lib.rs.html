@@ -941,6 +941,11 @@
 <a href="#941" id="941">941</a>
 <a href="#942" id="942">942</a>
 <a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -959,7 +964,7 @@
 <span class="kw">use </span>context::SequencerContext;
 <span class="kw">use </span>espresso_types::{
     BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
-    UpgradeVersion, ValidatedState,
+    ValidatedState,
 };
 <span class="kw">use </span>ethers::types::U256;
 <span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
@@ -1002,7 +1007,7 @@
     traits::{
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
     utils::BuilderCommitment,
@@ -1010,7 +1015,7 @@
 };
 <span class="kw">pub use </span>options::Options;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
-<span class="kw">use </span>vbs::version::StaticVersionType;
+<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 <span class="kw">pub mod </span>network;
 
 <span class="doccomment">/// The Sequencer node is generic over the hotshot CommChannel.
@@ -1032,6 +1037,8 @@
         <span class="kw-2">*</span><span class="self">self
     </span>}
 }
+
+<span class="kw">pub type </span>SequencerApiVersion = StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;;
 
 <span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence&gt; NodeImplementation&lt;SeqTypes&gt;
     <span class="kw">for </span>Node&lt;N, P&gt;
@@ -1070,17 +1077,17 @@
 }
 
 <span class="attr">#[allow(clippy::too_many_arguments)]
-</span><span class="kw">pub async fn </span>init_node&lt;P: PersistenceOptions, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+</span><span class="kw">pub async fn </span>init_node&lt;P: PersistenceOptions, V: Versions&gt;(
     genesis: Genesis,
     network_params: NetworkParams,
     metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
     persistence_opt: P,
     l1_params: L1Params,
-    bind_version: Ver,
+    seq_versions: V,
     is_da: bool,
     identity: Identity,
     marketplace_config: MarketplaceConfig&lt;SeqTypes, Node&lt;network::Production, P::Persistence&gt;&gt;,
-) -&gt; anyhow::Result&lt;SequencerContext&lt;network::Production, P::Persistence, Ver&gt;&gt; {
+) -&gt; anyhow::Result&lt;SequencerContext&lt;network::Production, P::Persistence, V&gt;&gt; {
     <span class="comment">// Expose git information via status API.
     </span>metrics
         .text_family(
@@ -1176,7 +1183,8 @@
         <span class="comment">// If we were told to fetch the config from an already-started peer, do so.
         </span>(<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(peers)) =&gt; {
             <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>peers, <span class="string">"loading network config from peers"</span>);
-            <span class="kw">let </span>peers = StatePeers::&lt;Ver&gt;::from_urls(peers, network_params.catchup_backoff);
+            <span class="kw">let </span>peers =
+                StatePeers::&lt;SequencerApiVersion&gt;::from_urls(peers, network_params.catchup_backoff);
             <span class="kw">let </span>config = peers.fetch_config(my_config.clone()).<span class="kw">await</span>;
 
             <span class="macro">tracing::info!</span>(
@@ -1215,7 +1223,7 @@
         }
     };
 
-    <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = genesis.upgrades.get(<span class="kw-2">&amp;</span>UpgradeVersion::VERSION) {
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = genesis.upgrades.get(<span class="kw-2">&amp;</span>V::Upgrade::VERSION) {
         upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span>config.config);
     }
 
@@ -1328,7 +1336,7 @@
         l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
-            StatePeers::&lt;Ver&gt;::from_urls(
+            StatePeers::&lt;SequencerApiVersion&gt;::from_urls(
                 network_params.state_peers,
                 network_params.catchup_backoff,
             ),
@@ -1336,7 +1344,7 @@
         .<span class="kw">await</span>,
         node_id: node_index,
         upgrades: genesis.upgrades,
-        current_version: Ver::VERSION,
+        current_version: V::Base::VERSION,
     };
 
     <span class="kw">let </span><span class="kw-2">mut </span>ctx = SequencerContext::init(
@@ -1348,7 +1356,7 @@
         metrics,
         genesis.stake_table.capacity,
         network_params.public_api_url,
-        bind_version,
+        seq_versions,
         marketplace_config,
     )
     .<span class="kw">await</span><span class="question-mark">?</span>;
@@ -1371,7 +1379,7 @@
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade, UpgradeVersion,
+        Event, FeeAccount, MockSequencerVersions, PubKey, SeqTypes, Transaction, Upgrade,
     };
     <span class="kw">use </span>futures::{
         future::join_all,
@@ -1459,7 +1467,10 @@
         </span>}
 
         <span class="kw">pub fn </span>build(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; TestConfig&lt;NUM_NODES&gt; {
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = <span class="self">self</span>.upgrades.get(<span class="kw-2">&amp;</span>UpgradeVersion::VERSION) {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = <span class="self">self
+                </span>.upgrades
+                .get(<span class="kw-2">&amp;</span>&lt;MockSequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION)
+            {
                 upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config)
             }
 
@@ -1587,10 +1598,10 @@
             <span class="self">self</span>.upgrades.clone()
         }
 
-        <span class="kw">pub async fn </span>init_nodes&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+        <span class="kw">pub async fn </span>init_nodes&lt;V: Versions&gt;(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
-            bind_version: Ver,
-        ) -&gt; Vec&lt;SequencerContext&lt;network::Memory, NoStorage, Ver&gt;&gt; {
+            bind_version: V,
+        ) -&gt; Vec&lt;SequencerContext&lt;network::Memory, NoStorage, V&gt;&gt; {
             join_all((<span class="number">0</span>..<span class="self">self</span>.num_nodes()).map(|i| <span class="kw">async move </span>{
                 <span class="self">self</span>.init_node(
                     i,
@@ -1628,7 +1639,7 @@
         }
 
         <span class="attr">#[allow(clippy::too_many_arguments)]
-        </span><span class="kw">pub async fn </span>init_node&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>, P: PersistenceOptions&gt;(
+        </span><span class="kw">pub async fn </span>init_node&lt;V: Versions, P: PersistenceOptions&gt;(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
             i: usize,
             <span class="kw-2">mut </span>state: ValidatedState,
@@ -1636,9 +1647,9 @@
             catchup: <span class="kw">impl </span>StateCatchup + <span class="lifetime">'static</span>,
             metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
             stake_table_capacity: u64,
-            bind_version: Ver,
+            bind_version: V,
             upgrades: BTreeMap&lt;Version, Upgrade&gt;,
-        ) -&gt; SequencerContext&lt;network::Memory, P::Persistence, Ver&gt; {
+        ) -&gt; SequencerContext&lt;network::Memory, P::Persistence, V&gt; {
             <span class="kw">let </span><span class="kw-2">mut </span>config = <span class="self">self</span>.config.clone();
             <span class="kw">let </span>my_peer_config = <span class="kw-2">&amp;</span>config.known_nodes_with_stake[i];
             <span class="kw">let </span>is_da = config.known_da_nodes.contains(my_peer_config);
@@ -1672,8 +1683,9 @@
                 state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(<span class="self">self</span>.l1_url.clone(), <span class="number">1000</span>),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).<span class="kw">await</span>,
+                V::Base::VERSION,
             )
-            .with_current_version(Ver::version())
+            .with_current_version(V::Base::version())
             .with_genesis(state)
             .with_upgrades(upgrades);
 
@@ -1750,7 +1762,7 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
 
-    <span class="kw">use </span>espresso_types::{BaseVersion, Header, NamespaceId, Payload, Transaction};
+    <span class="kw">use </span>espresso_types::{Header, MockSequencerVersions, NamespaceId, Payload, Transaction};
     <span class="kw">use </span>futures::StreamExt;
     <span class="kw">use </span>hotshot::types::EventType::Decide;
     <span class="kw">use </span>hotshot_types::{
@@ -1768,7 +1780,6 @@
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_skeleton_instantiation() {
         setup_test();
-        <span class="kw">let </span>ver = BaseVersion::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();
@@ -1781,7 +1792,7 @@
 
         config.set_builder_urls(<span class="macro">vec1::vec1!</span>[builder_url]);
 
-        <span class="kw">let </span>handles = config.init_nodes(ver).<span class="kw">await</span>;
+        <span class="kw">let </span>handles = config.init_nodes(MockSequencerVersions::new()).<span class="kw">await</span>;
 
         <span class="kw">let </span>handle_0 = <span class="kw-2">&amp;</span>handles[<span class="number">0</span>];
 
@@ -1810,7 +1821,6 @@
         setup_test();
 
         <span class="kw">let </span>success_height = <span class="number">30</span>;
-        <span class="kw">let </span>ver = BaseVersion::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();
@@ -1822,7 +1832,7 @@
         <span class="kw">let </span>(builder_task, builder_url) = run_test_builder::&lt;NUM_NODES&gt;(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         config.set_builder_urls(<span class="macro">vec1::vec1!</span>[builder_url]);
-        <span class="kw">let </span>handles = config.init_nodes(ver).<span class="kw">await</span>;
+        <span class="kw">let </span>handles = config.init_nodes(MockSequencerVersions::new()).<span class="kw">await</span>;
 
         <span class="kw">let </span>handle_0 = <span class="kw-2">&amp;</span>handles[<span class="number">0</span>];
 
