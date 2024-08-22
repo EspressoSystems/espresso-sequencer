@@ -68,17 +68,18 @@ struct UpdateArgs {
     #[clap(
         long,
         env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL",
+        default_value = "",
         value_parser = parse_update_option::<Url>
     )]
     pub reserve_url: Update<Option<Url>>,
 
-    #[clap(long, value_parser = parse_update::<u64>)]
+    #[clap(long, value_parser = parse_update::<u64>, default_value = "")]
     pub reserve_price: Update<u64>,
 
-    #[clap(long, value_parser = parse_update::<bool>)]
+    #[clap(long, value_parser = parse_update::<bool>, default_value = "")]
     pub active: Update<bool>,
 
-    #[clap(long, value_parser = parse_update::<String>)]
+    #[clap(long, value_parser = parse_update::<String>, default_value = "")]
     pub text: Update<String>,
 
     /// The private key is provided in tagged-base64 format.
