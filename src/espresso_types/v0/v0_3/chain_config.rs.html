@@ -173,12 +173,34 @@
 <a href="#173" id="173">173</a>
 <a href="#174" id="174">174</a>
 <a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{v0_1, BlockSize, ChainId, FeeAccount, FeeAmount};
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::{Address, U256};
 <span class="kw">use </span>itertools::Either;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
-<span class="kw">use </span>std::str::FromStr;
 
 <span class="doccomment">/// Global variables for an Espresso blockchain.
 </span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -285,9 +307,8 @@
             Either::Left(chain_config) =&gt; ResolvableChainConfig {
                 chain_config: Either::Left(ChainConfig::from(chain_config)),
             },
-            <span class="comment">// TODO does this work? is there a better way?
-            </span>Either::Right(c) =&gt; ResolvableChainConfig {
-                chain_config: Either::Right(Commitment::from_str(<span class="kw-2">&amp;</span>c.to_string()).unwrap()),
+            Either::Right(c) =&gt; ResolvableChainConfig {
+                chain_config: Either::Right(Commitment::from_raw(<span class="kw-2">*</span>c.as_ref())),
             },
         }
     }
@@ -346,6 +367,31 @@
             fee_recipient: Default::default(),
             bid_recipient: <span class="prelude-val">None</span>,
         }
+    }
+}
+
+<span class="attr">#[cfg(test)]
+</span><span class="kw">mod </span>test {
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_upgrade_chain_config_v3_resolvable_chain_config_from_v1() {
+        <span class="kw">let </span>expectation: ResolvableChainConfig = ChainConfig::default().into();
+        <span class="kw">let </span>v1_resolvable: v0_1::ResolvableChainConfig = v0_1::ChainConfig::default().into();
+        <span class="kw">let </span>v3_resolvable: ResolvableChainConfig = ResolvableChainConfig::from(<span class="kw-2">&amp;</span>v1_resolvable);
+        <span class="macro">assert_eq!</span>(expectation, v3_resolvable);
+        <span class="kw">let </span>expectation: ResolvableChainConfig = ChainConfig::default().commit().into();
+        <span class="kw">let </span>v1_resolvable: v0_1::ResolvableChainConfig =
+            v0_1::ChainConfig::default().commit().into();
+        <span class="kw">let </span>v3_resolvable: ResolvableChainConfig = ResolvableChainConfig::from(<span class="kw-2">&amp;</span>v1_resolvable);
+        <span class="macro">assert_eq!</span>(expectation, v3_resolvable);
+    }
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_upgrade_chain_config_v1_chain_config_from_v3() {
+        <span class="kw">let </span>expectation = v0_1::ChainConfig::default();
+        <span class="kw">let </span>v3_chain_config = ChainConfig::default();
+        <span class="kw">let </span>v1_chain_config = v0_1::ChainConfig::from(v3_chain_config);
+        <span class="macro">assert_eq!</span>(expectation, v1_chain_config);
     }
 }
 </code></pre></div></section></main></body></html>
