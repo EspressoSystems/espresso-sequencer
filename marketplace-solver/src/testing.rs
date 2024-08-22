@@ -123,8 +123,6 @@ mod test {
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_types::traits::node_implementation::NodeType;
-    use std::str::FromStr;
-    use tide_disco::Url;
 
     use crate::{testing::MockSolver, SolverError};
 
@@ -152,7 +150,7 @@ mod test {
         // Initialize a rollup registration with namespace id = 1
         let reg_ns_1_body = RollupRegistrationBody {
             namespace_id: 1_u64.into(),
-            reserve_url: Url::from_str("http://localhost").unwrap(),
+            reserve_url: None,
             reserve_price: 200.into(),
             active: true,
             signature_keys,
@@ -351,7 +349,7 @@ mod test {
         // Initialize a rollup registration with namespace id = 1
         let reg_ns_1_body = RollupRegistrationBody {
             namespace_id: 1_u64.into(),
-            reserve_url: Url::from_str("http://localhost").unwrap(),
+            reserve_url: None,
             reserve_price: 200.into(),
             active: true,
             signature_keys: signature_keys.clone(),

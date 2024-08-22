@@ -125,7 +125,7 @@ async fn register(opt: Register) -> Result<()> {
 
     let reg_body = RollupRegistrationBody {
         namespace_id: namespace_id.into(),
-        reserve_url: reserve_url.clone(),
+        reserve_url: Some(reserve_url.clone()),
         reserve_price: reserve_price.into(),
         active,
         signature_keys: vec![pubkey],

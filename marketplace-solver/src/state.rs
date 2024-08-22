@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use async_trait::async_trait;
 use committable::Committable;
@@ -16,6 +16,7 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
+use tide_disco::Url;
 
 use crate::{database::PostgresClient, overflow_err, serde_json_err, SolverError, SolverResult};
 
@@ -189,9 +190,7 @@ impl UpdateSolverState for GlobalState {
         let mut registration =
             serde_json::from_value::<RollupRegistration>(result.data).map_err(serde_json_err)?;
 
-        if let Some(reserve_url) = reserve_url {
-            registration.body.reserve_url = reserve_url;
-        }
+        registration.body.reserve_url = reserve_url;
 
         if let Some(rp) = reserve_price {
             registration.body.reserve_price = rp;
@@ -271,7 +270,14 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .map(|r| {
+                    (
+                        r.body.namespace_id,
+                        r.body
+                            .reserve_url
+                            .unwrap_or_else(|| Url::from_str("http://localhost").unwrap()),
+                    )
+                })
                 .collect(),
         );
 
@@ -292,7 +298,14 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .map(|r| {
+                    (
+                        r.body.namespace_id,
+                        r.body
+                            .reserve_url
+                            .unwrap_or_else(|| Url::from_str("http://localhost").unwrap()),
+                    )
+                })
                 .collect(),
         );
 
