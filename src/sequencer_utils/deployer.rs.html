@@ -402,7 +402,6 @@
 <a href="#402" id="402">402</a>
 <a href="#403" id="403">403</a>
 <a href="#404" id="404">404</a>
-<a href="#405" id="405">405</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref};
 
 <span class="kw">use </span>anyhow::{ensure, Context};
@@ -417,12 +416,11 @@
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
     plonk_verifier::PlonkVerifier,
-    shared_types::LightClientState,
 };
 <span class="kw">use </span>derive_more::Display;
 <span class="kw">use </span>ethers::{prelude::<span class="kw-2">*</span>, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 <span class="kw">use </span>futures::future::{BoxFuture, FutureExt};
-<span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
+<span class="kw">use </span>hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedLightClientState};
 <span class="kw">use </span>url::Url;
 
 <span class="doccomment">/// Set of predeployed contracts.
@@ -650,7 +648,7 @@
 </span><span class="kw">pub async fn </span>deploy_mock_light_client_contract&lt;M: Middleware + <span class="lifetime">'static</span>&gt;(
     l1: Arc&lt;M&gt;,
     contracts: <span class="kw-2">&amp;mut </span>Contracts,
-    constructor_args: <span class="prelude-ty">Option</span>&lt;(LightClientState, u32)&gt;,
+    constructor_args: <span class="prelude-ty">Option</span>&lt;LightClientConstructorArgs&gt;,
 ) -&gt; anyhow::Result&lt;Address&gt; {
     <span class="comment">// Deploy library contracts.
     </span><span class="kw">let </span>plonk_verifier = contracts
@@ -697,9 +695,9 @@
             </span>.clone(),
         l1,
     );
-    <span class="kw">let </span>constructor_args = <span class="kw">match </span>constructor_args {
+    <span class="kw">let </span>constructor_args: LightClientConstructorArgs = <span class="kw">match </span>constructor_args {
         <span class="prelude-val">Some</span>(args) =&gt; args,
-        <span class="prelude-val">None </span>=&gt; (ParsedLightClientState::dummy_genesis().into(), u32::MAX),
+        <span class="prelude-val">None </span>=&gt; LightClientConstructorArgs::dummy_genesis(),
     };
     <span class="kw">let </span>contract = light_client_factory
         .deploy(constructor_args)<span class="question-mark">?
@@ -762,7 +760,7 @@
         <span class="kw">let </span>light_client = LightClient::new(lc_address, l1.clone());
 
         <span class="kw">let </span>data = light_client
-            .initialize(genesis.<span class="kw">await</span><span class="question-mark">?</span>.into(), u32::MAX, owner)
+            .initialize(genesis.<span class="kw">await</span><span class="question-mark">?</span>.into(), u32::MAX, <span class="number">864000</span>, owner)
             .calldata()
             .context(<span class="string">"calldata for initialize transaction not available"</span>)<span class="question-mark">?</span>;
         contracts

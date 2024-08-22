@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ParsedLightClientState"]};
+window.SIDEBAR_ITEMS = {"struct":["LightClientConstructorArgs","ParsedLightClientState"]};

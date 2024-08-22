@@ -755,6 +755,14 @@
 <a href="#755" id="755">755</a>
 <a href="#756" id="756">756</a>
 <a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
+<a href="#761" id="761">761</a>
+<a href="#762" id="762">762</a>
+<a href="#763" id="763">763</a>
+<a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -1294,6 +1302,7 @@
         abi::AbiEncode,
         utils::{Anvil, AnvilInstance},
     };
+    <span class="kw">use </span>hotshot_contract_adapter::light_client::LightClientConstructorArgs;
     <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
     <span class="kw">use </span>hotshot_types::light_client::StateSignKey;
     <span class="kw">use </span>jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
@@ -1305,6 +1314,7 @@
 
     <span class="kw">const </span>STAKE_TABLE_CAPACITY_FOR_TEST: usize = <span class="number">10</span>;
     <span class="kw">const </span>BLOCKS_PER_EPOCH: u32 = <span class="number">10</span>;
+    <span class="kw">const </span>MAX_HISTORY_SECONDS: u32 = <span class="number">864000</span>;
 
     <span class="kw">const </span>NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / <span class="number">2</span>) <span class="kw">as </span>u32;
 
@@ -1413,11 +1423,17 @@
             .with_chain_id(provider.get_chainid().<span class="kw">await</span><span class="question-mark">?</span>.as_u64());
         <span class="kw">let </span>l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
+        <span class="kw">let </span>genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
+            light_client_state: genesis,
+            num_blocks_per_epoch: BLOCKS_PER_EPOCH,
+            max_history_seconds: MAX_HISTORY_SECONDS,
+        };
+
         <span class="kw">let </span><span class="kw-2">mut </span>contracts = deployer::Contracts::default();
         <span class="kw">let </span>address = deployer::deploy_mock_light_client_contract(
             l1_wallet.clone(),
             <span class="kw-2">&amp;mut </span>contracts,
-            <span class="prelude-val">Some</span>((genesis.into(), BLOCKS_PER_EPOCH)),
+            <span class="prelude-val">Some</span>(genesis_constructor_args),
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
 
