@@ -1479,8 +1479,6 @@ mod test {
             },
         );
 
-        let stop_voting_view = u64::MAX;
-
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
             .api_config(
@@ -1508,7 +1506,11 @@ mod test {
         let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         let mut events = network.server.event_stream().await;
-        loop {
+
+        // First loop to get an `UpgradeProposal`. Note that the
+        // actual upgrade will take several subsequent views for
+        // voting and finally the actual upgrade.
+        let new_version_first_view = loop {
             let event = events.next().await.unwrap();
 
             match event.event {
@@ -1519,42 +1521,54 @@ mod test {
                         new_version,
                         <MockSequencerVersions as Versions>::Upgrade::VERSION
                     );
-                    break;
+                    break upgrade.new_version_first_view;
                 }
                 _ => continue,
             }
-        }
+        };
 
         let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");
 
-        'outer: loop {
+        // Loop to wait on the upgrade itself.
+        loop {
+            // Get height as a proxy for view number. Height is always
+            // >= to view, especially using anvil. As a possible
+            // alternative we might loop on hotshot events here again
+            // and pull the view number off the event.
             let height = client
-                .get::<usize>("status/block-height")
+                .get::<ViewNumber>("status/block-height")
                 .send()
                 .await
                 .unwrap();
 
-            for peer in &network.peers {
-                let state = peer.consensus().read().await.decided_state().await;
+            let states: Vec<_> = network
+                .peers
+                .iter()
+                .map(|peer| async { peer.consensus().read().await.decided_state().await })
+                .collect();
 
-                match state.chain_config.resolve() {
-                    Some(cf) => {
-                        if cf != chain_config_upgrade && height as u64 > stop_voting_view {
-                            panic!("failed to upgrade chain config");
-                        }
+            let configs: Option<Vec<ChainConfig>> = join_all(states)
+                .await
+                .iter()
+                .map(|state| state.chain_config.resolve())
+                .collect();
+
+            // ChainConfigs will eventually be resolved
+            if let Some(configs) = configs {
+                if height >= new_version_first_view {
+                    for config in configs {
+                        assert_eq!(config, chain_config_upgrade);
                     }
-                    None => continue 'outer,
+                    break; // if assertion did not panic, we need to exit the loop
                 }
             }
-
-            break;
+            sleep(Duration::from_millis(200)).await;
         }
 
         network.server.shut_down().await;
-        drop(network);
     }
 
     #[async_std::test]

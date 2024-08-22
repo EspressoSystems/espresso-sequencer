@@ -667,7 +667,6 @@ mod test {
             timestamp = "0x123def"
             hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
 
-
             [[upgrade]]
             version = "0.3"
             start_proposing_view = 1
