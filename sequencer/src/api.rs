@@ -1479,7 +1479,7 @@ mod test {
             },
         );
 
-        let stop_voting_view = u64::MAX;
+        let stop_voting_view = 30u64;
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
@@ -1508,7 +1508,7 @@ mod test {
         let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         let mut events = network.server.event_stream().await;
-        loop {
+        let new_version_first_view = loop {
             let event = events.next().await.unwrap();
 
             match event.event {
@@ -1519,41 +1519,50 @@ mod test {
                         new_version,
                         <MockSequencerVersions as Versions>::Upgrade::VERSION
                     );
-                    break;
+                    break upgrade.new_version_first_view;
                 }
                 _ => continue,
             }
-        }
+        };
 
         let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");
 
-        'outer: loop {
+        let expected: Vec<ChainConfig> = (0..NUM_NODES).map(|_| chain_config_upgrade).collect();
+
+        loop {
             let height = client
-                .get::<usize>("status/block-height")
+                .get::<ViewNumber>("status/block-height")
                 .send()
                 .await
                 .unwrap();
 
-            for peer in &network.peers {
-                let state = peer.consensus().read().await.decided_state().await;
+            let states: Vec<_> = network
+                .peers
+                .iter()
+                .map(|peer| async { peer.consensus().read().await.decided_state().await })
+                .collect();
 
-                match state.chain_config.resolve() {
-                    Some(cf) => {
-                        if cf != chain_config_upgrade && height as u64 > stop_voting_view {
-                            panic!("failed to upgrade chain config");
-                        }
-                    }
-                    None => continue 'outer,
+            let configs: Option<Vec<ChainConfig>> = join_all(states)
+                .await
+                .iter()
+                .map(|state| state.chain_config.resolve())
+                .collect();
+
+            // ChainConfig will eventually be resolved
+            if let Some(configs) = configs {
+                if height > new_version_first_view {
+                    assert_eq!(expected, configs);
+                    break;
                 }
             }
-
-            break;
+            sleep(Duration::from_secs(1));
         }
 
         network.server.shut_down().await;
+        // TODO I don't think this drop does anything.
         drop(network);
     }
 
