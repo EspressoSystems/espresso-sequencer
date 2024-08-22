@@ -1,4 +1,4 @@
-use crate::{FeeAmount, NamespaceId, SeqTypes};
+use crate::{FeeAmount, NamespaceId, SeqTypes, Update};
 use hotshot::types::SignatureKey;
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
@@ -41,14 +41,14 @@ pub struct RollupUpdate {
 pub struct RollupUpdatebody {
     pub namespace_id: NamespaceId,
     // Denominated in Wei
-    pub reserve_url: Option<Url>,
-    pub reserve_price: Option<FeeAmount>,
+    pub reserve_url: Update<Option<Url>>,
+    pub reserve_price: Update<FeeAmount>,
     // whether this registration is active in the marketplace
-    pub active: Option<bool>,
+    pub active: Update<bool>,
     // a list of keys authorized to update the registration information
-    pub signature_keys: Option<Vec<<SeqTypes as NodeType>::SignatureKey>>,
+    pub signature_keys: Update<Vec<<SeqTypes as NodeType>::SignatureKey>>,
     // The signature key used to sign this update body
     pub signature_key: <SeqTypes as NodeType>::SignatureKey,
     // Optional field for human readable information
-    pub text: Option<String>,
+    pub text: Update<String>,
 }

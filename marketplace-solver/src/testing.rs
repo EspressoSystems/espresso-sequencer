@@ -120,6 +120,7 @@ mod test {
     use espresso_types::{
         v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
         MarketplaceVersion, SeqTypes,
+        Update::{Set, Skip},
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_types::traits::node_implementation::NodeType;
@@ -235,12 +236,12 @@ mod test {
 
         let update_body = RollupUpdatebody {
             namespace_id: 1_u64.into(),
-            reserve_url: None,
-            reserve_price: None,
-            active: Some(false),
-            signature_keys: None,
+            reserve_url: Skip,
+            reserve_price: Skip,
+            active: Set(false),
+            signature_keys: Skip,
             signature_key,
-            text: None,
+            text: Skip,
         };
 
         let signature =
@@ -288,11 +289,11 @@ mod test {
 
         let update_body = RollupUpdatebody {
             namespace_id: 1_u64.into(),
-            reserve_url: None,
-            reserve_price: None,
-            active: Some(false),
-            signature_keys: None,
-            text: None,
+            reserve_url: Skip,
+            reserve_price: Skip,
+            active: Set(false),
+            signature_keys: Skip,
+            text: Skip,
             signature_key: pubkey,
         };
         let signature =
@@ -388,12 +389,12 @@ mod test {
         // We update the rollup but the signature key in the body is not from the signature keys list so this should fail
         let update_body = RollupUpdatebody {
             namespace_id: 1_u64.into(),
-            reserve_url: None,
-            reserve_price: None,
-            active: Some(false),
-            signature_keys: Some(signature_keys.clone()),
+            reserve_url: Skip,
+            reserve_price: Skip,
+            active: Set(false),
+            signature_keys: Set(signature_keys.clone()),
             signature_key,
-            text: None,
+            text: Skip,
         };
 
         let signature =
@@ -416,7 +417,7 @@ mod test {
 
         // add the signature back
         signature_keys.push(signature_key);
-        update_rollup.body.signature_keys = Some(signature_keys.clone());
+        update_rollup.body.signature_keys = Set(signature_keys.clone());
 
         let signature = <SeqTypes as NodeType>::SignatureKey::sign(
             &private_key,
@@ -460,7 +461,7 @@ mod test {
         // test signature key not present in database
         update_rollup.body.signature_key = new_signature_key;
         signature_keys.push(new_signature_key);
-        update_rollup.body.signature_keys = Some(signature_keys);
+        update_rollup.body.signature_keys = Set(signature_keys);
 
         client
             .post::<RollupUpdate>("update_rollup")

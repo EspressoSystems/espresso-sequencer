@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use committable::Committable;
 use espresso_types::{
     v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
-    MarketplaceVersion, SeqTypes,
+    MarketplaceVersion, SeqTypes, Update,
 };
 use hotshot::types::BLSPubKey;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
@@ -25,13 +25,13 @@ struct Options {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    Register(Register),
-    Update(Update),
+    Register(RegisterArgs),
+    Update(UpdateArgs),
 }
 
 // Options for registering a rollup
 #[derive(Parser, Debug)]
-struct Register {
+struct RegisterArgs {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     pub solver_url: Url,
 
@@ -58,29 +58,48 @@ struct Register {
 
 // Options for updating an already registered rollup
 #[derive(Parser, Debug)]
-struct Update {
+struct UpdateArgs {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     pub solver_url: Url,
 
     #[clap(short, long = "ns")]
     pub namespace_id: u64,
 
-    #[clap(long, env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL")]
-    pub reserve_url: Option<Url>,
+    #[clap(
+        long,
+        env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL",
+        value_parser = parse_update_option::<Url>
+    )]
+    pub reserve_url: Update<Option<Url>>,
 
-    #[clap(long)]
-    pub reserve_price: Option<u64>,
+    #[clap(long, value_parser = parse_update::<u64>)]
+    pub reserve_price: Update<u64>,
 
-    #[clap(long)]
-    pub active: Option<bool>,
+    #[clap(long, value_parser = parse_update::<bool>)]
+    pub active: Update<bool>,
 
-    #[clap(long, default_value = "test")]
-    pub text: Option<String>,
+    #[clap(long, value_parser = parse_update::<String>)]
+    pub text: Update<String>,
 
     /// The private key is provided in tagged-base64 format.
     /// If not provided, a default private key with a seed of `[0; 32]` and an index of `9876` will be used.
     #[clap(long = "privkey")]
     pub private_key: Option<String>,
+}
+
+fn parse_update<T: FromStr>(s: &str) -> Result<Update<T>, T::Err> {
+    match s {
+        "" => Ok(Update::Skip),
+        s => Ok(Update::Set(s.parse()?)),
+    }
+}
+
+fn parse_update_option<T: FromStr>(s: &str) -> Result<Update<Option<T>>, T::Err> {
+    Ok(match s {
+        "" => Update::Skip,
+        "none" => Update::Set(None),
+        s => Update::Set(Some(s.parse()?)),
+    })
 }
 
 #[async_std::main]
@@ -94,8 +113,8 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn register(opt: Register) -> Result<()> {
-    let Register {
+async fn register(opt: RegisterArgs) -> Result<()> {
+    let RegisterArgs {
         solver_url,
         namespace_id,
         reserve_url,
@@ -153,8 +172,8 @@ async fn register(opt: Register) -> Result<()> {
     Ok(())
 }
 
-async fn update(opt: Update) -> Result<()> {
-    let Update {
+async fn update(opt: UpdateArgs) -> Result<()> {
+    let UpdateArgs {
         solver_url,
         namespace_id,
         reserve_url,
@@ -182,7 +201,7 @@ async fn update(opt: Update) -> Result<()> {
         reserve_url,
         reserve_price: reserve_price.map(Into::into),
         active,
-        signature_keys: None,
+        signature_keys: Update::Skip,
         signature_key: pubkey,
         text,
     };
