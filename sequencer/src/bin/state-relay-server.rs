@@ -1,9 +1,7 @@
 use clap::Parser;
-use espresso_types::SequencerVersions;
 use ethers::types::U256;
 use hotshot_state_prover::service::one_honest_threshold;
-use hotshot_types::traits::node_implementation::Versions;
-use sequencer::state_signature::relay_server::run_relay_server;
+use sequencer::{state_signature::relay_server::run_relay_server, SequencerApiVersion};
 use sequencer_utils::logging;
 use vbs::version::StaticVersionType;
 
@@ -47,7 +45,7 @@ async fn main() {
         None,
         threshold,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
-        <SequencerVersions as Versions>::Base::instance(),
+        SequencerApiVersion::instance(),
     )
     .await
     .unwrap();

@@ -5,19 +5,25 @@ use std::{
 use anyhow::{bail, Context};
 use builder::permissioned::init_node;
 use clap::Parser;
-use espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
+use espresso_types::{
+    eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
+    SequencerVersions, V0_1,
+};
 use ethers::types::Address;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignKey,
     signature_key::BLSPrivKey,
-    traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+    traits::{
+        metrics::NoMetrics,
+        node_implementation::{ConsensusTime, Versions},
+    },
 };
 use libp2p::Multiaddr;
 use sequencer::{persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams};
 use sequencer_utils::logging;
 use url::Url;
-use vbs::version::{StaticVersion, StaticVersionType};
+use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 pub struct PermissionedBuilderOptions {
@@ -214,11 +220,12 @@ impl PermissionedBuilderOptions {
         }
     }
 }
-#[async_std::main]
-async fn main() -> anyhow::Result<()> {
-    let opt = PermissionedBuilderOptions::parse();
-    opt.logging.init();
 
+async fn run<V: Versions>(
+    genesis: Genesis,
+    opt: PermissionedBuilderOptions,
+    versions: V,
+) -> anyhow::Result<()> {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
 
     let l1_params = L1Params {
@@ -259,8 +266,6 @@ async fn main() -> anyhow::Result<()> {
         catchup_backoff: Default::default(),
     };
 
-    let sequencer_version = StaticVersion::<0, 1>::instance();
-
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
     let bootstrapped_view = ViewNumber::new(opt.view_number);
@@ -273,7 +278,7 @@ async fn main() -> anyhow::Result<()> {
 
     // it will internally spawn the builder web server
     let ctx = init_node(
-        Genesis::from_file(&opt.genesis_file)?,
+        genesis,
         network_params,
         &NoMetrics,
         l1_params,
@@ -282,7 +287,7 @@ async fn main() -> anyhow::Result<()> {
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
-        sequencer_version,
+        versions,
         NoStorage,
         max_api_response_timeout_duration,
         buffer_view_num_count,
@@ -295,4 +300,33 @@ async fn main() -> anyhow::Result<()> {
     ctx.start_consensus().await;
 
     Ok(())
+}
+
+#[async_std::main]
+async fn main() -> anyhow::Result<()> {
+    let opt = PermissionedBuilderOptions::parse();
+    opt.logging.init();
+
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
+
+    match (base, upgrade) {
+        (V0_1::VERSION, FeeVersion::VERSION) => {
+            run(genesis, opt, SequencerVersions::<V0_1, FeeVersion>::new()).await
+        }
+        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+            run(
+                genesis,
+                opt,
+                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+            )
+            .await
+        }
+        _ => panic!(
+            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
+        ),
+    }
 }

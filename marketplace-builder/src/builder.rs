@@ -11,8 +11,8 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, SequencerVersions, ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
+    NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -31,7 +31,7 @@ use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
@@ -45,11 +45,11 @@ use marketplace_builder_core::{
         ProxyGlobalState, ReceivedTransaction,
     },
 };
-use sequencer::{catchup::StatePeers, L1Params, NetworkParams};
+use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 use crate::{
     hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
@@ -63,28 +63,29 @@ pub struct BuilderConfig {
     pub hotshot_builder_apis_url: Url,
 }
 
-pub fn build_instance_state<Ver: StaticVersionType + 'static>(
+pub fn build_instance_state<V: Versions>(
     chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(
+        Arc::new(StatePeers::<SequencerApiVersion>::from_urls(
             state_peers,
             Default::default(),
         )),
+        V::Base::version(),
     );
     Ok(instance_state)
 }
 
 impl BuilderConfig {
     #[allow(clippy::too_many_arguments)]
-    pub async fn init(
+    pub async fn init<V: Versions>(
         is_reserve: bool,
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
@@ -101,6 +102,7 @@ impl BuilderConfig {
         base_fee: FeeAmount,
         bid_config: Option<BidConfig>,
         solver_api_url: Url,
+        _: V,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -181,6 +183,7 @@ impl BuilderConfig {
         let proxy_global_state = ProxyGlobalState::new(
             global_state.clone(),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            max_api_timeout_duration,
         );
 
         // start the hotshot api service
@@ -205,7 +208,7 @@ impl BuilderConfig {
             async_spawn(async move {
                 let res = run_non_permissioned_standalone_builder_service::<
                     SeqTypes,
-                    SequencerVersions,
+                    V, // todo change this function to take only api version
                 >(hooks, senders, events_url)
                 .await;
                 tracing::error!(?res, "Reserve builder service exited");
@@ -219,10 +222,9 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<
-                    SeqTypes,
-                    SequencerVersions,
-                >(hooks, senders, events_url)
+                let res = run_non_permissioned_standalone_builder_service::<SeqTypes, V>(
+                    hooks, senders, events_url,
+                )
                 .await;
                 tracing::error!(?res, "Fallback builder service exited");
                 if res.is_err() {
@@ -243,7 +245,7 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use async_compatibility_layer::{
         art::{async_sleep, async_spawn},
@@ -253,17 +255,17 @@ mod test {
     use async_std::{stream::StreamExt, task};
     use committable::Commitment;
     use espresso_types::{
-        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, SequencerVersions,
-        Transaction,
+        mock::MockStateCatchup, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
+        SequencerVersions, Transaction,
     };
     use ethers::utils::Anvil;
-    use hotshot::types::BLSPrivKey;
+    use hotshot::types::{BLSPrivKey, Event, EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_query_service::availability::LeafQueryData;
+    use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
         light_client::StateKeyPair,
@@ -283,6 +285,7 @@ mod test {
         api::test_helpers::TestNetworkConfigBuilder,
         persistence::no_storage::{self, NoStorage},
         testing::TestConfigBuilder,
+        SequencerApiVersion,
     };
     use sequencer::{
         api::{fs::DataSource, options::HotshotEvents, test_helpers::TestNetwork, Options},
@@ -292,6 +295,7 @@ mod test {
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
+    use vbs::version::StaticVersion;
 
     use super::*;
 
@@ -329,8 +333,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network =
-            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
@@ -353,12 +356,12 @@ mod test {
                 amount: FeeAmount::from(10),
             }),
             format!("http://localhost:{}", 3000).parse().unwrap(),
+            MockSequencerVersions::new(),
         );
         let _builder_config = init.await;
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
-            Client::new(query_api_url);
+        let sequencer_client: Client<ServerError, SequencerApiVersion> = Client::new(query_api_url);
         sequencer_client.connect(None).await;
         sequencer_client
             .socket("availability/stream/leaves/0")
@@ -371,32 +374,59 @@ mod test {
             .unwrap();
 
         //  Connect to builder
-        let builder_client: Client<ServerError, <SequencerVersions as Versions>::Marketplace> =
+        let builder_client: Client<ServerError, MarketplaceVersion> =
             Client::new(builder_api_url.clone());
         builder_client.connect(None).await;
-
-        //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
-            Client::new(builder_api_url);
-        submission_client.connect(None).await;
-
-        // Test getting a bundle
-        let _bundle = builder_client
-            .get::<Bundle<SeqTypes>>("block_info/bundle/1")
-            .send()
-            .await
-            .unwrap();
 
         // Test submitting transactions
         let transactions = (0..10)
             .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
             .collect::<Vec<_>>();
-        submission_client
+        builder_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
             .unwrap()
             .send()
             .await
             .unwrap();
+
+        let events_service_client = Client::<
+            hotshot_events_service::events::Error,
+            SequencerApiVersion,
+        >::new(event_service_url.clone());
+        events_service_client.connect(None).await;
+
+        let mut subscribed_events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(10) {
+                panic!("Didn't get a quorum proposal in 10 seconds");
+            }
+
+            let event = subscribed_events.next().await.unwrap().unwrap();
+            if let EventType::QuorumProposal { proposal, .. } = event.event {
+                let parent_view_number = *proposal.data.view_number;
+                let parent_commitment =
+                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+                let bundle = builder_client
+                    .get::<Bundle<SeqTypes>>(
+                        format!(
+                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                            parent_view_number + 1
+                        )
+                        .as_str(),
+                    )
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(bundle.transactions, transactions);
+                break;
+            }
+        }
     }
 }

@@ -4,11 +4,11 @@ use std::{cmp::max, process::exit, time::Duration};
 
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
-use espresso_types::{Header, L1BlockInfo, SequencerVersions};
+use espresso_types::{Header, L1BlockInfo};
 use ethers::prelude::*;
 use futures::future::join_all;
-use hotshot_types::traits::node_implementation::Versions;
 use itertools::Itertools;
+use sequencer::SequencerApiVersion;
 use sequencer_utils::logging;
 use surf_disco::Url;
 use vbs::version::StaticVersionType;
@@ -54,11 +54,11 @@ struct Options {
     logging: logging::Config,
 }
 
-type SequencerClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
+type SequencerClient<ApiVer> = surf_disco::Client<hotshot_query_service::Error, ApiVer>;
 
-async fn verify_header<Ver: StaticVersionType>(
+async fn verify_header<ApiVer: StaticVersionType>(
     opt: &Options,
-    seq: &SequencerClient<Ver>,
+    seq: &SequencerClient<ApiVer>,
     l1: Option<&Provider<Http>>,
     parent: Option<Header>,
     height: usize,
@@ -117,7 +117,10 @@ async fn verify_header<Ver: StaticVersionType>(
     (header, ok)
 }
 
-async fn get_header<Ver: StaticVersionType>(seq: &SequencerClient<Ver>, height: usize) -> Header {
+async fn get_header<ApiVer: StaticVersionType>(
+    seq: &SequencerClient<ApiVer>,
+    height: usize,
+) -> Header {
     loop {
         match seq
             .get(&format!("availability/header/{height}"))
@@ -170,8 +173,7 @@ async fn main() {
     let opt = Arc::new(Options::parse());
     opt.logging.init();
 
-    let seq =
-        Arc::new(SequencerClient::<<SequencerVersions as Versions>::Base>::new(opt.url.clone()));
+    let seq = Arc::new(SequencerClient::<SequencerApiVersion>::new(opt.url.clone()));
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);

@@ -141,11 +141,11 @@ where
     Ok(api)
 }
 
-pub(crate) fn load_api<State: 'static, Error: 'static, Ver: StaticVersionType + 'static>(
+pub(crate) fn load_api<State: 'static, Error: 'static, ApiVer: StaticVersionType + 'static>(
     path: Option<impl AsRef<Path>>,
     default: &str,
     extensions: impl IntoIterator<Item = Value>,
-) -> Result<Api<State, Error, Ver>, ApiError> {
+) -> Result<Api<State, Error, ApiVer>, ApiError> {
     let mut toml = match path {
         Some(path) => load_toml(path.as_ref())?,
         None => toml::from_str(default).map_err(|err| ApiError::CannotReadToml {

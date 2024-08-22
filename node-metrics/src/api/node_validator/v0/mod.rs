@@ -100,9 +100,9 @@ impl From<ApiError> for LoadApiError {
     }
 }
 
-pub(crate) fn load_api<State: 'static, Ver: StaticVersionType + 'static>(
+pub(crate) fn load_api<State: 'static, ApiVer: StaticVersionType + 'static>(
     default: &str,
-) -> Result<Api<State, Error, Ver>, LoadApiError> {
+) -> Result<Api<State, Error, ApiVer>, LoadApiError> {
     let toml: toml::Value = toml::from_str(default)?;
     Ok(Api::new(toml)?)
 }
