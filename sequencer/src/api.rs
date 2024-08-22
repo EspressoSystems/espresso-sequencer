@@ -1506,6 +1506,10 @@ mod test {
         let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         let mut events = network.server.event_stream().await;
+
+        // First loop to get an `UpgradeProposal`. Note that the
+        // actual upgrade will take several subsequent views for
+        // voting and finally the actual upgrade.
         let new_version_first_view = loop {
             let event = events.next().await.unwrap();
 
@@ -1528,7 +1532,12 @@ mod test {
         client.connect(None).await;
         tracing::info!(port, "server running");
 
+        // Loop to wait on the upgrade itself.
         loop {
+            // Get height as a proxy for view number. Height is always
+            // >= to view, especially using anvil. As a possible
+            // alternative we might loop on hotshot events here again
+            // and pull the view number off the event.
             let height = client
                 .get::<ViewNumber>("status/block-height")
                 .send()
