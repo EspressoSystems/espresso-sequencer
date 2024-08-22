@@ -1549,14 +1549,14 @@ mod test {
 
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
-                if height > new_version_first_view {
+                if height >= new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
                     }
                     break; // if assertion did not panic, we need to exit the loop
                 }
             }
-            sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_millis(200)).await;
         }
 
         network.server.shut_down().await;
