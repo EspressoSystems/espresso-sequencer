@@ -15,7 +15,8 @@ pub struct RollupRegistration {
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 pub struct RollupRegistrationBody {
     pub namespace_id: NamespaceId,
-    pub reserve_url: Url,
+    // URL of reserve builder for this rollup
+    pub reserve_url: Option<Url>,
     // Denominated in Wei
     pub reserve_price: FeeAmount,
     // whether this registration is active in the marketplace

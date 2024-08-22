@@ -189,9 +189,7 @@ impl UpdateSolverState for GlobalState {
         let mut registration =
             serde_json::from_value::<RollupRegistration>(result.data).map_err(serde_json_err)?;
 
-        if let Some(reserve_url) = reserve_url {
-            registration.body.reserve_url = reserve_url;
-        }
+        registration.body.reserve_url = reserve_url;
 
         if let Some(rp) = reserve_price {
             registration.body.reserve_price = rp;
@@ -271,7 +269,7 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
                 .collect(),
         );
 
@@ -292,7 +290,7 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
                 .collect(),
         );
 

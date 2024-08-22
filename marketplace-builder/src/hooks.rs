@@ -154,7 +154,10 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
                 }
             };
         for registration in registrations {
-            registered_namespaces.push(registration.body.namespace_id);
+            // Skip over rollups that don't have reserve builders
+            if registration.body.reserve_url.is_some() {
+                registered_namespaces.push(registration.body.namespace_id);
+            }
         }
 
         transactions.retain(|txn| !registered_namespaces.contains(&txn.namespace()));

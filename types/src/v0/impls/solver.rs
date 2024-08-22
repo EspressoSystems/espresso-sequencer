@@ -1,5 +1,6 @@
 use committable::{Commitment, Committable};
 use hotshot::types::SignatureKey;
+use url::Url;
 
 use super::v0_3::{RollupRegistrationBody, RollupUpdatebody};
 
@@ -11,7 +12,14 @@ impl Committable for RollupRegistrationBody {
     fn commit(&self) -> Commitment<Self> {
         let mut comm = committable::RawCommitmentBuilder::new(&Self::tag())
             .u64_field("namespace_id", u64::from(self.namespace_id))
-            .var_size_field("reserve_url", self.reserve_url.as_str().as_ref())
+            .var_size_field(
+                "reserve_url",
+                self.reserve_url
+                    .as_ref()
+                    .map(Url::as_str)
+                    .unwrap_or_default()
+                    .as_ref(),
+            )
             .fixed_size_field("reserve_price", &self.reserve_price.to_fixed_bytes())
             .fixed_size_field("active", &[u8::from(self.active)])
             .constant_str("signature_keys");

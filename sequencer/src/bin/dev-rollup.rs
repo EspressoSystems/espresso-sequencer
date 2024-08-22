@@ -38,12 +38,8 @@ struct Register {
     #[clap(short, long = "ns")]
     pub namespace_id: u64,
 
-    #[clap(
-        long,
-        env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL",
-        default_value_t = Url::from_str("http://localhost").unwrap()
-    )]
-    pub reserve_url: Url,
+    #[clap(long, env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL")]
+    pub reserve_url: Option<Url>,
 
     #[clap(long, default_value_t = 200)]
     pub reserve_price: u64,

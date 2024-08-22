@@ -152,7 +152,7 @@ mod test {
         // Initialize a rollup registration with namespace id = 1
         let reg_ns_1_body = RollupRegistrationBody {
             namespace_id: 1_u64.into(),
-            reserve_url: Url::from_str("http://localhost").unwrap(),
+            reserve_url: Some(Url::from_str("http://localhost").unwrap()),
             reserve_price: 200.into(),
             active: true,
             signature_keys,
@@ -351,7 +351,7 @@ mod test {
         // Initialize a rollup registration with namespace id = 1
         let reg_ns_1_body = RollupRegistrationBody {
             namespace_id: 1_u64.into(),
-            reserve_url: Url::from_str("http://localhost").unwrap(),
+            reserve_url: Some(Url::from_str("http://localhost").unwrap()),
             reserve_price: 200.into(),
             active: true,
             signature_keys: signature_keys.clone(),
