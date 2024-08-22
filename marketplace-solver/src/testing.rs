@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use async_compatibility_layer::art::async_spawn;
 use async_std::{sync::RwLock, task::JoinHandle};
-use espresso_types::BaseVersion;
+use espresso_types::MarketplaceVersion;
 use hotshot_query_service::data_source::sql::testing::TmpDb;
 use portpicker::pick_unused_port;
 use tide_disco::{App, Url};
@@ -80,7 +80,7 @@ impl MockSolver {
         let mut api = define_api(Default::default()).unwrap();
         api.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
 
-        app.register_module::<SolverError, BaseVersion>("solver_api", api)
+        app.register_module::<SolverError, MarketplaceVersion>("solver_api", api)
             .unwrap();
 
         let solver_api_port = pick_unused_port().expect("no free port");
@@ -89,7 +89,7 @@ impl MockSolver {
         let solver_api_handle = async_spawn({
             let solver_url = solver_url.clone();
             async move {
-                let _ = app.serve(solver_url, BaseVersion::instance()).await;
+                let _ = app.serve(solver_url, MarketplaceVersion::instance()).await;
             }
         });
 
@@ -119,7 +119,7 @@ mod test {
     use committable::Committable;
     use espresso_types::{
         v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
-        BaseVersion, SeqTypes,
+        MarketplaceVersion, SeqTypes,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_types::traits::node_implementation::NodeType;
@@ -132,7 +132,7 @@ mod test {
     async fn test_rollup_registration() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
-        let client = surf_disco::Client::<SolverError, BaseVersion>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
         // Create a list of signature keys for rollup registration data
         let mut signature_keys = Vec::new();
@@ -280,7 +280,7 @@ mod test {
     async fn test_update_rollup_not_registered() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
-        let client = surf_disco::Client::<SolverError, BaseVersion>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
         let private_key =
             <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
@@ -331,7 +331,7 @@ mod test {
 
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
-        let client = surf_disco::Client::<SolverError, BaseVersion>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
         // Create a list of signature keys for rollup registration data
         let mut signature_keys = Vec::new();
@@ -477,7 +477,7 @@ mod test {
 
         let solver_api = mock_solver.solver_api();
 
-        let client = surf_disco::Client::<SolverError, BaseVersion>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
         let result: String = client.post("submit_bid").send().await.unwrap();
         assert_eq!(result, "Bid Submitted".to_string());

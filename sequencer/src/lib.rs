@@ -16,7 +16,7 @@ use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::{
     BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
-    UpgradeVersion, ValidatedState,
+    ValidatedState,
 };
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
@@ -59,7 +59,7 @@ use hotshot_types::{
     traits::{
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
     utils::BuilderCommitment,
@@ -67,7 +67,7 @@ use hotshot_types::{
 };
 pub use options::Options;
 use serde::{Deserialize, Serialize};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
@@ -89,6 +89,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Clone for Node<N, P> 
         *self
     }
 }
+
+pub type SequencerApiVersion = StaticVersion<0, 1>;
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<SeqTypes>
     for Node<N, P>
@@ -127,17 +129,17 @@ pub struct L1Params {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
+pub async fn init_node<P: PersistenceOptions, V: Versions>(
     genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence_opt: P,
     l1_params: L1Params,
-    bind_version: Ver,
+    seq_versions: V,
     is_da: bool,
     identity: Identity,
     marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P::Persistence>>,
-) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, V>> {
     // Expose git information via status API.
     metrics
         .text_family(
@@ -233,7 +235,8 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         // If we were told to fetch the config from an already-started peer, do so.
         (None, Some(peers)) => {
             tracing::info!(?peers, "loading network config from peers");
-            let peers = StatePeers::<Ver>::from_urls(peers, network_params.catchup_backoff);
+            let peers =
+                StatePeers::<SequencerApiVersion>::from_urls(peers, network_params.catchup_backoff);
             let config = peers.fetch_config(my_config.clone()).await;
 
             tracing::info!(
@@ -272,7 +275,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         }
     };
 
-    if let Some(upgrade) = genesis.upgrades.get(&UpgradeVersion::VERSION) {
+    if let Some(upgrade) = genesis.upgrades.get(&V::Upgrade::VERSION) {
         upgrade.set_hotshot_config_parameters(&mut config.config);
     }
 
@@ -385,7 +388,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
-            StatePeers::<Ver>::from_urls(
+            StatePeers::<SequencerApiVersion>::from_urls(
                 network_params.state_peers,
                 network_params.catchup_backoff,
             ),
@@ -393,7 +396,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         .await,
         node_id: node_index,
         upgrades: genesis.upgrades,
-        current_version: Ver::VERSION,
+        current_version: V::Base::VERSION,
     };
 
     let mut ctx = SequencerContext::init(
@@ -405,7 +408,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         metrics,
         genesis.stake_table.capacity,
         network_params.public_api_url,
-        bind_version,
+        seq_versions,
         marketplace_config,
     )
     .await?;
@@ -428,7 +431,7 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade, UpgradeVersion,
+        Event, FeeAccount, MockSequencerVersions, PubKey, SeqTypes, Transaction, Upgrade,
     };
     use futures::{
         future::join_all,
@@ -516,7 +519,10 @@ pub mod testing {
         }
 
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrade) = self.upgrades.get(&UpgradeVersion::VERSION) {
+            if let Some(upgrade) = self
+                .upgrades
+                .get(&<MockSequencerVersions as Versions>::Upgrade::VERSION)
+            {
                 upgrade.set_hotshot_config_parameters(&mut self.config)
             }
 
@@ -644,10 +650,10 @@ pub mod testing {
             self.upgrades.clone()
         }
 
-        pub async fn init_nodes<Ver: StaticVersionType + 'static>(
+        pub async fn init_nodes<V: Versions>(
             &self,
-            bind_version: Ver,
-        ) -> Vec<SequencerContext<network::Memory, NoStorage, Ver>> {
+            bind_version: V,
+        ) -> Vec<SequencerContext<network::Memory, NoStorage, V>> {
             join_all((0..self.num_nodes()).map(|i| async move {
                 self.init_node(
                     i,
@@ -685,7 +691,7 @@ pub mod testing {
         }
 
         #[allow(clippy::too_many_arguments)]
-        pub async fn init_node<Ver: StaticVersionType + 'static, P: PersistenceOptions>(
+        pub async fn init_node<V: Versions, P: PersistenceOptions>(
             &self,
             i: usize,
             mut state: ValidatedState,
@@ -693,9 +699,9 @@ pub mod testing {
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
             stake_table_capacity: u64,
-            bind_version: Ver,
+            bind_version: V,
             upgrades: BTreeMap<Version, Upgrade>,
-        ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
+        ) -> SequencerContext<network::Memory, P::Persistence, V> {
             let mut config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
             let is_da = config.known_da_nodes.contains(my_peer_config);
@@ -729,8 +735,9 @@ pub mod testing {
                 state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
+                V::Base::VERSION,
             )
-            .with_current_version(Ver::version())
+            .with_current_version(V::Base::version())
             .with_genesis(state)
             .with_upgrades(upgrades);
 
@@ -807,7 +814,7 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use espresso_types::{BaseVersion, Header, NamespaceId, Payload, Transaction};
+    use espresso_types::{Header, MockSequencerVersions, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
@@ -825,7 +832,6 @@ mod test {
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_test();
-        let ver = BaseVersion::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -838,7 +844,7 @@ mod test {
 
         config.set_builder_urls(vec1::vec1![builder_url]);
 
-        let handles = config.init_nodes(ver).await;
+        let handles = config.init_nodes(MockSequencerVersions::new()).await;
 
         let handle_0 = &handles[0];
 
@@ -867,7 +873,6 @@ mod test {
         setup_test();
 
         let success_height = 30;
-        let ver = BaseVersion::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -879,7 +884,7 @@ mod test {
         let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
 
         config.set_builder_urls(vec1::vec1![builder_url]);
-        let handles = config.init_nodes(ver).await;
+        let handles = config.init_nodes(MockSequencerVersions::new()).await;
 
         let handle_0 = &handles[0];
 

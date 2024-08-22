@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use espresso_types::v0_3::BidTxBody;
 
 use espresso_types::v0_3::RollupRegistration;
-use espresso_types::BaseVersion;
+
 use espresso_types::SeqTypes;
 use hotshot::types::EventType;
 
@@ -22,6 +22,7 @@ use espresso_types::NamespaceId;
 use hotshot_types::traits::node_implementation::NodeType;
 
 use marketplace_solver::SolverError;
+use sequencer::SequencerApiVersion;
 use surf_disco::Client;
 
 use tide_disco::Url;
@@ -36,8 +37,10 @@ pub struct BidConfig {
     pub amount: FeeAmount,
 }
 
-pub async fn connect_to_solver(solver_api_url: Url) -> Option<Client<SolverError, BaseVersion>> {
-    let client = Client::<SolverError, BaseVersion>::new(
+pub async fn connect_to_solver(
+    solver_api_url: Url,
+) -> Option<Client<SolverError, SequencerApiVersion>> {
+    let client = Client::<SolverError, SequencerApiVersion>::new(
         solver_api_url.join("marketplace-solver/").unwrap(),
     );
 

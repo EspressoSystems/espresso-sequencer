@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use committable::Committable;
 use espresso_types::{
     v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
-    SeqTypes,
+    MarketplaceVersion, SeqTypes,
 };
 use hotshot::types::BLSPubKey;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
@@ -13,7 +13,6 @@ use marketplace_solver::SolverError;
 
 use sequencer_utils::logging;
 use url::Url;
-use vbs::version::StaticVersion;
 
 #[derive(Debug, Parser)]
 struct Options {
@@ -110,7 +109,7 @@ async fn register(opt: Register) -> Result<()> {
         private_key,
     } = opt;
 
-    let client = surf_disco::Client::<SolverError, StaticVersion<0, 1>>::new(
+    let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(
         solver_url.join("marketplace-solver").unwrap(),
     );
 
@@ -169,7 +168,7 @@ async fn update(opt: Update) -> Result<()> {
         private_key,
     } = opt;
 
-    let client = surf_disco::Client::<SolverError, StaticVersion<0, 1>>::new(
+    let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(
         solver_url.join("marketplace-solver").unwrap(),
     );
     let (pubkey, privkey) = if let Some(privkey) = private_key {

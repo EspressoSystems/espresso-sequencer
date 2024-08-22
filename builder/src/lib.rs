@@ -65,7 +65,7 @@ use sequencer::{
     context::{Consensus, SequencerContext},
     network,
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node,
+    L1Params, NetworkParams, Node, SequencerApiVersion,
 };
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -98,7 +98,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, StaticVersion::<0, 1>::instance()));
+    async_spawn(app.serve(url, SequencerApiVersion::instance()));
 }
 
 #[cfg(test)]
@@ -167,13 +167,13 @@ pub mod testing {
             block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
             metrics::NoMetrics,
             network::Topic,
-            node_implementation::ConsensusTime,
+            node_implementation::{ConsensusTime, Versions},
             signature_key::BuilderSignatureKey as _,
         },
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
-    use sequencer::{state_signature::StateSignatureMemStorage, testing::TestConfig};
+    use sequencer::{state_signature::StateSignatureMemStorage, SequencerApiVersion};
     use serde::{Deserialize, Serialize};
     use surf_disco::Client;
     use vbs::version::StaticVersion;
@@ -345,11 +345,14 @@ pub mod testing {
             }
         }
 
-        pub async fn init_nodes<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+        pub async fn init_nodes<P: SequencerPersistence, V: Versions>(
             &self,
-            bind_version: Ver,
+            bind_version: V,
             options: impl PersistenceOptions<Persistence = P>,
-        ) -> Vec<(Arc<Consensus<network::Memory, P>>, Option<StateSigner<Ver>>)> {
+        ) -> Vec<(
+            Arc<Consensus<network::Memory, P, V>>,
+            Option<StateSigner<SequencerApiVersion>>,
+        )> {
             let num_staked_nodes = self.num_staked_nodes();
             let mut is_staked = false;
             let stake_table_commit = static_stake_table_commitment(
@@ -379,15 +382,18 @@ pub mod testing {
             .await
         }
 
-        pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+        pub async fn init_node<P: SequencerPersistence, V: Versions>(
             &self,
             i: usize,
             is_staked: bool,
             stake_table_commit: StakeTableCommitmentType,
             metrics: &dyn Metrics,
-            bind_version: Ver,
+            bind_version: V,
             persistence: P,
-        ) -> (Consensus<network::Memory, P>, StateSigner<Ver>) {
+        ) -> (
+            Consensus<network::Memory, P, V>,
+            StateSigner<SequencerApiVersion>,
+        ) {
             let mut config = self.config.clone();
 
             let num_staked_nodes = self.num_staked_nodes();
@@ -410,8 +416,8 @@ pub mod testing {
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), 1),
                 MockStateCatchup::default(),
+                V::Base::VERSION,
             )
-            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             tracing::info!("Before init hotshot");
@@ -463,14 +469,14 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, StaticVersion::<0, 1>::instance()));
+            async_spawn(app.serve(url, SequencerApiVersion::instance()));
         }
         // enable hotshot event streaming
-        pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
+        pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence, V: Versions>(
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: Arc<Consensus<network::Memory, P>>,
+            hotshot_context_handle: Arc<Consensus<network::Memory, P, V>>,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -538,10 +544,11 @@ pub mod testing {
     impl NonPermissionedBuilderTestConfig {
         pub const SUBSCRIBED_DA_NODE_ID: usize = 5;
 
-        pub async fn init_non_permissioned_builder(
+        pub async fn init_non_permissioned_builder<V: Versions>(
             hotshot_events_streaming_api_url: Url,
             hotshot_builder_api_url: Url,
             num_nodes: usize,
+            versions: V,
         ) -> Self {
             // generate builder keys
             let seed = [201_u8; 32];
@@ -562,7 +569,7 @@ pub mod testing {
                 tx_channel_capacity,
                 event_channel_capacity,
                 node_count,
-                NodeState::default(),
+                NodeState::default().with_current_version(V::Base::VERSION),
                 ValidatedState::default(),
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
@@ -570,6 +577,7 @@ pub mod testing {
                 15,
                 Duration::from_millis(500),
                 ChainConfig::default().base_fee,
+                versions,
             )
             .await
             .unwrap();
@@ -581,25 +589,20 @@ pub mod testing {
         }
     }
 
-    pub struct PermissionedBuilderTestConfig<
-        P: SequencerPersistence,
-        Ver: StaticVersionType + 'static,
-    > {
-        pub builder_context: BuilderContext<network::Memory, P, Ver>,
+    pub struct PermissionedBuilderTestConfig<P: SequencerPersistence, V: Versions> {
+        pub builder_context: BuilderContext<network::Memory, P, V>,
         pub fee_account: FeeAccount,
     }
 
-    impl<P: SequencerPersistence, Ver: StaticVersionType + 'static>
-        PermissionedBuilderTestConfig<P, Ver>
-    {
+    impl<P: SequencerPersistence, V: Versions> PermissionedBuilderTestConfig<P, V> {
         pub async fn init_permissioned_builder(
-            hotshot_handle: Arc<Consensus<network::Memory, P>>,
+            hotshot_handle: Arc<Consensus<network::Memory, P, V>>,
             node_id: u64,
-            state_signer: Arc<StateSigner<Ver>>,
+            state_signer: Arc<StateSigner<SequencerApiVersion>>,
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
-            let node_state = NodeState::default();
+            let node_state = NodeState::default().with_current_version(V::Base::VERSION);
 
             // generate builder keys
             let seed = [201_u8; 32];
@@ -784,7 +787,7 @@ pub mod testing {
 mod test {
     use async_std::stream::IntoStream;
     use clap::builder;
-    use espresso_types::{Header, NodeState, Payload, ValidatedState};
+    use espresso_types::{Header, MockSequencerVersions, NodeState, Payload, ValidatedState};
     use ethers::providers::Quorum;
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
@@ -811,13 +814,13 @@ mod test {
     async fn test_non_voting_hotshot_node() {
         setup_test();
 
-        let ver = StaticVersion::<0, 1>::instance();
-
         let success_height = 5;
         // Assign `config` so it isn't dropped early.
         let config = HotShotTestConfig::default();
         tracing::debug!("Done with hotshot test config");
-        let handles = config.init_nodes(ver, no_storage::Options).await;
+        let handles = config
+            .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+            .await;
         tracing::debug!("Done with init nodes");
         let total_nodes = HotShotTestConfig::total_nodes();
 

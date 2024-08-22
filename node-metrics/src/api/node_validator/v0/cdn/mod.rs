@@ -100,8 +100,8 @@ impl CdnReceiveMessagesTask {
 
             for message in messages {
                 // We want to try and decode this message.
-                let message_deserialize_result: Result<Message<SeqTypes>, _> =
-                    bincode::deserialize(&message);
+                let message_deserialize_result =
+                    bincode::deserialize::<Message<SeqTypes>>(&message);
 
                 let message = match message_deserialize_result {
                     Ok(message) => message,
@@ -558,7 +558,7 @@ mod test {
 
         let mut message_receiver = message_receiver;
         let next_message = message_receiver.next().await.unwrap();
-        let next_message: Message<SeqTypes> = bincode::deserialize(&next_message).unwrap();
+        let next_message = bincode::deserialize::<Message<SeqTypes>>(&next_message).unwrap();
 
         let external_message = match next_message.kind {
             MessageKind::External(external_message) => external_message,

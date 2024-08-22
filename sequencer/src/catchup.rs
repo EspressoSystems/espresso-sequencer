@@ -32,12 +32,12 @@ use crate::{
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
 #[derive(Debug, Clone)]
-struct Client<ServerError, Ver: StaticVersionType> {
-    inner: surf_disco::Client<ServerError, Ver>,
+struct Client<ServerError, ApiVer: StaticVersionType> {
+    inner: surf_disco::Client<ServerError, ApiVer>,
     url: Url,
 }
 
-impl<Ver: StaticVersionType> Client<ServerError, Ver> {
+impl<ApiVer: StaticVersionType> Client<ServerError, ApiVer> {
     pub fn new(url: Url) -> Self {
         Self {
             inner: surf_disco::Client::new(url.clone()),
@@ -45,7 +45,7 @@ impl<Ver: StaticVersionType> Client<ServerError, Ver> {
         }
     }
 
-    pub fn get<T: DeserializeOwned>(&self, route: &str) -> Request<T, ServerError, Ver> {
+    pub fn get<T: DeserializeOwned>(&self, route: &str) -> Request<T, ServerError, ApiVer> {
         self.inner.get(route)
     }
 }
@@ -66,12 +66,12 @@ pub(crate) async fn local_and_remote(
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct StatePeers<Ver: StaticVersionType> {
-    clients: Vec<Client<ServerError, Ver>>,
+pub struct StatePeers<ApiVer: StaticVersionType> {
+    clients: Vec<Client<ServerError, ApiVer>>,
     backoff: BackoffParams,
 }
 
-impl<Ver: StaticVersionType> StatePeers<Ver> {
+impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
     pub fn from_urls(urls: Vec<Url>, backoff: BackoffParams) -> Self {
         if urls.is_empty() {
             panic!("Cannot create StatePeers with no peers");
@@ -116,7 +116,7 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
 }
 
 #[async_trait]
-impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
+impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
     #[tracing::instrument(skip(self))]
     async fn try_fetch_account(
         &self,
