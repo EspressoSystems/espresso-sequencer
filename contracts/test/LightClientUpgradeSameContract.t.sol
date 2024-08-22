@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
-import { Test } /*, console2*/ from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClient as LCV2 } from "../src/LightClient.sol";
 import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
