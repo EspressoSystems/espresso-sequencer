@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use espresso_types::v0_3::BidTxBody;
 
 use espresso_types::v0_3::RollupRegistration;
+use espresso_types::BaseVersion;
 use espresso_types::SeqTypes;
-use espresso_types::SequencerVersions;
 use hotshot::types::EventType;
 
 use hotshot::types::Event;
@@ -36,10 +36,8 @@ pub struct BidConfig {
     pub amount: FeeAmount,
 }
 
-pub async fn connect_to_solver(
-    solver_api_url: Url,
-) -> Option<Client<SolverError, <SequencerVersions as Versions>::Base>> {
-    let client = Client::<SolverError, <SequencerVersions as Versions>::Base>::new(
+pub async fn connect_to_solver(solver_api_url: Url) -> Option<Client<SolverError, BaseVersion>> {
+    let client = Client::<SolverError, BaseVersion>::new(
         solver_api_url.join("marketplace-solver/").unwrap(),
     );
 

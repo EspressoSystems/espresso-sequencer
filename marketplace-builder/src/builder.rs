@@ -181,6 +181,7 @@ impl BuilderConfig {
         let proxy_global_state = ProxyGlobalState::new(
             global_state.clone(),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            max_api_timeout_duration,
         );
 
         // start the hotshot api service
@@ -203,10 +204,9 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<
-                    SeqTypes,
-                    SequencerVersions,
-                >(hooks, senders, events_url)
+                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
+                    hooks, senders, events_url,
+                )
                 .await;
                 tracing::error!(?res, "Reserve builder service exited");
                 if res.is_err() {
@@ -219,10 +219,9 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<
-                    SeqTypes,
-                    SequencerVersions,
-                >(hooks, senders, events_url)
+                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
+                    hooks, senders, events_url,
+                )
                 .await;
                 tracing::error!(?res, "Fallback builder service exited");
                 if res.is_err() {
@@ -243,7 +242,7 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use async_compatibility_layer::{
         art::{async_sleep, async_spawn},
@@ -253,17 +252,17 @@ mod test {
     use async_std::{stream::StreamExt, task};
     use committable::Commitment;
     use espresso_types::{
-        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, SequencerVersions,
-        Transaction,
+        mock::MockStateCatchup, BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey,
+        SeqTypes, Transaction,
     };
     use ethers::utils::Anvil;
-    use hotshot::types::BLSPrivKey;
+    use hotshot::types::{BLSPrivKey, Event, EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_query_service::availability::LeafQueryData;
+    use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
         light_client::StateKeyPair,
@@ -329,8 +328,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network =
-            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
+        let network = TestNetwork::new(config, BaseVersion::instance()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
@@ -357,8 +355,7 @@ mod test {
         let _builder_config = init.await;
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
-            Client::new(query_api_url);
+        let sequencer_client: Client<ServerError, BaseVersion> = Client::new(query_api_url);
         sequencer_client.connect(None).await;
         sequencer_client
             .socket("availability/stream/leaves/0")
@@ -371,21 +368,13 @@ mod test {
             .unwrap();
 
         //  Connect to builder
-        let builder_client: Client<ServerError, <SequencerVersions as Versions>::Marketplace> =
+        let builder_client: Client<ServerError, MarketplaceVersion> =
             Client::new(builder_api_url.clone());
         builder_client.connect(None).await;
 
         //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
-            Client::new(builder_api_url);
+        let submission_client: Client<ServerError, BaseVersion> = Client::new(builder_api_url);
         submission_client.connect(None).await;
-
-        // Test getting a bundle
-        let _bundle = builder_client
-            .get::<Bundle<SeqTypes>>("block_info/bundle/1")
-            .send()
-            .await
-            .unwrap();
 
         // Test submitting transactions
         let transactions = (0..10)
@@ -398,5 +387,44 @@ mod test {
             .send()
             .await
             .unwrap();
+
+        let events_service_client =
+            Client::<hotshot_events_service::events::Error, BaseVersion>::new(
+                event_service_url.clone(),
+            );
+        events_service_client.connect(None).await;
+
+        let mut subscribed_events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(10) {
+                panic!("Didn't get a quorum proposal in 10 seconds");
+            }
+
+            let event = subscribed_events.next().await.unwrap().unwrap();
+            if let EventType::QuorumProposal { proposal, .. } = event.event {
+                let parent_view_number = *proposal.data.view_number;
+                let parent_commitment =
+                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+                let bundle = builder_client
+                    .get::<Bundle<SeqTypes>>(
+                        format!(
+                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                            parent_view_number + 1
+                        )
+                        .as_str(),
+                    )
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(bundle.transactions, transactions);
+                break;
+            }
+        }
     }
 }

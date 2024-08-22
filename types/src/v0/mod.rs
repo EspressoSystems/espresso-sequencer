@@ -135,19 +135,25 @@ impl NodeType for SeqTypes {
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
-#[derive(Clone, Debug, Copy)]
-pub struct SequencerVersions {}
+
+#[derive(Debug, Copy, Clone)]
+pub struct SequencerVersions;
 
 impl Versions for SequencerVersions {
     type Base = StaticVersion<0, 1>;
     type Upgrade = StaticVersion<0, 2>;
+    type Marketplace = StaticVersion<0, 3>;
+
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
         0, 0,
     ];
-
-    type Marketplace = StaticVersion<0, 3>;
 }
+
+/// Type aliases for readability
+pub type BaseVersion = <SequencerVersions as Versions>::Base;
+pub type UpgradeVersion = <SequencerVersions as Versions>::Upgrade;
+pub type MarketplaceVersion = <SequencerVersions as Versions>::Marketplace;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Event = hotshot::types::Event<SeqTypes>;

@@ -115,7 +115,7 @@ use hotshot::traits::implementations::{
     CdnMetricsValue, CdnTopic, PushCdnNetwork, WrappedSignatureKey,
 };
 use hotshot_query_service::metrics::PrometheusMetrics;
-use hotshot_types::traits::signature_key::BuilderSignatureKey;
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey};
 use tide_disco::App;
 use url::Url;
 
@@ -264,7 +264,7 @@ pub async fn run_standalone_service(options: Options) {
 
     let _cdn_tasks = if let Some(cdn_broker_url_string) = options.cdn_marshal_endpoint() {
         let (public_key, private_key) = PubKey::generated_from_seed_indexed([1; 32], 0);
-        let cdn_network_result = PushCdnNetwork::<SeqTypes>::new(
+        let cdn_network_result = PushCdnNetwork::<<SeqTypes as NodeType>::SignatureKey>::new(
             cdn_broker_url_string.to_string(),
             vec![CdnTopic::Global],
             hotshot::traits::implementations::KeyPair {
