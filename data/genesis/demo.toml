@@ -15,9 +15,9 @@ fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 timestamp = "1970-01-01T00:00:00Z"
 
 [[upgrade]]
-version = "0.2"
-start_proposing_view = 5
-stop_proposing_view = 15
+version = "0.3"
+start_proposing_view = 0
+stop_proposing_view = 5
 
 [upgrade.fee]
 
@@ -30,7 +30,16 @@ fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 
 [[upgrade]]
 version = "0.3"
-start_proposing_view = 5
-stop_proposing_view = 15
+start_proposing_view = 0  
+stop_proposing_view = 4
 
 [upgrade.marketplace]
+
+[upgrade.marketplace.chain_config]
+chain_id = 999999999
+base_fee = '1 wei'
+max_block_size = '1mb'
+fee_recipient = '0x0000000000000000000000000000000000000000'
+bid_recipient = '0x0000000000000000000000000000000000000000'
+fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
+

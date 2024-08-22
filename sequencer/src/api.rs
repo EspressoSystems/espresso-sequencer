@@ -1438,7 +1438,7 @@ mod test {
             start_voting_view: None,
             stop_voting_view: None,
             start_proposing_view: 1,
-            stop_proposing_view: 10,
+            stop_proposing_view: 5,
         }))
         .await;
     }
