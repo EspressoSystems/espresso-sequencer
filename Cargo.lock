@@ -1487,10 +1487,10 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
+source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown)",
  "clap",
  "console-subscriber 0.3.0",
  "dashmap",
@@ -1511,10 +1511,10 @@ dependencies = [
 [[package]]
 name = "cdn-client"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
+source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown)",
  "clap",
  "jf-signature",
  "rand 0.8.5",
@@ -1526,10 +1526,10 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
+source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown)",
  "clap",
  "jf-signature",
  "tokio",
@@ -1541,6 +1541,39 @@ dependencies = [
 name = "cdn-proto"
 version = "0.4.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-trait",
+ "capnp",
+ "capnpc",
+ "derivative",
+ "jf-signature",
+ "kanal",
+ "lazy_static",
+ "mnemonic",
+ "num_enum",
+ "pem 3.0.4",
+ "quinn",
+ "rand 0.8.5",
+ "rcgen 0.13.1",
+ "redis",
+ "rkyv",
+ "rustls 0.23.12",
+ "rustls-pki-types",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-rustls 0.26.0",
+ "tracing",
+ "url",
+ "warp",
+]
+
+[[package]]
+name = "cdn-proto"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4376,7 +4409,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "bitvec",
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
  "chrono",
  "committable",
  "either",
@@ -4413,7 +4446,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "bitvec",
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
  "chrono",
  "committable",
  "either",
@@ -4502,7 +4535,7 @@ dependencies = [
  "bincode",
  "bitvec",
  "blake3",
- "cdn-proto",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
  "committable",
  "custom_debug 0.5.1",
  "derivative",
@@ -7615,7 +7648,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.74",
