@@ -279,6 +279,12 @@ The transactions being confirmed are: (i) the deployment of the new fee contract
 
 ## Deploying Upgradable Contracts without OpenZeppelin Defender and without a Safe Multisig Wallet Admin
 
+Use these instructions for staging deployments only. Ensure that you have set the following variables in the `.env`
+file.
+
+- `MNEMONIC`
+- `MNEMONIC_OFFSET`
+
 ### 1. Deploy the LightClient Contract
 
 ```bash

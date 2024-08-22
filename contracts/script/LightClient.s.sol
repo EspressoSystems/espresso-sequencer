@@ -298,6 +298,9 @@ contract UpgradeLightClientWithDefenderScript is Script {
     }
 }
 
+/// @notice Deploys the upgradable light client contract
+/// the admin is not a multisig wallet but is the same as the associated mnemonic
+/// used in staging deployments only
 contract DeployLightClientContractWithoutMultiSigScript is Script {
     function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
         external
@@ -340,8 +343,8 @@ contract DeployLightClientContractWithoutMultiSigScript is Script {
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
         // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        string memory seedPhrase = vm.envString("MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("MNEMONIC_OFFSET"));
         (admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
         vm.startBroadcast(admin);
 
@@ -368,6 +371,7 @@ contract DeployLightClientContractWithoutMultiSigScript is Script {
 /// @notice Upgrades the light client contract first by deploying the new implementation
 /// and then calling the upgradeToAndCall method of the proxy
 /// @dev This is used when the admin is not a multisig wallet
+/// used in staging deployments only
 contract UpgradeLightClientWithoutMultisigAdminScript is Script {
     /// @notice runs the upgrade
     /// @param mostRecentlyDeployedProxy address of deployed proxy
@@ -375,8 +379,8 @@ contract UpgradeLightClientWithoutMultisigAdminScript is Script {
     /// TODO get the most recent deployment from the devops tooling
     function run(address mostRecentlyDeployedProxy) external returns (address) {
         // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        string memory seedPhrase = vm.envString("MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("MNEMONIC_OFFSET"));
         (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
         vm.startBroadcast(admin);
 

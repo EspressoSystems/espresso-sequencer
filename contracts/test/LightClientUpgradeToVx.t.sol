@@ -6,8 +6,11 @@ import { Test } from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { LightClientV3 as LCV3 } from "../test/LightClientV3.sol";
+// import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
+//     "../script/LightClient.s.sol";
+
 import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
-    "../script/LightClient.s.sol";
+    "./script/LightClientTestScript.s.sol";
 import { UpgradeLightClientScript as UpgradeScript } from "./script/UpgradeLightClientToV2.s.sol";
 import { UpgradeLightClientScript as ULCV3 } from "./script/UpgradeLightClientToV3.s.sol";
 import { OwnableUpgradeable } from
