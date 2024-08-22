@@ -1837,9 +1837,9 @@ dependencies = [
 
 [[package]]
 name = "committable"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93c989a517928da3346fce6f6f75794285420edc3ef42c995ced45519f065acd"
+checksum = "05a8809c2761232ce27226ef1ca1bc78b480b558406895848f76ab8fce04076c"
 dependencies = [
  "arbitrary",
  "ark-serialize",
@@ -9214,7 +9214,7 @@ version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38d1e02fca405f6280643174a50c942219f0bbf4dbf7d480f1dd864d6f211ae5"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.74",
