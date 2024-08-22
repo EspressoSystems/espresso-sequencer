@@ -144,7 +144,7 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
             return Vec::new();
         };
 
-        let mut registered_namespaces = Vec::new();
+        let mut namespaces_to_skip = HashSet::new();
         let registrations: Vec<RollupRegistration> =
             match solver_client.get("rollup_registrations").send().await {
                 Ok(registrations) => registrations,
@@ -154,13 +154,13 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
                 }
             };
         for registration in registrations {
-            // Skip over rollups that don't have reserve builders
-            if registration.body.reserve_url.is_some() {
-                registered_namespaces.push(registration.body.namespace_id);
+            // Rollups that have reserve builders or aren't active shouldn't be served by fallback builder
+            if registration.body.reserve_url.is_some() || !registration.body.active {
+                namespaces_to_skip.insert(registration.body.namespace_id);
             }
         }
 
-        transactions.retain(|txn| !registered_namespaces.contains(&txn.namespace()));
+        transactions.retain(|txn| !namespaces_to_skip.contains(&txn.namespace()));
         transactions
     }
 
