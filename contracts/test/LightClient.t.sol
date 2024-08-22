@@ -32,12 +32,12 @@ contract LightClientCommonTest is Test {
     function deployAndInitProxy(
         LC.LightClientState memory state,
         uint32 numBlocksPerEpoch,
-        uint32 maxHistorySeconds
+        uint32 stateHistoryRetentionPeriod
     ) public returns (address payable, address) {
         vm.warp(1 days);
         //deploy light client test with a proxy
         (lcTestProxy, admin, state) =
-            deployer.deployContract(state, numBlocksPerEpoch, maxHistorySeconds, admin);
+            deployer.deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod, admin);
 
         //cast the proxy to be of type light client test
         lc = LCMock(lcTestProxy);
@@ -100,10 +100,10 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     function initWithExpectRevert(
         LC.LightClientState memory _genesis,
         uint32 _blocksPerEpoch,
-        uint32 _maxHistorySeconds
+        uint32 _stateHistoryRetentionPeriod
     ) private {
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCMock(_genesis, _blocksPerEpoch, _maxHistorySeconds);
+        lc = new LCMock(_genesis, _blocksPerEpoch, _stateHistoryRetentionPeriod);
     }
 
     function test_RevertWhen_InvalidGenesis() external {
@@ -686,11 +686,11 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.getStateHistoryCount(), blockUpdatesCount + 1);
     }
 
-    function testFuzz_setstateHistoryRetentionPeriod(uint32 maxHistorySeconds) public {
+    function testFuzz_setstateHistoryRetentionPeriod(uint32 stateHistoryRetentionPeriod) public {
         vm.prank(admin);
-        vm.assume(maxHistorySeconds > 1 days);
-        lc.setstateHistoryRetentionPeriod(maxHistorySeconds);
-        assertEq(maxHistorySeconds, lc.stateHistoryRetentionPeriod());
+        vm.assume(stateHistoryRetentionPeriod > 1 days);
+        lc.setstateHistoryRetentionPeriod(stateHistoryRetentionPeriod);
+        assertEq(stateHistoryRetentionPeriod, lc.stateHistoryRetentionPeriod());
     }
 
     function test_revertNonAdminSetMaxStateHistoryAllowed() public {

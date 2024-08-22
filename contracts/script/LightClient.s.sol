@@ -7,10 +7,11 @@ import { LightClient as LC } from "../src/LightClient.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientContractScript is Script {
-    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, uint32 maxHistorySeconds)
-        external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
+    function run(
+        uint32 numBlocksPerEpoch,
+        uint32 numInitValidators,
+        uint32 stateHistoryRetentionPeriod
+    ) external returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         // TODO for a production deployment provide the right genesis state and value
 
         string[] memory cmds = new string[](4);
@@ -23,10 +24,10 @@ contract DeployLightClientContractScript is Script {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, numBlocksPerEpoch, maxHistorySeconds);
+        return deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod);
     }
 
-    function runDemo(uint32 numBlocksPerEpoch, uint32 maxHistorySeconds)
+    function runDemo(uint32 numBlocksPerEpoch, uint32 stateHistoryRetentionPeriod)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -36,7 +37,7 @@ contract DeployLightClientContractScript is Script {
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
-        return deployContract(state, numBlocksPerEpoch, maxHistorySeconds);
+        return deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
@@ -46,7 +47,7 @@ contract DeployLightClientContractScript is Script {
     function deployContract(
         LC.LightClientState memory state,
         uint32 numBlocksPerEpoch,
-        uint32 maxHistorySeconds
+        uint32 stateHistoryRetentionPeriod
     ) private returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
@@ -59,7 +60,7 @@ contract DeployLightClientContractScript is Script {
             "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,uint32,address)",
             state,
             numBlocksPerEpoch,
-            maxHistorySeconds,
+            stateHistoryRetentionPeriod,
             admin
         );
 

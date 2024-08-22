@@ -23,7 +23,7 @@ contract LightClientDefenderDeployScript is Script {
         // TODO for a production deployment provide the right genesis state and value
         uint32 numBlocksPerEpoch = 5;
         uint32 numInitValidators = 1;
-        uint32 maxHistorySeconds = 864000;
+        uint32 stateHistoryRetentionPeriod = 864000;
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
@@ -53,7 +53,9 @@ contract LightClientDefenderDeployScript is Script {
 
         proxy = Upgrades.deployUUPSProxy(
             contractName,
-            abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch, maxHistorySeconds, multisig)),
+            abi.encodeCall(
+                LC.initialize, (state, numBlocksPerEpoch, stateHistoryRetentionPeriod, multisig)
+            ),
             opts
         );
 

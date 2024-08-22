@@ -307,7 +307,7 @@ pub mod light_client_mock {
                         name: ::std::borrow::ToOwned::to_owned("initialize"),
                         inputs: ::std::vec![
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("genesis"),
+                                name: ::std::borrow::ToOwned::to_owned("_genesis"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                     ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
@@ -325,14 +325,16 @@ pub mod light_client_mock {
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("numBlocksPerEpoch"),
+                                name: ::std::borrow::ToOwned::to_owned("_blocksPerEpoch"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("uint32"),
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("maxHistorySeconds"),
+                                name: ::std::borrow::ToOwned::to_owned(
+                                    "_stateHistoryRetentionPeriod",
+                                ),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("uint32"),
@@ -1349,14 +1351,19 @@ pub mod light_client_mock {
         pub fn initialize(
             &self,
             genesis: LightClientState,
-            num_blocks_per_epoch: u32,
-            max_history_seconds: u32,
+            blocks_per_epoch: u32,
+            state_history_retention_period: u32,
             owner: ::ethers::core::types::Address,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
                     [202, 21, 82, 28],
-                    (genesis, num_blocks_per_epoch, max_history_seconds, owner),
+                    (
+                        genesis,
+                        blocks_per_epoch,
+                        state_history_retention_period,
+                        owner,
+                    ),
                 )
                 .expect("method not found (this should never happen)")
         }
@@ -2878,8 +2885,8 @@ pub mod light_client_mock {
     )]
     pub struct InitializeCall {
         pub genesis: LightClientState,
-        pub num_blocks_per_epoch: u32,
-        pub max_history_seconds: u32,
+        pub blocks_per_epoch: u32,
+        pub state_history_retention_period: u32,
         pub owner: ::ethers::core::types::Address,
     }
     ///Container type for all input parameters for the `lagOverEscapeHatchThreshold` function with signature `lagOverEscapeHatchThreshold(uint256,uint256)` and selector `0xe0303301`

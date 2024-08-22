@@ -232,7 +232,7 @@ Solution: `export FOUNDRY_PROFILE=default`
 ## LightClient Contract Deployment
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators $maxHistorySeconds \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -254,7 +254,7 @@ Change the $MNEMONIC in the .env file to the one of the admin
 To Deploy
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators $maxHistorySeconds \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com\
@@ -297,7 +297,7 @@ forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDefen
 ## LightClient Contract Deployment
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators $maxHistorySeconds \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -319,7 +319,7 @@ Change the $MNEMONIC in the .env file to the one of the admin
 To Deploy
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators #$maxHistorySeconds \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com\

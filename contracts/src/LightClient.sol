@@ -178,21 +178,22 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice This contract is called by the proxy when you deploy this contract
-    /// @param genesis The initial state of the light client
-    /// @param numBlocksPerEpoch The number of blocks per epoch
-    /// @param maxHistorySeconds The maximum retention period (in seconds) for the state history
+    /// @param _genesis The initial state of the light client
+    /// @param _blocksPerEpoch The number of blocks per epoch
+    /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
+    /// history
     /// @param owner The address of the contract owner
     function initialize(
-        LightClientState memory genesis,
-        uint32 numBlocksPerEpoch,
-        uint32 maxHistorySeconds,
+        LightClientState memory _genesis,
+        uint32 _blocksPerEpoch,
+        uint32 _stateHistoryRetentionPeriod,
         address owner
     ) public initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
         genesisState = 0;
         finalizedState = 1;
-        _initializeState(genesis, numBlocksPerEpoch, maxHistorySeconds);
+        _initializeState(_genesis, _blocksPerEpoch, _stateHistoryRetentionPeriod);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -215,43 +216,44 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
-    /// @param genesis The initial state of the light client
-    /// @param numBlockPerEpoch The number of blocks per epoch
-    /// @param maxHistorySeconds The maximum retention period (in seconds) for the state history
+    /// @param _genesis The initial state of the light client
+    /// @param _blockPerEpoch The number of blocks per epoch
+    /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
+    /// history
     function _initializeState(
-        LightClientState memory genesis,
-        uint32 numBlockPerEpoch,
-        uint32 maxHistorySeconds
+        LightClientState memory _genesis,
+        uint32 _blockPerEpoch,
+        uint32 _stateHistoryRetentionPeriod
     ) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
         // feeLedgerComm can be zero, if we optionally support fee ledger yet.
         if (
-            genesis.viewNum != 0 || genesis.blockHeight != 0
-                || BN254.ScalarField.unwrap(genesis.stakeTableBlsKeyComm) == 0
-                || BN254.ScalarField.unwrap(genesis.stakeTableSchnorrKeyComm) == 0
-                || BN254.ScalarField.unwrap(genesis.stakeTableAmountComm) == 0 || genesis.threshold == 0
-                || numBlockPerEpoch == 0
+            _genesis.viewNum != 0 || _genesis.blockHeight != 0
+                || BN254.ScalarField.unwrap(_genesis.stakeTableBlsKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesis.stakeTableSchnorrKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesis.stakeTableAmountComm) == 0
+                || _genesis.threshold == 0 || _blockPerEpoch == 0
         ) {
             revert InvalidArgs();
         }
-        states[genesisState] = genesis;
-        states[finalizedState] = genesis;
+        states[genesisState] = _genesis;
+        states[finalizedState] = _genesis;
 
         currentEpoch = 0;
 
-        blocksPerEpoch = numBlockPerEpoch;
+        blocksPerEpoch = _blockPerEpoch;
 
-        stateHistoryRetentionPeriod = maxHistorySeconds;
+        stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
 
-        bytes32 initStakeTableComm = computeStakeTableComm(genesis);
+        bytes32 initStakeTableComm = computeStakeTableComm(_genesis);
         votingStakeTableCommitment = initStakeTableComm;
-        votingThreshold = genesis.threshold;
+        votingThreshold = _genesis.threshold;
         frozenStakeTableCommitment = initStakeTableComm;
-        frozenThreshold = genesis.threshold;
+        frozenThreshold = _genesis.threshold;
 
-        updateStateHistory(uint64(block.number), uint64(block.timestamp), genesis);
+        updateStateHistory(uint64(block.number), uint64(block.timestamp), _genesis);
     }
 
     // === State Modifying APIs ===
