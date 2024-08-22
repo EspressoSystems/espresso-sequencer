@@ -74,11 +74,15 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", ta
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.4", package = "cdn-broker" }
+], branch = "ss/fix-shutdown", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.4", package = "cdn-marshal" }
+], branch="ss/fix-shutdown", package = "cdn-marshal" }
+cdn-client = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
+    "runtime-async-std",
+    "global-permits",
+], branch="ss/fix-shutdown", package = "cdn-client" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
     "test-apis",
@@ -148,18 +152,3 @@ hotshot-task = { git = "https://github.com/EspressoSystems//hotshot", branch = "
 hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
 hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
 hotshot-example-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
-
-
-[patch.'https://github.com/EspressoSystems/Push-CDN']
-cdn-broker = { git = "https://github.com/EspressoSystems//Push-CDN", features = [
-    "runtime-async-std",
-    "global-permits",
-], branch = "ss/fix-shutdown", package = "cdn-broker" }
-cdn-marshal = { git = "https://github.com/EspressoSystems//Push-CDN", features = [
-    "runtime-async-std",
-    "global-permits",
-], branch = "ss/fix-shutdown", package = "cdn-marshal" }
-cdn-client = { git = "https://github.com/EspressoSystems//Push-CDN", features = [
-    "runtime-async-std",
-    "global-permits",
-], branch = "ss/fix-shutdown", package = "cdn-client" }

@@ -1487,10 +1487,34 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown)",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
+ "clap",
+ "console-subscriber 0.3.0",
+ "dashmap",
+ "derivative",
+ "jf-signature",
+ "lazy_static",
+ "local-ip-address",
+ "parking_lot",
+ "portpicker",
+ "prometheus",
+ "rand 0.8.5",
+ "rkyv",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
+name = "cdn-broker"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=ss/fix-shutdown)",
  "clap",
  "console-subscriber 0.3.0",
  "dashmap",
@@ -1511,10 +1535,10 @@ dependencies = [
 [[package]]
 name = "cdn-client"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown)",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
  "clap",
  "jf-signature",
  "rand 0.8.5",
@@ -1526,10 +1550,24 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown)",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
+ "clap",
+ "jf-signature",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
+name = "cdn-marshal"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=ss/fix-shutdown)",
  "clap",
  "jf-signature",
  "tokio",
@@ -1554,6 +1592,7 @@ dependencies = [
  "mnemonic",
  "num_enum",
  "pem 3.0.4",
+ "prometheus",
  "quinn",
  "rand 0.8.5",
  "rcgen 0.13.1",
@@ -1573,7 +1612,7 @@ dependencies = [
 [[package]]
 name = "cdn-proto"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems//Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
+source = "git+https://github.com/EspressoSystems/Push-CDN?branch=ss/fix-shutdown#93eb15bc5e1a77ca0d89aa40b67c66b81bb8bdef"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4037,9 +4076,9 @@ dependencies = [
  "bimap",
  "bincode",
  "blake3",
- "cdn-broker",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
  "cdn-client",
- "cdn-marshal",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
  "chrono",
  "committable",
  "custom_debug 0.5.1",
@@ -7648,7 +7687,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.74",
@@ -8717,8 +8756,8 @@ dependencies = [
  "async-trait",
  "bincode",
  "bytesize",
- "cdn-broker",
- "cdn-marshal",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=ss/fix-shutdown)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=ss/fix-shutdown)",
  "clap",
  "cld",
  "committable",
