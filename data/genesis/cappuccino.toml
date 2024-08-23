@@ -1,5 +1,5 @@
 base_version = "0.1"
-upgrade_version = "0.1"
+upgrade_version = "0.2"
 
 [stake_table]
 capacity = 200
