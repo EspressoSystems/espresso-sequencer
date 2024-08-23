@@ -764,6 +764,12 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                     .dht
                     .add_address(&my_id, address.clone());
             }
+            SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
+                self.swarm
+                    .behaviour_mut()
+                    .dht
+                    .add_address(&peer_id, address.clone());
+            }
             _ => {
                 debug!("Unhandled swarm event {:?}", event);
             }
