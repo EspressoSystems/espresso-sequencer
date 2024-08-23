@@ -4026,7 +4026,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4073,7 +4073,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "async-trait",
  "clap",
@@ -4170,7 +4170,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4203,7 +4203,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
@@ -4222,7 +4222,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4233,7 +4233,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4319,7 +4319,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4384,7 +4384,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4436,7 +4436,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4473,7 +4473,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4519,7 +4519,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5885,7 +5885,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#ca7dcde5463459e83fab15a1da532cd4a35941de"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#b43e9ac0636da241c1a5cb3d386b276598d3db7f"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -7648,7 +7648,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.74",
