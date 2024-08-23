@@ -193,6 +193,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
             // This is because the key that we receive is for the prior leader, so the payload would be routed
             // incorrectly.
             task_state.public_key.clone(),
+            task_state.private_key.clone(),
             &task_state.upgrade_lock,
         )
         .await

@@ -254,6 +254,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 view,
                 proposal,
                 pub_key,
+                priv_key.clone(),
                 consensus,
                 storage,
                 quorum_mem,

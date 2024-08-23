@@ -124,6 +124,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             &self.receiver,
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
+            self.private_key.clone(),
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             &self.upgrade_lock,
         )
@@ -262,7 +263,8 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
             let membership = Arc::clone(&self.quorum_membership);
             let event_sender = self.sender.clone();
             let event_receiver = self.receiver.clone();
-            let sender_key = self.public_key.clone();
+            let sender_public_key = self.public_key.clone();
+            let sender_private_key = self.private_key.clone();
             let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
             let upgrade_lock = self.upgrade_lock.clone();
             async_spawn(async move {
@@ -272,7 +274,8 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                     event_receiver,
                     membership,
                     consensus,
-                    sender_key,
+                    sender_public_key,
+                    sender_private_key,
                     &upgrade_lock,
                 )
                 .await

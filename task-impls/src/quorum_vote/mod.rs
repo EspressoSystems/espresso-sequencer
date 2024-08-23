@@ -116,6 +116,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                 Arc::clone(&self.quorum_membership),
                 OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                 self.public_key.clone(),
+                self.private_key.clone(),
                 &self.upgrade_lock,
             )
             .await

@@ -182,6 +182,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
         &receiver,
         quorum_membership,
         public_key.clone(),
+        private_key.clone(),
         OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
         &upgrade_lock,
     )
@@ -379,6 +380,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
             Arc::clone(&task_state.quorum_membership),
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
             task_state.public_key.clone(),
+            task_state.private_key.clone(),
             &task_state.upgrade_lock,
         )
         .await
@@ -696,6 +698,7 @@ pub async fn update_state_and_vote_if_able<
     cur_view: TYPES::Time,
     proposal: QuorumProposal<TYPES>,
     public_key: TYPES::SignatureKey,
+    private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     consensus: OuterConsensus<TYPES>,
     storage: Arc<RwLock<I::Storage>>,
     quorum_membership: Arc<TYPES::Membership>,
@@ -766,6 +769,7 @@ pub async fn update_state_and_vote_if_able<
             Arc::clone(&quorum_membership),
             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
             public_key.clone(),
+            private_key.clone(),
             upgrade_lock,
         )
         .await

@@ -115,14 +115,11 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                             GeneralConsensusMessage::Proposal(proposal) => {
                                 HotShotEvent::QuorumProposalRecv(proposal, sender)
                             }
-                            GeneralConsensusMessage::ProposalRequested(view, sender) => {
-                                HotShotEvent::QuorumProposalRequestRecv(view, sender)
+                            GeneralConsensusMessage::ProposalRequested(req, sig) => {
+                                HotShotEvent::QuorumProposalRequestRecv(req, sig)
                             }
                             GeneralConsensusMessage::LeaderProposalAvailable(proposal) => {
-                                HotShotEvent::QuorumProposalResponseRecv(
-                                    proposal.data.view_number,
-                                    proposal,
-                                )
+                                HotShotEvent::QuorumProposalResponseRecv(proposal)
                             }
                             GeneralConsensusMessage::Vote(vote) => {
                                 HotShotEvent::QuorumVoteRecv(vote.clone())
@@ -313,14 +310,14 @@ impl<
                         TransmitType::Direct(membership.leader(vote.view_number() + 1)),
                     )
                 }
-                HotShotEvent::QuorumProposalRequestSend(view_number, sender_key) => (
-                    sender_key.clone(),
+                HotShotEvent::QuorumProposalRequestSend(req, signature) => (
+                    req.key.clone(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ProposalRequested(view_number, sender_key),
+                        GeneralConsensusMessage::ProposalRequested(req.clone(), signature),
                     )),
-                    TransmitType::Direct(membership.leader(view_number)),
+                    TransmitType::Direct(membership.leader(req.view_number)),
                 ),
-                HotShotEvent::QuorumProposalResponseSend(_view_number, sender_key, proposal) => (
+                HotShotEvent::QuorumProposalResponseSend(sender_key, proposal) => (
                     sender_key.clone(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::LeaderProposalAvailable(proposal),

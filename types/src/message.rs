@@ -22,6 +22,7 @@ use vbs::{
     BinarySerializer, Serializer,
 };
 
+use crate::request_response::ProposalRequestPayload;
 use crate::{
     data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     simple_certificate::{
@@ -163,7 +164,10 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
     Proposal(Proposal<TYPES, QuorumProposal<TYPES>>),
 
     /// A peer node needs a proposal from the leader.
-    ProposalRequested(TYPES::Time, TYPES::SignatureKey),
+    ProposalRequested(
+        ProposalRequestPayload<TYPES>,
+        <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ),
 
     /// The leader has responded with a valid proposal.
     LeaderProposalAvailable(Proposal<TYPES, QuorumProposal<TYPES>>),
@@ -241,7 +245,7 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                         // this should match replica upon receipt
                         p.data.view_number()
                     }
-                    GeneralConsensusMessage::ProposalRequested(view_number, _) => *view_number,
+                    GeneralConsensusMessage::ProposalRequested(req, _) => req.view_number,
                     GeneralConsensusMessage::LeaderProposalAvailable(proposal) => {
                         proposal.data.view_number()
                     }
