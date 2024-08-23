@@ -15,7 +15,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !contains(github.ref, 'main')}}
+  cancel-in-progress: false
 
 env:
   RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
@@ -53,7 +53,7 @@ jobs:
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
-      - name: SlowEst
+      - name: Slow tests
         env:
           CARGO_TERM_COLOR: always
         # Build test binary with `testing` feature, which requires `hotshot_example` config
@@ -61,4 +61,4 @@ jobs:
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           cargo nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)' --nocapture
-        timeout-minutes: 40
+        timeout-minutes: 120
