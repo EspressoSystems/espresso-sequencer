@@ -41,11 +41,15 @@ pub struct RollupUpdate {
 pub struct RollupUpdatebody {
     pub namespace_id: NamespaceId,
     // Denominated in Wei
+    #[serde(default)]
     pub reserve_url: Update<Option<Url>>,
+    #[serde(default)]
     pub reserve_price: Update<FeeAmount>,
     // whether this registration is active in the marketplace
+    #[serde(default)]
     pub active: Update<bool>,
     // a list of keys authorized to update the registration information
+    #[serde(default)]
     pub signature_keys: Update<Vec<<SeqTypes as NodeType>::SignatureKey>>,
     // The signature key used to sign this update body
     pub signature_key: <SeqTypes as NodeType>::SignatureKey,

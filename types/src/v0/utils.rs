@@ -22,7 +22,9 @@ use time::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Update<T> {
     #[default]
+    #[serde(rename = "__skip")]
     Skip,
+    #[serde(untagged)]
     Set(T),
 }
 
