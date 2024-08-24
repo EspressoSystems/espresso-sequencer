@@ -374,7 +374,7 @@ pub mod test_helpers {
     use espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        NamespaceId, ValidatedState,
+        MarketplaceVersion, NamespaceId, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
@@ -394,11 +394,15 @@ pub mod test_helpers {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
+    use vbs::version::StaticVersionType;
 
     use super::*;
     use crate::{
         persistence::no_storage,
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
+        testing::{
+            run_marketplace_builder, run_test_builder, wait_for_decide_on_handle, TestConfig,
+            TestConfigBuilder,
+        },
     };
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
@@ -524,11 +528,31 @@ pub mod test_helpers {
             bind_version: V,
         ) -> Self {
             let mut cfg = cfg;
-            let (builder_task, builder_url) =
-                run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
+            let mut builder_tasks = Vec::new();
+            let mut legacy_builder_url = "http://example.com".parse().unwrap();
+            let mut marketplace_builder_url = "http://example.com".parse().unwrap();
+
+            if <V as Versions>::Base::VERSION <= MarketplaceVersion::VERSION {
+                let (task, url) =
+                    run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
+                builder_tasks.push(task);
+                legacy_builder_url = url;
+            };
+
+            if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION {
+                println!("Running marketplace builder!");
+                let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
+                    cfg.network_config.builder_port(),
+                    NodeState::default(),
+                    cfg.state[0].clone(),
+                )
+                .await;
+                builder_tasks.push(task);
+                marketplace_builder_url = url;
+            }
 
             cfg.network_config
-                .set_builder_urls(vec1::vec1![builder_url]);
+                .set_builder_urls(vec1::vec1![legacy_builder_url]);
 
             let mut nodes = join_all(
                 izip!(cfg.state, cfg.persistence, cfg.catchup)
@@ -537,6 +561,7 @@ pub mod test_helpers {
                         let opt = cfg.api_config.clone();
                         let cfg = &cfg.network_config;
                         let upgrades_map = cfg.upgrades();
+                        let marketplace_builder_url = marketplace_builder_url.clone();
                         async move {
                             if i == 0 {
                                 opt.serve(|metrics| {
@@ -551,6 +576,7 @@ pub mod test_helpers {
                                             STAKE_TABLE_CAPACITY_FOR_TEST,
                                             bind_version,
                                             upgrades_map,
+                                            marketplace_builder_url,
                                         )
                                         .await
                                     }
@@ -568,6 +594,7 @@ pub mod test_helpers {
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
                                     bind_version,
                                     upgrades_map,
+                                    marketplace_builder_url,
                                 )
                                 .await
                             }
@@ -578,8 +605,10 @@ pub mod test_helpers {
 
             let handle_0 = &nodes[0];
 
-            // Hook the builder up to the event stream from the first node
-            builder_task.start(Box::new(handle_0.event_stream().await));
+            // Hook the builder(s) up to the event stream from the first node
+            for builder_task in builder_tasks {
+                builder_task.start(Box::new(handle_0.event_stream().await));
+            }
 
             for ctx in &nodes {
                 ctx.start_consensus().await;
@@ -1268,6 +1297,7 @@ mod test {
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 MockSequencerVersions::new(),
                 Default::default(),
+                "http://localhost".parse().unwrap(),
             )
             .await;
         let mut events = node.event_stream().await;
