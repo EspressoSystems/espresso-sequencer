@@ -347,8 +347,6 @@
 <a href="#347" id="347">347</a>
 <a href="#348" id="348">348</a>
 <a href="#349" id="349">349</a>
-<a href="#350" id="350">350</a>
-<a href="#351" id="351">351</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -366,10 +364,9 @@
     data::ViewNumber, signature_key::BuilderKey, traits::node_implementation::NodeType, PeerConfig,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
-<span class="kw">use </span>serde_json::Value;
 <span class="kw">use </span>sqlx::{FromRow, PgPool};
 
-<span class="kw">use crate</span>::{database::PostgresClient, overflow_err, serde_json_err, SolverError, SolverResult};
+<span class="kw">use crate</span>::{database::PostgresClient, overflow_err, SolverError, SolverResult};
 
 <span class="comment">// TODO ED: Implement a shared solver state with the HotShot events received
 </span><span class="kw">pub struct </span>GlobalState {
@@ -482,11 +479,11 @@
             <span class="kw">return </span><span class="prelude-val">Err</span>(SolverError::RollupAlreadyExists(namespace_id));
         }
 
-        <span class="kw">let </span>json = serde_json::to_value(registration.clone()).map_err(serde_json_err)<span class="question-mark">?</span>;
+        <span class="kw">let </span>bytes = bincode::serialize(<span class="kw-2">&amp;</span>registration)<span class="question-mark">?</span>;
 
         <span class="kw">let </span>result = sqlx::query(<span class="string">"INSERT INTO rollup_registrations VALUES ($1, $2);"</span>)
             .bind::&lt;i64&gt;(u64::from(namespace_id).try_into().map_err(overflow_err)<span class="question-mark">?</span>)
-            .bind(<span class="kw-2">&amp;</span>json)
+            .bind(<span class="kw-2">&amp;</span>bytes)
             .execute(db)
             .<span class="kw">await
             </span>.map_err(SolverError::from)<span class="question-mark">?</span>;
@@ -538,8 +535,7 @@
                 .<span class="kw">await
                 </span>.map_err(SolverError::from)<span class="question-mark">?</span>;
 
-        <span class="kw">let </span><span class="kw-2">mut </span>registration =
-            serde_json::from_value::&lt;RollupRegistration&gt;(result.data).map_err(serde_json_err)<span class="question-mark">?</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>registration = bincode::deserialize::&lt;RollupRegistration&gt;(<span class="kw-2">&amp;</span>result.data)<span class="question-mark">?</span>;
 
         <span class="kw">if let </span>Set(ru) = reserve_url {
             registration.body.reserve_url = ru;
@@ -575,11 +571,11 @@
             registration.body.signature_keys = keys;
         }
 
-        <span class="kw">let </span>value = serde_json::to_value(<span class="kw-2">&amp;</span>registration).map_err(serde_json_err)<span class="question-mark">?</span>;
+        <span class="kw">let </span>bytes = bincode::serialize(<span class="kw-2">&amp;</span>registration)<span class="question-mark">?</span>;
 
         <span class="kw">let </span>result =
             sqlx::query(<span class="string">"UPDATE rollup_registrations SET data = $1  WHERE namespace_id = $2;"</span>)
-                .bind(<span class="kw-2">&amp;</span>value)
+                .bind(<span class="kw-2">&amp;</span>bytes)
                 .bind::&lt;i64&gt;(u64::from(namespace_id).try_into().map_err(overflow_err)<span class="question-mark">?</span>)
                 .execute(db)
                 .<span class="kw">await
@@ -605,7 +601,7 @@
                 </span>.map_err(SolverError::from)<span class="question-mark">?</span>;
 
         rows.iter()
-            .map(|r| serde_json::from_value(r.data.clone()).map_err(serde_json_err))
+            .map(|r| bincode::deserialize(<span class="kw-2">&amp;</span>r.data).map_err(SolverError::from))
             .collect::&lt;SolverResult&lt;Vec&lt;RollupRegistration&gt;&gt;&gt;()
     }
 
@@ -655,7 +651,7 @@
 <span class="attr">#[derive(Debug, Deserialize, Serialize, FromRow)]
 </span><span class="kw">struct </span>RollupRegistrationResult {
     namespace_id: i64,
-    data: Value,
+    data: Vec&lt;u8&gt;,
 }
 
 <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]

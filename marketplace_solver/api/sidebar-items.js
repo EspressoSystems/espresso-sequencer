@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SolverError"],"fn":["define_api","load_api","load_toml","merge_toml","overflow_err","serde_json_err"],"struct":["ApiOptions"]};
+window.SIDEBAR_ITEMS = {"enum":["SolverError"],"fn":["define_api","load_api","load_toml","merge_toml","overflow_err"],"struct":["ApiOptions"]};
