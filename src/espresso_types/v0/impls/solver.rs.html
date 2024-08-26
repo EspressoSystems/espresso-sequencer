@@ -65,10 +65,25 @@
 <a href="#65" id="65">65</a>
 <a href="#66" id="66">66</a>
 <a href="#67" id="67">67</a>
+<a href="#68" id="68">68</a>
+<a href="#69" id="69">69</a>
+<a href="#70" id="70">70</a>
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>hotshot::types::SignatureKey;
 
-<span class="kw">use </span><span class="kw">super</span>::v0_3::{RollupRegistrationBody, RollupUpdatebody};
+<span class="kw">use super</span>::{
+    v0_3::{RollupRegistrationBody, RollupUpdatebody},
+    Update,
+};
 
 <span class="kw">impl </span>Committable <span class="kw">for </span>RollupRegistrationBody {
     <span class="kw">fn </span>tag() -&gt; String {
@@ -77,8 +92,17 @@
 
     <span class="kw">fn </span>commit(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Commitment&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>comm = committable::RawCommitmentBuilder::new(<span class="kw-2">&amp;</span><span class="self">Self</span>::tag())
-            .u64_field(<span class="string">"namespace_id"</span>, u64::from(<span class="self">self</span>.namespace_id))
-            .var_size_field(<span class="string">"reserve_url"</span>, <span class="self">self</span>.reserve_url.as_str().as_ref())
+            .u64_field(<span class="string">"namespace_id"</span>, u64::from(<span class="self">self</span>.namespace_id));
+
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = <span class="kw-2">&amp;</span><span class="self">self</span>.reserve_url {
+            comm = comm
+                .u64_field(<span class="string">"reserve_url"</span>, <span class="number">1</span>)
+                .var_size_bytes(url.as_str().as_ref())
+        } <span class="kw">else </span>{
+            comm = comm.u64_field(<span class="string">"reserve_url"</span>, <span class="number">0</span>)
+        };
+
+        comm = comm
             .fixed_size_field(<span class="string">"reserve_price"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.reserve_price.to_fixed_bytes())
             .fixed_size_field(<span class="string">"active"</span>, <span class="kw-2">&amp;</span>[u8::from(<span class="self">self</span>.active)])
             .constant_str(<span class="string">"signature_keys"</span>);
@@ -104,19 +128,19 @@
         <span class="kw">let </span><span class="kw-2">mut </span>comm = committable::RawCommitmentBuilder::new(<span class="kw-2">&amp;</span><span class="self">Self</span>::tag())
             .u64_field(<span class="string">"namespace_id"</span>, u64::from(<span class="self">self</span>.namespace_id));
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(reserve_url) = <span class="kw-2">&amp;</span><span class="self">self</span>.reserve_url {
+        <span class="kw">if let </span>Update::Set(<span class="prelude-val">Some</span>(reserve_url)) = <span class="kw-2">&amp;</span><span class="self">self</span>.reserve_url {
             comm = comm.var_size_field(<span class="string">"reserve_url"</span>, reserve_url.as_str().as_ref())
         }
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(rp) = <span class="self">self</span>.reserve_price {
+        <span class="kw">if let </span>Update::Set(rp) = <span class="self">self</span>.reserve_price {
             comm = comm.fixed_size_field(<span class="string">"reserve_price"</span>, <span class="kw-2">&amp;</span>rp.to_fixed_bytes())
         };
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(active) = <span class="self">self</span>.active {
+        <span class="kw">if let </span>Update::Set(active) = <span class="self">self</span>.active {
             comm = comm.fixed_size_field(<span class="string">"active"</span>, <span class="kw-2">&amp;</span>[u8::from(active)]);
         }
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(keys) = <span class="kw-2">&amp;</span><span class="self">self</span>.signature_keys {
+        <span class="kw">if let </span>Update::Set(keys) = <span class="kw-2">&amp;</span><span class="self">self</span>.signature_keys {
             comm = comm.constant_str(<span class="string">"signature_keys"</span>);
             <span class="kw">for </span>key <span class="kw">in </span>keys.iter() {
                 comm = comm.var_size_bytes(<span class="kw-2">&amp;</span>key.to_bytes());
@@ -125,7 +149,7 @@
 
         comm = comm.var_size_field(<span class="string">"signature_key"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.signature_key.to_bytes());
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(text) = <span class="kw-2">&amp;</span><span class="self">self</span>.text {
+        <span class="kw">if let </span>Update::Set(text) = <span class="kw-2">&amp;</span><span class="self">self</span>.text {
             comm = comm.var_size_field(<span class="string">"text"</span>, text.as_bytes());
         }
 

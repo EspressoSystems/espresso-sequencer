@@ -213,6 +213,22 @@
 <a href="#213" id="213">213</a>
 <a href="#214" id="214">214</a>
 <a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+<a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
+<a href="#230" id="230">230</a>
+<a href="#231" id="231">231</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::str::FromStr;
 
 <span class="kw">use </span>anyhow::Result;
@@ -220,7 +236,7 @@
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>espresso_types::{
     v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
-    MarketplaceVersion, SeqTypes,
+    MarketplaceVersion, SeqTypes, Update,
 };
 <span class="kw">use </span>hotshot::types::BLSPubKey;
 <span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
@@ -240,25 +256,21 @@
 
 <span class="attr">#[derive(Debug, Subcommand)]
 </span><span class="kw">enum </span>Command {
-    Register(Register),
-    Update(Update),
+    Register(RegisterArgs),
+    Update(UpdateArgs),
 }
 
 <span class="comment">// Options for registering a rollup
 </span><span class="attr">#[derive(Parser, Debug)]
-</span><span class="kw">struct </span>Register {
+</span><span class="kw">struct </span>RegisterArgs {
     <span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_MARKETPLACE_SOLVER_API_URL"</span>)]
     </span><span class="kw">pub </span>solver_url: Url,
 
     <span class="attr">#[clap(short, long = <span class="string">"ns"</span>)]
     </span><span class="kw">pub </span>namespace_id: u64,
 
-    <span class="attr">#[clap(
-        long,
-        env = <span class="string">"ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL"</span>,
-        default_value_t = Url::from_str(<span class="string">"http://localhost"</span>).unwrap()
-    )]
-    </span><span class="kw">pub </span>reserve_url: Url,
+    <span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL"</span>)]
+    </span><span class="kw">pub </span>reserve_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
 
     <span class="attr">#[clap(long, default_value_t = <span class="number">200</span>)]
     </span><span class="kw">pub </span>reserve_price: u64,
@@ -277,29 +289,49 @@
 
 <span class="comment">// Options for updating an already registered rollup
 </span><span class="attr">#[derive(Parser, Debug)]
-</span><span class="kw">struct </span>Update {
+</span><span class="kw">struct </span>UpdateArgs {
     <span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_MARKETPLACE_SOLVER_API_URL"</span>)]
     </span><span class="kw">pub </span>solver_url: Url,
 
     <span class="attr">#[clap(short, long = <span class="string">"ns"</span>)]
     </span><span class="kw">pub </span>namespace_id: u64,
 
-    <span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL"</span>)]
-    </span><span class="kw">pub </span>reserve_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
+    <span class="attr">#[clap(
+        long,
+        env = <span class="string">"ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL"</span>,
+        default_value = <span class="string">""</span>,
+        value_parser = parse_update_option::&lt;Url&gt;
+    )]
+    </span><span class="kw">pub </span>reserve_url: Update&lt;<span class="prelude-ty">Option</span>&lt;Url&gt;&gt;,
 
-    <span class="attr">#[clap(long)]
-    </span><span class="kw">pub </span>reserve_price: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+    <span class="attr">#[clap(long, value_parser = parse_update::&lt;u64&gt;, default_value = <span class="string">""</span>)]
+    </span><span class="kw">pub </span>reserve_price: Update&lt;u64&gt;,
 
-    <span class="attr">#[clap(long)]
-    </span><span class="kw">pub </span>active: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+    <span class="attr">#[clap(long, value_parser = parse_update::&lt;bool&gt;, default_value = <span class="string">""</span>)]
+    </span><span class="kw">pub </span>active: Update&lt;bool&gt;,
 
-    <span class="attr">#[clap(long, default_value = <span class="string">"test"</span>)]
-    </span><span class="kw">pub </span>text: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="attr">#[clap(long, value_parser = parse_update::&lt;String&gt;, default_value = <span class="string">""</span>)]
+    </span><span class="kw">pub </span>text: Update&lt;String&gt;,
 
     <span class="doccomment">/// The private key is provided in tagged-base64 format.
     /// If not provided, a default private key with a seed of `[0; 32]` and an index of `9876` will be used.
     </span><span class="attr">#[clap(long = <span class="string">"privkey"</span>)]
     </span><span class="kw">pub </span>private_key: <span class="prelude-ty">Option</span>&lt;String&gt;,
+}
+
+<span class="kw">fn </span>parse_update&lt;T: FromStr&gt;(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Update&lt;T&gt;, T::Err&gt; {
+    <span class="kw">match </span>s {
+        <span class="string">"" </span>=&gt; <span class="prelude-val">Ok</span>(Update::Skip),
+        s =&gt; <span class="prelude-val">Ok</span>(Update::Set(s.parse()<span class="question-mark">?</span>)),
+    }
+}
+
+<span class="kw">fn </span>parse_update_option&lt;T: FromStr&gt;(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Update&lt;<span class="prelude-ty">Option</span>&lt;T&gt;&gt;, T::Err&gt; {
+    <span class="prelude-val">Ok</span>(<span class="kw">match </span>s {
+        <span class="string">"" </span>=&gt; Update::Skip,
+        <span class="string">"none" </span>=&gt; Update::Set(<span class="prelude-val">None</span>),
+        s =&gt; Update::Set(<span class="prelude-val">Some</span>(s.parse()<span class="question-mark">?</span>)),
+    })
 }
 
 <span class="attr">#[async_std::main]
@@ -313,8 +345,8 @@
     }
 }
 
-<span class="kw">async fn </span>register(opt: Register) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="kw">let </span>Register {
+<span class="kw">async fn </span>register(opt: RegisterArgs) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>RegisterArgs {
         solver_url,
         namespace_id,
         reserve_url,
@@ -372,8 +404,8 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">async fn </span>update(opt: Update) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="kw">let </span>Update {
+<span class="kw">async fn </span>update(opt: UpdateArgs) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>UpdateArgs {
         solver_url,
         namespace_id,
         reserve_url,
@@ -401,7 +433,7 @@
         reserve_url,
         reserve_price: reserve_price.map(Into::into),
         active,
-        signature_keys: <span class="prelude-val">None</span>,
+        signature_keys: Update::Skip,
         signature_key: pubkey,
         text,
     };

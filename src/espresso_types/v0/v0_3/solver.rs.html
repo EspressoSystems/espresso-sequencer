@@ -51,7 +51,12 @@
 <a href="#51" id="51">51</a>
 <a href="#52" id="52">52</a>
 <a href="#53" id="53">53</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{FeeAmount, NamespaceId, SeqTypes};
+<a href="#54" id="54">54</a>
+<a href="#55" id="55">55</a>
+<a href="#56" id="56">56</a>
+<a href="#57" id="57">57</a>
+<a href="#58" id="58">58</a>
+</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{FeeAmount, NamespaceId, SeqTypes, Update};
 <span class="kw">use </span>hotshot::types::SignatureKey;
 <span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -68,7 +73,8 @@
 <span class="attr">#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
 </span><span class="kw">pub struct </span>RollupRegistrationBody {
     <span class="kw">pub </span>namespace_id: NamespaceId,
-    <span class="kw">pub </span>reserve_url: Url,
+    <span class="comment">// URL of reserve builder for this rollup
+    </span><span class="kw">pub </span>reserve_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
     <span class="comment">// Denominated in Wei
     </span><span class="kw">pub </span>reserve_price: FeeAmount,
     <span class="comment">// whether this registration is active in the marketplace
@@ -93,15 +99,19 @@
 </span><span class="kw">pub struct </span>RollupUpdatebody {
     <span class="kw">pub </span>namespace_id: NamespaceId,
     <span class="comment">// Denominated in Wei
-    </span><span class="kw">pub </span>reserve_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
-    <span class="kw">pub </span>reserve_price: <span class="prelude-ty">Option</span>&lt;FeeAmount&gt;,
+    </span><span class="attr">#[serde(default)]
+    </span><span class="kw">pub </span>reserve_url: Update&lt;<span class="prelude-ty">Option</span>&lt;Url&gt;&gt;,
+    <span class="attr">#[serde(default)]
+    </span><span class="kw">pub </span>reserve_price: Update&lt;FeeAmount&gt;,
     <span class="comment">// whether this registration is active in the marketplace
-    </span><span class="kw">pub </span>active: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+    </span><span class="attr">#[serde(default)]
+    </span><span class="kw">pub </span>active: Update&lt;bool&gt;,
     <span class="comment">// a list of keys authorized to update the registration information
-    </span><span class="kw">pub </span>signature_keys: <span class="prelude-ty">Option</span>&lt;Vec&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt;,
+    </span><span class="attr">#[serde(default)]
+    </span><span class="kw">pub </span>signature_keys: Update&lt;Vec&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;&gt;,
     <span class="comment">// The signature key used to sign this update body
     </span><span class="kw">pub </span>signature_key: &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey,
     <span class="comment">// Optional field for human readable information
-    </span><span class="kw">pub </span>text: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    </span><span class="kw">pub </span>text: Update&lt;String&gt;,
 }
 </code></pre></div></section></main></body></html>

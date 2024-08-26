@@ -348,6 +348,7 @@
 <a href="#348" id="348">348</a>
 <a href="#349" id="349">349</a>
 <a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -358,6 +359,7 @@
         SolverAuctionResults,
     },
     PubKey, SeqTypes,
+    Update::Set,
 };
 <span class="kw">use </span>hotshot::types::SignatureKey;
 <span class="kw">use </span>hotshot_types::{
@@ -539,15 +541,15 @@
         <span class="kw">let </span><span class="kw-2">mut </span>registration =
             serde_json::from_value::&lt;RollupRegistration&gt;(result.data).map_err(serde_json_err)<span class="question-mark">?</span>;
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(reserve_url) = reserve_url {
-            registration.body.reserve_url = reserve_url;
-        }
+        <span class="kw">if let </span>Set(ru) = reserve_url {
+            registration.body.reserve_url = ru;
+        };
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(rp) = reserve_price {
+        <span class="kw">if let </span>Set(rp) = reserve_price {
             registration.body.reserve_price = rp;
         }
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(active) = active {
+        <span class="kw">if let </span>Set(active) = active {
             registration.body.active = active;
         }
 
@@ -558,12 +560,12 @@
             ));
         }
 
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(text) = text {
+        <span class="kw">if let </span>Set(text) = text {
             registration.body.text = text;
         }
 
         <span class="comment">// If signature keys are provided for the update, verify that the given signature key is in the list
-        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(keys) = signature_keys {
+        </span><span class="kw">if let </span>Set(keys) = signature_keys {
             <span class="kw">if </span>!keys.contains(<span class="kw-2">&amp;</span>signature_key) {
                 <span class="kw">return </span><span class="prelude-val">Err</span>(SolverError::SignatureKeysMismatch(
                     signature_key.to_string(),
@@ -621,7 +623,7 @@
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| <span class="prelude-val">Some</span>((r.body.namespace_id, r.body.reserve_url<span class="question-mark">?</span>)))
                 .collect(),
         );
 
@@ -642,7 +644,7 @@
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| <span class="prelude-val">Some</span>((r.body.namespace_id, r.body.reserve_url<span class="question-mark">?</span>)))
                 .collect(),
         );
 

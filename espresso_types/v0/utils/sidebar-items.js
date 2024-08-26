@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BACKOFF_FACTOR","BACKOFF_JITTER","MAX_RETRY_DELAY","MIN_RETRY_DELAY"],"enum":["ParseRatioError"],"fn":["parse_duration","parse_size"],"struct":["BackoffParams","GenesisHeader","ParseDurationError","ParseSizeError","Ratio","Timestamp"]};
+window.SIDEBAR_ITEMS = {"constant":["BACKOFF_FACTOR","BACKOFF_JITTER","MAX_RETRY_DELAY","MIN_RETRY_DELAY"],"enum":["ParseRatioError","Update"],"fn":["parse_duration","parse_size"],"struct":["BackoffParams","GenesisHeader","ParseDurationError","ParseSizeError","Ratio","Timestamp"]};

@@ -164,6 +164,9 @@
 <a href="#164" id="164">164</a>
 <a href="#165" id="165">165</a>
 <a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashSet;
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -310,7 +313,7 @@
             <span class="kw">return </span>Vec::new();
         };
 
-        <span class="kw">let </span><span class="kw-2">mut </span>registered_namespaces = Vec::new();
+        <span class="kw">let </span><span class="kw-2">mut </span>namespaces_to_skip = HashSet::new();
         <span class="kw">let </span>registrations: Vec&lt;RollupRegistration&gt; =
             <span class="kw">match </span>solver_client.get(<span class="string">"rollup_registrations"</span>).send().<span class="kw">await </span>{
                 <span class="prelude-val">Ok</span>(registrations) =&gt; registrations,
@@ -320,10 +323,13 @@
                 }
             };
         <span class="kw">for </span>registration <span class="kw">in </span>registrations {
-            registered_namespaces.push(registration.body.namespace_id);
+            <span class="comment">// Rollups that have reserve builders or aren't active shouldn't be served by fallback builder
+            </span><span class="kw">if </span>registration.body.reserve_url.is_some() || !registration.body.active {
+                namespaces_to_skip.insert(registration.body.namespace_id);
+            }
         }
 
-        transactions.retain(|txn| !registered_namespaces.contains(<span class="kw-2">&amp;</span>txn.namespace()));
+        transactions.retain(|txn| !namespaces_to_skip.contains(<span class="kw-2">&amp;</span>txn.namespace()));
         transactions
     }
 
