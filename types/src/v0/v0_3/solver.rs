@@ -1,7 +1,9 @@
+use std::str::FromStr;
+
 use crate::{FeeAmount, NamespaceId, SeqTypes};
 use hotshot::types::SignatureKey;
 use hotshot_types::traits::node_implementation::NodeType;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use tide_disco::Url;
 
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
@@ -41,7 +43,8 @@ pub struct RollupUpdate {
 pub struct RollupUpdatebody {
     pub namespace_id: NamespaceId,
     // Denominated in Wei
-    pub reserve_url: Option<Url>,
+    #[serde(deserialize_with = "from_string_to_reserve_url")]
+    pub reserve_url: Option<Option<Url>>,
     pub reserve_price: Option<FeeAmount>,
     // whether this registration is active in the marketplace
     pub active: Option<bool>,
@@ -51,4 +54,19 @@ pub struct RollupUpdatebody {
     pub signature_key: <SeqTypes as NodeType>::SignatureKey,
     // Optional field for human readable information
     pub text: Option<String>,
+}
+
+pub fn from_string_to_reserve_url<'de, D>(deserializer: D) -> Result<Option<Option<Url>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val: Option<String> = Option::deserialize(deserializer)?;
+
+    match val {
+        Some(string) if string.is_empty() => Ok(Some(None)), // Empty string case
+        Some(string) => Url::from_str(&string)
+            .map(|url| Some(Some(url)))
+            .map_err(|err| serde::de::Error::custom(format!("invalid url: {}", err))),
+        None => Ok(None),
+    }
 }

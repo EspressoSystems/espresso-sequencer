@@ -66,7 +66,7 @@ struct Update {
     pub namespace_id: u64,
 
     #[clap(long, env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL")]
-    pub reserve_url: Option<Url>,
+    pub reserve_url: Option<String>,
 
     #[clap(long)]
     pub reserve_price: Option<u64>,
@@ -177,9 +177,15 @@ async fn update(opt: Update) -> Result<()> {
         BLSPubKey::generated_from_seed_indexed([0; 32], 9876)
     };
 
+    let url = match reserve_url {
+        Some(str) if str.is_empty() => Some(None),
+        Some(str) => Url::from_str(&str).map(|url| Some(Some(url)))?,
+        None => None,
+    };
+
     let body = RollupUpdatebody {
         namespace_id: namespace_id.into(),
-        reserve_url,
+        reserve_url: url,
         reserve_price: reserve_price.map(Into::into),
         active,
         signature_keys: None,
@@ -198,7 +204,7 @@ async fn update(opt: Update) -> Result<()> {
 
     // update a rollup
     client
-        .post::<RollupRegistration>("register_rollup")
+        .post::<RollupRegistration>("update_rollup")
         .body_json(&update)
         .unwrap()
         .send()

@@ -58,7 +58,7 @@ pub async fn handle_events(
         #[allow(clippy::single_match)]
         match event.event {
             hotshot::types::EventType::ViewFinished { view_number } => {
-                tracing::info!("received view finished event {view_number:?}")
+                tracing::debug!("received view finished event {view_number:?}")
             }
             _ => (),
         }

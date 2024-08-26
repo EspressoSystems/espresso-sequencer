@@ -46,7 +46,7 @@ impl Committable for RollupUpdatebody {
         let mut comm = committable::RawCommitmentBuilder::new(&Self::tag())
             .u64_field("namespace_id", u64::from(self.namespace_id));
 
-        if let Some(reserve_url) = &self.reserve_url {
+        if let Some(Some(reserve_url)) = &self.reserve_url {
             comm = comm.var_size_field("reserve_url", reserve_url.as_str().as_ref())
         }
 

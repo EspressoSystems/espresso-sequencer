@@ -189,7 +189,9 @@ impl UpdateSolverState for GlobalState {
         let mut registration =
             serde_json::from_value::<RollupRegistration>(result.data).map_err(serde_json_err)?;
 
-        registration.body.reserve_url = reserve_url;
+        if let Some(url) = reserve_url {
+            registration.body.reserve_url = url;
+        }
 
         if let Some(rp) = reserve_price {
             registration.body.reserve_price = rp;
