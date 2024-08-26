@@ -50,10 +50,6 @@ pub(crate) fn overflow_err(err: std::num::TryFromIntError) -> SolverError {
     }
 }
 
-pub(crate) fn serde_json_err(err: serde_json::Error) -> SolverError {
-    SolverError::SerdeJsonError(err.to_string())
-}
-
 impl From<Box<bincode::ErrorKind>> for SolverError {
     fn from(err: Box<bincode::ErrorKind>) -> Self {
         Self::BincodeError(err.to_string())
