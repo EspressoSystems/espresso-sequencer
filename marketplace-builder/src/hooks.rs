@@ -9,6 +9,7 @@ use espresso_types::v0_3::BidTxBody;
 
 use espresso_types::v0_3::RollupRegistration;
 
+use espresso_types::MarketplaceVersion;
 use espresso_types::SeqTypes;
 use hotshot::types::EventType;
 
@@ -119,8 +120,8 @@ pub(crate) struct EspressoFallbackHooks {
     pub(crate) namespaces_to_skip: RwLock<Option<HashSet<NamespaceId>>>,
 }
 
-pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, SequencerApiVersion> {
-    Client::<SolverError, SequencerApiVersion>::new(
+pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, MarketplaceVersion> {
+    Client::<SolverError, MarketplaceVersion>::new(
         solver_api_url.join("marketplace-solver/").unwrap(),
     )
 }
@@ -140,7 +141,10 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
                 transactions
             }
             // Solver connection has failed and we don't have up-to-date information on this
-            None => Vec::new(),
+            None => {
+                error!("Not accepting transactions due to outdated information");
+                Vec::new()
+            }
         }
     }
 
