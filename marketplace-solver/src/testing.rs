@@ -118,8 +118,8 @@ mod test {
 
     use committable::Committable;
     use espresso_types::{
-        v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
-        MarketplaceVersion, SeqTypes,
+        v0_3::{BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
+        FeeAccount, MarketplaceVersion, SeqTypes,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_types::traits::node_implementation::NodeType;
@@ -472,14 +472,22 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_solver_api() {
+    async fn test_bid_submission() {
         let mock_solver = MockSolver::init().await;
 
         let solver_api = mock_solver.solver_api();
 
         let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
-        let result: String = client.post("submit_bid").send().await.unwrap();
-        assert_eq!(result, "Bid Submitted".to_string());
+        let key = FeeAccount::test_key_pair();
+        let tx = BidTx::mock(key);
+
+        client
+            .post::<BidTx>("submit_bid")
+            .body_json(&tx)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
     }
 }
