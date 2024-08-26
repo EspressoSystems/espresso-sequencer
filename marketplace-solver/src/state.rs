@@ -8,16 +8,16 @@ use espresso_types::{
         SolverAuctionResults,
     },
     PubKey, SeqTypes,
+    Update::Set,
 };
 use hotshot::types::SignatureKey;
 use hotshot_types::{
     data::ViewNumber, signature_key::BuilderKey, traits::node_implementation::NodeType, PeerConfig,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sqlx::{FromRow, PgPool};
 
-use crate::{database::PostgresClient, overflow_err, serde_json_err, SolverError, SolverResult};
+use crate::{database::PostgresClient, overflow_err, SolverError, SolverResult};
 
 // TODO ED: Implement a shared solver state with the HotShot events received
 pub struct GlobalState {
@@ -130,11 +130,11 @@ impl UpdateSolverState for GlobalState {
             return Err(SolverError::RollupAlreadyExists(namespace_id));
         }
 
-        let json = serde_json::to_value(registration.clone()).map_err(serde_json_err)?;
+        let bytes = bincode::serialize(&registration)?;
 
         let result = sqlx::query("INSERT INTO rollup_registrations VALUES ($1, $2);")
             .bind::<i64>(u64::from(namespace_id).try_into().map_err(overflow_err)?)
-            .bind(&json)
+            .bind(&bytes)
             .execute(db)
             .await
             .map_err(SolverError::from)?;
@@ -186,18 +186,17 @@ impl UpdateSolverState for GlobalState {
                 .await
                 .map_err(SolverError::from)?;
 
-        let mut registration =
-            serde_json::from_value::<RollupRegistration>(result.data).map_err(serde_json_err)?;
+        let mut registration = bincode::deserialize::<RollupRegistration>(&result.data)?;
 
-        if let Some(reserve_url) = reserve_url {
-            registration.body.reserve_url = reserve_url;
-        }
+        if let Set(ru) = reserve_url {
+            registration.body.reserve_url = ru;
+        };
 
-        if let Some(rp) = reserve_price {
+        if let Set(rp) = reserve_price {
             registration.body.reserve_price = rp;
         }
 
-        if let Some(active) = active {
+        if let Set(active) = active {
             registration.body.active = active;
         }
 
@@ -208,12 +207,12 @@ impl UpdateSolverState for GlobalState {
             ));
         }
 
-        if let Some(text) = text {
+        if let Set(text) = text {
             registration.body.text = text;
         }
 
         // If signature keys are provided for the update, verify that the given signature key is in the list
-        if let Some(keys) = signature_keys {
+        if let Set(keys) = signature_keys {
             if !keys.contains(&signature_key) {
                 return Err(SolverError::SignatureKeysMismatch(
                     signature_key.to_string(),
@@ -223,11 +222,11 @@ impl UpdateSolverState for GlobalState {
             registration.body.signature_keys = keys;
         }
 
-        let value = serde_json::to_value(&registration).map_err(serde_json_err)?;
+        let bytes = bincode::serialize(&registration)?;
 
         let result =
             sqlx::query("UPDATE rollup_registrations SET data = $1  WHERE namespace_id = $2;")
-                .bind(&value)
+                .bind(&bytes)
                 .bind::<i64>(u64::from(namespace_id).try_into().map_err(overflow_err)?)
                 .execute(db)
                 .await
@@ -253,7 +252,7 @@ impl UpdateSolverState for GlobalState {
                 .map_err(SolverError::from)?;
 
         rows.iter()
-            .map(|r| serde_json::from_value(r.data.clone()).map_err(serde_json_err))
+            .map(|r| bincode::deserialize(&r.data).map_err(SolverError::from))
             .collect::<SolverResult<Vec<RollupRegistration>>>()
     }
 
@@ -271,7 +270,7 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
                 .collect(),
         );
 
@@ -292,7 +291,7 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
                 .collect(),
         );
 
@@ -303,7 +302,7 @@ impl UpdateSolverState for GlobalState {
 #[derive(Debug, Deserialize, Serialize, FromRow)]
 struct RollupRegistrationResult {
     namespace_id: i64,
-    data: Value,
+    data: Vec<u8>,
 }
 
 #[cfg(any(test, feature = "testing"))]

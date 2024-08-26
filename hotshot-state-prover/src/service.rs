@@ -537,6 +537,7 @@ mod test {
         abi::AbiEncode,
         utils::{Anvil, AnvilInstance},
     };
+    use hotshot_contract_adapter::light_client::LightClientConstructorArgs;
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
@@ -548,6 +549,7 @@ mod test {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
+    const MAX_HISTORY_SECONDS: u32 = 864000;
 
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
 
@@ -656,11 +658,17 @@ mod test {
             .with_chain_id(provider.get_chainid().await?.as_u64());
         let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
+        let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
+            light_client_state: genesis,
+            num_blocks_per_epoch: BLOCKS_PER_EPOCH,
+            max_history_seconds: MAX_HISTORY_SECONDS,
+        };
+
         let mut contracts = deployer::Contracts::default();
         let address = deployer::deploy_mock_light_client_contract(
             l1_wallet.clone(),
             &mut contracts,
-            Some((genesis.into(), BLOCKS_PER_EPOCH)),
+            Some(genesis_constructor_args),
         )
         .await?;
 
