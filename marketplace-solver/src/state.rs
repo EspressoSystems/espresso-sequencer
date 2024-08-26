@@ -8,6 +8,7 @@ use espresso_types::{
         SolverAuctionResults,
     },
     PubKey, SeqTypes,
+    Update::Set,
 };
 use hotshot::types::SignatureKey;
 use hotshot_types::{
@@ -189,15 +190,15 @@ impl UpdateSolverState for GlobalState {
         let mut registration =
             serde_json::from_value::<RollupRegistration>(result.data).map_err(serde_json_err)?;
 
-        if let Some(reserve_url) = reserve_url {
-            registration.body.reserve_url = reserve_url;
-        }
+        if let Set(ru) = reserve_url {
+            registration.body.reserve_url = ru;
+        };
 
-        if let Some(rp) = reserve_price {
+        if let Set(rp) = reserve_price {
             registration.body.reserve_price = rp;
         }
 
-        if let Some(active) = active {
+        if let Set(active) = active {
             registration.body.active = active;
         }
 
@@ -208,12 +209,12 @@ impl UpdateSolverState for GlobalState {
             ));
         }
 
-        if let Some(text) = text {
+        if let Set(text) = text {
             registration.body.text = text;
         }
 
         // If signature keys are provided for the update, verify that the given signature key is in the list
-        if let Some(keys) = signature_keys {
+        if let Set(keys) = signature_keys {
             if !keys.contains(&signature_key) {
                 return Err(SolverError::SignatureKeysMismatch(
                     signature_key.to_string(),
@@ -271,7 +272,7 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
                 .collect(),
         );
 
@@ -292,7 +293,7 @@ impl UpdateSolverState for GlobalState {
             Vec::new(),
             rollups
                 .into_iter()
-                .map(|r| (r.body.namespace_id, r.body.reserve_url))
+                .filter_map(|r| Some((r.body.namespace_id, r.body.reserve_url?)))
                 .collect(),
         );
 

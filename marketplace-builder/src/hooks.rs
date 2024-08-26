@@ -166,7 +166,9 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
                 Ok(registrations) => {
                     let mut new_namespaces = HashSet::new();
                     for registration in registrations {
-                        new_namespaces.insert(registration.body.namespace_id);
+                        if registration.body.reserve_url.is_some() || !registration.body.active {
+                            new_namespaces.insert(registration.body.namespace_id);
+                        }
                     }
                     *self.namespaces_to_skip.write().await = Some(new_namespaces);
                 }
