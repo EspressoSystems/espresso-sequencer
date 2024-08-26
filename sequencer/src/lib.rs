@@ -446,9 +446,6 @@ pub mod testing {
         },
         types::EventType::Decide,
     };
-    use hotshot_builder_api::v0_3::builder::{
-        Error as BuilderApiError, Options as HotshotBuilderApiOptions,
-    };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
@@ -469,20 +466,20 @@ pub mod testing {
         service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
     };
     use portpicker::pick_unused_port;
-    use tide_disco::App;
     use vbs::version::Version;
 
     use super::*;
     use crate::persistence::no_storage::{self, NoStorage};
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
+    const BUILDER_CHANNEL_CAPACITY_FOR_TEST: usize = 128;
 
-    struct RealBuilderImplementation {
+    struct MarketplaceBuilderImplementation {
         hooks: Arc<NoHooks<SeqTypes>>,
         senders: BroadcastSenders<SeqTypes>,
     }
 
-    impl BuilderTask<SeqTypes> for RealBuilderImplementation {
+    impl BuilderTask<SeqTypes> for MarketplaceBuilderImplementation {
         fn start(
             self: Box<Self>,
             stream: Box<
@@ -494,10 +491,7 @@ pub mod testing {
         ) {
             async_spawn(async move {
                 let res = run_builder_service::<SeqTypes>(self.hooks, self.senders, stream).await;
-                tracing::error!(?res, "Reserve builder service exited");
-                if res.is_err() {
-                    panic!("Reserve builder should restart.");
-                }
+                tracing::error!(?res, "Testing marketplace builder service exited");
             });
         }
     }
@@ -515,12 +509,13 @@ pub mod testing {
             .parse()
             .expect("Failed to parse builder URL");
 
-        let (mut senders, receivers) = marketplace_builder_core::service::broadcast_channels(1024);
-
-        senders.transactions.set_capacity(1024);
+        let (senders, receivers) = marketplace_builder_core::service::broadcast_channels(
+            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
+        );
 
         // builder api request channel
-        let (req_sender, req_receiver) = async_broadcast::broadcast::<_>(1024);
+        let (req_sender, req_receiver) =
+            async_broadcast::broadcast::<_>(BUILDER_CHANNEL_CAPACITY_FOR_TEST);
 
         let (genesis_payload, genesis_ns_table) =
             Payload::from_transactions([], &validated_state, &instance_state)
@@ -569,40 +564,21 @@ pub mod testing {
         let hooks = Arc::new(NoHooks(PhantomData));
 
         // create the proxy global state it will server the builder apis
-        let proxy_global_state = ProxyGlobalState::new(
+        let app = ProxyGlobalState::new(
             global_state.clone(),
             Arc::clone(&hooks),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
             Duration::from_secs(60),
-        );
-
-        // start the hotshot api service
-        let builder_api = hotshot_builder_api::v0_3::builder::define_api::<
-            ProxyGlobalState<SeqTypes, NoHooks<SeqTypes>>,
-            SeqTypes,
-        >(&HotshotBuilderApiOptions::default())
-        .expect("Failed to construct the builder APIs");
-
-        // it enables external clients to submit txn to the builder's private mempool
-        let private_mempool_api = hotshot_builder_api::v0_3::builder::submit_api::<
-            ProxyGlobalState<SeqTypes, NoHooks<SeqTypes>>,
-            SeqTypes,
-            MarketplaceVersion,
-        >(&HotshotBuilderApiOptions::default())
-        .expect("Failed to construct the builder API for private mempool txns");
-
-        let mut app: App<ProxyGlobalState<SeqTypes, NoHooks<SeqTypes>>, BuilderApiError> =
-            App::with_state(proxy_global_state);
-
-        app.register_module("block_info", builder_api)
-            .expect("Failed to register the builder API");
-
-        app.register_module("txn_submit", private_mempool_api)
-            .expect("Failed to register the private mempool API");
+        )
+        .into_app()
+        .expect("Failed to create builder tide-disco app");
 
         async_spawn(app.serve(url.clone(), MarketplaceVersion::instance()));
 
-        (Box::new(RealBuilderImplementation { hooks, senders }), url)
+        (
+            Box::new(MarketplaceBuilderImplementation { hooks, senders }),
+            url,
+        )
     }
 
     pub async fn run_test_builder<const NUM_NODES: usize>(
