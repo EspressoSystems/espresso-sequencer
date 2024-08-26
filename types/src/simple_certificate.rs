@@ -19,9 +19,9 @@ use committable::{Commitment, Committable};
 use ethereum_types::U256;
 use serde::{Deserialize, Serialize};
 
-use crate::message::UpgradeLock;
 use crate::{
     data::serialize_signature2,
+    message::UpgradeLock,
     simple_vote::{
         DaData, QuorumData, TimeoutData, UpgradeProposalData, VersionedVoteData,
         ViewSyncCommitData, ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,

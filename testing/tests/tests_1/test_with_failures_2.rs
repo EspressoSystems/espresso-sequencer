@@ -8,10 +8,11 @@
 #![allow(unused_imports)]
 use std::{
     collections::{HashMap, HashSet},
+    rc::Rc,
     time::Duration,
 };
 
-use hotshot::tasks::DishonestDa;
+use hotshot::tasks::{DishonestDa, DishonestLeader};
 use hotshot_example_types::{
     node_types::{
         Libp2pImpl, MarketplaceTestVersions, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes,
@@ -24,11 +25,10 @@ use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
-    test_builder::TestDescription,
+    test_builder::{Behaviour, TestDescription},
     view_sync_task::ViewSyncTaskDescription,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use {hotshot::tasks::DishonestLeader, hotshot_testing::test_builder::Behaviour, std::rc::Rc};
 // Test that a good leader can succeed in the view directly after view sync
 cross_tests!(
     TestName: test_with_failures_2,

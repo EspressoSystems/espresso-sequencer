@@ -10,7 +10,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::{events::HotShotEvent, request::REQUEST_TIMEOUT};
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{Receiver, SendError, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
@@ -20,27 +19,28 @@ use async_std::task::JoinHandle;
 use chrono::Utc;
 use committable::{Commitment, Committable};
 use hotshot_task::dependency::{Dependency, EventDependency};
-use hotshot_types::traits::node_implementation::Versions;
 use hotshot_types::{
     consensus::{ConsensusUpgradableReadLockGuard, OuterConsensus},
     data::{Leaf, QuorumProposal, ViewChangeEvidence},
     event::{Event, EventType, LeafInfo},
-    message::Proposal,
+    message::{Proposal, UpgradeLock},
+    request_response::ProposalRequestPayload,
     simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{
         block_contents::BlockHeader,
         election::Membership,
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
     utils::{Terminator, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-use hotshot_types::{message::UpgradeLock, request_response::ProposalRequestPayload};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
+
+use crate::{events::HotShotEvent, request::REQUEST_TIMEOUT};
 
 /// Trigger a request to the network for a proposal for a view and wait for the response or timeout.
 #[instrument(skip_all)]

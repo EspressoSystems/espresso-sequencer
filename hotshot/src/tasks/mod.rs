@@ -8,7 +8,6 @@
 
 /// Provides trait to create task states from a `SystemContextHandle`
 pub mod task_state;
-use hotshot_task::task::{NetworkHandle, Task};
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use async_broadcast::broadcast;
@@ -19,6 +18,7 @@ use futures::{
     future::{BoxFuture, FutureExt},
     stream, StreamExt,
 };
+use hotshot_task::task::{NetworkHandle, Task};
 #[cfg(feature = "rewind")]
 use hotshot_task_impls::rewind::RewindTaskState;
 use hotshot_task_impls::{

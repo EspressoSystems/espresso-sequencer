@@ -13,8 +13,9 @@ use futures::channel::{mpsc::Receiver, oneshot};
 use libp2p::request_response::ResponseChannel;
 use serde::{Deserialize, Serialize};
 
-use crate::traits::signature_key::SignatureKey;
-use crate::traits::{network::NetworkMsg, node_implementation::NodeType};
+use crate::traits::{
+    network::NetworkMsg, node_implementation::NodeType, signature_key::SignatureKey,
+};
 
 /// Request for Consenus data
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -6,11 +6,9 @@
 
 use std::fmt::Display;
 
-use crate::view_sync::ViewSyncPhase;
 use async_broadcast::Sender;
 use either::Either;
 use hotshot_task::task::TaskEvent;
-use hotshot_types::traits::signature_key::SignatureKey;
 use hotshot_types::{
     data::{
         DaProposal, Leaf, PackedBundle, QuorumProposal, UpgradeProposal, VidDisperse,
@@ -26,12 +24,17 @@ use hotshot_types::{
         DaVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
-    traits::{block_contents::BuilderFee, node_implementation::NodeType, BlockPayload},
+    traits::{
+        block_contents::BuilderFee, node_implementation::NodeType, signature_key::SignatureKey,
+        BlockPayload,
+    },
     utils::{BuilderCommitment, View},
     vid::VidCommitment,
     vote::HasViewNumber,
 };
 use vec1::Vec1;
+
+use crate::view_sync::ViewSyncPhase;
 
 impl<TYPES: NodeType> TaskEvent for HotShotEvent<TYPES> {
     fn shutdown_event() -> Self {

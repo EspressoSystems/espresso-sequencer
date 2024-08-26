@@ -22,9 +22,9 @@ use vbs::{
     BinarySerializer, Serializer,
 };
 
-use crate::request_response::ProposalRequestPayload;
 use crate::{
     data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
+    request_response::ProposalRequestPayload,
     simple_certificate::{
         DaCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
         ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
@@ -163,15 +163,6 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
     /// Message with a quorum proposal.
     Proposal(Proposal<TYPES, QuorumProposal<TYPES>>),
 
-    /// A peer node needs a proposal from the leader.
-    ProposalRequested(
-        ProposalRequestPayload<TYPES>,
-        <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ),
-
-    /// The leader has responded with a valid proposal.
-    LeaderProposalAvailable(Proposal<TYPES, QuorumProposal<TYPES>>),
-
     /// Message with a quorum vote.
     Vote(QuorumVote<TYPES>),
 
@@ -201,6 +192,15 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
 
     /// Message with an upgrade vote
     UpgradeVote(UpgradeVote<TYPES>),
+
+    /// A peer node needs a proposal from the leader.
+    ProposalRequested(
+        ProposalRequestPayload<TYPES>,
+        <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ),
+
+    /// The leader has responded with a valid proposal.
+    LeaderProposalAvailable(Proposal<TYPES, QuorumProposal<TYPES>>),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]

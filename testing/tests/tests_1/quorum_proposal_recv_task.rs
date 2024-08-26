@@ -26,13 +26,15 @@ use hotshot_testing::{
     serial,
     view_generator::TestViewGenerator,
 };
-use hotshot_types::request_response::ProposalRequestPayload;
-use hotshot_types::traits::consensus_api::ConsensusApi;
-use hotshot_types::traits::node_implementation::NodeType;
-use hotshot_types::traits::signature_key::SignatureKey;
 use hotshot_types::{
     data::ViewNumber,
-    traits::{node_implementation::ConsensusTime, ValidatedState},
+    request_response::ProposalRequestPayload,
+    traits::{
+        consensus_api::ConsensusApi,
+        node_implementation::{ConsensusTime, NodeType},
+        signature_key::SignatureKey,
+        ValidatedState,
+    },
 };
 
 #[cfg(test)]

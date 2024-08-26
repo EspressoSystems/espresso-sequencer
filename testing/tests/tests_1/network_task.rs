@@ -4,13 +4,14 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::{sync::Arc, time::Duration};
+
 use async_broadcast::Sender;
 use async_compatibility_layer::art::async_timeout;
 use async_lock::RwLock;
 use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
-use hotshot_task::task::TaskState;
-use hotshot_task::task::{ConsensusTaskRegistry, Task};
+use hotshot_task::task::{ConsensusTaskRegistry, Task, TaskState};
 use hotshot_task_impls::{
     events::HotShotEvent,
     network::{self, NetworkEventTaskState},
@@ -27,7 +28,6 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
-use std::{sync::Arc, time::Duration};
 
 // Test that the event task sends a message, and the message task receives it
 // and emits the proper event
