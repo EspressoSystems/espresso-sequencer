@@ -6,7 +6,6 @@ edition = "2021"
 
 [features]
 testing = [
-	"hotshot-query-service",
 	"portpicker",
 	
 ]
@@ -24,7 +23,6 @@ espresso-types = { path = "../types", features = [ "testing" ] }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-events-service = { workspace = true }
-hotshot-query-service = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
 jf-signature = { workspace = true }
 portpicker = { workspace = true, optional = true } 
@@ -41,3 +39,4 @@ vbs = { workspace = true }
 
 [dev-dependencies]
 portpicker = { workspace = true }
+hotshot-query-service = { workspace = true }
