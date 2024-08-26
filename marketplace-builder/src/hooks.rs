@@ -6,6 +6,7 @@ use espresso_types::v0_3::BidTxBody;
 use espresso_types::v0_3::RollupRegistration;
 
 use espresso_types::SeqTypes;
+use ethers::abi::Hash;
 use hotshot::types::EventType;
 
 use hotshot::types::Event;
@@ -28,14 +29,6 @@ use surf_disco::Client;
 use tide_disco::Url;
 use tracing::error;
 use tracing::info;
-
-/// Configurations for bid submission.
-pub struct BidConfig {
-    /// Namespace IDs to filter and bid for.
-    pub namespaces: Vec<NamespaceId>,
-    /// Amount to bid.
-    pub amount: FeeAmount,
-}
 
 pub async fn connect_to_solver(
     solver_api_url: Url,
@@ -60,8 +53,6 @@ pub async fn connect_to_solver(
 ///
 /// Provides bidding and transaction filtering on top of base builder functionality.
 pub(crate) struct EspressoReserveHooks {
-    /// IDs of namespaces to filter and bid for
-    pub(crate) namespaces: HashSet<NamespaceId>,
     /// Base API to contact the solver
     pub(crate) solver_api_url: Url,
     /// Builder API base to include in the bid
@@ -72,6 +63,34 @@ pub(crate) struct EspressoReserveHooks {
     pub(crate) bid_amount: FeeAmount,
 }
 
+impl EspressoReserveHooks {
+    /// Namespaces to submit transactions and bid for.
+    async fn namespaces(&self) -> HashSet<NamespaceId> {
+        let Some(solver_client) = connect_to_solver(self.solver_api_url.clone()).await else {
+            error!("Failed to connect to the solver service.");
+            return HashSet::new();
+        };
+
+        let mut namespaces = HashSet::new();
+        let registrations: Vec<RollupRegistration> =
+            match solver_client.get("rollup_registrations").send().await {
+                Ok(registrations) => registrations,
+                Err(e) => {
+                    error!("Failed to get the registered rollups: {:?}.", e);
+                    return HashSet::new();
+                }
+            };
+        for registration in registrations {
+            // Rollups that have reserve builders should be served by the reserve builder.
+            if registration.body.reserve_url.is_some() {
+                namespaces.insert(registration.body.namespace_id);
+            }
+        }
+
+        namespaces
+    }
+}
+
 #[async_trait]
 impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
     #[inline(always)]
@@ -79,7 +98,9 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
         &mut self,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
-        transactions.retain(|txn| self.namespaces.contains(&txn.namespace()));
+        let namespaces_to_include = self.namespaces().await;
+
+        transactions.retain(|txn| namespaces_to_include.contains(&txn.namespace()));
         transactions
     }
 
@@ -90,7 +111,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
                 self.bid_key_pair.fee_account(),
                 self.bid_amount,
                 view_number + 3, // We submit a bid 3 views in advance.
-                self.namespaces.iter().cloned().collect(),
+                self.namespaces().await.iter().cloned().collect(),
                 self.builder_api_base_url.clone(),
                 Default::default(),
             )

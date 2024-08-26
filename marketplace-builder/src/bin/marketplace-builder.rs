@@ -4,17 +4,14 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion,
-    NamespaceId, SequencerVersions, V0_1,
+    SequencerVersions, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
     data::ViewNumber,
     traits::node_implementation::{ConsensusTime, Versions},
 };
-use marketplace_builder::{
-    builder::{build_instance_state, BuilderConfig},
-    hooks::BidConfig,
-};
+use marketplace_builder::builder::{build_instance_state, BuilderConfig};
 use sequencer::{Genesis, L1Params};
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -97,16 +94,6 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
 
-    /// Namespace to build for
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE",
-        default_value = "1",
-        value_delimiter = ','
-    )]
-    pub namespaces: Vec<u32>,
-
     /// Url we will use to communicate to solver
     #[clap(long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     solver_url: Url,
@@ -163,11 +150,8 @@ async fn run<V: Versions>(
     };
 
     let is_reserve = opt.is_reserve;
-    let bid_config = if opt.is_reserve {
-        Some(BidConfig {
-            amount: opt.bid_amount,
-            namespaces: opt.namespaces.into_iter().map(NamespaceId::from).collect(),
-        })
+    let bid_amount = if opt.is_reserve {
+        Some(opt.bid_amount)
     } else {
         None
     };
@@ -206,7 +190,7 @@ async fn run<V: Versions>(
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
-        bid_config,
+        bid_amount,
         opt.solver_url,
         versions,
     )

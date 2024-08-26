@@ -52,7 +52,7 @@ use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
 use crate::{
-    hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
+    hooks::{self, EspressoFallbackHooks, EspressoReserveHooks},
     run_builder_api_service,
 };
 
@@ -100,7 +100,7 @@ impl BuilderConfig {
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
-        bid_config: Option<BidConfig>,
+        bid_amount: Option<FeeAmount>,
         solver_api_url: Url,
         _: V,
     ) -> anyhow::Result<Self> {
@@ -194,15 +194,14 @@ impl BuilderConfig {
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
 
         if is_reserve {
-            let Some(bid_config) = bid_config else {
-                panic!("Missing bid config for the reserve builder.");
+            let Some(bid_amount) = bid_amount else {
+                panic!("Missing bid amount for the reserve builder.");
             };
             let hooks = hooks::EspressoReserveHooks {
-                namespaces: bid_config.namespaces.into_iter().collect(),
                 solver_api_url,
                 builder_api_base_url: hotshot_builder_apis_url.clone(),
                 bid_key_pair: builder_key_pair,
-                bid_amount: bid_config.amount,
+                bid_amount,
             };
 
             async_spawn(async move {
@@ -351,10 +350,7 @@ mod test {
             5,
             Duration::from_secs(2),
             FeeAmount::from(10),
-            Some(BidConfig {
-                namespaces: vec![NamespaceId::from(10u32)],
-                amount: FeeAmount::from(10),
-            }),
+            Some(FeeAmount::from(10)),
             format!("http://localhost:{}", 3000).parse().unwrap(),
             MockSequencerVersions::new(),
         );
