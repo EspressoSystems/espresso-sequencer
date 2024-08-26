@@ -6,6 +6,7 @@ edition = "2021"
 
 [features]
 testing = [
+	"hotshot-query-service",
 	"portpicker",
 	
 ]
@@ -23,13 +24,14 @@ espresso-types = { path = "../types", features = [ "testing" ] }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-events-service = { workspace = true }
+hotshot-query-service = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
 jf-signature = { workspace = true }
 portpicker = { workspace = true, optional = true } 
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlx = { workspace = true }
+sqlx = { workspace = true, features = [ "postgres", "macros" ] }
 surf-disco = { workspace = true }
 thiserror = { workspace = true }
 tide-disco = { workspace = true }
@@ -39,4 +41,3 @@ vbs = { workspace = true }
 
 [dev-dependencies]
 portpicker = { workspace = true }
-hotshot-query-service = { workspace = true }
