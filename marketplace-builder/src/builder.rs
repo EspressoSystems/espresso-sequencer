@@ -52,10 +52,7 @@ use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
-use crate::{
-    hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
-    run_builder_api_service,
-};
+use crate::hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -98,15 +95,22 @@ impl BuilderConfig {
         H: BuilderHooks<SeqTypes>,
     {
         // create the proxy global state it will server the builder apis
-        let proxy_global_state = ProxyGlobalState::new(
+        let app = ProxyGlobalState::new(
             global_state.clone(),
             Arc::clone(&hooks),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
             api_timeout,
-        );
+        )
+        .into_app()
+        .context("Failed to construct builder API app")?;
 
-        // start the hotshot api service
-        run_builder_api_service(builder_api_url.clone(), proxy_global_state);
+        async_spawn(async move {
+            tracing::info!("Starting builder API app at {builder_api_url}");
+            let res = app
+                .serve(builder_api_url, MarketplaceVersion::instance())
+                .await;
+            tracing::error!(?res, "Builder API app exited");
+        });
 
         // spawn the builder service
         tracing::info!("Running builder against hotshot events API at {events_api_url}",);

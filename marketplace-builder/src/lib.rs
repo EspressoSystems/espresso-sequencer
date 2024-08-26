@@ -78,36 +78,3 @@ use vbs::version::{StaticVersion, StaticVersionType};
 pub mod builder;
 
 pub mod hooks;
-
-// It runs the api service for the builder
-pub fn run_builder_api_service<H: BuilderHooks<SeqTypes>>(
-    url: Url,
-    source: ProxyGlobalState<SeqTypes, H>,
-) {
-    tracing::info!("Starting builder API at {url}");
-
-    // it is to serve hotshot
-    let builder_api = hotshot_builder_api::v0_3::builder::define_api::<
-        ProxyGlobalState<SeqTypes, H>,
-        SeqTypes,
-    >(&HotshotBuilderApiOptions::default())
-    .expect("Failed to construct the builder APIs");
-
-    // it enables external clients to submit txn to the builder's private mempool
-    let private_mempool_api = hotshot_builder_api::v0_3::builder::submit_api::<
-        ProxyGlobalState<SeqTypes, H>,
-        SeqTypes,
-        MarketplaceVersion,
-    >(&HotshotBuilderApiOptions::default())
-    .expect("Failed to construct the builder API for private mempool txns");
-
-    let mut app: App<ProxyGlobalState<SeqTypes, H>, BuilderApiError> = App::with_state(source);
-
-    app.register_module("block_info", builder_api)
-        .expect("Failed to register the builder API");
-
-    app.register_module("txn_submit", private_mempool_api)
-        .expect("Failed to register the private mempool API");
-
-    async_spawn(app.serve(url, MarketplaceVersion::instance()));
-}
