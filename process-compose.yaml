@@ -367,8 +367,7 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
-
-  # We use KeyDB (a Redis variant) to maintain consistency between 
+  # We use KeyDB (a Redis variant) to maintain consistency between
   # different parts of the CDN
   # Cheating a bit here too, but KeyDB is not available as a Nix package.
   # Could do local (SQLite) discovery, but removes some of the spirit
@@ -457,6 +456,8 @@ processes:
     command: submit-transactions
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=1
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=6
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -476,11 +477,13 @@ processes:
     command: submit-transactions
     environment:
       - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
-      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT/txn_submit
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT/txn_submit
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=1
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=3
     depends_on:
       sequencer0:
         condition: process_healthy
-      permissionless-builder:
+      marketplace-reserve-builder:
         condition: process_healthy
     readiness_probe:
       http_get:
@@ -490,18 +493,37 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
+  submit-transactions-private-fallback:
+    command: submit-transactions
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT/txn_submit
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=4
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=6
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+      marketplace-fallback-builder:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
   marketplace-reserve-builder:
-    disabled: true
     command: marketplace-builder
     ports:
-      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
+      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT"
     environment:
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=true
       - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
-      - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_BUILDER_GENESIS_FILE
+      - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=1,2,3
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -511,12 +533,12 @@ processes:
       http_get:
         scheme: http
         host: localhost
-        port: $ESPRESSO_BUILDER_SERVER_PORT
+        port: $ESPRESSO_RESERVE_BUILDER_SERVER_PORT
         path: /healthcheck
       failure_threshold: 100
 
   marketplace-fallback-builder:
-    disabled: true
+    # disabled: true
     command: marketplace-builder
     ports:
       - "$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT"
@@ -524,7 +546,6 @@ processes:
       - ESPRESSO_BUILDER_SERVER_PORT=$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=false
       - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
-      - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_BUILDER_GENESIS_FILE
@@ -542,6 +563,7 @@ processes:
       failure_threshold: 100
 
   permissionless-builder:
+    disabled: true
     command: permissionless-builder
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
@@ -664,10 +686,10 @@ processes:
         condition: process_healthy
 
   dev-rollup:
-    command:
-      dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
+    command: dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
     environment:
       - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL=http://localhost:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT
     depends_on:
       marketplace-solver:
         condition: process_healthy

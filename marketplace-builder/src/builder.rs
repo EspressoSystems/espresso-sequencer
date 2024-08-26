@@ -208,7 +208,7 @@ impl BuilderConfig {
             async_spawn(async move {
                 let res = run_non_permissioned_standalone_builder_service::<
                     SeqTypes,
-                    V, // todo change this function to take only api version
+                    SequencerApiVersion, // todo change this function to take only api version
                 >(hooks, senders, events_url)
                 .await;
                 tracing::error!(?res, "Reserve builder service exited");
@@ -222,9 +222,10 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<SeqTypes, V>(
-                    hooks, senders, events_url,
-                )
+                let res = run_non_permissioned_standalone_builder_service::<
+                    SeqTypes,
+                    SequencerApiVersion,
+                >(hooks, senders, events_url)
                 .await;
                 tracing::error!(?res, "Fallback builder service exited");
                 if res.is_err() {
