@@ -68,7 +68,7 @@ use sequencer::{
     context::{Consensus, SequencerContext},
     network,
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node,
+    L1Params, NetworkParams, Node, SequencerApiVersion,
 };
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
@@ -92,7 +92,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     let private_mempool_api = hotshot_builder_api::v0_3::builder::submit_api::<
         ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        MarketplaceVersion,
+        SequencerApiVersion,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
