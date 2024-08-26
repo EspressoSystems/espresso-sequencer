@@ -127,7 +127,7 @@ impl BuilderConfig {
             Payload::from_transactions([], &validated_state, &instance_state)
                 .await
                 .expect("genesis payload construction failed");
-            println!("here genesis");
+        println!("here genesis");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -249,18 +249,23 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, time::{Duration, Instant}};
+    use std::{
+        str::FromStr,
+        time::{Duration, Instant},
+    };
 
     use async_compatibility_layer::{
         art::{async_sleep, async_spawn},
         logging::{setup_backtrace, setup_logging},
     };
     use async_lock::RwLock;
-    use async_std::{stream::StreamExt, task,prelude::FutureExt};
+    use async_std::{prelude::FutureExt, stream::StreamExt, task};
     use committable::Commitment;
     use committable::Committable;
     use espresso_types::{
-        mock::MockStateCatchup, v0_3::{RollupRegistration, RollupRegistrationBody}, BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, Transaction
+        mock::MockStateCatchup,
+        v0_3::{RollupRegistration, RollupRegistrationBody},
+        BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, Transaction,
     };
     use ethers::utils::Anvil;
     use hotshot::types::{BLSPrivKey, Event, EventType};
@@ -269,6 +274,7 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
+    use hotshot_example_types::block_types::TestTransaction;
     use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
@@ -285,7 +291,8 @@ mod test {
         service::{
             run_non_permissioned_standalone_builder_service,
             run_permissioned_standalone_builder_service,
-        }, utils::BuilderStateId,
+        },
+        utils::BuilderStateId,
     };
     use marketplace_solver::{testing::MockSolver, SolverError};
     use portpicker::pick_unused_port;
@@ -345,56 +352,57 @@ mod test {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
         println!("here after solver api");
-        let client =
-        surf_disco::Client::<SolverError, <SeqTypes as NodeType>::Base>::new(solver_api.clone());
+        let client = surf_disco::Client::<SolverError, BaseVersion>::new(solver_api.clone());
 
-    // Create a list of signature keys for rollup registration data
-    let mut signature_keys = Vec::new();
+        // Create a list of signature keys for rollup registration data
+        let mut signature_keys = Vec::new();
 
-    for _ in 0..10 {
+        for _ in 0..10 {
+            let private_key =
+                <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+            signature_keys.push(BLSPubKey::from_private(&private_key))
+        }
+
         let private_key =
             <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
-        signature_keys.push(BLSPubKey::from_private(&private_key))
-    }
+        let signature_key = BLSPubKey::from_private(&private_key);
 
-    let private_key =
-        <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
-    let signature_key = BLSPubKey::from_private(&private_key);
+        signature_keys.push(signature_key);
 
-    signature_keys.push(signature_key);
+        // Initialize a rollup registration with namespace id = 1
+        let reg_ns_1_body = RollupRegistrationBody {
+            namespace_id: 1_u64.into(),
+            reserve_url: Url::from_str("http://localhost").unwrap(),
+            reserve_price: 200.into(),
+            active: true,
+            signature_keys: signature_keys.clone(),
+            text: "test".to_string(),
+            signature_key,
+        };
 
-                // Initialize a rollup registration with namespace id = 1
-                let reg_ns_1_body = RollupRegistrationBody {
-                    namespace_id: 1_u64.into(),
-                    reserve_url: Url::from_str("http://localhost").unwrap(),
-                    reserve_price: 200.into(),
-                    active: true,
-                    signature_keys: signature_keys.clone(),
-                    text: "test".to_string(),
-                    signature_key,
-                };
-        
-                // Sign the registration body
-                let reg_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-                    &private_key,
-                    reg_ns_1_body.commit().as_ref(),
-                )
-                .expect("failed to sign");
-        
-                let reg_ns_1 = RollupRegistration {
-                    body: reg_ns_1_body.clone(),
-                    signature: reg_signature,
-                };
-        
-                // registering a rollup
-                let result: RollupRegistration = client
-                    .post("register_rollup")
-                    .body_json(&reg_ns_1)
-                    .unwrap()
-                    .send()
-                    .await
-                    .unwrap();
+        // Sign the registration body
+        let reg_signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &private_key,
+            reg_ns_1_body.commit().as_ref(),
+        )
+        .expect("failed to sign");
 
+        let reg_ns_1 = RollupRegistration {
+            body: reg_ns_1_body.clone(),
+            signature: reg_signature,
+        };
+
+        // registering a rollup
+        let result: RollupRegistration = client
+            .post("register_rollup")
+            .body_json(&reg_ns_1)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+        let result: Vec<RollupRegistration> =
+        client.get("rollup_registrations").send().await.unwrap();
+    assert_eq!(result,vec![reg_ns_1]);
 
         // Start the builder
         let init = BuilderConfig::init(
@@ -417,7 +425,6 @@ mod test {
         );
         println!("here after init");
         let builder_config = init.await.unwrap();
-        println!("here after await");
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
         let sequencer_client: Client<ServerError, BaseVersion> = Client::new(query_api_url);
@@ -442,17 +449,52 @@ mod test {
         submission_client.connect(None).await;
 
         // Test submitting transactions
-        let transactions = (0..10)
-            .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
-            .collect::<Vec<_>>();
+        // let mut transactions = (0..10)
+        //     .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
+        //     .collect::<Vec<_>>();
+        // transactions.push(Transaction::new(1u64.into(), vec![1, 1, 1, 11]));
+        let mut transactions = [Transaction::new(0u64.into(), vec![1, 1, 1, 0]),Transaction::new(1u64.into(), vec![1, 1, 1, 1])];
         submission_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
             .unwrap()
             .send()
             .await
-            .unwrap()
             .unwrap();
+
+        let (response_sender, response_receiver) = unbounded();
+        let request_message = MessageType::<SeqTypes>::RequestMessage(RequestMessage {
+            requested_view_number: ViewNumber::new(0),
+            response_channel: response_sender,
+        });
+        let (payload, metadata) = Payload::from_transactions(
+            transactions.clone(),
+            &ValidatedState::default(),
+            &NodeState::default(),
+        ).await.unwrap();
+        let block_vid_commitment = vid_commitment(&payload.encode(), GENESIS_VID_NUM_STORAGE_NODES);
+        // let req_msg = (
+        //     response_receiver,
+        //     BuilderStateId {
+        //         parent_commitment: block_vid_commitment,
+        //         parent_view: ViewNumber::new(0),
+        //     },
+        //     request_message,
+        // );
+
+        // give builder state time to fork
+        async_sleep(Duration::from_millis(100)).await;
+
+        // // get the builder state for parent view we've just simulated
+        // builder_config.global_state
+        //     .read_arc()
+        //     .await
+        //     .spawned_builder_states
+        //     .get(&req_msg.1)
+        //     .expect("Failed to get channel for matching builder")
+        //     .broadcast(req_msg.2.clone())
+        //     .await
+        //     .unwrap();
 
         let events_service_client =
             Client::<hotshot_events_service::events::Error, BaseVersion>::new(
@@ -475,6 +517,7 @@ mod test {
             let event = subscribed_events.next().await.unwrap().unwrap();
             if let EventType::QuorumProposal { proposal, .. } = event.event {
                 let parent_view_number = *proposal.data.view_number;
+                println!("here parent_view_number {:?}",parent_view_number);
                 let parent_commitment =
                     Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
                 let bundle = builder_client
@@ -489,6 +532,7 @@ mod test {
                     .await
                     .unwrap();
                 assert_eq!(bundle.transactions, transactions);
+                println!("here transactions {:?}", transactions);
                 break;
             }
         }

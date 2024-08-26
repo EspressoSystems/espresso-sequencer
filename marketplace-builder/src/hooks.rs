@@ -77,6 +77,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
         transactions.retain(|txn| self.namespaces.contains(&txn.namespace()));
+        println!("here filtered transactions {:?}", transactions);
         transactions
     }
 
