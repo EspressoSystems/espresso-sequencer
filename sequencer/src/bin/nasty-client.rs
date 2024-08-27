@@ -21,8 +21,7 @@ use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
 use espresso_types::{
-    parse_duration, v0_3::IterableFeeInfo, BaseVersion, BlockMerkleTree, FeeMerkleTree, Header,
-    SeqTypes,
+    parse_duration, v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes,
 };
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
@@ -38,7 +37,7 @@ use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use rand::{seq::SliceRandom, RngCore};
-use sequencer::api::endpoints::NamespaceProofQueryData;
+use sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
 use sequencer_utils::logging;
 use serde::de::DeserializeOwned;
 use std::{
@@ -402,7 +401,7 @@ impl Queryable for PayloadQueryData<SeqTypes> {
     }
 }
 
-type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, BaseVersion>;
+type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, SequencerApiVersion>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -415,7 +414,7 @@ struct Subscription<T: Queryable> {
 
 #[derive(Debug)]
 struct ResourceManager<T: Queryable> {
-    client: surf_disco::Client<ClientError, BaseVersion>,
+    client: surf_disco::Client<ClientError, SequencerApiVersion>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
     metrics: Arc<Metrics>,
@@ -1260,14 +1259,14 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         METHOD = "METRICS"
     };
     let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
-    app.module::<ServerError, BaseVersion>("status", api)
+    app.module::<ServerError, SequencerApiVersion>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()
         })
         .unwrap();
     if let Err(err) = app
-        .serve(format!("0.0.0.0:{port}"), BaseVersion::instance())
+        .serve(format!("0.0.0.0:{port}"), SequencerApiVersion::instance())
         .await
     {
         tracing::error!("web server exited unexpectedly: {err:#}");

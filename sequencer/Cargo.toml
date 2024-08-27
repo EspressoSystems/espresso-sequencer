@@ -7,7 +7,7 @@ edition = "2021"
 
 [features]
 default = ["libp2p"]
-testing = ["hotshot-testing"]
+testing = ["hotshot-testing", "marketplace-builder-core", "hotshot-builder-api"]
 libp2p = []
 benchmarking = []
 
@@ -33,6 +33,7 @@ vergen = { workspace = true }
 anyhow = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
+async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-once-cell = { workspace = true }
 async-std = { workspace = true }
@@ -57,6 +58,7 @@ ethers = { workspace = true }
 futures = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-builder-api = { workspace = true, optional = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-example-types = { workspace = true }
@@ -67,6 +69,8 @@ hotshot-state-prover = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
+marketplace-builder-core = { workspace = true, optional = true }
+
 hotshot-types = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
@@ -76,7 +80,7 @@ jf-rescue = { workspace = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
-libp2p = { workspace = true } 
+libp2p = { workspace = true }
 marketplace-solver = { path = "../marketplace-solver" }
 num-traits = "0.2.18"
 num_enum = "0.7"

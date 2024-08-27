@@ -235,8 +235,8 @@ pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     pk
 }
 
-pub async fn fetch_latest_state<Ver: StaticVersionType>(
-    client: &Client<ServerError, Ver>,
+pub async fn fetch_latest_state<ApiVer: StaticVersionType>(
+    client: &Client<ServerError, ApiVer>,
 ) -> Result<StateSignaturesBundle, ServerError> {
     tracing::info!("Fetching the latest state signatures bundle from relay server.");
     client
@@ -307,10 +307,10 @@ pub async fn submit_state_and_proof(
     Ok(())
 }
 
-pub async fn sync_state<Ver: StaticVersionType>(
+pub async fn sync_state<ApiVer: StaticVersionType>(
     st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     proving_key: Arc<ProvingKey>,
-    relay_server_client: &Client<ServerError, Ver>,
+    relay_server_client: &Client<ServerError, ApiVer>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     let light_client_address = config.light_client_address;
@@ -393,16 +393,16 @@ pub async fn sync_state<Ver: StaticVersionType>(
     Ok(())
 }
 
-fn start_http_server<Ver: StaticVersionType + 'static>(
+fn start_http_server<ApiVer: StaticVersionType + 'static>(
     port: u16,
     light_client_address: Address,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> io::Result<()> {
     let mut app = tide_disco::App::<_, ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<_, ServerError, Ver>::new(toml)
+    let mut api = Api::<_, ServerError, ApiVer>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("getlightclientcontract", move |_, _| {
@@ -416,9 +416,9 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
     Ok(())
 }
 
-pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
+pub async fn run_prover_service<ApiVer: StaticVersionType + 'static>(
     config: StateProverConfig,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> Result<()> {
     let stake_table_capacity = config.stake_table_capacity;
     tracing::info!("Stake table capacity: {}", stake_table_capacity);
@@ -431,15 +431,16 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     run_prover_service_with_stake_table(config, bind_version, st).await
 }
 
-pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'static>(
+pub async fn run_prover_service_with_stake_table<ApiVer: StaticVersionType + 'static>(
     config: StateProverConfig,
-    bind_version: Ver,
+    bind_version: ApiVer,
     st: Arc<StakeTable<BLSPubKey, StateVerKey, CircuitField>>,
 ) -> Result<()> {
     tracing::info!("Light client address: {:?}", config.light_client_address);
 
-    let relay_server_client =
-        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
+    let relay_server_client = Arc::new(Client::<ServerError, ApiVer>::new(
+        config.relay_server.clone(),
+    ));
 
     // Start the HTTP server to get a functioning healthcheck before any heavy computations.
     if let Some(port) = config.port {
@@ -466,9 +467,9 @@ pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'stati
 }
 
 /// Run light client state prover once
-pub async fn run_prover_once<Ver: StaticVersionType>(
+pub async fn run_prover_once<ApiVer: StaticVersionType>(
     config: StateProverConfig,
-    _: Ver,
+    _: ApiVer,
 ) -> Result<()> {
     let st = init_stake_table_from_sequencer(&config.sequencer_url, config.stake_table_capacity)
         .await
@@ -476,7 +477,7 @@ pub async fn run_prover_once<Ver: StaticVersionType>(
     let stake_table_capacity = config.stake_table_capacity;
     let proving_key =
         spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
-    let relay_server_client = Client::<ServerError, Ver>::new(config.relay_server.clone());
+    let relay_server_client = Client::<ServerError, ApiVer>::new(config.relay_server.clone());
 
     sync_state(&st, proving_key, &relay_server_client, &config)
         .await
@@ -536,6 +537,7 @@ mod test {
         abi::AbiEncode,
         utils::{Anvil, AnvilInstance},
     };
+    use hotshot_contract_adapter::light_client::LightClientConstructorArgs;
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
@@ -547,6 +549,7 @@ mod test {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
+    const MAX_HISTORY_SECONDS: u32 = 864000;
 
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
 
@@ -655,11 +658,17 @@ mod test {
             .with_chain_id(provider.get_chainid().await?.as_u64());
         let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
+        let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
+            light_client_state: genesis,
+            num_blocks_per_epoch: BLOCKS_PER_EPOCH,
+            max_history_seconds: MAX_HISTORY_SECONDS,
+        };
+
         let mut contracts = deployer::Contracts::default();
         let address = deployer::deploy_mock_light_client_contract(
             l1_wallet.clone(),
             &mut contracts,
-            Some((genesis.into(), BLOCKS_PER_EPOCH)),
+            Some(genesis_constructor_args),
         )
         .await?;
 

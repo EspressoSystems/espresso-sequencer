@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::ViewNumber,
@@ -19,7 +21,7 @@ pub use impls::{
     StateValidationError,
 };
 pub use utils::*;
-use vbs::version::StaticVersion;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 // This is the single source of truth for minor versions supported by this major version.
 //
@@ -135,25 +137,37 @@ impl NodeType for SeqTypes {
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
+#[derive(Clone, Default, Debug, Copy)]
+pub struct SequencerVersions<Base: StaticVersionType, Upgrade: StaticVersionType> {
+    _pd: PhantomData<(Base, Upgrade)>,
+}
 
-#[derive(Debug, Copy, Clone)]
-pub struct SeqVersions;
+impl<Base: StaticVersionType, Upgrade: StaticVersionType> SequencerVersions<Base, Upgrade> {
+    pub fn new() -> Self {
+        Self {
+            _pd: Default::default(),
+        }
+    }
+}
 
-impl Versions for SeqVersions {
-    type Base = StaticVersion<0, 1>;
-    type Upgrade = StaticVersion<0, 3>;
-    type Marketplace = StaticVersion<0, 3>;
-
+impl<Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static> Versions
+    for SequencerVersions<Base, Upgrade>
+{
+    type Base = Base;
+    type Upgrade = Upgrade;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
         0, 1,
     ];
+
+    type Marketplace = MarketplaceVersion;
 }
 
-/// Type aliases for readability
-pub type BaseVersion = <SeqVersions as Versions>::Base;
-pub type UpgradeVersion = <SeqVersions as Versions>::Upgrade;
-pub type MarketplaceVersion = <SeqVersions as Versions>::Marketplace;
+pub type MockSequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
+
+pub type V0_1 = StaticVersion<0, 1>;
+pub type FeeVersion = StaticVersion<0, 2>;
+pub type MarketplaceVersion = StaticVersion<0, 3>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Event = hotshot::types::Event<SeqTypes>;

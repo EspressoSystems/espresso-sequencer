@@ -4,9 +4,7 @@ use anyhow::{bail, ensure, Context};
 use async_std::{sync::Arc, task::sleep};
 use clap::{Parser, Subcommand};
 use contract_bindings::fee_contract::FeeContract;
-use espresso_types::{
-    eth_signature_key::EthKeyPair, BaseVersion, FeeAccount, FeeAmount, FeeMerkleTree, Header,
-};
+use espresso_types::{eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header};
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
@@ -17,10 +15,11 @@ use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
 };
+use sequencer::SequencerApiVersion;
 use sequencer_utils::logging;
 use surf_disco::{error::ClientError, Url};
 
-type EspressoClient = surf_disco::Client<ClientError, BaseVersion>;
+type EspressoClient = surf_disco::Client<ClientError, SequencerApiVersion>;
 
 type FeeMerkleProof = MerkleProof<FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }>;
 

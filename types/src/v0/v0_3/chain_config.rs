@@ -3,7 +3,6 @@ use committable::{Commitment, Committable};
 use ethers::types::{Address, U256};
 use itertools::Either;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
 /// Global variables for an Espresso blockchain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -110,9 +109,8 @@ impl From<&v0_1::ResolvableChainConfig> for ResolvableChainConfig {
             Either::Left(chain_config) => ResolvableChainConfig {
                 chain_config: Either::Left(ChainConfig::from(chain_config)),
             },
-            // TODO does this work? is there a better way?
             Either::Right(c) => ResolvableChainConfig {
-                chain_config: Either::Right(Commitment::from_str(&c.to_string()).unwrap()),
+                chain_config: Either::Right(Commitment::from_raw(*c.as_ref())),
             },
         }
     }
@@ -171,5 +169,30 @@ impl Default for ChainConfig {
             fee_recipient: Default::default(),
             bid_recipient: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_upgrade_chain_config_v3_resolvable_chain_config_from_v1() {
+        let expectation: ResolvableChainConfig = ChainConfig::default().into();
+        let v1_resolvable: v0_1::ResolvableChainConfig = v0_1::ChainConfig::default().into();
+        let v3_resolvable: ResolvableChainConfig = ResolvableChainConfig::from(&v1_resolvable);
+        assert_eq!(expectation, v3_resolvable);
+        let expectation: ResolvableChainConfig = ChainConfig::default().commit().into();
+        let v1_resolvable: v0_1::ResolvableChainConfig =
+            v0_1::ChainConfig::default().commit().into();
+        let v3_resolvable: ResolvableChainConfig = ResolvableChainConfig::from(&v1_resolvable);
+        assert_eq!(expectation, v3_resolvable);
+    }
+    #[test]
+    fn test_upgrade_chain_config_v1_chain_config_from_v3() {
+        let expectation = v0_1::ChainConfig::default();
+        let v3_chain_config = ChainConfig::default();
+        let v1_chain_config = v0_1::ChainConfig::from(v3_chain_config);
+        assert_eq!(expectation, v1_chain_config);
     }
 }

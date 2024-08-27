@@ -24,12 +24,14 @@ use time::OffsetDateTime;
 use vbs::version::{StaticVersionType, Version};
 
 use crate::{
-    v0::header::{EitherOrVersion, VersionedHeader},
+    v0::{
+        header::{EitherOrVersion, VersionedHeader},
+        MarketplaceVersion,
+    },
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, MarketplaceVersion, NamespaceId, NsTable, SeqTypes,
-    UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
