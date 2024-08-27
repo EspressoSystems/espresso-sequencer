@@ -5,6 +5,7 @@ use espresso_types::v0_3::BidTxBody;
 
 use espresso_types::v0_3::RollupRegistration;
 
+use espresso_types::MarketplaceVersion;
 use espresso_types::SeqTypes;
 use hotshot::types::EventType;
 
@@ -39,8 +40,8 @@ pub struct BidConfig {
 
 pub async fn connect_to_solver(
     solver_api_url: Url,
-) -> Option<Client<SolverError, SequencerApiVersion>> {
-    let client = Client::<SolverError, SequencerApiVersion>::new(
+) -> Option<Client<SolverError, MarketplaceVersion>> {
+    let client = Client::<SolverError, MarketplaceVersion>::new(
         solver_api_url.join("marketplace-solver/").unwrap(),
     );
 
