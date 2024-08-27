@@ -157,7 +157,7 @@ impl<Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static> Ve
     type Upgrade = Upgrade;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-        0, 1,
+        0, 0,
     ];
 
     type Marketplace = MarketplaceVersion;
