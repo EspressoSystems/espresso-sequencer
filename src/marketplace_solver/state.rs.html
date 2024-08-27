@@ -347,22 +347,23 @@
 <a href="#347" id="347">347</a>
 <a href="#348" id="348">348</a>
 <a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>espresso_types::{
     v0_3::{
-        RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody,
+        BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody,
         SolverAuctionResults,
     },
     PubKey, SeqTypes,
     Update::Set,
 };
 <span class="kw">use </span>hotshot::types::SignatureKey;
-<span class="kw">use </span>hotshot_types::{
-    data::ViewNumber, signature_key::BuilderKey, traits::node_implementation::NodeType, PeerConfig,
-};
+<span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::NodeType, PeerConfig};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>sqlx::{FromRow, PgPool};
 
@@ -395,8 +396,7 @@
 
 <span class="kw">pub struct </span>SolverState {
     <span class="kw">pub </span>stake_table: StakeTable,
-    <span class="comment">// todo (abdul) : () will be replaced w BidTx
-    </span><span class="kw">pub </span>bid_txs: HashMap&lt;ViewNumber, HashMap&lt;BuilderKey, ()&gt;&gt;,
+    <span class="kw">pub </span>bid_txs: HashMap&lt;ViewNumber, HashMap&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::BuilderSignatureKey, BidTx&gt;&gt;,
 }
 
 <span class="kw">pub struct </span>StakeTable {
@@ -405,10 +405,9 @@
 
 <span class="attr">#[async_trait]
 </span><span class="kw">pub trait </span>UpdateSolverState {
-    <span class="comment">// TODO (abdul) : add BidTx from types crate.
-    </span><span class="kw">async fn </span>submit_bix_tx(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; anyhow::Result&lt;()&gt;;
-    <span class="comment">// TODO (abdul)
-    </span><span class="kw">async fn </span>register_rollup(
+    <span class="kw">async fn </span>submit_bid_tx(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bid_tx: BidTx) -&gt; SolverResult&lt;()&gt;;
+
+    <span class="kw">async fn </span>register_rollup(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         registration: RollupRegistration,
     ) -&gt; SolverResult&lt;RollupRegistration&gt;;
@@ -416,12 +415,14 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         update: RollupUpdate,
     ) -&gt; SolverResult&lt;RollupRegistration&gt;;
+
     <span class="kw">async fn </span>get_all_rollup_registrations(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; SolverResult&lt;Vec&lt;RollupRegistration&gt;&gt;;
-    <span class="comment">// TODO (abdul) : return AuctionResults
-    </span><span class="kw">async fn </span>calculate_auction_results_permissionless(
+
+    <span class="kw">async fn </span>calculate_auction_results_permissionless(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         view_number: ViewNumber,
     ) -&gt; SolverResult&lt;SolverAuctionResults&gt;;
+
     <span class="kw">async fn </span>calculate_auction_results_permissioned(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         view_number: ViewNumber,
@@ -431,7 +432,12 @@
 
 <span class="attr">#[async_trait]
 </span><span class="kw">impl </span>UpdateSolverState <span class="kw">for </span>GlobalState {
-    <span class="kw">async fn </span>submit_bix_tx(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; anyhow::Result&lt;()&gt; {
+    <span class="kw">async fn </span>submit_bid_tx(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bid_tx: BidTx) -&gt; SolverResult&lt;()&gt; {
+        <span class="kw">let </span>view = bid_tx.view();
+        <span class="kw">let </span>builder_key = bid_tx.account();
+
+        <span class="kw">let </span>bid_txs = <span class="kw-2">&amp;mut </span><span class="self">self</span>.solver.bid_txs;
+        bid_txs.entry(view).or_default().insert(builder_key, bid_tx);
         <span class="prelude-val">Ok</span>(())
     }
 

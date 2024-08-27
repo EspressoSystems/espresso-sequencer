@@ -178,13 +178,16 @@
 <a href="#178" id="178">178</a>
 <a href="#179" id="179">179</a>
 <a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     fs,
     path::{Path, PathBuf},
 };
 
 <span class="kw">use </span>espresso_types::{
-    v0_3::{RollupRegistration, RollupUpdate},
+    v0_3::{BidTx, RollupRegistration, RollupUpdate},
     NamespaceId,
 };
 <span class="kw">use </span>futures::FutureExt;
@@ -274,9 +277,12 @@
         options.extensions.clone(),
     )<span class="question-mark">?</span>;
 
-    <span class="comment">// TODO ED: We need to fill these in with the appropriate logic later
-    </span>api.post(<span class="string">"submit_bid"</span>, |_req, _state| {
-        <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(<span class="string">"Bid Submitted"</span>) }.boxed()
+    api.post(<span class="string">"submit_bid"</span>, |req, state| {
+        <span class="kw">async move </span>{
+            <span class="kw">let </span>bid = req.body_json::&lt;BidTx&gt;()<span class="question-mark">?</span>;
+            state.submit_bid_tx(bid).<span class="kw">await
+        </span>}
+        .boxed()
     })<span class="question-mark">?
     </span>.get(<span class="string">"auction_results"</span>, |req, state| {
         <span class="kw">async move </span>{
