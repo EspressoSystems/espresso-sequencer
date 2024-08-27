@@ -37,6 +37,8 @@ jobs:
         with:
           version: nightly
 
+      - uses: taiki-e/install-action@nextest
+
       - uses: dtolnay/rust-toolchain@nightly
 
       - name: Enable Rust Caching
