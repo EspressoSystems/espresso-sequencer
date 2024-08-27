@@ -54,11 +54,13 @@ mod persistence_tests {
         event::HotShotAction,
         message::Proposal,
         simple_certificate::QuorumCertificate,
+        simple_vote::QuorumData,
         traits::{node_implementation::ConsensusTime, EncodeBytes},
         vid::vid_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
+    use std::marker::PhantomData;
     use testing::TestablePersistence;
 
     use super::*;
@@ -85,9 +87,16 @@ mod persistence_tests {
         // Store a newer leaf, make sure storage gets updated.
         let mut leaf2 = leaf1.clone();
         *leaf2.block_header_mut().height_mut() += 1;
-        let mut qc2 = qc1.clone();
-        qc2.data.leaf_commit = leaf2.commit();
-        qc2.vote_commitment = qc2.data.commit();
+        let qc2 = QuorumCertificate::new(
+            qc1.data.clone(),
+            QuorumData {
+                leaf_commit: leaf2.commit(),
+            }
+            .commit(),
+            qc1.view_number,
+            qc1.signatures.clone(),
+            PhantomData,
+        );
         storage.save_anchor_leaf(&leaf2, &qc2).await.unwrap();
         assert_eq!(
             storage.load_anchor_leaf().await.unwrap().unwrap(),
