@@ -430,6 +430,10 @@
 <a href="#430" id="430">430</a>
 <a href="#431" id="431">431</a>
 <a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -810,11 +814,15 @@
             Client::new(builder_api_url.clone());
         builder_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
+        <span class="kw">let </span>txn_submission_client: Client&lt;ServerError, SequencerApiVersion&gt; =
+            Client::new(builder_api_url.clone());
+        txn_submission_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
+
         <span class="comment">// Test submitting transactions
         </span><span class="kw">let </span>transactions = (<span class="number">0</span>..<span class="number">10</span>)
             .map(|i| Transaction::new(<span class="number">0u32</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, i]))
             .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-        builder_client
+        txn_submission_client
             .post::&lt;Vec&lt;Commitment&lt;Transaction&gt;&gt;&gt;(<span class="string">"txn_submit/batch"</span>)
             .body_json(<span class="kw-2">&amp;</span>transactions)
             .unwrap()

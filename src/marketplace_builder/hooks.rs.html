@@ -167,6 +167,7 @@
 <a href="#167" id="167">167</a>
 <a href="#168" id="168">168</a>
 <a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashSet;
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -174,6 +175,7 @@
 
 <span class="kw">use </span>espresso_types::v0_3::RollupRegistration;
 
+<span class="kw">use </span>espresso_types::MarketplaceVersion;
 <span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>hotshot::types::EventType;
 
@@ -208,8 +210,8 @@
 
 <span class="kw">pub async fn </span>connect_to_solver(
     solver_api_url: Url,
-) -&gt; <span class="prelude-ty">Option</span>&lt;Client&lt;SolverError, SequencerApiVersion&gt;&gt; {
-    <span class="kw">let </span>client = Client::&lt;SolverError, SequencerApiVersion&gt;::new(
+) -&gt; <span class="prelude-ty">Option</span>&lt;Client&lt;SolverError, MarketplaceVersion&gt;&gt; {
+    <span class="kw">let </span>client = Client::&lt;SolverError, MarketplaceVersion&gt;::new(
         solver_api_url.join(<span class="string">"marketplace-solver/"</span>).unwrap(),
     );
 

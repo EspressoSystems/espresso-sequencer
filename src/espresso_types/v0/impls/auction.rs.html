@@ -360,8 +360,7 @@
 <a href="#360" id="360">360</a>
 <a href="#361" id="361">361</a>
 <a href="#362" id="362">362</a>
-<a href="#363" id="363">363</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::state::ValidatedState;
+</pre></div><pre class="rust"><code><span class="kw">use super</span>::{state::ValidatedState, MarketplaceVersion};
 <span class="kw">use crate</span>::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
@@ -382,7 +381,6 @@
 <span class="kw">use </span>thiserror::Error;
 <span class="kw">use </span>tide_disco::error::ServerError;
 <span class="kw">use </span>url::Url;
-<span class="kw">use </span>vbs::version::StaticVersion;
 
 <span class="kw">impl </span>FullNetworkTx {
     <span class="doccomment">/// Proxy for `execute` method of each transaction variant.
@@ -643,7 +641,7 @@
     }
 }
 
-<span class="kw">type </span>SurfClient = surf_disco::Client&lt;ServerError, StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;&gt;;
+<span class="kw">type </span>SurfClient = surf_disco::Client&lt;ServerError, MarketplaceVersion&gt;;
 
 <span class="attr">#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 </span><span class="doccomment">/// Auction Results provider holding the Url of the solver in order to fetch auction results.
