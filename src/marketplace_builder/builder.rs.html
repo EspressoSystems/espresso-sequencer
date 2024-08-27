@@ -434,6 +434,19 @@
 <a href="#434" id="434">434</a>
 <a href="#435" id="435">435</a>
 <a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -447,8 +460,9 @@
 <span class="kw">use </span>async_lock::RwLock;
 <span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
-    NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MarketplaceVersion,
+    MockSequencerVersions, NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions,
+    ValidatedState, V0_1,
 };
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -477,8 +491,8 @@
         BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
     },
     service::{
-        run_non_permissioned_standalone_builder_service, BroadcastSenders, GlobalState,
-        ProxyGlobalState, ReceivedTransaction,
+        run_builder_service, BroadcastSenders, BuilderHooks, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
     },
 };
 <span class="kw">use </span>sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
@@ -487,10 +501,7 @@
 <span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
 <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 
-<span class="kw">use crate</span>::{
-    hooks::{<span class="self">self</span>, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
-    run_builder_api_service,
-};
+<span class="kw">use </span><span class="kw">crate</span>::hooks::{<span class="self">self</span>, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
 
 <span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>BuilderConfig {
@@ -520,32 +531,80 @@
 }
 
 <span class="kw">impl </span>BuilderConfig {
+    <span class="kw">async fn </span>start_service&lt;H&gt;(
+        global_state: Arc&lt;RwLock&lt;GlobalState&lt;SeqTypes&gt;&gt;&gt;,
+        senders: BroadcastSenders&lt;SeqTypes&gt;,
+        hooks: Arc&lt;H&gt;,
+        builder_key_pair: EthKeyPair,
+        events_api_url: Url,
+        builder_api_url: Url,
+        api_timeout: Duration,
+    ) -&gt; anyhow::Result&lt;()&gt;
+    <span class="kw">where
+        </span>H: BuilderHooks&lt;SeqTypes&gt;,
+    {
+        <span class="comment">// create the proxy global state it will server the builder apis
+        </span><span class="kw">let </span>app = ProxyGlobalState::new(
+            global_state.clone(),
+            Arc::clone(<span class="kw-2">&amp;</span>hooks),
+            (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            api_timeout,
+        )
+        .into_app()
+        .context(<span class="string">"Failed to construct builder API app"</span>)<span class="question-mark">?</span>;
+
+        async_spawn(<span class="kw">async move </span>{
+            <span class="macro">tracing::info!</span>(<span class="string">"Starting builder API app at {builder_api_url}"</span>);
+            <span class="kw">let </span>res = app
+                .serve(builder_api_url, MarketplaceVersion::instance())
+                .<span class="kw">await</span>;
+            <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Builder API app exited"</span>);
+        });
+
+        <span class="comment">// spawn the builder service
+        </span><span class="macro">tracing::info!</span>(<span class="string">"Running builder against hotshot events API at {events_api_url}"</span>,);
+
+        <span class="kw">let </span>stream = marketplace_builder_core::utils::EventServiceStream::&lt;
+            SeqTypes,
+            SequencerApiVersion,
+        &gt;::connect(events_api_url)
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+
+        async_spawn(<span class="kw">async move </span>{
+            <span class="kw">let </span>res = run_builder_service::&lt;SeqTypes&gt;(hooks, senders, stream).<span class="kw">await</span>;
+            <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Builder service exited"</span>);
+            <span class="kw">if </span>res.is_err() {
+                <span class="macro">panic!</span>(<span class="string">"Builder should restart."</span>);
+            }
+        });
+
+        <span class="prelude-val">Ok</span>(())
+    }
+
     <span class="attr">#[allow(clippy::too_many_arguments)]
-    </span><span class="kw">pub async fn </span>init&lt;V: Versions&gt;(
+    </span><span class="kw">pub async fn </span>init(
         is_reserve: bool,
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
         event_channel_capacity: NonZeroUsize,
-        node_count: NonZeroUsize,
         instance_state: NodeState,
         validated_state: ValidatedState,
-        hotshot_events_api_url: Url,
-        hotshot_builder_apis_url: Url,
-        max_api_timeout_duration: Duration,
+        events_api_url: Url,
+        builder_api_url: Url,
+        api_timeout: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
         bid_config: <span class="prelude-ty">Option</span>&lt;BidConfig&gt;,
         solver_api_url: Url,
-        <span class="kw">_</span>: V,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="macro">tracing::info!</span>(
             address = %builder_key_pair.fee_account(),
             <span class="question-mark">?</span>bootstrapped_view,
             %tx_channel_capacity,
             %event_channel_capacity,
-            <span class="question-mark">?</span>max_api_timeout_duration,
+            <span class="question-mark">?</span>api_timeout,
             buffered_view_num_count,
             <span class="question-mark">?</span>maximize_txns_count_timeout_duration,
             <span class="string">"initializing builder"</span>,
@@ -578,12 +637,9 @@
             senders.transactions.clone(),
             vid_commitment,
             bootstrapped_view,
-            bootstrapped_view,
-            buffered_view_num_count <span class="kw">as </span>u64,
         );
 
         <span class="kw">let </span>global_state = Arc::new(RwLock::new(global_state));
-        <span class="kw">let </span>global_state_clone = global_state.clone();
 
         <span class="kw">let </span>builder_state = BuilderState::&lt;SeqTypes&gt;::new(
             BuiltFromProposedBlock {
@@ -595,8 +651,7 @@
             <span class="kw-2">&amp;</span>receivers,
             req_receiver,
             Vec::new() <span class="comment">/* tx_queue */</span>,
-            global_state_clone,
-            node_count,
+            Arc::clone(<span class="kw-2">&amp;</span>global_state),
             maximize_txns_count_timeout_duration,
             base_fee
                 .as_u64()
@@ -606,75 +661,51 @@
             Arc::new(validated_state),
         );
 
-        <span class="comment">// spawn the builder event loop
-        // Note: we don't do anything with the handle because BuilderState's
-        // event loop is going to be spawning child BuilderStates and will exit
-        // when the view it's building for is decided, so we don't care about
-        // it eventually finishing.
-        </span>async_spawn(<span class="kw">async move </span>{
-            builder_state.event_loop();
-        });
-
-        <span class="comment">// create the proxy global state it will server the builder apis
-        </span><span class="kw">let </span>proxy_global_state = ProxyGlobalState::new(
-            global_state.clone(),
-            (builder_key_pair.fee_account(), builder_key_pair.clone()),
-            max_api_timeout_duration,
-        );
-
-        <span class="comment">// start the hotshot api service
-        </span>run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
-
-        <span class="comment">// spawn the builder service
-        </span><span class="kw">let </span>events_url = hotshot_events_api_url.clone();
-        <span class="macro">tracing::info!</span>(<span class="string">"Running permissionless builder against hotshot events API at {events_url}"</span>,);
+        <span class="comment">// Start builder event loop
+        </span>builder_state.event_loop();
 
         <span class="kw">if </span>is_reserve {
-            <span class="kw">let </span><span class="prelude-val">Some</span>(bid_config) = bid_config <span class="kw">else </span>{
-                <span class="macro">panic!</span>(<span class="string">"Missing bid config for the reserve builder."</span>);
-            };
-            <span class="kw">let </span>hooks = hooks::EspressoReserveHooks {
+            <span class="kw">let </span>bid_config = bid_config.expect(<span class="string">"Missing bid config for the reserve builder."</span>);
+            <span class="kw">let </span>hooks = Arc::new(hooks::EspressoReserveHooks {
                 namespaces: bid_config.namespaces.into_iter().collect(),
                 solver_api_url,
-                builder_api_base_url: hotshot_builder_apis_url.clone(),
-                bid_key_pair: builder_key_pair,
+                builder_api_base_url: builder_api_url.clone(),
+                bid_key_pair: builder_key_pair.clone(),
                 bid_amount: bid_config.amount,
-            };
-
-            async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;
-                    SeqTypes,
-                    V, <span class="comment">// todo change this function to take only api version
-                </span>&gt;(hooks, senders, events_url)
-                .<span class="kw">await</span>;
-                <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Reserve builder service exited"</span>);
-                <span class="kw">if </span>res.is_err() {
-                    <span class="macro">panic!</span>(<span class="string">"Reserve builder should restart."</span>);
-                }
             });
-
-            <span class="macro">tracing::info!</span>(<span class="string">"Reserve builder init finished"</span>);
+            <span class="self">Self</span>::start_service(
+                Arc::clone(<span class="kw-2">&amp;</span>global_state),
+                senders,
+                hooks,
+                builder_key_pair,
+                events_api_url.clone(),
+                builder_api_url.clone(),
+                api_timeout,
+            )
+            .<span class="kw">await</span><span class="question-mark">?</span>;
         } <span class="kw">else </span>{
-            <span class="kw">let </span>hooks = hooks::EspressoFallbackHooks { solver_api_url };
-
-            async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;SeqTypes, V&gt;(
-                    hooks, senders, events_url,
-                )
-                .<span class="kw">await</span>;
-                <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Fallback builder service exited"</span>);
-                <span class="kw">if </span>res.is_err() {
-                    <span class="macro">panic!</span>(<span class="string">"Fallback builder should restart."</span>);
-                }
+            <span class="kw">let </span>hooks = Arc::new(hooks::EspressoFallbackHooks {
+                solver_api_url,
+                namespaces_to_skip: RwLock::new(<span class="prelude-val">None</span>),
             });
-
-            <span class="macro">tracing::info!</span>(<span class="string">"Fallback builder init finished"</span>);
+            <span class="self">Self</span>::start_service(
+                Arc::clone(<span class="kw-2">&amp;</span>global_state),
+                senders,
+                hooks,
+                builder_key_pair,
+                events_api_url.clone(),
+                builder_api_url.clone(),
+                api_timeout,
+            )
+            .<span class="kw">await</span><span class="question-mark">?</span>;
         }
+
+        <span class="macro">tracing::info!</span>(<span class="string">"Builder init finished"</span>);
 
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             global_state,
-            hotshot_events_api_url,
-            hotshot_builder_apis_url,
+            hotshot_events_api_url: events_api_url,
+            hotshot_builder_apis_url: builder_api_url,
         })
     }
 }
@@ -688,7 +719,7 @@
         logging::{setup_backtrace, setup_logging},
     };
     <span class="kw">use </span>async_lock::RwLock;
-    <span class="kw">use </span>async_std::{stream::StreamExt, task};
+    <span class="kw">use </span>async_std::{prelude::FutureExt, stream::StreamExt, task};
     <span class="kw">use </span>committable::Commitment;
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
@@ -712,10 +743,7 @@
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
     };
-    <span class="kw">use </span>marketplace_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
-    };
+    <span class="kw">use </span>marketplace_builder_core::service::run_builder_service;
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>sequencer::{
         api::test_helpers::TestNetworkConfigBuilder,
@@ -769,16 +797,15 @@
             )
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
+        <span class="kw">let </span>_network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
 
         <span class="comment">// Start the builder
         </span><span class="kw">let </span>init = BuilderConfig::init(
-            <span class="bool-val">false</span>,
+            <span class="bool-val">true</span>,
             FeeAccount::test_key_pair(),
             ViewNumber::genesis(),
             NonZeroUsize::new(<span class="number">1024</span>).unwrap(),
             NonZeroUsize::new(<span class="number">1024</span>).unwrap(),
-            NonZeroUsize::new(network.cfg.num_nodes()).unwrap(),
             NodeState::default(),
             ValidatedState::default(),
             event_service_url.clone(),
@@ -792,7 +819,6 @@
                 amount: FeeAmount::from(<span class="number">10</span>),
             }),
             <span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, <span class="number">3000</span>).parse().unwrap(),
-            MockSequencerVersions::new(),
         );
         <span class="kw">let </span>_builder_config = init.<span class="kw">await</span>;
 
@@ -820,7 +846,7 @@
 
         <span class="comment">// Test submitting transactions
         </span><span class="kw">let </span>transactions = (<span class="number">0</span>..<span class="number">10</span>)
-            .map(|i| Transaction::new(<span class="number">0u32</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, i]))
+            .map(|i| Transaction::new(<span class="number">10u32</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, i]))
             .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
         txn_submission_client
             .post::&lt;Vec&lt;Commitment&lt;Transaction&gt;&gt;&gt;(<span class="string">"txn_submit/batch"</span>)

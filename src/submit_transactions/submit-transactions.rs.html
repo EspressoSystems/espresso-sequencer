@@ -479,6 +479,9 @@
 <a href="#479" id="479">479</a>
 <a href="#480" id="480">480</a>
 <a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
+<a href="#484" id="484">484</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to submit random transactions to an Espresso Sequencer.
 
 </span><span class="kw">use </span>std::{
@@ -912,7 +915,10 @@
                     .send()
                     .<span class="kw">await
             </span>} {
-                <span class="macro">tracing::error!</span>(<span class="string">"failed to submit batch of {txns_batch_count} transactions: {err}"</span>);
+                <span class="macro">tracing::error!</span>(
+                    <span class="question-mark">?</span>err,
+                    <span class="string">"failed to submit batch of {txns_batch_count} transactions"
+                </span>);
             } <span class="kw">else </span>{
                 <span class="macro">tracing::info!</span>(<span class="string">"submitted batch of {txns_batch_count} transactions"</span>);
                 <span class="kw">let </span>submitted_at = Instant::now();

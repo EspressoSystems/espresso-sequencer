@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["run_builder_api_service"],"mod":["builder","hooks"]};
+window.SIDEBAR_ITEMS = {"mod":["builder","hooks"]};
