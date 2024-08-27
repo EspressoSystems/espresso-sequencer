@@ -22,7 +22,7 @@ env:
     -Zprofile -Z threads=4 -Ccodegen-units=1 -Cllvm-args=--inline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
     -Zpanic_abort_tests
   CARGO_TEST_CMD: >
-    cargo +nightly test --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
+    cargo +nightly nextest run --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
     --exclude gen-vk-contract --exclude hotshot-contract-adapter --exclude diff-test-hotshot
 
 jobs:
@@ -56,7 +56,7 @@ jobs:
       # TODO investigate why `uint_bytes` fail in coverage runs
       - name: Run tests with coverage
         run: |
-          $CARGO_TEST_CMD -- --skip service::test::test_ --skip slow_ --skip uint_bytes
+          $CARGO_TEST_CMD -E '!test(slow_) and !test(service::test::test_) and !test(uint_bytes)
         env:
           CARGO_INCREMENTAL: "0"
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
