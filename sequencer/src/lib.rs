@@ -766,6 +766,10 @@ pub mod testing {
             self.config.builder_urls = builder_urls;
         }
 
+        pub fn marketplace_builder_port(&self) -> Option<u16> {
+            self.marketplace_builder_port
+        }
+
         pub fn builder_port(&self) -> Option<u16> {
             self.builder_port
         }

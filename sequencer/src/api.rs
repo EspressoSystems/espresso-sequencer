@@ -541,7 +541,7 @@ pub mod test_helpers {
 
             if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
-                    cfg.network_config.builder_port(),
+                    cfg.network_config.marketplace_builder_port(),
                     NodeState::default(),
                     cfg.state[0].clone(),
                 )
