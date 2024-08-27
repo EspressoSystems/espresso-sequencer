@@ -39,14 +39,12 @@ async-once-cell = { workspace = true }
 async-std = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
-bytesize = { workspace = true }
 
 # CDN imports
 cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
 
 clap = { workspace = true }
-cld = { workspace = true }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 csv = "1"
@@ -61,7 +59,6 @@ hotshot = { workspace = true }
 hotshot-builder-api = { workspace = true, optional = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
-hotshot-example-types = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
@@ -82,7 +79,6 @@ jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
 libp2p = { workspace = true }
 marketplace-solver = { path = "../marketplace-solver" }
-num-traits = "0.2.18"
 num_enum = "0.7"
 portpicker = { workspace = true }
 rand = { workspace = true }
@@ -112,3 +108,7 @@ normal = ["hotshot-testing"]
 unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(async_executor_impl, values("tokio", "async-std"))',
 ] }
+
+
+[package.metadata.cargo-machete]
+ignored = ["vergen", "include_dir", "hotshot_builder_api"]
