@@ -370,7 +370,7 @@ mod test {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
         println!("here after solver api");
-        let client = surf_disco::Client::<SolverError, BaseVersion>::new(solver_api.clone());
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api.clone());
 
         // Create a list of signature keys for rollup registration data
         let mut signature_keys = Vec::new();
@@ -387,10 +387,10 @@ mod test {
 
         signature_keys.push(signature_key);
 
-        // Initialize a rollup registration with namespace id = 1
+        // Initialize a rollup registration with namespace id = 10
         let reg_ns_1_body = RollupRegistrationBody {
-            namespace_id: 1_u64.into(),
-            reserve_url: Url::from_str("http://localhost").unwrap(),
+            namespace_id: 10_u64.into(),
+            reserve_url: Some(Url::from_str("http://localhost").unwrap()),
             reserve_price: 200.into(),
             active: true,
             signature_keys: signature_keys.clone(),
@@ -424,7 +424,7 @@ mod test {
 
         // Start the builder
         let init = BuilderConfig::init(
-            true,
+            false,
             FeeAccount::test_key_pair(),
             ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
@@ -465,20 +465,11 @@ mod test {
             Client::new(builder_api_url.clone());
         txn_submission_client.connect(None).await;
 
-        // Make an empty commitment (for testing, the commitment is not used)
-        let commitment = vid_commitment(&[0], 1);
-
-        // Test getting a bundle
-        let _bundle = builder_client
-            .get::<Bundle<SeqTypes>>(format!("block_info/bundle/1/{}/1", commitment).as_str())
-            .send()
-            .await
-            .unwrap();
-
         // Test submitting transactions
-        let transactions = (0..10)
-            .map(|i| Transaction::new(10u32.into(), vec![1, 1, 1, i]))
-            .collect::<Vec<_>>();
+        let transactions = vec![
+            Transaction::new(10u32.into(), vec![1, 1, 1, 1]),
+            Transaction::new(20u32.into(), vec![1, 1, 1, 2]),
+        ];
         txn_submission_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
@@ -498,6 +489,8 @@ mod test {
             .subscribe::<Event<SeqTypes>>()
             .await
             .unwrap();
+
+        task::sleep(std::time::Duration::from_millis(100)).await;
 
         let start = Instant::now();
         loop {
