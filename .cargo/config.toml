@@ -1,2 +1,6 @@
 [net]
 git-fetch-with-cli = true
+[profile.dev]
+debug = 0
+strip = "debuginfo"
+
