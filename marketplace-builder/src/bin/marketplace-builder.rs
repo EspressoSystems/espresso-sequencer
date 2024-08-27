@@ -138,12 +138,7 @@ async fn main() -> anyhow::Result<()> {
             run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
         }
         (MarketplaceVersion::VERSION, _) => {
-            run(
-                genesis,
-                opt,
-                SequencerVersions::<MarketplaceVersion, V0_1>::new(),
-            )
-            .await
+            run::<SequencerVersions<MarketplaceVersion, V0_1>>(genesis, opt).await
         }
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
