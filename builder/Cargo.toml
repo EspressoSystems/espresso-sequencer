@@ -11,7 +11,7 @@ libp2p = ["sequencer/libp2p"]
 
 [dependencies]
 anyhow = { workspace = true }
-async-broadcast = "0.7.0"
+async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = "2.2"
 async-std = { workspace = true }

@@ -6276,7 +6276,7 @@ dependencies = [
  "anyhow",
  "async-broadcast",
  "async-compatibility-layer",
- "async-lock 3.4.0",
+ "async-lock 2.8.0",
  "async-std",
  "async-trait",
  "clap",
@@ -6319,18 +6319,19 @@ dependencies = [
 
 [[package]]
 name = "marketplace-builder-core"
-version = "0.0.2"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.6#d6cd8aac934580b897856951aa4c249040ea222d"
+version = "0.0.7"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.7#aeef3ae1bd3243ff0f3bc34592e612be51289d88"
 dependencies = [
  "anyhow",
  "async-broadcast",
  "async-compatibility-layer",
- "async-lock 3.4.0",
+ "async-lock 2.8.0",
  "async-std",
  "async-trait",
  "clap",
  "committable",
  "derivative",
+ "either",
  "futures",
  "hex",
  "hotshot",
@@ -7665,7 +7666,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.74",
@@ -8728,6 +8729,7 @@ dependencies = [
  "anyhow",
  "ark-ff",
  "ark-serialize",
+ "async-broadcast",
  "async-compatibility-layer",
  "async-once-cell",
  "async-std",
@@ -8750,6 +8752,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot",
+ "hotshot-builder-api",
  "hotshot-contract-adapter",
  "hotshot-events-service",
  "hotshot-example-types",
@@ -8767,6 +8770,7 @@ dependencies = [
  "jf-signature",
  "jf-vid",
  "libp2p",
+ "marketplace-builder-core",
  "marketplace-solver",
  "num-traits",
  "num_enum",
@@ -9214,7 +9218,7 @@ version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38d1e02fca405f6280643174a50c942219f0bbf4dbf7d480f1dd864d6f211ae5"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.74",
