@@ -15,8 +15,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
         id: toolchain
+        with:
+          toolchain: nightly-2024-08-27
 
       # Set nightly as the default toolchain
       - run: rustup override set ${{steps.toolchain.outputs.name}}

@@ -35,7 +35,9 @@ jobs:
         with:
           version: nightly
 
-      - uses: dtolnay/rust-toolchain@nightly-2024-08-27
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2024-08-27
 
       - uses: taiki-e/install-action@nextest
 

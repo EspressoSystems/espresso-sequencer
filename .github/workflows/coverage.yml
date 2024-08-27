@@ -37,7 +37,9 @@ jobs:
         with:
           version: nightly
 
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2024-08-27
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
