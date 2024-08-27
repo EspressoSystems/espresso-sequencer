@@ -19,6 +19,24 @@ use time::{
     format_description::well_known::Rfc3339 as TimestampFormat, macros::time, Date, OffsetDateTime,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Update<T> {
+    #[default]
+    #[serde(rename = "__skip")]
+    Skip,
+    #[serde(untagged)]
+    Set(T),
+}
+
+impl<T> Update<T> {
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Update<U> {
+        match self {
+            Update::Skip => Update::Skip,
+            Update::Set(v) => Update::Set(f(v)),
+        }
+    }
+}
+
 /// Information about the genesis state which feeds into the genesis block header.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GenesisHeader {
