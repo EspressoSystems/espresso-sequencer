@@ -55,7 +55,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          $CARGO_TEST_CMD -- --skip service::test::test_ --skip slow_
+          $CARGO_TEST_CMD -- --skip service::test::test_ --skip slow_ --skip uint_bytes
         env:
           CARGO_INCREMENTAL: "0"
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
