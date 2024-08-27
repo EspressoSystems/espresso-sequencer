@@ -166,13 +166,6 @@
 <a href="#166" id="166">166</a>
 <a href="#167" id="167">167</a>
 <a href="#168" id="168">168</a>
-<a href="#169" id="169">169</a>
-<a href="#170" id="170">170</a>
-<a href="#171" id="171">171</a>
-<a href="#172" id="172">172</a>
-<a href="#173" id="173">173</a>
-<a href="#174" id="174">174</a>
-<a href="#175" id="175">175</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 <span class="kw">use </span>builder::non_permissioned::{build_instance_state, BuilderConfig};
@@ -280,15 +273,10 @@
 
     <span class="kw">match </span>(base, upgrade) {
         (V0_1::VERSION, FeeVersion::VERSION) =&gt; {
-            run(genesis, opt, SequencerVersions::&lt;V0_1, FeeVersion&gt;::new()).<span class="kw">await
+            run::&lt;SequencerVersions&lt;V0_1, FeeVersion&gt;&gt;(genesis, opt).<span class="kw">await
         </span>}
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) =&gt; {
-            run(
-                genesis,
-                opt,
-                SequencerVersions::&lt;FeeVersion, MarketplaceVersion&gt;::new(),
-            )
-            .<span class="kw">await
+            run::&lt;SequencerVersions&lt;FeeVersion, MarketplaceVersion&gt;&gt;(genesis, opt).<span class="kw">await
         </span>}
         <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(
             <span class="string">"Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
@@ -299,7 +287,6 @@
 <span class="kw">async fn </span>run&lt;V: Versions&gt;(
     genesis: Genesis,
     opt: NonPermissionedBuilderOptions,
-    versions: V,
 ) -&gt; anyhow::Result&lt;()&gt; {
     <span class="kw">let </span>l1_params = L1Params {
         url: opt.l1_provider_url,
@@ -339,7 +326,6 @@
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
-        versions,
     )
     .<span class="kw">await</span><span class="question-mark">?</span>;
 

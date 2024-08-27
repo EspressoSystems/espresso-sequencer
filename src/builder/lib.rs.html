@@ -879,8 +879,6 @@
 <a href="#879" id="879">879</a>
 <a href="#880" id="880">880</a>
 <a href="#881" id="881">881</a>
-<a href="#882" id="882">882</a>
-<a href="#883" id="883">883</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -1431,7 +1429,6 @@
             hotshot_events_streaming_api_url: Url,
             hotshot_builder_api_url: Url,
             num_nodes: usize,
-            versions: V,
         ) -&gt; <span class="self">Self </span>{
             <span class="comment">// generate builder keys
             </span><span class="kw">let </span>seed = [<span class="number">201_u8</span>; <span class="number">32</span>];
@@ -1460,7 +1457,6 @@
                 <span class="number">15</span>,
                 Duration::from_millis(<span class="number">500</span>),
                 ChainConfig::default().base_fee,
-                versions,
             )
             .<span class="kw">await
             </span>.unwrap();

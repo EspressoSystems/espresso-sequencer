@@ -426,7 +426,7 @@
 
 <span class="kw">impl </span>BuilderConfig {
     <span class="attr">#[allow(clippy::too_many_arguments)]
-    </span><span class="kw">pub async fn </span>init&lt;V: Versions&gt;(
+    </span><span class="kw">pub async fn </span>init(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -440,7 +440,6 @@
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
-        <span class="kw">_</span>: V,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="macro">tracing::info!</span>(
             address = %builder_key_pair.fee_account(),
@@ -543,7 +542,7 @@
         <span class="kw">let </span>global_state_clone = global_state.clone();
         <span class="macro">tracing::info!</span>(<span class="string">"Running permissionless builder against hotshot events API at {events_url}"</span>,);
         async_spawn(<span class="kw">async move </span>{
-            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, V&gt;(
+            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerApiVersion&gt;(
                 da_sender,
                 qc_sender,
                 decide_sender,
@@ -661,11 +660,12 @@
             .build();
         <span class="kw">let </span>network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
 
-        <span class="kw">let </span>builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
+        <span class="kw">let </span>builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder::&lt;
+            MockSequencerVersions,
+        &gt;(
             event_service_url.clone(),
             builder_api_url.clone(),
             network.cfg.num_nodes(),
-            MockSequencerVersions::new(),
         )
         .<span class="kw">await</span>;
 
