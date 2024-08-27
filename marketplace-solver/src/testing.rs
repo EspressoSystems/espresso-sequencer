@@ -484,7 +484,7 @@ mod test {
         let tx = BidTx::mock(key);
 
         client
-            .post::<BidTx>("submit_bid")
+            .post::<()>("submit_bid")
             .body_json(&tx)
             .unwrap()
             .send()
