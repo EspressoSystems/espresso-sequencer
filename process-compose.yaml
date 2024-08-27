@@ -516,8 +516,9 @@ processes:
   marketplace-reserve-builder:
     command: marketplace-builder
     ports:
-      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT"
+      - "$ESPRESSO_RESERVE_BUILDER_SERVER_PORT:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT"
     environment:
+      - ESPRESSO_BUILDER_SERVER_PORT=$ESPRESSO_RESERVE_BUILDER_SERVER_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=true
       - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
@@ -538,7 +539,6 @@ processes:
       failure_threshold: 100
 
   marketplace-fallback-builder:
-    # disabled: true
     command: marketplace-builder
     ports:
       - "$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT"
