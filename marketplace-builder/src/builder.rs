@@ -391,11 +391,15 @@ mod test {
             Client::new(builder_api_url.clone());
         builder_client.connect(None).await;
 
+        let txn_submission_client: Client<ServerError, SequencerApiVersion> =
+            Client::new(builder_api_url.clone());
+        txn_submission_client.connect(None).await;
+
         // Test submitting transactions
         let transactions = (0..10)
             .map(|i| Transaction::new(10u32.into(), vec![1, 1, 1, i]))
             .collect::<Vec<_>>();
-        builder_client
+        txn_submission_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
             .unwrap()

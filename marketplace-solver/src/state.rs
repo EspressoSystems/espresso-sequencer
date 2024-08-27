@@ -4,16 +4,14 @@ use async_trait::async_trait;
 use committable::Committable;
 use espresso_types::{
     v0_3::{
-        RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody,
+        BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody,
         SolverAuctionResults,
     },
     PubKey, SeqTypes,
     Update::Set,
 };
 use hotshot::types::SignatureKey;
-use hotshot_types::{
-    data::ViewNumber, signature_key::BuilderKey, traits::node_implementation::NodeType, PeerConfig,
-};
+use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeType, PeerConfig};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool};
 
@@ -46,8 +44,7 @@ impl GlobalState {
 
 pub struct SolverState {
     pub stake_table: StakeTable,
-    // todo (abdul) : () will be replaced w BidTx
-    pub bid_txs: HashMap<ViewNumber, HashMap<BuilderKey, ()>>,
+    pub bid_txs: HashMap<ViewNumber, HashMap<<SeqTypes as NodeType>::BuilderSignatureKey, BidTx>>,
 }
 
 pub struct StakeTable {
@@ -56,9 +53,8 @@ pub struct StakeTable {
 
 #[async_trait]
 pub trait UpdateSolverState {
-    // TODO (abdul) : add BidTx from types crate.
-    async fn submit_bix_tx(&mut self) -> anyhow::Result<()>;
-    // TODO (abdul)
+    async fn submit_bid_tx(&mut self, bid_tx: BidTx) -> SolverResult<()>;
+
     async fn register_rollup(
         &self,
         registration: RollupRegistration,
@@ -67,12 +63,14 @@ pub trait UpdateSolverState {
         &self,
         update: RollupUpdate,
     ) -> SolverResult<RollupRegistration>;
+
     async fn get_all_rollup_registrations(&self) -> SolverResult<Vec<RollupRegistration>>;
-    // TODO (abdul) : return AuctionResults
+
     async fn calculate_auction_results_permissionless(
         &self,
         view_number: ViewNumber,
     ) -> SolverResult<SolverAuctionResults>;
+
     async fn calculate_auction_results_permissioned(
         &self,
         view_number: ViewNumber,
@@ -82,7 +80,12 @@ pub trait UpdateSolverState {
 
 #[async_trait]
 impl UpdateSolverState for GlobalState {
-    async fn submit_bix_tx(&mut self) -> anyhow::Result<()> {
+    async fn submit_bid_tx(&mut self, bid_tx: BidTx) -> SolverResult<()> {
+        let view = bid_tx.view();
+        let builder_key = bid_tx.account();
+
+        let bid_txs = &mut self.solver.bid_txs;
+        bid_txs.entry(view).or_default().insert(builder_key, bid_tx);
         Ok(())
     }
 

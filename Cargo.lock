@@ -4141,8 +4141,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
-version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.42#31545442d5118e50d9f0fb2e451ecbd111fa74d0"
+version = "0.1.43"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.43#87d1b2a3579d631f6b899d3b2f991b5a3a23a5f1"
 dependencies = [
  "anyhow",
  "async-broadcast",

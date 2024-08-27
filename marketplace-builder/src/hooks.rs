@@ -42,6 +42,12 @@ pub struct BidConfig {
     pub amount: FeeAmount,
 }
 
+pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, MarketplaceVersion> {
+    Client::<SolverError, MarketplaceVersion>::new(
+        solver_api_url.join("marketplace-solver/").unwrap(),
+    )
+}
+
 /// Reserve builder hooks for espresso sequencer.
 ///
 /// Provides bidding and transaction filtering on top of base builder functionality.
@@ -118,12 +124,6 @@ pub(crate) struct EspressoFallbackHooks {
     /// Base API to contact the solver
     pub(crate) solver_api_url: Url,
     pub(crate) namespaces_to_skip: RwLock<Option<HashSet<NamespaceId>>>,
-}
-
-pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, MarketplaceVersion> {
-    Client::<SolverError, MarketplaceVersion>::new(
-        solver_api_url.join("marketplace-solver/").unwrap(),
-    )
 }
 
 #[async_trait]

@@ -4,7 +4,7 @@ use std::{
 };
 
 use espresso_types::{
-    v0_3::{RollupRegistration, RollupUpdate},
+    v0_3::{BidTx, RollupRegistration, RollupUpdate},
     NamespaceId,
 };
 use futures::FutureExt;
@@ -94,9 +94,12 @@ where
         options.extensions.clone(),
     )?;
 
-    // TODO ED: We need to fill these in with the appropriate logic later
-    api.post("submit_bid", |_req, _state| {
-        async move { Ok("Bid Submitted") }.boxed()
+    api.post("submit_bid", |req, state| {
+        async move {
+            let bid = req.body_json::<BidTx>()?;
+            state.submit_bid_tx(bid).await
+        }
+        .boxed()
     })?
     .get("auction_results", |req, state| {
         async move {
