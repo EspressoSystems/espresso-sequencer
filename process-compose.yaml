@@ -563,7 +563,6 @@ processes:
       failure_threshold: 100
 
   permissionless-builder:
-    disabled: true
     command: permissionless-builder
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
