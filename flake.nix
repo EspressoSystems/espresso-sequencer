@@ -274,7 +274,7 @@
           ];
           CARGO_INCREMENTAL = "0";
           shellHook = ''
-            RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2 -Cllvm-args=--inline-threshold=0"
+            RUSTFLAGS="$RUSTFLAGS -Zprofile -Z threads=8 -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2 -Cllvm-args=--inline-threshold=0"
           '';
           RUSTDOCFLAGS = "-Zprofile -Ccodegen-units=1 -Cllvm-args=--inline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests";
         });
