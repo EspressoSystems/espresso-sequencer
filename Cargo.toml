@@ -56,7 +56,7 @@ futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.72" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.44" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "ab/api-ver" }
 marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.0.8" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.44" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
