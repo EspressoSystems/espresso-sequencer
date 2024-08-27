@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  RUSTFLAGS: '-Z threads=4 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
@@ -33,6 +33,8 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
+
+      - uses: dtolnay/rust-toolchain@nightly
 
       - uses: taiki-e/install-action@nextest
 
@@ -49,8 +51,8 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo build --locked --bin diff-test --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
+          cargo +nightly build --locked --bin diff-test --release
+          cargo +nightly nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
       - name: Test
@@ -60,5 +62,5 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
+          cargo +nightly nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
         timeout-minutes: 5
