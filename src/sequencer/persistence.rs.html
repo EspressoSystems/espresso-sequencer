@@ -364,6 +364,15 @@
 <a href="#364" id="364">364</a>
 <a href="#365" id="365">365</a>
 <a href="#366" id="366">366</a>
+<a href="#367" id="367">367</a>
+<a href="#368" id="368">368</a>
+<a href="#369" id="369">369</a>
+<a href="#370" id="370">370</a>
+<a href="#371" id="371">371</a>
+<a href="#372" id="372">372</a>
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -420,11 +429,13 @@
         event::HotShotAction,
         message::Proposal,
         simple_certificate::QuorumCertificate,
+        simple_vote::QuorumData,
         traits::{node_implementation::ConsensusTime, EncodeBytes},
         vid::vid_scheme,
     };
     <span class="kw">use </span>jf_vid::VidScheme;
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
+    <span class="kw">use </span>std::marker::PhantomData;
     <span class="kw">use </span>testing::TestablePersistence;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
@@ -451,9 +462,16 @@
         <span class="comment">// Store a newer leaf, make sure storage gets updated.
         </span><span class="kw">let </span><span class="kw-2">mut </span>leaf2 = leaf1.clone();
         <span class="kw-2">*</span>leaf2.block_header_mut().height_mut() += <span class="number">1</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>qc2 = qc1.clone();
-        qc2.data.leaf_commit = leaf2.commit();
-        qc2.vote_commitment = qc2.data.commit();
+        <span class="kw">let </span>qc2 = QuorumCertificate::new(
+            qc1.data.clone(),
+            QuorumData {
+                leaf_commit: leaf2.commit(),
+            }
+            .commit(),
+            qc1.view_number,
+            qc1.signatures.clone(),
+            PhantomData,
+        );
         storage.save_anchor_leaf(<span class="kw-2">&amp;</span>leaf2, <span class="kw-2">&amp;</span>qc2).<span class="kw">await</span>.unwrap();
         <span class="macro">assert_eq!</span>(
             storage.load_anchor_leaf().<span class="kw">await</span>.unwrap().unwrap(),

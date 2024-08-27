@@ -20,7 +20,7 @@ unless the operation fails several times in a row.</p>
 <p>If the operation fails even once but eventually succeeds, we will retry the operation
 several times to check that all servers are “healed”: at this point, the operation should no
 longer fail even once.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.get" class="method"><a class="src rightside" href="../src/nasty_client/nasty-client.rs.html#501-524">source</a><h4 class="code-header">pub(crate) async fn <a href="#method.get" class="fn">get</a>&lt;R: <a class="trait" href="https://docs.rs/serde/1.0.207/serde/de/trait.DeserializeOwned.html" title="trait serde::de::DeserializeOwned">DeserializeOwned</a>&gt;(
+</div></details><details class="toggle method-toggle" open><summary><section id="method.get" class="method"><a class="src rightside" href="../src/nasty_client/nasty-client.rs.html#501-524">source</a><h4 class="code-header">pub(crate) async fn <a href="#method.get" class="fn">get</a>&lt;R: <a class="trait" href="https://docs.rs/serde/1.0.209/serde/de/trait.DeserializeOwned.html" title="trait serde::de::DeserializeOwned">DeserializeOwned</a>&gt;(
     &amp;self,
     path: impl <a class="trait" href="https://doc.rust-lang.org/1.80.1/core/convert/trait.Into.html" title="trait core::convert::Into">Into</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.80.1/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;,
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.85/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;R&gt;</h4></section></summary><div class="docblock"><p>Send an HTTP GET request and deserialize the response.</p>
