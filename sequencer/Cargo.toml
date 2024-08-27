@@ -109,6 +109,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(async_executor_impl, values("tokio", "async-std"))',
 ] }
 
-
 [package.metadata.cargo-machete]
 ignored = ["vergen", "include_dir", "hotshot_builder_api"]
