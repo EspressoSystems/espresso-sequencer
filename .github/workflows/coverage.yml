@@ -53,6 +53,7 @@ jobs:
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
           RUSTDOCFLAGS: ${{ env.COVERAGE_RUSTDOCFLAGS }}
 
+      # TODO investigate why `uint_bytes` fail in coverage runs
       - name: Run tests with coverage
         run: |
           $CARGO_TEST_CMD -- --skip service::test::test_ --skip slow_ --skip uint_bytes
