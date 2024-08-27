@@ -115,11 +115,11 @@ impl BuilderConfig {
         // spawn the builder service
         tracing::info!("Running builder against hotshot events API at {events_api_url}",);
 
-        let stream =
-            marketplace_builder_core::utils::EventServiceStream::<SeqTypes, V0_1>::connect(
-                events_api_url,
-            )
-            .await?;
+        let stream = marketplace_builder_core::utils::EventServiceStream::<
+            SeqTypes,
+            SequencerApiVersion,
+        >::connect(events_api_url)
+        .await?;
 
         async_spawn(async move {
             let res = run_builder_service::<SeqTypes>(hooks, senders, stream).await;

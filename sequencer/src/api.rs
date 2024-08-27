@@ -532,7 +532,7 @@ pub mod test_helpers {
             let mut legacy_builder_url = "http://example.com".parse().unwrap();
             let mut marketplace_builder_url = "http://example.com".parse().unwrap();
 
-            if <V as Versions>::Base::VERSION <= MarketplaceVersion::VERSION {
+            if <V as Versions>::Base::VERSION < MarketplaceVersion::VERSION {
                 let (task, url) =
                     run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
                 builder_tasks.push(task);
@@ -540,7 +540,6 @@ pub mod test_helpers {
             };
 
             if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION {
-                println!("Running marketplace builder!");
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.builder_port(),
                     NodeState::default(),
