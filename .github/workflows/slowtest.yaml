@@ -54,8 +54,8 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS $PARALLEL --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo +nightly build --locked --bin diff-test --release
-          cargo +nightly nextest run --locked --release --workspace --all-features --no-run
+          cargo +nightly-2024-08-27 build --locked --bin diff-test --release
+          cargo +nightly-2024-08-27 nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
       - name: Slow Tests
@@ -65,5 +65,5 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS $PARALLEL --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo +nightly nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)'
+          cargo +nightly-2024-08-27 nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)'
         timeout-minutes: 25

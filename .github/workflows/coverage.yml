@@ -22,7 +22,7 @@ env:
     -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
     -Zpanic_abort_tests
   CARGO_TEST_CMD: >
-    cargo +nightly test --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
+    cargo +nightly-2024-08-27 test --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
     --exclude gen-vk-contract --exclude hotshot-contract-adapter --exclude diff-test-hotshot
 
 jobs:
