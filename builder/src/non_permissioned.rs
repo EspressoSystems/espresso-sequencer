@@ -11,7 +11,7 @@ use async_compatibility_layer::{
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
-    SeqTypes, SequencerVersions, ValidatedState,
+    SeqTypes, SeqVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -196,12 +196,12 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
+            let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
                 da_sender,
                 qc_sender,
                 decide_sender,
+                tx_sender,
                 events_url,
-                global_state_clone,
             )
             .await;
             tracing::error!(?res, "builder service exited");

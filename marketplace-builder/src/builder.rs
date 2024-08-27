@@ -12,7 +12,7 @@ use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, SequencerVersions, ValidatedState,
+    Payload, SeqTypes, SeqVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -210,7 +210,7 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
+                let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
                     hooks, senders, events_url,
                 )
                 .await;
@@ -225,7 +225,7 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
+                let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
                     hooks, senders, events_url,
                 )
                 .await;
@@ -263,9 +263,9 @@ mod test {
     use committable::Commitment;
     use committable::Committable;
     use espresso_types::{
-        mock::MockStateCatchup,
         v0_3::{RollupRegistration, RollupRegistrationBody},
-        BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, Transaction,
+        mock::MockStateCatchup, BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey,
+        SeqTypes, Transaction,
     };
     use ethers::utils::Anvil;
     use hotshot::types::{BLSPrivKey, Event, EventType};
@@ -274,7 +274,6 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_example_types::block_types::TestTransaction;
     use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
@@ -447,6 +446,16 @@ mod test {
         //  TODO(AG): workaround for version mismatch between bundle and submit APIs
         let submission_client: Client<ServerError, BaseVersion> = Client::new(builder_api_url);
         submission_client.connect(None).await;
+
+        // Make an empty commitment (for testing, the commitment is not used)
+        let commitment = vid_commitment(&[0], 1);
+
+        // Test getting a bundle
+        let _bundle = builder_client
+            .get::<Bundle<SeqTypes>>(format!("block_info/bundle/1/{}/1", commitment).as_str())
+            .send()
+            .await
+            .unwrap();
 
         // Test submitting transactions
         // let mut transactions = (0..10)

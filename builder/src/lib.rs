@@ -593,6 +593,7 @@ pub mod testing {
         PermissionedBuilderTestConfig<P, Ver>
     {
         pub async fn init_permissioned_builder(
+            hotshot_test_config: HotShotTestConfig,
             hotshot_handle: Arc<Consensus<network::Memory, P>>,
             node_id: u64,
             state_signer: Arc<StateSigner<Ver>>,
