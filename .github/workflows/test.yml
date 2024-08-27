@@ -62,5 +62,5 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo +nightly nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
+          cargo +nightly nextest run --locked --release --workspace --all-features --verbose -E '!test(slow_)'
         timeout-minutes: 5
