@@ -1,5 +1,9 @@
 use std::collections::HashSet;
+use std::sync::Arc;
+use std::time::Duration;
 
+use async_compatibility_layer::art::{async_sleep, async_spawn};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use espresso_types::v0_3::BidTxBody;
 
@@ -38,23 +42,10 @@ pub struct BidConfig {
     pub amount: FeeAmount,
 }
 
-pub async fn connect_to_solver(
-    solver_api_url: Url,
-) -> Option<Client<SolverError, MarketplaceVersion>> {
-    let client = Client::<SolverError, MarketplaceVersion>::new(
+pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, MarketplaceVersion> {
+    Client::<SolverError, MarketplaceVersion>::new(
         solver_api_url.join("marketplace-solver/").unwrap(),
-    );
-
-    if !(client.connect(None).await) {
-        return None;
-    }
-
-    tracing::info!(
-        %solver_api_url,
-        "Builder client connected to the solver api"
-    );
-
-    Some(client)
+    )
 }
 
 /// Reserve builder hooks for espresso sequencer.
@@ -77,7 +68,7 @@ pub(crate) struct EspressoReserveHooks {
 impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
     #[inline(always)]
     async fn process_transactions(
-        &mut self,
+        self: &Arc<Self>,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
         transactions.retain(|txn| self.namespaces.contains(&txn.namespace()));
@@ -85,8 +76,13 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(&mut self, event: &Event<SeqTypes>) {
-        if let EventType::ViewFinished { view_number } = event.event {
+    async fn handle_hotshot_event(self: &Arc<Self>, event: &Event<SeqTypes>) {
+        let EventType::ViewFinished { view_number } = event.event else {
+            return;
+        };
+
+        let self = Arc::clone(self);
+        async_spawn(async move {
             let bid_tx = match BidTxBody::new(
                 self.bid_key_pair.fee_account(),
                 self.bid_amount,
@@ -104,11 +100,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
                 }
             };
 
-            let Some(solver_client) = connect_to_solver(self.solver_api_url.clone()).await else {
-                error!("Failed to connect to the solver service.");
-                return;
-            };
-
+            let solver_client = connect_to_solver(self.solver_api_url.clone());
             if let Err(e) = solver_client
                 .post::<()>("submit_bid")
                 .body_json(&bid_tx)
@@ -121,7 +113,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
             }
 
             info!("Submitted bid for view {}", *view_number);
-        }
+        });
     }
 }
 
@@ -131,40 +123,64 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
 pub(crate) struct EspressoFallbackHooks {
     /// Base API to contact the solver
     pub(crate) solver_api_url: Url,
+    pub(crate) namespaces_to_skip: RwLock<Option<HashSet<NamespaceId>>>,
 }
 
 #[async_trait]
 impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
     #[inline(always)]
     async fn process_transactions(
-        &mut self,
+        self: &Arc<Self>,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
-        let Some(solver_client) = connect_to_solver(self.solver_api_url.clone()).await else {
-            error!("Failed to connect to the solver service.");
-            return Vec::new();
-        };
+        let namespaces_to_skip = self.namespaces_to_skip.read().await;
 
-        let mut namespaces_to_skip = HashSet::new();
-        let registrations: Vec<RollupRegistration> =
-            match solver_client.get("rollup_registrations").send().await {
-                Ok(registrations) => registrations,
-                Err(e) => {
-                    error!("Failed to get the registered rollups: {:?}.", e);
-                    return Vec::new();
-                }
-            };
-        for registration in registrations {
-            // Rollups that have reserve builders or aren't active shouldn't be served by fallback builder
-            if registration.body.reserve_url.is_some() || !registration.body.active {
-                namespaces_to_skip.insert(registration.body.namespace_id);
+        match namespaces_to_skip.as_ref() {
+            Some(namespaces_to_skip) => {
+                transactions.retain(|txn| !namespaces_to_skip.contains(&txn.namespace()));
+                transactions
+            }
+            // Solver connection has failed and we don't have up-to-date information on this
+            None => {
+                error!("Not accepting transactions due to outdated information");
+                Vec::new()
             }
         }
-
-        transactions.retain(|txn| !namespaces_to_skip.contains(&txn.namespace()));
-        transactions
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(&mut self, _event: &Event<SeqTypes>) {}
+    async fn handle_hotshot_event(self: &Arc<Self>, event: &Event<SeqTypes>) {
+        let EventType::ViewFinished { view_number } = event.event else {
+            return;
+        };
+
+        // Re-query the solver every 20 views
+        if view_number.rem_euclid(20) != 0 {
+            return;
+        }
+
+        let self = Arc::clone(self);
+        async_spawn(async move {
+            let solver_client = connect_to_solver(self.solver_api_url.clone());
+            match solver_client
+                .get::<Vec<RollupRegistration>>("rollup_registrations")
+                .send()
+                .await
+            {
+                Ok(registrations) => {
+                    let mut new_namespaces = HashSet::new();
+                    for registration in registrations {
+                        if registration.body.reserve_url.is_some() || !registration.body.active {
+                            new_namespaces.insert(registration.body.namespace_id);
+                        }
+                    }
+                    *self.namespaces_to_skip.write().await = Some(new_namespaces);
+                }
+                Err(e) => {
+                    *self.namespaces_to_skip.write().await = None;
+                    error!("Failed to get the registered rollups: {:?}.", e);
+                }
+            };
+        });
+    }
 }
