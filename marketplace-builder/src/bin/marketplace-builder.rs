@@ -71,10 +71,6 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY")]
     pub event_channel_capacity: NonZeroUsize,
 
-    /// NETWORK INITIAL NODE COUNT
-    #[clap(short, long, env = "ESPRESSO_BUILDER_INIT_NODE_COUNT")]
-    node_count: NonZeroUsize,
-
     /// The amount of time a builder can wait before timing out a request to the API.
     #[clap(
         short,
@@ -136,15 +132,10 @@ async fn main() -> anyhow::Result<()> {
 
     match (base, upgrade) {
         (V0_1::VERSION, FeeVersion::VERSION) => {
-            run(genesis, opt, SequencerVersions::<V0_1, FeeVersion>::new()).await
+            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
         }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-            run(
-                genesis,
-                opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
+            run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
         }
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
@@ -155,7 +146,6 @@ async fn main() -> anyhow::Result<()> {
 async fn run<V: Versions>(
     genesis: Genesis,
     opt: NonPermissionedBuilderOptions,
-    versions: V,
 ) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
@@ -197,7 +187,6 @@ async fn run<V: Versions>(
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
-        opt.node_count,
         instance_state,
         validated_state,
         opt.hotshot_event_streaming_url,
@@ -208,7 +197,6 @@ async fn run<V: Versions>(
         base_fee,
         bid_config,
         opt.solver_url,
-        versions,
     )
     .await?;
 

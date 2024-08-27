@@ -11,8 +11,9 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
-    NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MarketplaceVersion,
+    MockSequencerVersions, NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions,
+    ValidatedState, V0_1,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -41,8 +42,8 @@ use marketplace_builder_core::{
         BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
     },
     service::{
-        run_non_permissioned_standalone_builder_service, BroadcastSenders, GlobalState,
-        ProxyGlobalState, ReceivedTransaction,
+        run_builder_service, BroadcastSenders, BuilderHooks, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
     },
 };
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
@@ -51,10 +52,7 @@ use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
-use crate::{
-    hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
-    run_builder_api_service,
-};
+use crate::hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -84,32 +82,80 @@ pub fn build_instance_state<V: Versions>(
 }
 
 impl BuilderConfig {
+    async fn start_service<H>(
+        global_state: Arc<RwLock<GlobalState<SeqTypes>>>,
+        senders: BroadcastSenders<SeqTypes>,
+        hooks: Arc<H>,
+        builder_key_pair: EthKeyPair,
+        events_api_url: Url,
+        builder_api_url: Url,
+        api_timeout: Duration,
+    ) -> anyhow::Result<()>
+    where
+        H: BuilderHooks<SeqTypes>,
+    {
+        // create the proxy global state it will server the builder apis
+        let app = ProxyGlobalState::new(
+            global_state.clone(),
+            Arc::clone(&hooks),
+            (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            api_timeout,
+        )
+        .into_app()
+        .context("Failed to construct builder API app")?;
+
+        async_spawn(async move {
+            tracing::info!("Starting builder API app at {builder_api_url}");
+            let res = app
+                .serve(builder_api_url, MarketplaceVersion::instance())
+                .await;
+            tracing::error!(?res, "Builder API app exited");
+        });
+
+        // spawn the builder service
+        tracing::info!("Running builder against hotshot events API at {events_api_url}",);
+
+        let stream = marketplace_builder_core::utils::EventServiceStream::<
+            SeqTypes,
+            SequencerApiVersion,
+        >::connect(events_api_url)
+        .await?;
+
+        async_spawn(async move {
+            let res = run_builder_service::<SeqTypes>(hooks, senders, stream).await;
+            tracing::error!(?res, "Builder service exited");
+            if res.is_err() {
+                panic!("Builder should restart.");
+            }
+        });
+
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
-    pub async fn init<V: Versions>(
+    pub async fn init(
         is_reserve: bool,
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
         event_channel_capacity: NonZeroUsize,
-        node_count: NonZeroUsize,
         instance_state: NodeState,
         validated_state: ValidatedState,
-        hotshot_events_api_url: Url,
-        hotshot_builder_apis_url: Url,
-        max_api_timeout_duration: Duration,
+        events_api_url: Url,
+        builder_api_url: Url,
+        api_timeout: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
         bid_config: Option<BidConfig>,
         solver_api_url: Url,
-        _: V,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
             ?bootstrapped_view,
             %tx_channel_capacity,
             %event_channel_capacity,
-            ?max_api_timeout_duration,
+            ?api_timeout,
             buffered_view_num_count,
             ?maximize_txns_count_timeout_duration,
             "initializing builder",
@@ -142,12 +188,9 @@ impl BuilderConfig {
             senders.transactions.clone(),
             vid_commitment,
             bootstrapped_view,
-            bootstrapped_view,
-            buffered_view_num_count as u64,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
-        let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
             BuiltFromProposedBlock {
@@ -159,8 +202,7 @@ impl BuilderConfig {
             &receivers,
             req_receiver,
             Vec::new() /* tx_queue */,
-            global_state_clone,
-            node_count,
+            Arc::clone(&global_state),
             maximize_txns_count_timeout_duration,
             base_fee
                 .as_u64()
@@ -170,75 +212,51 @@ impl BuilderConfig {
             Arc::new(validated_state),
         );
 
-        // spawn the builder event loop
-        // Note: we don't do anything with the handle because BuilderState's
-        // event loop is going to be spawning child BuilderStates and will exit
-        // when the view it's building for is decided, so we don't care about
-        // it eventually finishing.
-        async_spawn(async move {
-            builder_state.event_loop();
-        });
-
-        // create the proxy global state it will server the builder apis
-        let proxy_global_state = ProxyGlobalState::new(
-            global_state.clone(),
-            (builder_key_pair.fee_account(), builder_key_pair.clone()),
-            max_api_timeout_duration,
-        );
-
-        // start the hotshot api service
-        run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
-
-        // spawn the builder service
-        let events_url = hotshot_events_api_url.clone();
-        tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
+        // Start builder event loop
+        builder_state.event_loop();
 
         if is_reserve {
-            let Some(bid_config) = bid_config else {
-                panic!("Missing bid config for the reserve builder.");
-            };
-            let hooks = hooks::EspressoReserveHooks {
+            let bid_config = bid_config.expect("Missing bid config for the reserve builder.");
+            let hooks = Arc::new(hooks::EspressoReserveHooks {
                 namespaces: bid_config.namespaces.into_iter().collect(),
                 solver_api_url,
-                builder_api_base_url: hotshot_builder_apis_url.clone(),
-                bid_key_pair: builder_key_pair,
+                builder_api_base_url: builder_api_url.clone(),
+                bid_key_pair: builder_key_pair.clone(),
                 bid_amount: bid_config.amount,
-            };
-
-            async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<
-                    SeqTypes,
-                    V, // todo change this function to take only api version
-                >(hooks, senders, events_url)
-                .await;
-                tracing::error!(?res, "Reserve builder service exited");
-                if res.is_err() {
-                    panic!("Reserve builder should restart.");
-                }
             });
-
-            tracing::info!("Reserve builder init finished");
+            Self::start_service(
+                Arc::clone(&global_state),
+                senders,
+                hooks,
+                builder_key_pair,
+                events_api_url.clone(),
+                builder_api_url.clone(),
+                api_timeout,
+            )
+            .await?;
         } else {
-            let hooks = hooks::EspressoFallbackHooks { solver_api_url };
-
-            async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<SeqTypes, V>(
-                    hooks, senders, events_url,
-                )
-                .await;
-                tracing::error!(?res, "Fallback builder service exited");
-                if res.is_err() {
-                    panic!("Fallback builder should restart.");
-                }
+            let hooks = Arc::new(hooks::EspressoFallbackHooks {
+                solver_api_url,
+                namespaces_to_skip: RwLock::new(None),
             });
-
-            tracing::info!("Fallback builder init finished");
+            Self::start_service(
+                Arc::clone(&global_state),
+                senders,
+                hooks,
+                builder_key_pair,
+                events_api_url.clone(),
+                builder_api_url.clone(),
+                api_timeout,
+            )
+            .await?;
         }
+
+        tracing::info!("Builder init finished");
 
         Ok(Self {
             global_state,
-            hotshot_events_api_url,
-            hotshot_builder_apis_url,
+            hotshot_events_api_url: events_api_url,
+            hotshot_builder_apis_url: builder_api_url,
         })
     }
 }
@@ -252,7 +270,7 @@ mod test {
         logging::{setup_backtrace, setup_logging},
     };
     use async_lock::RwLock;
-    use async_std::{stream::StreamExt, task};
+    use async_std::{prelude::FutureExt, stream::StreamExt, task};
     use committable::Commitment;
     use espresso_types::{
         mock::MockStateCatchup, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
@@ -276,10 +294,7 @@ mod test {
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
     };
-    use marketplace_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
-    };
+    use marketplace_builder_core::service::run_builder_service;
     use portpicker::pick_unused_port;
     use sequencer::{
         api::test_helpers::TestNetworkConfigBuilder,
@@ -333,16 +348,15 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
-            false,
+            true,
             FeeAccount::test_key_pair(),
             ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
             NonZeroUsize::new(1024).unwrap(),
-            NonZeroUsize::new(network.cfg.num_nodes()).unwrap(),
             NodeState::default(),
             ValidatedState::default(),
             event_service_url.clone(),
@@ -356,7 +370,6 @@ mod test {
                 amount: FeeAmount::from(10),
             }),
             format!("http://localhost:{}", 3000).parse().unwrap(),
-            MockSequencerVersions::new(),
         );
         let _builder_config = init.await;
 
@@ -384,7 +397,7 @@ mod test {
 
         // Test submitting transactions
         let transactions = (0..10)
-            .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
+            .map(|i| Transaction::new(10u32.into(), vec![1, 1, 1, i]))
             .collect::<Vec<_>>();
         txn_submission_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")

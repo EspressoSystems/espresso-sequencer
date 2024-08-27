@@ -33,6 +33,7 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-srs = "0.3.1"
+async-broadcast = "0.7.0"
 async-compatibility-layer = { version = "1.2.1", default-features = false, features = [
     "logging-utils",
 ] }

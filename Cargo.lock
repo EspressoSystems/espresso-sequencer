@@ -6145,7 +6145,7 @@ dependencies = [
  "anyhow",
  "async-broadcast",
  "async-compatibility-layer",
- "async-lock 3.4.0",
+ "async-lock 2.8.0",
  "async-std",
  "async-trait",
  "clap",
@@ -8352,7 +8352,7 @@ dependencies = [
  "once_cell",
  "ring 0.17.8",
  "rustls-pki-types",
- "rustls-webpki 0.102.6",
+ "rustls-webpki 0.102.7",
  "subtle",
  "zeroize",
 ]
@@ -8394,9 +8394,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.6"
+version = "0.102.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e6b52d4fda176fd835fdc55a835d4a89b8499cad995885a21149d5ad62f852e"
+checksum = "84678086bd54edf2b415183ed7a94d0efb049f1b646a33e22a36f3794be6ae56"
 dependencies = [
  "ring 0.17.8",
  "rustls-pki-types",
@@ -8607,6 +8607,7 @@ dependencies = [
  "anyhow",
  "ark-ff",
  "ark-serialize",
+ "async-broadcast",
  "async-compatibility-layer",
  "async-once-cell",
  "async-std",
@@ -8629,6 +8630,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot",
+ "hotshot-builder-api",
  "hotshot-contract-adapter",
  "hotshot-events-service",
  "hotshot-example-types",
@@ -8646,6 +8648,7 @@ dependencies = [
  "jf-signature",
  "jf-vid",
  "libp2p",
+ "marketplace-builder-core",
  "marketplace-solver",
  "num-traits",
  "num_enum",
