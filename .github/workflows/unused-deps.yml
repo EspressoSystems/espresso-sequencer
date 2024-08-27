@@ -5,7 +5,7 @@ on:
 name: udeps
 
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  RUSTFLAGS: '-Z threads=4 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
 
 jobs:
   check:

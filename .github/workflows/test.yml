@@ -18,7 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: '-Z threads=4 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  PARALLEL: '-Z threads=4'
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
@@ -34,7 +35,7 @@ jobs:
         with:
           version: nightly
 
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@nightly-2024-08-27
 
       - uses: taiki-e/install-action@nextest
 
@@ -49,7 +50,7 @@ jobs:
       - name: Build
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          export RUSTFLAGS="$RUSTFLAGS $PARALLEL --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           cargo +nightly build --locked --bin diff-test --release
           cargo +nightly nextest run --locked --release --workspace --all-features --no-run
@@ -60,7 +61,7 @@ jobs:
           CARGO_TERM_COLOR: always
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          export RUSTFLAGS="$RUSTFLAGS $PARALLEL --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           cargo +nightly nextest run --locked --release --workspace --all-features --verbose -E '!test(slow_)'
         timeout-minutes: 10
