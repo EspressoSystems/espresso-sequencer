@@ -555,8 +555,11 @@ impl SequencerPersistence for Persistence {
     async fn record_action(
         &mut self,
         view: ViewNumber,
-        _action: HotShotAction,
+        action: HotShotAction,
     ) -> anyhow::Result<()> {
+        if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
+            return Ok(());
+        }
         let stmt = "
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";

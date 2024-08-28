@@ -379,8 +379,11 @@ impl SequencerPersistence for Persistence {
     async fn record_action(
         &mut self,
         view: ViewNumber,
-        _action: HotShotAction,
+        action: HotShotAction,
     ) -> anyhow::Result<()> {
+        if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
+            return Ok(());
+        }
         self.replace(
             &self.voted_view_path(),
             |mut file| {
