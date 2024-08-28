@@ -381,6 +381,7 @@ impl SequencerPersistence for Persistence {
         view: ViewNumber,
         action: HotShotAction,
     ) -> anyhow::Result<()> {
+        // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
         }
