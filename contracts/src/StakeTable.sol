@@ -93,7 +93,7 @@ contract StakeTable is AbstractStakeTable {
     /// TODO handle this logic more appropriately when epochs are re-introduced
     /// @dev Fetches the current epoch from the light client contract.
     /// @return current epoch (computed from the current block)
-    function currentEpoch() public view returns (uint64) {
+    function currentEpoch() public pure returns (uint64) {
         return 0;
     }
 
