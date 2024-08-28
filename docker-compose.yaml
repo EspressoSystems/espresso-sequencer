@@ -743,7 +743,7 @@ services:
         condition: service_healthy
 
   dev-rollup:
-    image: ghcr.io/espressosystems/dev-rollup:main
+    image: ghcr.io/espressosystems/espresso-sequencer/dev-rollup:main
     command:
       dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
     environment:
