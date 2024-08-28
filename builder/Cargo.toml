@@ -17,7 +17,6 @@ async-lock = "2.2"
 async-std = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
-cld = { workspace = true }
 committable = { workspace = true }
 dotenvy = { workspace = true }
 espresso-types = { path = "../types", version = "*", features = ["testing"] }
