@@ -607,9 +607,6 @@
 <a href="#607" id="607">607</a>
 <a href="#608" id="608">608</a>
 <a href="#609" id="609">609</a>
-<a href="#610" id="610">610</a>
-<a href="#611" id="611">611</a>
-<a href="#612" id="612">612</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
@@ -1049,10 +1046,7 @@
         // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
         // starting in a view in which we had already voted before the restart, and prevents
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>view = max(highest_voted_view, leaf.view_number());
-        <span class="kw">if </span>view != ViewNumber::genesis() {
-            view += <span class="number">1</span>;
-        }
+        </span><span class="kw">let </span>view = max(highest_voted_view, leaf.view_number());
 
         <span class="kw">let </span>(undecided_leaves, undecided_state) = <span class="self">self
             </span>.load_undecided_state()

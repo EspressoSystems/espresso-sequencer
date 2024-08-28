@@ -667,6 +667,10 @@
 <a href="#667" id="667">667</a>
 <a href="#668" id="668">668</a>
 <a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -1224,8 +1228,12 @@
     <span class="kw">async fn </span>record_action(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         view: ViewNumber,
-        _action: HotShotAction,
+        action: HotShotAction,
     ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="comment">// Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
+        </span><span class="kw">if </span>!<span class="macro">matches!</span>(action, HotShotAction::Propose | HotShotAction::Vote) {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+        }
         <span class="kw">let </span>stmt = <span class="string">"
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)"</span>;
