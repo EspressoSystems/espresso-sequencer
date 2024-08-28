@@ -65,7 +65,7 @@
 #[serde(rename_all = <span class="string">"snake_case"</span>)]
 </span><span class="kw">pub enum </span>UpgradeType {
     Fee { chain_config: ChainConfig },
-    Marketplace {},
+    Marketplace { chain_config: ChainConfig },
 }
 
 <span class="doccomment">/// Represents an upgrade based on time (unix timestamp).

@@ -2429,11 +2429,11 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>validated_state = parent_state.clone();
 
-        <span class="kw">let </span>chain_config = <span class="kw">if </span>version &gt; instance_state.current_version {
+        <span class="kw">let </span>chain_config = <span class="kw">if </span>version &gt;= MarketplaceVersion::version() {
             <span class="kw">match </span>instance_state.upgrades.get(<span class="kw-2">&amp;</span>version) {
                 <span class="prelude-val">Some</span>(upgrade) =&gt; <span class="kw">match </span>upgrade.upgrade_type {
+                    UpgradeType::Marketplace { chain_config } =&gt; chain_config,
                     UpgradeType::Fee { chain_config } =&gt; chain_config,
-                    <span class="kw">_ </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span>,
                 },
                 <span class="prelude-val">None </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span>,
             }
