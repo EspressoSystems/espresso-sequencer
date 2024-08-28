@@ -54,6 +54,8 @@ pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, Marketplace
 /// - `Some` namespaces if the fetching succeeds, even if the list is empty.
 /// - `None` if the fetching fails.
 pub async fn fetch_namespaces_to_skip(solver_api_url: Url) -> Option<HashSet<NamespaceId>> {
+    // TODO: Make API path consistent between real and mock solvers.
+    // <https://github.com/EspressoSystems/espresso-sequencer/issues/1935>
     let solver_client = connect_to_solver(solver_api_url);
     match solver_client
         .get::<Vec<RollupRegistration>>("rollup_registrations")
