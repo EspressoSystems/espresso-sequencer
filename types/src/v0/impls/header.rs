@@ -752,8 +752,8 @@ impl BlockHeader<SeqTypes> for Header {
         let chain_config = if version >= MarketplaceVersion::version() {
             match instance_state.upgrades.get(&version) {
                 Some(upgrade) => match upgrade.upgrade_type {
-                    UpgradeType::Marketplace { chain_config }
-                    | UpgradeType::Fee { chain_config } => chain_config,
+                    UpgradeType::Marketplace { chain_config } => chain_config,
+                    UpgradeType::Fee { chain_config } => chain_config,
                 },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }
