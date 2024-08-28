@@ -48,6 +48,34 @@ pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, Marketplace
     )
 }
 
+/// Fetch registered namespaces from the solver and construct the list of namespaces to skip.
+///
+/// # Returns
+/// - `Some` namespaces if the fetching succeeds, even if the list is empty.
+/// - `None` if the fetching fails.
+pub async fn fetch_namespaces_to_skip(solver_api_url: Url) -> Option<HashSet<NamespaceId>> {
+    let solver_client = connect_to_solver(solver_api_url);
+    match solver_client
+        .get::<Vec<RollupRegistration>>("rollup_registrations")
+        .send()
+        .await
+    {
+        Ok(registrations) => {
+            let mut namespaces_to_skip = HashSet::new();
+            for registration in registrations {
+                if registration.body.reserve_url.is_some() || !registration.body.active {
+                    namespaces_to_skip.insert(registration.body.namespace_id);
+                }
+            }
+            Some(namespaces_to_skip)
+        }
+        Err(e) => {
+            error!("Failed to get the registered rollups: {:?}.", e);
+            None
+        }
+    }
+}
+
 /// Reserve builder hooks for espresso sequencer.
 ///
 /// Provides bidding and transaction filtering on top of base builder functionality.
@@ -161,26 +189,8 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
 
         let self = Arc::clone(self);
         async_spawn(async move {
-            let solver_client = connect_to_solver(self.solver_api_url.clone());
-            match solver_client
-                .get::<Vec<RollupRegistration>>("rollup_registrations")
-                .send()
-                .await
-            {
-                Ok(registrations) => {
-                    let mut new_namespaces = HashSet::new();
-                    for registration in registrations {
-                        if registration.body.reserve_url.is_some() || !registration.body.active {
-                            new_namespaces.insert(registration.body.namespace_id);
-                        }
-                    }
-                    *self.namespaces_to_skip.write().await = Some(new_namespaces);
-                }
-                Err(e) => {
-                    *self.namespaces_to_skip.write().await = None;
-                    error!("Failed to get the registered rollups: {:?}.", e);
-                }
-            };
+            let namespaces_to_skip = fetch_namespaces_to_skip(self.solver_api_url.clone()).await;
+            *self.namespaces_to_skip.write().await = namespaces_to_skip;
         });
     }
 }
