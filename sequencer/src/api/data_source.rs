@@ -373,7 +373,7 @@ impl From<NetworkConfig<PubKey>> for PublicNetworkConfig {
             rounds: cfg.rounds,
             indexed_da: cfg.indexed_da,
             transactions_per_round: cfg.transactions_per_round,
-            manual_start_password: cfg.manual_start_password,
+            manual_start_password: Some("*****".into()),
             num_bootrap: cfg.num_bootrap,
             next_view_timeout: cfg.next_view_timeout,
             view_sync_timeout: cfg.view_sync_timeout,
