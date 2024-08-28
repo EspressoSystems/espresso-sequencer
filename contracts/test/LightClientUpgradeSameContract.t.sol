@@ -29,8 +29,6 @@ contract LightClientUpgradeSameContractTest is Test {
     }
 
     function testCorrectInitialization() public view {
-        assert(lcV1Proxy.currentEpoch() == 0);
-
         assertEq(abi.encode(lcV1Proxy.getGenesisState()), abi.encode(stateV1));
 
         assertEq(abi.encode(lcV1Proxy.getFinalizedState()), abi.encode(stateV1));
@@ -48,8 +46,6 @@ contract LightClientUpgradeSameContractTest is Test {
         // field
         // of the upgraded contract is set to 0
         lcV2Proxy = LCV2(upgrader.run(0, proxy));
-
-        assertEq(lcV2Proxy.currentEpoch(), 0);
 
         LCV2.LightClientState memory expectedLightClientState = LCV2.LightClientState(
             stateV1.viewNum,

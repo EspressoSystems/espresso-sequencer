@@ -84,7 +84,6 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     function test_CorrectInitialization() external view {
         assertEq(abi.encode(lc.getGenesisState()), abi.encode(genesis));
         assertEq(abi.encode(lc.getFinalizedState()), abi.encode(genesis));
-        // assert(lc.currentEpoch() == 0);
 
         bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
         assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
@@ -363,7 +362,6 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             // check against hardcoded epoch advancement expectation
             if (i == BLOCKS_PER_EPOCH_TEST) {
                 // first block of a new epoch (from epoch 2) should update the following
-                // assertEq(lc.currentEpoch(), 2);
                 bytes32 genesisComm = lc.computeStakeTableComm(genesis);
                 LC.LightClientState memory lastBlockInFirstEpoch = states[i - 1];
                 bytes32 firstEpochComm = lc.computeStakeTableComm(lastBlockInFirstEpoch);
@@ -372,7 +370,6 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
                 assertEq(lc.votingThreshold(), genesis.threshold);
                 assertEq(lc.frozenThreshold(), lastBlockInFirstEpoch.threshold);
             } else {
-                // assertEq(lc.currentEpoch(), 1);
                 bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
                 assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
                 assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
@@ -410,7 +407,6 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         vm.prank(permissionedProver);
         lc.newFinalizedState(state, proof);
 
-        // assertEq(lc.currentEpoch(), 1);
         bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
         assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
         assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);

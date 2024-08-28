@@ -49,9 +49,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === Storage ===
     //
-    /// @notice current (finalized) epoch number
-    uint64 public currentEpoch;
-
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
     /// of last epoch)
     bytes32 public votingStakeTableCommitment;
@@ -226,8 +223,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
         states[genesisState] = _genesis;
         states[finalizedState] = _genesis;
-
-        currentEpoch = 0;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
 

@@ -68,22 +68,6 @@ pub mod light_client {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("currentEpoch"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("currentEpoch"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint64"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode",),
@@ -1093,12 +1077,6 @@ pub mod light_client {
         ) -> ::ethers::contract::builders::ContractCall<M, [u8; 32]> {
             self.0
                 .method_hash([170, 146, 39, 50], (state,))
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `currentEpoch` (0x76671808) function
-        pub fn current_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
-            self.0
-                .method_hash([118, 103, 24, 8], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `disablePermissionedProverMode` (0x69cc6a04) function
@@ -2401,21 +2379,6 @@ pub mod light_client {
     pub struct ComputeStakeTableCommCall {
         pub state: LightClientState,
     }
-    ///Container type for all input parameters for the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "currentEpoch", abi = "currentEpoch()")]
-    pub struct CurrentEpochCall;
     ///Container type for all input parameters for the `disablePermissionedProverMode` function with signature `disablePermissionedProverMode()` and selector `0x69cc6a04`
     #[derive(
         Clone,
@@ -2859,7 +2822,6 @@ pub mod light_client {
     pub enum LightClientCalls {
         UpgradeInterfaceVersion(UpgradeInterfaceVersionCall),
         ComputeStakeTableComm(ComputeStakeTableCommCall),
-        CurrentEpoch(CurrentEpochCall),
         DisablePermissionedProverMode(DisablePermissionedProverModeCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
         FrozenThreshold(FrozenThresholdCall),
@@ -2901,10 +2863,6 @@ pub mod light_client {
                 <ComputeStakeTableCommCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::ComputeStakeTableComm(decoded));
-            }
-            if let Ok(decoded) = <CurrentEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::CurrentEpoch(decoded));
             }
             if let Ok(decoded) =
                 <DisablePermissionedProverModeCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -3039,7 +2997,6 @@ pub mod light_client {
                 Self::ComputeStakeTableComm(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::CurrentEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::DisablePermissionedProverMode(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -3100,7 +3057,6 @@ pub mod light_client {
             match self {
                 Self::UpgradeInterfaceVersion(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ComputeStakeTableComm(element) => ::core::fmt::Display::fmt(element, f),
-                Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::DisablePermissionedProverMode(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -3142,11 +3098,6 @@ pub mod light_client {
     impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientCalls {
         fn from(value: ComputeStakeTableCommCall) -> Self {
             Self::ComputeStakeTableComm(value)
-        }
-    }
-    impl ::core::convert::From<CurrentEpochCall> for LightClientCalls {
-        fn from(value: CurrentEpochCall) -> Self {
-            Self::CurrentEpoch(value)
         }
     }
     impl ::core::convert::From<DisablePermissionedProverModeCall> for LightClientCalls {
@@ -3307,20 +3258,6 @@ pub mod light_client {
         Hash,
     )]
     pub struct ComputeStakeTableCommReturn(pub [u8; 32]);
-    ///Container type for all return fields from the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct CurrentEpochReturn(pub u64);
     ///Container type for all return fields from the `frozenStakeTableCommitment` function with signature `frozenStakeTableCommitment()` and selector `0x382b215a`
     #[derive(
         Clone,

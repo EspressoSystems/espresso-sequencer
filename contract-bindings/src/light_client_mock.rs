@@ -92,22 +92,6 @@ pub mod light_client_mock {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("currentEpoch"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("currentEpoch"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint64"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("disablePermissionedProverMode",),
@@ -524,22 +508,6 @@ pub mod light_client_mock {
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("renounceOwnership"),
                         inputs: ::std::vec![],
-                        outputs: ::std::vec![],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
-                    },],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("setCurrentEpoch"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("setCurrentEpoch"),
-                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned("newEpoch"),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint64"),
-                            ),
-                        },],
                         outputs: ::std::vec![],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
@@ -1217,12 +1185,6 @@ pub mod light_client_mock {
                 .method_hash([170, 146, 39, 50], (state,))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `currentEpoch` (0x76671808) function
-        pub fn current_epoch(&self) -> ::ethers::contract::builders::ContractCall<M, u64> {
-            self.0
-                .method_hash([118, 103, 24, 8], ())
-                .expect("method not found (this should never happen)")
-        }
         ///Calls the contract's `disablePermissionedProverMode` (0x69cc6a04) function
         pub fn disable_permissioned_prover_mode(
             &self,
@@ -1354,15 +1316,6 @@ pub mod light_client_mock {
         pub fn renounce_ownership(&self) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([113, 80, 24, 166], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `setCurrentEpoch` (0x3949d1e9) function
-        pub fn set_current_epoch(
-            &self,
-            new_epoch: u64,
-        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
-            self.0
-                .method_hash([57, 73, 209, 233], new_epoch)
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `setFinalizedState` (0x202a0adb) function
@@ -2569,21 +2522,6 @@ pub mod light_client_mock {
     pub struct ComputeStakeTableCommCall {
         pub state: LightClientState,
     }
-    ///Container type for all input parameters for the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "currentEpoch", abi = "currentEpoch()")]
-    pub struct CurrentEpochCall;
     ///Container type for all input parameters for the `disablePermissionedProverMode` function with signature `disablePermissionedProverMode()` and selector `0x69cc6a04`
     #[derive(
         Clone,
@@ -2849,23 +2787,6 @@ pub mod light_client_mock {
     )]
     #[ethcall(name = "renounceOwnership", abi = "renounceOwnership()")]
     pub struct RenounceOwnershipCall;
-    ///Container type for all input parameters for the `setCurrentEpoch` function with signature `setCurrentEpoch(uint64)` and selector `0x3949d1e9`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "setCurrentEpoch", abi = "setCurrentEpoch(uint64)")]
-    pub struct SetCurrentEpochCall {
-        pub new_epoch: u64,
-    }
     ///Container type for all input parameters for the `setFinalizedState` function with signature `setFinalizedState((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x202a0adb`
     #[derive(
         Clone,
@@ -3116,7 +3037,6 @@ pub mod light_client_mock {
     pub enum LightClientMockCalls {
         UpgradeInterfaceVersion(UpgradeInterfaceVersionCall),
         ComputeStakeTableComm(ComputeStakeTableCommCall),
-        CurrentEpoch(CurrentEpochCall),
         DisablePermissionedProverMode(DisablePermissionedProverModeCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
         FrozenThreshold(FrozenThresholdCall),
@@ -3133,7 +3053,6 @@ pub mod light_client_mock {
         PermissionedProverEnabled(PermissionedProverEnabledCall),
         ProxiableUUID(ProxiableUUIDCall),
         RenounceOwnership(RenounceOwnershipCall),
-        SetCurrentEpoch(SetCurrentEpochCall),
         SetFinalizedState(SetFinalizedStateCall),
         SetHotShotDownSince(SetHotShotDownSinceCall),
         SetHotShotUp(SetHotShotUpCall),
@@ -3163,10 +3082,6 @@ pub mod light_client_mock {
                 <ComputeStakeTableCommCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::ComputeStakeTableComm(decoded));
-            }
-            if let Ok(decoded) = <CurrentEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::CurrentEpoch(decoded));
             }
             if let Ok(decoded) =
                 <DisablePermissionedProverModeCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -3240,11 +3155,6 @@ pub mod light_client_mock {
                 <RenounceOwnershipCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::RenounceOwnership(decoded));
-            }
-            if let Ok(decoded) =
-                <SetCurrentEpochCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::SetCurrentEpoch(decoded));
             }
             if let Ok(decoded) =
                 <SetFinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -3325,7 +3235,6 @@ pub mod light_client_mock {
                 Self::ComputeStakeTableComm(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::CurrentEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::DisablePermissionedProverMode(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -3356,7 +3265,6 @@ pub mod light_client_mock {
                 }
                 Self::ProxiableUUID(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::RenounceOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::SetCurrentEpoch(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::SetFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::SetHotShotDownSince(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -3393,7 +3301,6 @@ pub mod light_client_mock {
             match self {
                 Self::UpgradeInterfaceVersion(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ComputeStakeTableComm(element) => ::core::fmt::Display::fmt(element, f),
-                Self::CurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::DisablePermissionedProverMode(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -3412,7 +3319,6 @@ pub mod light_client_mock {
                 Self::PermissionedProverEnabled(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ProxiableUUID(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RenounceOwnership(element) => ::core::fmt::Display::fmt(element, f),
-                Self::SetCurrentEpoch(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetHotShotDownSince(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetHotShotUp(element) => ::core::fmt::Display::fmt(element, f),
@@ -3440,11 +3346,6 @@ pub mod light_client_mock {
     impl ::core::convert::From<ComputeStakeTableCommCall> for LightClientMockCalls {
         fn from(value: ComputeStakeTableCommCall) -> Self {
             Self::ComputeStakeTableComm(value)
-        }
-    }
-    impl ::core::convert::From<CurrentEpochCall> for LightClientMockCalls {
-        fn from(value: CurrentEpochCall) -> Self {
-            Self::CurrentEpoch(value)
         }
     }
     impl ::core::convert::From<DisablePermissionedProverModeCall> for LightClientMockCalls {
@@ -3525,11 +3426,6 @@ pub mod light_client_mock {
     impl ::core::convert::From<RenounceOwnershipCall> for LightClientMockCalls {
         fn from(value: RenounceOwnershipCall) -> Self {
             Self::RenounceOwnership(value)
-        }
-    }
-    impl ::core::convert::From<SetCurrentEpochCall> for LightClientMockCalls {
-        fn from(value: SetCurrentEpochCall) -> Self {
-            Self::SetCurrentEpoch(value)
         }
     }
     impl ::core::convert::From<SetFinalizedStateCall> for LightClientMockCalls {
@@ -3630,20 +3526,6 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct ComputeStakeTableCommReturn(pub [u8; 32]);
-    ///Container type for all return fields from the `currentEpoch` function with signature `currentEpoch()` and selector `0x76671808`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct CurrentEpochReturn(pub u64);
     ///Container type for all return fields from the `frozenStakeTableCommitment` function with signature `frozenStakeTableCommitment()` and selector `0x382b215a`
     #[derive(
         Clone,

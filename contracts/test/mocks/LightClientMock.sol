@@ -17,11 +17,6 @@ contract LightClientMock is LC {
         _initializeState(genesis, maxHistorySeconds);
     }
 
-    /// @dev Directly mutate currentEpoch variable for test
-    function setCurrentEpoch(uint64 newEpoch) public {
-        currentEpoch = newEpoch;
-    }
-
     /// @dev Directly mutate finalizedState variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
         states[finalizedState] = state;

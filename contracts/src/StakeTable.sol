@@ -90,10 +90,11 @@ contract StakeTable is AbstractStakeTable {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
+    /// TODO handle this logic more appropriately when epochs are re-introduced
     /// @dev Fetches the current epoch from the light client contract.
     /// @return current epoch (computed from the current block)
     function currentEpoch() public view returns (uint64) {
-        return lightClient.currentEpoch();
+        return 0;
     }
 
     /// @notice Total stakes of the registered keys in the latest stake table (Head).
