@@ -6,7 +6,7 @@ use async_compatibility_layer::channel::{Receiver, Sender};
 use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
-    message::MessageKind,
+    message::{MessageKind, UpgradeLock},
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, Topic},
         node_implementation::Versions,
@@ -143,6 +143,9 @@ impl<V: Versions> ExternalEventHandler<V> {
     ) -> Result<Vec<u8>> {
         let response = ExternalMessage::RollCallResponse(roll_call_info.clone());
 
+        // Create an `UpgradeLock` from the supplied `Versions`
+        let upgrade_lock = UpgradeLock::<SeqTypes, V>::new();
+
         // Serialize the response
         let response_bytes = bincode::serialize(&response)
             .with_context(|| "Failed to serialize roll call response")?;
@@ -152,7 +155,9 @@ impl<V: Versions> ExternalEventHandler<V> {
             kind: MessageKind::<SeqTypes>::External(response_bytes),
         };
 
-        let response_bytes = bincode::serialize(&message)
+        let response_bytes = upgrade_lock
+            .serialize(&message)
+            .await
             .with_context(|| "Failed to serialize roll call response")?;
 
         Ok(response_bytes)

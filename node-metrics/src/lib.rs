@@ -115,7 +115,10 @@ use hotshot::traits::implementations::{
     CdnMetricsValue, CdnTopic, PushCdnNetwork, WrappedSignatureKey,
 };
 use hotshot_query_service::metrics::PrometheusMetrics;
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey};
+use hotshot_types::traits::{
+    node_implementation::{NodeType, Versions},
+    signature_key::BuilderSignatureKey,
+};
 use tide_disco::App;
 use url::Url;
 
@@ -221,7 +224,7 @@ impl StateClientMessageSender<Sender<ServerMessage>> for MainState {
 /// This function will run the node validator as its own service.  It has some
 /// options that allow it to be configured in order for it to operate
 /// effectively.
-pub async fn run_standalone_service(options: Options) {
+pub async fn run_standalone_service<V: Versions>(options: Options) {
     let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(32);
     let state = MainState {
         internal_client_message_sender,
@@ -283,7 +286,8 @@ pub async fn run_standalone_service(options: Options) {
         let url_sender = node_validator_task_state.url_sender.clone();
 
         let broadcast_cdn_network = cdn_network.clone();
-        let cdn_receive_message_task = CdnReceiveMessagesTask::new(cdn_network, url_sender);
+        let cdn_receive_message_task =
+            CdnReceiveMessagesTask::new::<V, _, _>(cdn_network, url_sender);
         let broadcast_roll_call_task =
             BroadcastRollCallTask::new(broadcast_cdn_network, public_key);
 
