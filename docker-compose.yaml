@@ -503,9 +503,12 @@ services:
       - ESPRESSO_BENCH_START_BLOCK
       - ESPRESSO_BENCH_END_BLOCK
       - ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=1
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=6
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
+      
     depends_on:
       sequencer0:
         condition: service_healthy
@@ -517,28 +520,53 @@ services:
   submit-transactions-private:
     image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
     ports:
-      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT:8080"
+      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT:8081"
     environment:
       - ESPRESSO_ORCHESTRATOR_NUM_NODES
-      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=8080
-      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://permissionless-builder:$ESPRESSO_BUILDER_SERVER_PORT/txn_submit
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=8081
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://marketplace-reserve-builder:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT/txn_submit
       - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
       - ESPRESSO_BENCH_START_BLOCK
       - ESPRESSO_BENCH_END_BLOCK
       - ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=1
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=3
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
     depends_on:
       sequencer0:
         condition: service_healthy
-      permissionless-builder:
+      marketplace-reserve-builder:
+        condition: service_healthy
+
+ submit-transactions-private-fallback:
+    image: ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
+    ports:
+      - "$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT:8082"
+    environment:
+      - ESPRESSO_ORCHESTRATOR_NUM_NODES
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=8082
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://marketplace-fallback-builder:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT/txn_submit
+      - ESPRESSO_SUBMIT_TRANSACTIONS_DELAY
+      - ESPRESSO_BENCH_START_BLOCK
+      - ESPRESSO_BENCH_END_BLOCK
+      - ESPRESSO_SEQUENCER_URL
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=4
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=6
+      - RUST_LOG
+      - RUST_LOG_FORMAT
+      - ASYNC_STD_THREAD_COUNT
+    depends_on:
+      sequencer0:
+        condition: service_healthy
+      marketplace-fallback-builder:
         condition: service_healthy
 
   marketplace-reserve-builder:
     image: ghcr.io/espressosystems/espresso-sequencer/marketplace-builder:main
     ports:
-      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
+      - "$ESPRESSO_RESERVE_BUILDER_SERVER_PORT:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT"
     profiles: [marketplace]
     environment:
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=true
@@ -550,7 +578,7 @@ services:
       - ESPRESSO_BUILDER_ETH_MNEMONIC
       - ESPRESSO_BUILDER_ETH_ACCOUNT_INDEX
       - ESPRESSO_BUILDER_L1_PROVIDER
-      - ESPRESSO_BUILDER_SERVER_PORT
+      - ESPRESSO_BUILDER_SERVER_PORT=$ESPRESSO_RESERVE_BUILDER_SERVER_PORT
       - ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY
       - ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY
       - ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW
