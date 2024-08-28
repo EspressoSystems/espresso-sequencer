@@ -1465,12 +1465,21 @@ mod test {
     async fn test_fee_upgrade_view_based() {
         setup_test();
 
-        test_fee_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
-            start_voting_view: None,
-            stop_voting_view: None,
-            start_proposing_view: 1,
-            stop_proposing_view: 10,
-        }))
+        test_upgrade_helper(
+            UpgradeMode::View(ViewBasedUpgrade {
+                start_voting_view: None,
+                stop_voting_view: None,
+                start_proposing_view: 1,
+                stop_proposing_view: 10,
+            }),
+            UpgradeType::Fee {
+                chain_config: ChainConfig {
+                    max_block_size: 300.into(),
+                    base_fee: 1.into(),
+                    ..Default::default()
+                },
+            },
+        )
         .await;
     }
 
@@ -1479,35 +1488,59 @@ mod test {
         setup_test();
 
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        test_fee_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
-            start_proposing_time: Timestamp::from_integer(now).unwrap(),
-            stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
-            start_voting_time: None,
-            stop_voting_time: None,
-        }))
+        test_upgrade_helper(
+            UpgradeMode::Time(TimeBasedUpgrade {
+                start_proposing_time: Timestamp::from_integer(now).unwrap(),
+                stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
+                start_voting_time: None,
+                stop_voting_time: None,
+            }),
+            UpgradeType::Fee {
+                chain_config: ChainConfig {
+                    max_block_size: 300.into(),
+                    base_fee: 1.into(),
+                    ..Default::default()
+                },
+            },
+        )
         .await;
     }
 
-    async fn test_fee_upgrade_helper(mode: UpgradeMode) {
+    #[async_std::test]
+    async fn test_marketplace_upgrade_view_based() {
+        setup_test();
+
+        test_upgrade_helper(
+            UpgradeMode::View(ViewBasedUpgrade {
+                start_voting_view: None,
+                stop_voting_view: None,
+                start_proposing_view: 1,
+                stop_proposing_view: 10,
+            }),
+            UpgradeType::Marketplace {
+                chain_config: ChainConfig {
+                    max_block_size: 400.into(),
+                    base_fee: 2.into(),
+                    bid_recipient: Some(FeeAccount::default()),
+                    ..Default::default()
+                },
+            },
+        )
+        .await;
+    }
+
+    async fn test_upgrade_helper(mode: UpgradeMode, upgrade_type: UpgradeType) {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
 
-        let chain_config_upgrade = ChainConfig {
-            max_block_size: 300.into(),
-            base_fee: 1.into(),
-            ..Default::default()
-        };
+        let chain_config_upgrade = upgrade_type.data();
+
         let mut upgrades = std::collections::BTreeMap::new();
 
         upgrades.insert(
             StaticVersion::<0, 2>::version(),
-            Upgrade {
-                mode,
-                upgrade_type: UpgradeType::Fee {
-                    chain_config: chain_config_upgrade,
-                },
-            },
+            Upgrade { mode, upgrade_type },
         );
 
         const NUM_NODES: usize = 5;
@@ -1566,9 +1599,10 @@ mod test {
         // Loop to wait on the upgrade itself.
         loop {
             // Get height as a proxy for view number. Height is always
-            // >= to view, especially using anvil. As a possible
-            // alternative we might loop on hotshot events here again
-            // and pull the view number off the event.
+            // >= to view. Especially when using Anvil, there should be little
+            // difference. As a possible alternative we might loop on
+            // hotshot events here again and pull the view number off
+            // the event.
             let height = client
                 .get::<ViewNumber>("status/block-height")
                 .send()
