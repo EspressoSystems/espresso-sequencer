@@ -20,7 +20,7 @@ clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
 dotenvy = { workspace = true }
-espresso-types = { path = "../types", features = ["testing"] }
+espresso-types = { path = "../types", version = "*", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot = { workspace = true }
@@ -30,14 +30,14 @@ hotshot-events-service = { workspace = true }
 hotshot-example-types = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
-hotshot-state-prover = { path = "../hotshot-state-prover" }
+hotshot-state-prover = { path = "../hotshot-state-prover" , version = "*" }
 hotshot-types = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true, features = ["bls"] }
 libp2p = { workspace = true }
 portpicker = { workspace = true }
 rand = "0.8.5"
-sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer = { path = "../sequencer", features = ["testing"], version = "*" }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 surf = "2.3.1"
@@ -49,5 +49,5 @@ vbs = { workspace = true }
 vec1 = { workspace = true }
 
 [dev-dependencies]
-sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer = { path = "../sequencer", features = ["testing"], version = "*" }
 tempfile = "3.10.1"

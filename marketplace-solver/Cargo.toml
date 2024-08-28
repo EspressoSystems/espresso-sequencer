@@ -20,7 +20,7 @@ bincode = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
-espresso-types = { path = "../types", features = [ "testing" ] }
+espresso-types = { path = "../types", version = "*", features = ["testing"] }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-events-service = { workspace = true }

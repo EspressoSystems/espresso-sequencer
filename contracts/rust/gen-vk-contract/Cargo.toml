@@ -9,5 +9,5 @@ edition = { workspace = true }
 ark-srs = { workspace = true }
 hotshot-contract-adapter = { path = "../adapter" }
 hotshot-stake-table = { workspace = true }
-hotshot-state-prover = { path = "../../../hotshot-state-prover" }
+hotshot-state-prover = { path = "../../../hotshot-state-prover" , version = "*" }
 jf-pcs = { workspace = true }

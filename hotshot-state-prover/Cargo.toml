@@ -20,7 +20,7 @@ clap = { workspace = true }
 cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 displaydoc = { version = "0.2.3", default-features = false }
-espresso-types = { path = "../types", features = ["testing"] }
+espresso-types = { path = "../types", version = "*", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter = { workspace = true }
@@ -32,7 +32,7 @@ jf-pcs = { workspace = true }
 jf-plonk = { workspace = true }
 jf-relation = { workspace = true }
 jf-rescue = { workspace = true, features = ["gadgets"] }
-jf-signature = { workspace = true, features = ["schnorr", "bls", "gadgets"] }
+jf-signature = { workspace = true, features = ["bls", "gadgets"] }
 jf-utils = { workspace = true }
 reqwest = { workspace = true }
 sequencer-utils = { path = "../utils" }

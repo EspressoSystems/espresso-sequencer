@@ -42,7 +42,7 @@ rand = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10"                                                        # TODO temporary, used only for VID, should be set in hotshot
+sha2 = "0.10"
 static_assertions = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }

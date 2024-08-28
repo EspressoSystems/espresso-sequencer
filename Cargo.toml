@@ -34,9 +34,7 @@ ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-srs = "0.3.1"
 async-broadcast = "0.7.0"
-async-compatibility-layer = { version = "1.2.1", default-features = false, features = [
-    "logging-utils",
-] }
+async-compatibility-layer = { version = "1.2.1", features = ["logging-utils"] }
 async-once-cell = "0.5"
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
 async-trait = "0.1"
@@ -71,46 +69,23 @@ hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" 
 hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
 
 # Push CDN imports
-cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
-    "runtime-async-std",
-    "global-permits",
-], tag = "0.4.5", package = "cdn-broker" }
-cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
-    "runtime-async-std",
-    "global-permits",
-], tag = "0.4.5", package = "cdn-marshal" }
+cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = ["global-permits", "runtime-async-std"], tag = "0.4.5", package = "cdn-broker" }
+cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = ["global-permits", "runtime-async-std"], tag = "0.4.5", package = "cdn-marshal" }
 
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "test-apis",
-] }
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["test-apis"] }
 jf-crhf = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
-jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-] }
-jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-] }
-jf-pcs = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
-] }
-jf-vid = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
-] }
-jf-rescue = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
-] }
-jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-] }
+jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std"] }
+jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std"] }
+jf-pcs = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std"] }
+jf-vid = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std"] }
+jf-rescue = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std"] }
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std"] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 libp2p = { version = "0.53", default-features = false }
 log-panics = { version = "2.0", features = ["with-backtrace"] }
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
-sqlx = { version = "^0.8", features = [ "postgres", "macros" ] }
+sqlx = { version = "^0.8", features = ["postgres"] }
 tagged-base64 = "0.4"
 tide-disco = "0.9"
 thiserror = "1.0.61"
