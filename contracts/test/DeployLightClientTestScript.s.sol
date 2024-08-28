@@ -9,7 +9,7 @@ import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy
 
 contract DeployLightClientTestScript is Script {
     function run(
-        uint32 numBlocksPerEpoch,
+        uint32 numBlocksPerEpoch, // TODO remove
         uint64 numInitValidators,
         uint32 stateHistoryRetentionPeriod,
         address owner
@@ -19,14 +19,14 @@ contract DeployLightClientTestScript is Script {
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
+        cmds[2] = vm.toString(numBlocksPerEpoch); // TODO remove
         cmds[3] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod, owner);
+        return deployContract(state, stateHistoryRetentionPeriod, owner);
     }
 
     function runBench(
@@ -48,6 +48,7 @@ contract DeployLightClientTestScript is Script {
         return (lcTestProxy, admin, state);
     }
 
+    // TODO remove numBlocksPerEpoch
     function runDemo(uint32 numBlocksPerEpoch, uint32 stateHistoryRetentionPeriod, address owner)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
@@ -58,7 +59,7 @@ contract DeployLightClientTestScript is Script {
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
-        return deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod, owner);
+        return deployContract(state, stateHistoryRetentionPeriod, owner);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
@@ -67,20 +68,17 @@ contract DeployLightClientTestScript is Script {
     /// @return the light client state
     function deployContract(
         LC.LightClientState memory state,
-        uint32 numBlocksPerEpoch,
         uint32 stateHistoryRetentionPeriod,
         address owner
     ) public returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         vm.startBroadcast(owner);
 
-        LCMock lightClientContract =
-            new LCMock(state, numBlocksPerEpoch, stateHistoryRetentionPeriod);
+        LCMock lightClientContract = new LCMock(state, stateHistoryRetentionPeriod);
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
             "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,uint32,address)",
             state,
-            numBlocksPerEpoch,
             stateHistoryRetentionPeriod,
             owner
         );

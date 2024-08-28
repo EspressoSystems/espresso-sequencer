@@ -13,12 +13,8 @@ contract LightClientMock is LC {
     bool internal hotShotDown;
     uint256 internal frozenL1Height;
 
-    constructor(
-        LC.LightClientState memory genesis,
-        uint32 numBlockPerEpoch,
-        uint32 maxHistorySeconds
-    ) LC() {
-        _initializeState(genesis, numBlockPerEpoch, maxHistorySeconds);
+    constructor(LC.LightClientState memory genesis, uint32 maxHistorySeconds) LC() {
+        _initializeState(genesis, maxHistorySeconds);
     }
 
     /// @dev Directly mutate currentEpoch variable for test

@@ -72,6 +72,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice The quorum threshold for the frozen stake table
     uint256 public frozenThreshold;
 
+    /// @notice commitments to the **fixed** stake table
+    BN254.ScalarField public stakeTableBlsKeyComm; // TODO immutable does not work as we cannot use
+        // the constructor
+    BN254.ScalarField public stakeTableSchnorrKeyComm;
+    BN254.ScalarField public stakeTableAmountComm;
+
+    /// @notice Threshold of signatures needed to verify a quorum certificate
+    uint256 threshold;
+
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
 
@@ -179,13 +188,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice This contract is called by the proxy when you deploy this contract
     /// @param _genesis The initial state of the light client
-    /// @param _blocksPerEpoch The number of blocks per epoch
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
-        uint32 _blocksPerEpoch,
         uint32 _stateHistoryRetentionPeriod,
         address owner
     ) public initializer {
@@ -193,7 +200,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
         genesisState = 0;
         finalizedState = 1;
-        _initializeState(_genesis, _blocksPerEpoch, _stateHistoryRetentionPeriod);
+
+        // Initialize parameters for the fixed stake table
+        stakeTableAmountComm = _genesis.stakeTableBlsKeyComm;
+        stakeTableSchnorrKeyComm = _genesis.stakeTableSchnorrKeyComm;
+        stakeTableAmountComm = _genesis.stakeTableAmountComm;
+        threshold = _genesis.threshold;
+
+        _initializeState(_genesis, _stateHistoryRetentionPeriod);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -217,14 +231,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param _genesis The initial state of the light client
-    /// @param _blockPerEpoch The number of blocks per epoch
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history
-    function _initializeState(
-        LightClientState memory _genesis,
-        uint32 _blockPerEpoch,
-        uint32 _stateHistoryRetentionPeriod
-    ) internal {
+    function _initializeState(LightClientState memory _genesis, uint32 _stateHistoryRetentionPeriod)
+        internal
+    {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -234,7 +245,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 || BN254.ScalarField.unwrap(_genesis.stakeTableBlsKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesis.stakeTableSchnorrKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesis.stakeTableAmountComm) == 0
-                || _genesis.threshold == 0 || _blockPerEpoch == 0
+                || _genesis.threshold == 0
         ) {
             revert InvalidArgs();
         }
@@ -242,8 +253,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         states[finalizedState] = _genesis;
 
         currentEpoch = 0;
-
-        blocksPerEpoch = _blockPerEpoch;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
 
@@ -286,24 +295,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert OutdatedState();
         }
-        uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
-        // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = states[finalizedState].blockHeight == epochEndingBlockHeight;
-        if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
-            revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
-        }
         // format validity check
         BN254.validateScalarField(newState.blockCommRoot);
         BN254.validateScalarField(newState.feeLedgerComm);
         BN254.validateScalarField(newState.stakeTableBlsKeyComm);
         BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
         BN254.validateScalarField(newState.stakeTableAmountComm);
-
-        // If the newState is in a new epoch, increment the `currentEpoch`, update the stake table.
-        if (isNewEpoch) {
-            _advanceEpoch();
-        }
 
         // check plonk proof
         verifyProof(newState, proof);
@@ -455,9 +453,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice checks if the state updates lag behind the specified threshold based on the provided
     /// block number.
     /// @param blockNumber The block number to compare against the latest state updates
-    /// @param threshold The number of blocks updates to this contract is allowed to lag behind
+    /// @param lagThreshold The number of blocks updates to this contract is allowed to lag behind
     /// @return bool returns true if the lag exceeds the threshold; otherwise, false
-    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 threshold)
+    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 lagThreshold)
         public
         view
         virtual
@@ -500,7 +498,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InsufficientSnapshotHistory();
         }
 
-        return blockNumber - prevBlock > threshold;
+        return blockNumber - prevBlock > lagThreshold;
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at

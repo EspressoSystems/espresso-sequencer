@@ -31,13 +31,13 @@ contract LightClientCommonTest is Test {
 
     function deployAndInitProxy(
         LC.LightClientState memory state,
-        uint32 numBlocksPerEpoch,
+        uint32 numBlocksPerEpoch, // TODO remove
         uint32 stateHistoryRetentionPeriod
     ) public returns (address payable, address) {
         vm.warp(1 days);
         //deploy light client test with a proxy
         (lcTestProxy, admin, state) =
-            deployer.deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod, admin);
+            deployer.deployContract(state, stateHistoryRetentionPeriod, admin);
 
         //cast the proxy to be of type light client test
         lc = LCMock(lcTestProxy);
@@ -99,11 +99,11 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     // @dev helper function to be able to initialize the contract and capture the revert error
     function initWithExpectRevert(
         LC.LightClientState memory _genesis,
-        uint32 _blocksPerEpoch,
+        uint32 _blocksPerEpoch, // TODO remove
         uint32 _stateHistoryRetentionPeriod
     ) private {
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCMock(_genesis, _blocksPerEpoch, _stateHistoryRetentionPeriod);
+        lc = new LCMock(_genesis, _stateHistoryRetentionPeriod);
     }
 
     function test_RevertWhen_InvalidGenesis() external {

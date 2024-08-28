@@ -280,7 +280,7 @@ contract StakeTableInvariant_Tests is Test {
         uint32 maxHistorySeconds = 864000;
         uint64 churnRate = 10;
 
-        lightClientContract = new LightClientMock(genesis, numBlocksPerEpoch, maxHistorySeconds);
+        lightClientContract = new LightClientMock(genesis, maxHistorySeconds);
         stakeTable = new S(address(token), address(lightClientContract), churnRate);
         handler =
             new StakeTableHandlerTest(stakeTable, exampleTokenCreator, token, lightClientContract);

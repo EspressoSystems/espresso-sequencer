@@ -122,7 +122,7 @@ contract StakeTable_Test is StakeTableCommonTest {
 
         genesis = state;
 
-        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
+        lc = new LCTest(genesis, MAX_HISTORY_SECONDS);
         stakeTable = new S(address(token), address(lc), 10);
     }
 
