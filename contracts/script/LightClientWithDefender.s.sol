@@ -53,9 +53,7 @@ contract LightClientDefenderDeployScript is Script {
 
         proxy = Upgrades.deployUUPSProxy(
             contractName,
-            abi.encodeCall(
-                LC.initialize, (state, numBlocksPerEpoch, stateHistoryRetentionPeriod, multisig)
-            ),
+            abi.encodeCall(LC.initialize, (state, stateHistoryRetentionPeriod, multisig)),
             opts
         );
 

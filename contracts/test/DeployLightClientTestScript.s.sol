@@ -26,7 +26,7 @@ contract DeployLightClientTestScript is Script {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod, owner);
+        return deployContract(state, stateHistoryRetentionPeriod, owner);
     }
 
     function runBench(
@@ -48,7 +48,7 @@ contract DeployLightClientTestScript is Script {
         return (lcTestProxy, admin, state);
     }
 
-    function runDemo(uint32 numBlocksPerEpoch, uint32 stateHistoryRetentionPeriod, address owner)
+    function runDemo(uint32 stateHistoryRetentionPeriod, address owner)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -58,7 +58,7 @@ contract DeployLightClientTestScript is Script {
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
-        return deployContract(state, numBlocksPerEpoch, stateHistoryRetentionPeriod, owner);
+        return deployContract(state, stateHistoryRetentionPeriod, owner);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
@@ -67,20 +67,17 @@ contract DeployLightClientTestScript is Script {
     /// @return the light client state
     function deployContract(
         LC.LightClientState memory state,
-        uint32 numBlocksPerEpoch,
         uint32 stateHistoryRetentionPeriod,
         address owner
     ) public returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         vm.startBroadcast(owner);
 
-        LCMock lightClientContract =
-            new LCMock(state, numBlocksPerEpoch, stateHistoryRetentionPeriod);
+        LCMock lightClientContract = new LCMock(state, stateHistoryRetentionPeriod);
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,uint32,address)",
+            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
             state,
-            numBlocksPerEpoch,
             stateHistoryRetentionPeriod,
             owner
         );

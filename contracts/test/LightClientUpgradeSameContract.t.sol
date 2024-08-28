@@ -20,7 +20,7 @@ contract LightClientUpgradeSameContractTest is Test {
     address public admin;
     address public proxy;
 
-    uint32 constant MAX_HISTORY_SECONDS = 864000; //10 days
+    uint32 public constant MAX_HISTORY_SECONDS = 864000; //10 days
 
     // deploy the first implementation with its proxy
     function setUp() public {
@@ -29,7 +29,6 @@ contract LightClientUpgradeSameContractTest is Test {
     }
 
     function testCorrectInitialization() public view {
-        assert(lcV1Proxy.blocksPerEpoch() == 10);
         assert(lcV1Proxy.currentEpoch() == 0);
 
         assertEq(abi.encode(lcV1Proxy.getGenesisState()), abi.encode(stateV1));
@@ -50,7 +49,6 @@ contract LightClientUpgradeSameContractTest is Test {
         // of the upgraded contract is set to 0
         lcV2Proxy = LCV2(upgrader.run(0, proxy));
 
-        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
         assertEq(lcV2Proxy.currentEpoch(), 0);
 
         LCV2.LightClientState memory expectedLightClientState = LCV2.LightClientState(

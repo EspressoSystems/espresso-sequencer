@@ -30,9 +30,6 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Events ===
     //
-    // @notice Notify a new epoch is starting
-    event EpochChanged(uint64);
-
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
@@ -44,9 +41,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === System Parameters ===
     //
-    /// @notice number of blocks per epoch
-    uint32 public blocksPerEpoch;
-
     /// @notice genesis block commitment index
     uint32 internal genesisState;
 
@@ -145,9 +139,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice The state is outdated and older than currently known `finalizedState`
     error OutdatedState();
-    /// @notice Warning that the last block of the current epoch is not yet submitted before newer
-    /// states are proposed.
-    error MissingLastBlockForCurrentEpoch(uint64 expectedBlockHeight);
     /// @notice Invalid user inputs: wrong format or non-sensible arguments
     error InvalidArgs();
     /// @notice Wrong plonk proof or public inputs.
@@ -179,13 +170,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice This contract is called by the proxy when you deploy this contract
     /// @param _genesis The initial state of the light client
-    /// @param _blocksPerEpoch The number of blocks per epoch
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
-        uint32 _blocksPerEpoch,
         uint32 _stateHistoryRetentionPeriod,
         address owner
     ) public initializer {
@@ -193,7 +182,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
         genesisState = 0;
         finalizedState = 1;
-        _initializeState(_genesis, _blocksPerEpoch, _stateHistoryRetentionPeriod);
+        _initializeState(_genesis, _stateHistoryRetentionPeriod);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -217,14 +206,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param _genesis The initial state of the light client
-    /// @param _blockPerEpoch The number of blocks per epoch
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history
-    function _initializeState(
-        LightClientState memory _genesis,
-        uint32 _blockPerEpoch,
-        uint32 _stateHistoryRetentionPeriod
-    ) internal {
+    function _initializeState(LightClientState memory _genesis, uint32 _stateHistoryRetentionPeriod)
+        internal
+    {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -234,7 +220,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 || BN254.ScalarField.unwrap(_genesis.stakeTableBlsKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesis.stakeTableSchnorrKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesis.stakeTableAmountComm) == 0
-                || _genesis.threshold == 0 || _blockPerEpoch == 0
+                || _genesis.threshold == 0
         ) {
             revert InvalidArgs();
         }
@@ -242,8 +228,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         states[finalizedState] = _genesis;
 
         currentEpoch = 0;
-
-        blocksPerEpoch = _blockPerEpoch;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
 
@@ -286,24 +270,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert OutdatedState();
         }
-        uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
-        // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = states[finalizedState].blockHeight == epochEndingBlockHeight;
-        if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
-            revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
-        }
         // format validity check
         BN254.validateScalarField(newState.blockCommRoot);
         BN254.validateScalarField(newState.feeLedgerComm);
         BN254.validateScalarField(newState.stakeTableBlsKeyComm);
         BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
         BN254.validateScalarField(newState.stakeTableAmountComm);
-
-        // If the newState is in a new epoch, increment the `currentEpoch`, update the stake table.
-        if (isNewEpoch) {
-            _advanceEpoch();
-        }
 
         // check plonk proof
         verifyProof(newState, proof);
@@ -348,20 +321,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
-    }
-
-    /// @notice Advance to the next epoch (without any precondition check!)
-    /// @dev This meant to be invoked only internally after appropriate precondition checks are done
-    function _advanceEpoch() internal virtual {
-        bytes32 newStakeTableComm = computeStakeTableComm(states[finalizedState]);
-        votingStakeTableCommitment = frozenStakeTableCommitment;
-        frozenStakeTableCommitment = newStakeTableComm;
-
-        votingThreshold = frozenThreshold;
-        frozenThreshold = states[finalizedState].threshold;
-
-        currentEpoch += 1;
-        emit EpochChanged(currentEpoch);
     }
 
     /// @notice Given the light client state, compute the short commitment of the stake table
