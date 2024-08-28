@@ -184,6 +184,18 @@
 <a href="#184" id="184">184</a>
 <a href="#185" id="185">185</a>
 <a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashSet;
 <span class="kw">use </span>std::sync::Arc;
 <span class="kw">use </span>std::time::Duration;
@@ -232,6 +244,36 @@
     Client::&lt;SolverError, MarketplaceVersion&gt;::new(
         solver_api_url.join(<span class="string">"marketplace-solver/"</span>).unwrap(),
     )
+}
+
+<span class="doccomment">/// Fetch registered namespaces from the solver and construct the list of namespaces to skip.
+///
+/// # Returns
+/// - `Some` namespaces if the fetching succeeds, even if the list is empty.
+/// - `None` if the fetching fails.
+</span><span class="kw">pub async fn </span>fetch_namespaces_to_skip(solver_api_url: Url) -&gt; <span class="prelude-ty">Option</span>&lt;HashSet&lt;NamespaceId&gt;&gt; {
+    <span class="comment">// TODO: Make API path consistent between real and mock solvers.
+    // &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1935&gt;
+    </span><span class="kw">let </span>solver_client = connect_to_solver(solver_api_url);
+    <span class="kw">match </span>solver_client
+        .get::&lt;Vec&lt;RollupRegistration&gt;&gt;(<span class="string">"rollup_registrations"</span>)
+        .send()
+        .<span class="kw">await
+    </span>{
+        <span class="prelude-val">Ok</span>(registrations) =&gt; {
+            <span class="kw">let </span><span class="kw-2">mut </span>namespaces_to_skip = HashSet::new();
+            <span class="kw">for </span>registration <span class="kw">in </span>registrations {
+                <span class="kw">if </span>registration.body.reserve_url.is_some() || !registration.body.active {
+                    namespaces_to_skip.insert(registration.body.namespace_id);
+                }
+            }
+            <span class="prelude-val">Some</span>(namespaces_to_skip)
+        }
+        <span class="prelude-val">Err</span>(e) =&gt; {
+            <span class="macro">error!</span>(<span class="string">"Failed to get the registered rollups: {:?}."</span>, e);
+            <span class="prelude-val">None
+        </span>}
+    }
 }
 
 <span class="doccomment">/// Reserve builder hooks for espresso sequencer.
@@ -347,26 +389,8 @@
 
         <span class="kw">let </span><span class="self">self </span>= Arc::clone(<span class="self">self</span>);
         async_spawn(<span class="kw">async move </span>{
-            <span class="kw">let </span>solver_client = connect_to_solver(<span class="self">self</span>.solver_api_url.clone());
-            <span class="kw">match </span>solver_client
-                .get::&lt;Vec&lt;RollupRegistration&gt;&gt;(<span class="string">"rollup_registrations"</span>)
-                .send()
-                .<span class="kw">await
-            </span>{
-                <span class="prelude-val">Ok</span>(registrations) =&gt; {
-                    <span class="kw">let </span><span class="kw-2">mut </span>new_namespaces = HashSet::new();
-                    <span class="kw">for </span>registration <span class="kw">in </span>registrations {
-                        <span class="kw">if </span>registration.body.reserve_url.is_some() || !registration.body.active {
-                            new_namespaces.insert(registration.body.namespace_id);
-                        }
-                    }
-                    <span class="kw-2">*</span><span class="self">self</span>.namespaces_to_skip.write().<span class="kw">await </span>= <span class="prelude-val">Some</span>(new_namespaces);
-                }
-                <span class="prelude-val">Err</span>(e) =&gt; {
-                    <span class="kw-2">*</span><span class="self">self</span>.namespaces_to_skip.write().<span class="kw">await </span>= <span class="prelude-val">None</span>;
-                    <span class="macro">error!</span>(<span class="string">"Failed to get the registered rollups: {:?}."</span>, e);
-                }
-            };
+            <span class="kw">let </span>namespaces_to_skip = fetch_namespaces_to_skip(<span class="self">self</span>.solver_api_url.clone()).<span class="kw">await</span>;
+            <span class="kw-2">*</span><span class="self">self</span>.namespaces_to_skip.write().<span class="kw">await </span>= namespaces_to_skip;
         });
     }
 }

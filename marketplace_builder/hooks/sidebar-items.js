@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["connect_to_solver"],"struct":["BidConfig","EspressoFallbackHooks","EspressoReserveHooks"]};
+window.SIDEBAR_ITEMS = {"fn":["connect_to_solver","fetch_namespaces_to_skip"],"struct":["BidConfig","EspressoFallbackHooks","EspressoReserveHooks"]};
