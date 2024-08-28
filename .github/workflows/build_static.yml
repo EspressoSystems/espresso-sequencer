@@ -217,6 +217,7 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/marketplace-solver
           flavor: suffix=musl
+          
       - name: Generate marketplace-builder metadata
         uses: docker/metadata-action@v5
         id: marketplace-builder
