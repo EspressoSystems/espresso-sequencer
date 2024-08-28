@@ -30,7 +30,7 @@ hotshot-events-service = { workspace = true }
 hotshot-example-types = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
-hotshot-state-prover = { path = "../hotshot-state-prover" , version = "*" }
+hotshot-state-prover = { path = "../hotshot-state-prover", version = "*" }
 hotshot-types = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true, features = ["bls"] }
