@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
 use anyhow::Context;
 use async_broadcast::{
@@ -11,7 +11,7 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MarketplaceVersion,
+    eth_signature_key::EthKeyPair, v0_3::{ChainConfig, RollupRegistration}, FeeAmount, L1Client, MarketplaceVersion,
     MockSequencerVersions, NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions,
     ValidatedState, V0_1,
 };
@@ -46,13 +46,14 @@ use marketplace_builder_core::{
         ReceivedTransaction,
     },
 };
+use marketplace_solver::SolverError;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
-use crate::hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
+use crate::hooks::{self, connect_to_solver, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -239,9 +240,30 @@ impl BuilderConfig {
             )
             .await?;
         } else {
+            let solver_client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api_url.clone());
+            let namespaces_to_skip = match solver_client
+                .get::<Vec<RollupRegistration>>("rollup_registrations")
+                .send()
+                .await
+            {
+                Ok(registrations) => {
+                    let mut new_namespaces = HashSet::new();
+                    println!("here registrations {:?} ", registrations.clone());
+                    for registration in registrations {
+                        if registration.body.reserve_url.is_some() || !registration.body.active {
+                            new_namespaces.insert(registration.body.namespace_id);
+                        }
+                    }
+                    RwLock::new(Some(new_namespaces))
+                }
+                Err(e) => {
+                    println!("here no regis");
+                    RwLock::new(None)
+                }
+            };
             let hooks = Arc::new(hooks::EspressoFallbackHooks {
                 solver_api_url,
-                namespaces_to_skip: RwLock::new(None),
+                namespaces_to_skip,
             });
             Self::start_service(
                 Arc::clone(&global_state),
@@ -331,6 +353,199 @@ mod test {
     use super::*;
 
     #[async_std::test]
+    async fn test_marketplace_reserve_builder() {
+        setup_test();
+
+        let query_port = pick_unused_port().expect("No ports free");
+        let query_api_url: Url = format!("http://localhost:{query_port}").parse().unwrap();
+
+        let event_port = pick_unused_port().expect("No ports free");
+        let event_service_url: Url = format!("http://localhost:{event_port}").parse().unwrap();
+
+        let builder_port = pick_unused_port().expect("No ports free");
+        let builder_api_url: Url = format!("http://localhost:{builder_port}").parse().unwrap();
+
+        // Set up and start the network
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+
+        let tmpdir = TempDir::new().unwrap();
+        println!("here after tmpdir");
+
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(
+                Options::with_port(query_port)
+                    .submit(Default::default())
+                    .query_fs(
+                        Default::default(),
+                        persistence::fs::Options::new(tmpdir.path().to_owned()),
+                    )
+                    .hotshot_events(HotshotEvents {
+                        events_service_port: event_port,
+                    }),
+            )
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        let mock_solver = MockSolver::init().await;
+        let solver_api = mock_solver.solver_api();
+        println!("here after solver api");
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api.clone());
+
+        // Create a list of signature keys for rollup registration data
+        let mut signature_keys = Vec::new();
+
+        for _ in 0..10 {
+            let private_key =
+                <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+            signature_keys.push(BLSPubKey::from_private(&private_key))
+        }
+
+        let private_key =
+            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+        let signature_key = BLSPubKey::from_private(&private_key);
+
+        signature_keys.push(signature_key);
+
+        // Initialize a rollup registration with namespace id = 10
+        let reg_ns_1_body = RollupRegistrationBody {
+            namespace_id: 10_u64.into(),
+            reserve_url: Some(Url::from_str("http://localhost").unwrap()),
+            reserve_price: 200.into(),
+            active: true,
+            signature_keys: signature_keys.clone(),
+            text: "test".to_string(),
+            signature_key,
+        };
+
+        // Sign the registration body
+        let reg_signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &private_key,
+            reg_ns_1_body.commit().as_ref(),
+        )
+        .expect("failed to sign");
+
+        let reg_ns_1 = RollupRegistration {
+            body: reg_ns_1_body.clone(),
+            signature: reg_signature,
+        };
+
+        // registering a rollup
+        let _: RollupRegistration = client
+            .post("register_rollup")
+            .body_json(&reg_ns_1)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+        let result: Vec<RollupRegistration> =
+            client.get("rollup_registrations").send().await.unwrap();
+        assert_eq!(result, vec![reg_ns_1]);
+
+        // Start the builder
+        let init = BuilderConfig::init(
+            true,
+            FeeAccount::test_key_pair(),
+            ViewNumber::genesis(),
+            NonZeroUsize::new(1024).unwrap(),
+            NonZeroUsize::new(1024).unwrap(),
+            NodeState::default(),
+            ValidatedState::default(),
+            event_service_url.clone(),
+            builder_api_url.clone(),
+            Duration::from_secs(2),
+            5,
+            Duration::from_secs(2),
+            FeeAmount::from(10),
+            Some(BidConfig {
+                namespaces: vec![NamespaceId::from(10u32)],
+                amount: FeeAmount::from(10),
+            }),
+            solver_api,
+        );
+        println!("here after init");
+        let _ = init.await.unwrap();
+
+        // Wait for at least one empty block to be sequenced (after consensus starts VID).
+        let sequencer_client: Client<ServerError, SequencerApiVersion> = Client::new(query_api_url);
+        sequencer_client.connect(None).await;
+        sequencer_client
+            .socket("availability/stream/leaves/0")
+            .subscribe::<LeafQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
+        //  Connect to builder
+        let builder_client: Client<ServerError, MarketplaceVersion> =
+            Client::new(builder_api_url.clone());
+        builder_client.connect(None).await;
+
+        let txn_submission_client: Client<ServerError, SequencerApiVersion> =
+            Client::new(builder_api_url.clone());
+        txn_submission_client.connect(None).await;
+
+        // Test submitting transactions
+        let registered_transaction = Transaction::new(10u32.into(), vec![1, 1, 1, 1]);
+        let unregistered_transaction = Transaction::new(20u32.into(), vec![1, 1, 1, 2]);
+        let transactions = vec![registered_transaction.clone(), unregistered_transaction];
+        txn_submission_client
+            .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
+            .body_json(&transactions)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        let events_service_client = Client::<
+            hotshot_events_service::events::Error,
+            SequencerApiVersion,
+        >::new(event_service_url.clone());
+        events_service_client.connect(None).await;
+
+        let mut subscribed_events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        task::sleep(std::time::Duration::from_millis(1000)).await;
+
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(10) {
+                panic!("Didn't get a quorum proposal in 10 seconds");
+            }
+
+            let event = subscribed_events.next().await.unwrap().unwrap();
+            if let EventType::QuorumProposal { proposal, .. } = event.event {
+                let parent_view_number = *proposal.data.view_number;
+                println!("here parent_view_number {:?}", parent_view_number);
+                let parent_commitment =
+                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+                let bundle = builder_client
+                    .get::<Bundle<SeqTypes>>(
+                        format!(
+                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                            parent_view_number + 1
+                        )
+                        .as_str(),
+                    )
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(bundle.transactions, vec![registered_transaction]);
+                break;
+            }
+        }
+    }
+
+    #[async_std::test]
     async fn test_marketplace_fallback_builder() {
         setup_test();
 
@@ -411,7 +626,7 @@ mod test {
         };
 
         // registering a rollup
-        let result: RollupRegistration = client
+        let _: RollupRegistration = client
             .post("register_rollup")
             .body_json(&reg_ns_1)
             .unwrap()
@@ -441,7 +656,7 @@ mod test {
             solver_api,
         );
         println!("here after init");
-        let builder_config = init.await.unwrap();
+        let _ = init.await.unwrap();
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
         let sequencer_client: Client<ServerError, SequencerApiVersion> = Client::new(query_api_url);
@@ -466,10 +681,9 @@ mod test {
         txn_submission_client.connect(None).await;
 
         // Test submitting transactions
-        let transactions = vec![
-            Transaction::new(10u32.into(), vec![1, 1, 1, 1]),
-            Transaction::new(20u32.into(), vec![1, 1, 1, 2]),
-        ];
+        let registered_transaction = Transaction::new(10u32.into(), vec![1, 1, 1, 1]);
+        let unregistered_transaction = Transaction::new(20u32.into(), vec![1, 1, 1, 2]);
+        let transactions = vec![registered_transaction, unregistered_transaction.clone()];
         txn_submission_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
@@ -490,7 +704,7 @@ mod test {
             .await
             .unwrap();
 
-        task::sleep(std::time::Duration::from_millis(100)).await;
+        task::sleep(std::time::Duration::from_millis(1000)).await;
 
         let start = Instant::now();
         loop {
@@ -515,8 +729,7 @@ mod test {
                     .send()
                     .await
                     .unwrap();
-                assert_eq!(bundle.transactions, transactions);
-                println!("here transactions {:?}", transactions);
+                assert_eq!(bundle.transactions, vec![unregistered_transaction]);
                 break;
             }
         }

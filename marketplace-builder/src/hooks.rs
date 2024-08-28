@@ -134,19 +134,21 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
         self: &Arc<Self>,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
+        println!("here process_transactions");
         let namespaces_to_skip = self.namespaces_to_skip.read().await;
+        println!("here namespaces_to_skip {:?}", namespaces_to_skip);
 
         match namespaces_to_skip.as_ref() {
             Some(namespaces_to_skip) => {
                 transactions.retain(|txn| !namespaces_to_skip.contains(&txn.namespace()));
-                transactions
             }
-            // Solver connection has failed and we don't have up-to-date information on this
             None => {
-                error!("Not accepting transactions due to outdated information");
-                Vec::new()
+                error!("Not filtering transactions, possibly due to outdated information.");
             }
         }
+
+        println!("here transactions {:?}", transactions);
+        transactions
     }
 
     #[inline(always)]
@@ -155,22 +157,24 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
             return;
         };
 
-        // Re-query the solver every 20 views
-        if view_number.rem_euclid(20) != 0 {
-            return;
-        }
+        // // Re-query the solver every 5 views
+        // if view_number.rem_euclid(5) != 0 {
+        //     return;
+        // }
 
         let self = Arc::clone(self);
         async_spawn(async move {
-            let solver_client = connect_to_solver(self.solver_api_url.clone());
+            // let solver_client = connect_to_solver(self.solver_api_url.clone());
+            let solver_client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(self.solver_api_url.clone());
             match solver_client
                 .get::<Vec<RollupRegistration>>("rollup_registrations")
                 .send()
                 .await
             {
                 Ok(registrations) => {
+                    println!("here registrations {:?} ", registrations.clone());
                     let mut new_namespaces = HashSet::new();
-                    for registration in registrations {
+                    for registration in registrations.clone() {
                         if registration.body.reserve_url.is_some() || !registration.body.active {
                             new_namespaces.insert(registration.body.namespace_id);
                         }
@@ -178,6 +182,7 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
                     *self.namespaces_to_skip.write().await = Some(new_namespaces);
                 }
                 Err(e) => {
+                    println!("here no regis" );
                     *self.namespaces_to_skip.write().await = None;
                     error!("Failed to get the registered rollups: {:?}.", e);
                 }

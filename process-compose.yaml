@@ -668,7 +668,6 @@ processes:
       dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
     environment:
       - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
-      - ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
     depends_on:
       marketplace-solver:
         condition: process_healthy
