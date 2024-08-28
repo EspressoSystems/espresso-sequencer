@@ -47,12 +47,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice number of blocks per epoch
     uint32 public blocksPerEpoch;
 
-    /// @notice genesis block commitment index
-    uint32 internal genesisState;
-
-    /// @notice Finalized HotShot's light client state index
-    uint32 internal finalizedState;
-
     // === Storage ===
     //
     /// @notice current (finalized) epoch number
@@ -74,6 +68,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
+
+    /// @notice genesis block commitment
+    LightClientState public genesisState;
+
+    /// @notice Finalized HotShot's light client state
+    LightClientState public finalizedState;
 
     /// @notice the address of the prover that can call the newFinalizedState function when the
     /// contract is
@@ -191,8 +191,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ) public initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
-        genesisState = 0;
-        finalizedState = 1;
         _initializeState(_genesis, _blocksPerEpoch, _stateHistoryRetentionPeriod);
     }
 
@@ -238,8 +236,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert InvalidArgs();
         }
-        states[genesisState] = _genesis;
-        states[finalizedState] = _genesis;
+        genesisState = _genesis;
+        finalizedState = _genesis;
 
         currentEpoch = 0;
 
@@ -289,7 +287,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
         // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = states[finalizedState].blockHeight == epochEndingBlockHeight;
+        bool isNewEpoch = finalizedState.blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
@@ -309,7 +307,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         verifyProof(newState, proof);
 
         // upon successful verification, update the latest finalized state
-        states[finalizedState] = newState;
+        finalizedState = newState;
 
         updateStateHistory(uint64(block.number), uint64(block.timestamp), newState);
 
@@ -318,12 +316,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @dev Simple getter function for the genesis state
     function getGenesisState() public view virtual returns (LightClientState memory) {
-        return states[genesisState];
+        return genesisState;
     }
 
     /// @dev Simple getter function for the finalized state
     function getFinalizedState() public view virtual returns (LightClientState memory) {
-        return states[finalizedState];
+        return finalizedState;
     }
 
     /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
@@ -341,9 +339,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
         publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
+        publicInput[5] = BN254.ScalarField.unwrap(finalizedState.stakeTableBlsKeyComm);
+        publicInput[6] = BN254.ScalarField.unwrap(finalizedState.stakeTableSchnorrKeyComm);
+        publicInput[7] = BN254.ScalarField.unwrap(finalizedState.stakeTableAmountComm);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
@@ -353,12 +351,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Advance to the next epoch (without any precondition check!)
     /// @dev This meant to be invoked only internally after appropriate precondition checks are done
     function _advanceEpoch() internal virtual {
-        bytes32 newStakeTableComm = computeStakeTableComm(states[finalizedState]);
+        bytes32 newStakeTableComm = computeStakeTableComm(finalizedState);
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
 
         votingThreshold = frozenThreshold;
-        frozenThreshold = states[finalizedState].threshold;
+        frozenThreshold = finalizedState.threshold;
 
         currentEpoch += 1;
         emit EpochChanged(currentEpoch);

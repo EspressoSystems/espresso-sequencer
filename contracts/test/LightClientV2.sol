@@ -22,7 +22,7 @@ contract LightClientV2 is LightClient {
     }
 
     /// @notice mapping to store the extended light client states in order to simplify upgrades
-    mapping(uint32 index => ExtendedLightClientState state) public extendedStates;
+    ExtendedLightClientState public extendedFinalzedState;
 
     /// @notice Initialize v2
     /// @param _newField   New field amount
@@ -92,16 +92,17 @@ contract LightClientV2 is LightClient {
         // because newState is in memory and states[finalizedState] is in storage, they have
         // different data handling mechanisms
         // and this each field needs to be assigned individually
-        states[finalizedState].viewNum = newState.viewNum;
-        states[finalizedState].blockHeight = newState.blockHeight;
-        states[finalizedState].blockCommRoot = newState.blockCommRoot;
-        states[finalizedState].feeLedgerComm = newState.feeLedgerComm;
-        states[finalizedState].stakeTableBlsKeyComm = newState.stakeTableBlsKeyComm;
-        states[finalizedState].stakeTableSchnorrKeyComm = newState.stakeTableSchnorrKeyComm;
-        states[finalizedState].stakeTableAmountComm = newState.stakeTableAmountComm;
-        states[finalizedState].threshold = newState.threshold;
+        finalizedState = newState;
+        // states[finalizedState].viewNum = newState.viewNum;
+        // states[finalizedState].blockHeight = newState.blockHeight;
+        // states[finalizedState].blockCommRoot = newState.blockCommRoot;
+        // states[finalizedState].feeLedgerComm = newState.feeLedgerComm;
+        // states[finalizedState].stakeTableBlsKeyComm = newState.stakeTableBlsKeyComm;
+        // states[finalizedState].stakeTableSchnorrKeyComm = newState.stakeTableSchnorrKeyComm;
+        // states[finalizedState].stakeTableAmountComm = newState.stakeTableAmountComm;
+        // states[finalizedState].threshold = newState.threshold;
 
-        extendedStates[finalizedState].extraField = 2;
+        extendedFinalzedState.extraField = 2;
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
@@ -113,6 +114,6 @@ contract LightClientV2 is LightClient {
         virtual
         returns (ExtendedLightClientState memory)
     {
-        return extendedStates[finalizedState];
+        return extendedFinalzedState;
     }
 }
