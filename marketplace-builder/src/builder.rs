@@ -52,7 +52,9 @@ use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
-use crate::hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
+use crate::hooks::{
+    self, fetch_namespaces_to_skip, BidConfig, EspressoFallbackHooks, EspressoReserveHooks,
+};
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -235,9 +237,12 @@ impl BuilderConfig {
             )
             .await?;
         } else {
+            // Fetch the namespaces upon initialization. It will be fetched every 20 views when
+            // handling events.
+            let namespaces_to_skip = fetch_namespaces_to_skip(solver_api_url.clone()).await;
             let hooks = Arc::new(hooks::EspressoFallbackHooks {
                 solver_api_url,
-                namespaces_to_skip: RwLock::new(None),
+                namespaces_to_skip: RwLock::new(namespaces_to_skip),
             });
             Self::start_service(
                 Arc::clone(&global_state),
