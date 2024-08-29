@@ -15,7 +15,7 @@ use crate::{
     define_api, handle_events,
     mock::run_mock_event_service,
     state::{GlobalState, SolverState, StakeTable},
-    EventsServiceClient, SolverError,
+    EventsServiceClient, SolverError, SOLVER_API_PATH,
 };
 
 pub struct MockSolver {
@@ -93,7 +93,7 @@ impl MockSolver {
             }
         });
 
-        let solver_api = solver_url.join("solver_api").unwrap();
+        let solver_api = solver_url.join(SOLVER_API_PATH).unwrap();
 
         let handles = vec![
             generate_events_handle,

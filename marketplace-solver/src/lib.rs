@@ -10,3 +10,5 @@ pub use events::*;
 pub use options::*;
 
 type SolverResult<T> = Result<T, SolverError>;
+
+pub const SOLVER_API_PATH: &str = "marketplace-solver";

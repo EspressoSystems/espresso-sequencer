@@ -27,6 +27,7 @@ use espresso_types::NamespaceId;
 use hotshot_types::traits::node_implementation::NodeType;
 
 use marketplace_solver::SolverError;
+use marketplace_solver::SOLVER_API_PATH;
 use sequencer::SequencerApiVersion;
 use surf_disco::Client;
 
@@ -43,9 +44,7 @@ pub struct BidConfig {
 }
 
 pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, MarketplaceVersion> {
-    Client::<SolverError, MarketplaceVersion>::new(
-        solver_api_url.join("marketplace-solver/").unwrap(),
-    )
+    Client::<SolverError, MarketplaceVersion>::new(solver_api_url.join(SOLVER_API_PATH).unwrap())
 }
 
 /// Fetch registered namespaces from the solver and construct the list of namespaces to skip.
