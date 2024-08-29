@@ -48,5 +48,5 @@ jobs:
       - name: Test Demo
         run: |
           export PATH="$PWD/target/release:$PATH"
-          scripts/demo-native --tui=false &
+          scripts/demo-native --tui=false -c process-compose-mp.yml &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
