@@ -11,6 +11,10 @@ demo-native:
     cargo build --release
     scripts/demo-native
 
+demo-native-mp:
+    cargo build --release
+    scripts/demo-native --config process-compose-mp.yml
+
 demo-native-benchmark:
     cargo build --release --features benchmarking
     scripts/demo-native
@@ -74,7 +78,7 @@ build-docker-images:
     scripts/build-docker-images-native
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$"
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$"
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
@@ -112,10 +116,9 @@ lc-contract-profiling-sepolia:
     echo $LC_CONTRACT_ADDRESS
     forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numInitValidators, address lcContractAddress)" {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
 
-gas-benchmarks:
+lc-contract-benchmark:
     cargo build --bin diff-test --release
-    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench"
-    @[ -n "$(git diff --name-only .gas-snapshot)" ] && echo "⚠️ Uncommitted gas benchmarks, please stage them before committing." && exit 1 || exit 0
+    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.
@@ -135,3 +138,4 @@ download-srs:
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
+ 
