@@ -21,6 +21,13 @@ struct Options {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
+    #[command(subcommand)]
+    Sequencer(SequencerStorage),
+    Solver(marketplace_solver::DatabaseOptions),
+}
+
+#[derive(Clone, Debug, Subcommand)]
+enum SequencerStorage {
     /// Reset file system storage.
     Fs(persistence::fs::Options),
     /// Reset SQL storage.
@@ -33,13 +40,23 @@ async fn main() -> anyhow::Result<()> {
     opt.logging.init();
 
     match opt.command {
-        Command::Fs(opt) => {
-            tracing::warn!("resetting file system storage {opt:?}");
-            reset_storage(opt).await
-        }
-        Command::Sql(opt) => {
-            tracing::warn!("resetting SQL storage {opt:?}");
-            reset_storage(*opt).await
+        Command::Sequencer(query_resetter) => match query_resetter {
+            SequencerStorage::Fs(opt) => {
+                tracing::warn!("resetting sequencer file system storage {opt:?}");
+                reset_storage(opt).await
+            }
+            SequencerStorage::Sql(opt) => {
+                tracing::warn!("resetting sequencer SQL storage {opt:?}");
+                reset_storage(*opt).await
+            }
+        },
+
+        Command::Solver(opt) => {
+            tracing::warn!("resetting solver SQL storage {opt:?}");
+            let opts = opt.reset();
+            opts.connect().await?;
+
+            Ok(())
         }
     }
 }
