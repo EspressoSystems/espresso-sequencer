@@ -102,7 +102,7 @@ lc-contract-profiling-sepolia:
 
 gas-benchmarks:
     cargo build --bin diff-test --release
-    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench" --mc "PlonkVerifier2|LightClientBench"
+    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench"
     @[ -n "$(git diff --name-only .gas-snapshot)" ] && echo "⚠️ Uncommitted gas benchmarks, please stage them before committing." && exit 1 || exit 0
 
 # This is meant for local development and produces HTML output. In CI

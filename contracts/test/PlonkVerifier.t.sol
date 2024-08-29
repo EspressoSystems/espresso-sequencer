@@ -59,16 +59,6 @@ contract PlonkVerifierCommonTest is Test {
         return vk;
     }
 
-    /// @dev copy a fixed array into a dynamic array, mostly used for converting fuzzer generated
-    /// array into another accepted by most APIs.
-    function copyCommScalars(uint256[30] memory a) public pure returns (uint256[] memory) {
-        uint256[] memory b = new uint256[](a.length);
-        for (uint256 i = 0; i < a.length; i++) {
-            b[i] = a[i];
-        }
-        return b;
-    }
-
     /// @dev Generate a random valid (format-wise) proof from a random seed
     function dummyProof(uint64 seed) public returns (IPlonkVerifier.PlonkProof memory) {
         string[] memory cmds = new string[](3);
@@ -286,62 +276,6 @@ contract PlonkVerifier_validateProof_Test is PlonkVerifierCommonTest {
     }
 }
 
-contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
-    /// @dev Test `preparePcsInfo` matches that of Jellyfish
-    function testFuzz_preparePcsInfo_matches(uint64 seed, uint256[8] memory _publicInput)
-        external
-    {
-        uint256[8] memory publicInput;
-        for (uint256 i = 0; i < 8; i++) {
-            publicInput[i] = _publicInput[i];
-        }
-
-        publicInput = sanitizeScalarFields(publicInput);
-        IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
-        IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-
-        V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof);
-
-        string[] memory cmds = new string[](5);
-        cmds[0] = "diff-test";
-        cmds[1] = "plonk-prepare-pcs-info";
-        cmds[2] = vm.toString(abi.encode(vk));
-        cmds[3] = vm.toString(abi.encode(publicInput));
-        cmds[4] = vm.toString(abi.encode(proof));
-
-        bytes memory result = vm.ffi(cmds);
-        (
-            uint256 u,
-            uint256 evalPoint,
-            uint256 nextEvalPoint,
-            uint256 eval,
-            BN254.G1Point memory scalarsAndBasesProd,
-            BN254.G1Point memory openingProof,
-            BN254.G1Point memory shiftedOpeningProof
-        ) = abi.decode(
-            result,
-            (uint256, uint256, uint256, uint256, BN254.G1Point, BN254.G1Point, BN254.G1Point)
-        );
-
-        assertEq(info.u, u);
-        assertEq(info.evalPoint, evalPoint);
-        assertEq(info.nextEvalPoint, nextEvalPoint);
-        assertEq(info.eval, eval);
-        // NOTE: since we cannot directly compare `struct ScalarsAndBases`, we compare their MSM
-        uint256 l = info.commScalars.length;
-        BN254.ScalarField[] memory infoCommScalars = new BN254.ScalarField[](l);
-        for (uint256 i = 0; i < l; i++) {
-            infoCommScalars[i] = BN254.ScalarField.wrap(info.commScalars[i]);
-        }
-        assertEq(
-            abi.encode(BN254.multiScalarMul(info.commBases, infoCommScalars)),
-            abi.encode(scalarsAndBasesProd)
-        );
-        assertEq(abi.encode(info.openingProof), abi.encode(openingProof));
-        assertEq(abi.encode(info.shiftedOpeningProof), abi.encode(shiftedOpeningProof));
-    }
-}
-
 contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
     /// @dev Test `computeChallenges` matches that of Jellyfish
     function testFuzz_computeChallenges_matches(uint64 seed, uint256[8] memory _publicInput)
@@ -376,31 +310,5 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
         assertEq(chal.zeta, c.zeta);
         assertEq(chal.v, c.v);
         assertEq(chal.u, c.u);
-    }
-}
-
-contract PlonkVerifier_prepareEvaluations_Test is PlonkVerifierCommonTest {
-    /// @dev Test if combining the polynomial evaluations into a single evaluation is done correctly
-    /// is done correctly
-    function testFuzz_prepareEvaluations_matches(
-        uint64 seed,
-        uint256 linPolyConstant,
-        uint256[30] memory scalars
-    ) external {
-        IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        linPolyConstant = sanitizeScalarField(linPolyConstant);
-        uint256[] memory commScalars = copyCommScalars(sanitizeScalarFields(scalars));
-
-        string[] memory cmds = new string[](5);
-        cmds[0] = "diff-test";
-        cmds[1] = "plonk-prepare-eval";
-        cmds[2] = vm.toString(abi.encode(proof));
-        cmds[3] = vm.toString(bytes32(linPolyConstant));
-        cmds[4] = vm.toString(abi.encode(commScalars));
-
-        bytes memory result = vm.ffi(cmds);
-        (uint256 eval) = abi.decode(result, (uint256));
-
-        assertEq(eval, V._prepareEvaluations(linPolyConstant, proof, commScalars));
     }
 }
