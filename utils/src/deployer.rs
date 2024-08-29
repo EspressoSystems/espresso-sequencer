@@ -208,7 +208,7 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
     ))?;
     bytecode
         .link_fully_qualified(
-            "contracts/src/libraries/PlonkVerifier2.sol:PlonkVerifier2",
+            "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
             plonk_verifier,
         )
         .resolve()
@@ -265,7 +265,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     ))?;
     bytecode
         .link_fully_qualified(
-            "contracts/src/libraries/PlonkVerifier2.sol:PlonkVerifier2",
+            "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
             plonk_verifier,
         )
         .resolve()
