@@ -1456,11 +1456,15 @@ mod test {
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
     use futures::StreamExt;
-    use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot::{
+        traits::BlockPayload,
+        types::{BLSPubKey, SignatureKey},
+    };
     use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
     use hotshot_example_types::{
         block_types::{TestBlockPayload, TestMetadata, TestTransaction},
         node_types::TestTypes,
+        state_types::{TestInstanceState, TestValidatedState},
     };
     use hotshot_types::{
         data::ViewNumber,
@@ -1473,7 +1477,9 @@ mod test {
     };
 
     use crate::{
-        builder_state::{MessageType, RequestMessage, ResponseMessage, TriggerStatus},
+        builder_state::{
+            BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TriggerStatus,
+        },
         service::INITIAL_MAX_BLOCK_SIZE,
         BlockId, BuilderStateId,
     };
@@ -1783,6 +1789,482 @@ mod test {
                 "The spawned builder states should contain the new builder state id"
             );
         };
+    }
+
+    // GlobalState::update_global_state Tests
+
+    /// This test checks that the update_global_state method will correctly
+    /// update the LRU blocks cache and the builder_state_to_last_built_block
+    /// hashmap with values derived from the parameters passed into the method.
+    ///
+    /// The assumption behind this test is that the values being stored were
+    /// not being stored previously.
+    #[async_std::test]
+    async fn test_global_state_update_global_state_success() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[], 8);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        let new_parent_commit = vid_commitment(&[], 9);
+        let new_view_num = ViewNumber::new(1);
+        let builder_state_id = BuilderStateId {
+            parent_commitment: new_parent_commit,
+            view: new_view_num,
+        };
+
+        let builder_hash_1 = BuilderCommitment::from_bytes([1, 2, 3, 4]);
+        let block_id = BlockId {
+            hash: builder_hash_1,
+            view: new_view_num,
+        };
+
+        let (vid_trigger_sender, vid_trigger_receiver) =
+            async_compatibility_layer::channel::oneshot();
+        let (vid_sender, vid_receiver) = unbounded();
+        let (block_payload, metadata) =
+            <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
+                vec![TestTransaction::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])],
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await
+            .unwrap();
+        let offered_fee = 64u64;
+        let block_size = 64u64;
+        let truncated = false;
+
+        let build_block_info = BuildBlockInfo {
+            id: block_id.clone(),
+            block_size,
+            offered_fee,
+            block_payload: block_payload.clone(),
+            metadata,
+            vid_trigger: vid_trigger_sender,
+            vid_receiver,
+            truncated,
+        };
+
+        let builder_hash_2 = BuilderCommitment::from_bytes([2, 3, 4, 5]);
+        let response_msg = ResponseMessage {
+            builder_hash: builder_hash_2.clone(),
+            block_size: 32,
+            offered_fee: 128,
+        };
+
+        // Now that every object is prepared and setup for storage, we can
+        // test the `update_global_state` method.
+
+        // `update_global_state` has not return value from its method, so can
+        // only inspect its "success" based on the mutation of the state object.
+        state.update_global_state(builder_state_id.clone(), build_block_info, response_msg);
+
+        // two things should be adjusted by `update_global_state`:
+        // - state.blocks
+        // - state.builder_state_to_last_built_block
+
+        // start with blocks
+
+        assert_eq!(
+            state.blocks.len(),
+            1,
+            "The blocks LRU should have a single entry"
+        );
+
+        let retrieved_block_info = state.blocks.get(&block_id);
+        assert!(
+            retrieved_block_info.is_some(),
+            "Retrieval of the block id should result is a valid block info data"
+        );
+
+        let retrieved_block_info = retrieved_block_info.unwrap();
+
+        assert_eq!(
+            retrieved_block_info.block_payload, block_payload,
+            "The block payloads should match"
+        );
+        assert_eq!(
+            retrieved_block_info.metadata, metadata,
+            "The metadata should match"
+        );
+        assert_eq!(
+            retrieved_block_info.offered_fee, offered_fee,
+            "The offered fee should match"
+        );
+        assert_eq!(
+            retrieved_block_info.truncated, truncated,
+            "The truncated flag should match"
+        );
+
+        {
+            // This ensures that the vid_trigger that is stored is still the
+            // same, or links to the vid_trigger_receiver that we submitted.
+            let mut vid_trigger_write_lock_guard =
+                retrieved_block_info.vid_trigger.write_arc().await;
+            if let Some(vid_trigger_sender) = vid_trigger_write_lock_guard.take() {
+                vid_trigger_sender.send(TriggerStatus::Start);
+            }
+
+            match vid_trigger_receiver.recv().await {
+                Ok(TriggerStatus::Start) => {
+                    // This is expected
+                }
+                _ => {
+                    panic!("did not receive TriggerStatus::Start from vid_trigger_receiver as expected");
+                }
+            }
+        }
+
+        {
+            // This ensures that the vid_sender that is stored is still the
+            // same, or links to the vid_receiver that we submitted.
+            let (vid_commitment, vid_precompute) = precompute_vid_commitment(&[1, 2, 3, 4, 5], 4);
+            assert_eq!(
+                vid_sender
+                    .send((vid_commitment, vid_precompute.clone()))
+                    .await,
+                Ok(()),
+                "The vid_sender should be able to send the vid commitment and precompute"
+            );
+
+            let mut vid_receiver_write_lock_guard =
+                retrieved_block_info.vid_receiver.write_arc().await;
+
+            // Get and Keep object
+
+            match vid_receiver_write_lock_guard.get().await {
+                Ok((received_vid_commitment, received_vid_precompute)) => {
+                    assert_eq!(
+                        received_vid_commitment, vid_commitment,
+                        "The received vid commitment should match the expected vid commitment"
+                    );
+                    assert_eq!(
+                        received_vid_precompute, vid_precompute,
+                        "The received vid precompute should match the expected vid precompute"
+                    );
+                }
+                _ => {
+                    panic!("did not receive the expected vid commitment and precompute from vid_receiver_write_lock_guard");
+                }
+            }
+        }
+
+        // finish with builder_state_to_last_built_block
+
+        assert_eq!(
+            state.builder_state_to_last_built_block.len(),
+            1,
+            "The builder state to last built block should have a single entry"
+        );
+
+        let last_built_block = state
+            .builder_state_to_last_built_block
+            .get(&builder_state_id);
+
+        assert!(
+            last_built_block.is_some(),
+            "The last built block should be retrievable"
+        );
+
+        let last_built_block = last_built_block.unwrap();
+
+        assert_eq!(
+            last_built_block.builder_hash, builder_hash_2,
+            "The last built block id should match the block id"
+        );
+
+        assert_eq!(
+            last_built_block.block_size, 32,
+            "The last built block size should match the response message"
+        );
+
+        assert_eq!(
+            last_built_block.offered_fee, 128,
+            "The last built block offered fee should match the response message"
+        );
+    }
+
+    /// This test demonstrates the replacement behavior of the the
+    /// `update_global_state` method.
+    ///
+    /// When given a `BuilderStateId` that already exists in the `blocks` LRU,
+    /// and the `builder_state_to_last_built_block` hashmap, the method will
+    /// replace the values in the `builder_state_to_last_built_block` hashmap,
+    /// but will not replace the values in the `blocks` LRU.
+    #[async_std::test]
+    async fn test_global_state_update_global_state_replacement() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[], 8);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        let new_parent_commit = vid_commitment(&[], 9);
+        let new_view_num = ViewNumber::new(1);
+        let builder_state_id = BuilderStateId {
+            parent_commitment: new_parent_commit,
+            view: new_view_num,
+        };
+
+        let builder_hash = BuilderCommitment::from_bytes([1, 2, 3, 4]);
+        let block_id_1 = BlockId {
+            hash: builder_hash.clone(),
+            view: new_view_num,
+        };
+        let (vid_trigger_sender_1, vid_trigger_receiver_1) =
+            async_compatibility_layer::channel::oneshot();
+        let (vid_sender_1, vid_receiver_1) = unbounded();
+        let (block_payload_1, metadata_1) =
+            <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
+                vec![TestTransaction::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])],
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await
+            .unwrap();
+        let offered_fee_1 = 64u64;
+        let block_size_1 = 64u64;
+        let truncated_1 = false;
+        let build_block_info_1 = BuildBlockInfo {
+            id: block_id_1.clone(),
+            block_size: block_size_1,
+            offered_fee: offered_fee_1,
+            block_payload: block_payload_1.clone(),
+            metadata: metadata_1,
+            vid_trigger: vid_trigger_sender_1,
+            vid_receiver: vid_receiver_1,
+            truncated: truncated_1,
+        };
+        let response_msg_1 = ResponseMessage {
+            builder_hash: builder_hash.clone(),
+            block_size: block_size_1,
+            offered_fee: offered_fee_1,
+        };
+
+        // Now that every object is prepared and setup for storage, we can
+        // test the `update_global_state` method.
+
+        // `update_global_state` has not return value from its method, so can
+        // only inspect its "success" based on the mutation of the state object.
+        state.update_global_state(builder_state_id.clone(), build_block_info_1, response_msg_1);
+
+        // We're going to enter another update_global_state_entry with the same
+        // builder_state_id, but with different values for the block info and
+        // response message.  This should highlight what values get replaced
+        // in this update, and which stay the same.
+
+        let block_id_2 = BlockId {
+            hash: builder_hash.clone(),
+            view: new_view_num,
+        };
+        let (vid_trigger_sender_2, vid_trigger_receiver_2) =
+            async_compatibility_layer::channel::oneshot();
+        let (vid_sender_2, vid_receiver_2) = unbounded();
+        let (block_payload_2, metadata_2) =
+            <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
+                vec![TestTransaction::new(vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await
+            .unwrap();
+        let offered_fee_2 = 16u64;
+        let block_size_2 = 32u64;
+        let truncated_2 = true;
+        let build_block_info_2 = BuildBlockInfo {
+            id: block_id_2.clone(),
+            block_size: block_size_2,
+            offered_fee: offered_fee_2,
+            block_payload: block_payload_2.clone(),
+            metadata: metadata_2,
+            vid_trigger: vid_trigger_sender_2,
+            vid_receiver: vid_receiver_2,
+            truncated: truncated_2,
+        };
+        let response_msg_2: ResponseMessage = ResponseMessage {
+            builder_hash: builder_hash.clone(),
+            block_size: block_size_2,
+            offered_fee: offered_fee_2,
+        };
+
+        // two things should be adjusted by `update_global_state`:
+        // When given the same build_state_ids, the current logic indicates
+        // that the LRU value does **NOT** get replaced, but the response
+        // message does.
+
+        state.update_global_state(builder_state_id.clone(), build_block_info_2, response_msg_2);
+
+        // start with blocks
+
+        assert_eq!(
+            state.blocks.len(),
+            1,
+            "The blocks LRU should have a single entry"
+        );
+
+        let retrieved_block_info = state.blocks.get(&block_id_1);
+        assert!(
+            retrieved_block_info.is_some(),
+            "Retrieval of the block id should result is a valid block info data"
+        );
+
+        let retrieved_block_info = retrieved_block_info.unwrap();
+
+        assert_eq!(
+            retrieved_block_info.block_payload, block_payload_1,
+            "The block payloads should match"
+        );
+        assert_ne!(
+            retrieved_block_info.block_payload, block_payload_2,
+            "The block payloads should not match"
+        );
+        assert_eq!(
+            retrieved_block_info.metadata, metadata_2,
+            "The metadata should match"
+        );
+        assert_eq!(
+            retrieved_block_info.metadata, metadata_1,
+            "The metadata should match"
+        );
+        // TestMetadata will always match
+
+        assert_eq!(
+            retrieved_block_info.offered_fee, offered_fee_1,
+            "The offered fee should match"
+        );
+        assert_ne!(
+            retrieved_block_info.offered_fee, offered_fee_2,
+            "The offered fee should not match"
+        );
+        assert_eq!(
+            retrieved_block_info.truncated, truncated_1,
+            "The truncated flag should match"
+        );
+        assert_ne!(
+            retrieved_block_info.truncated, truncated_2,
+            "The truncated flag should not match"
+        );
+
+        {
+            // This ensures that the vid_trigger that is stored is still the
+            // same, or links to the vid_trigger_receiver that we submitted.
+            let mut vid_trigger_write_lock_guard =
+                retrieved_block_info.vid_trigger.write_arc().await;
+            if let Some(vid_trigger_sender) = vid_trigger_write_lock_guard.take() {
+                vid_trigger_sender.send(TriggerStatus::Start);
+            }
+
+            match vid_trigger_receiver_1.recv().await {
+                Ok(TriggerStatus::Start) => {
+                    // This is expected
+                }
+                _ => {
+                    panic!("did not receive TriggerStatus::Start from vid_trigger_receiver as expected");
+                }
+            }
+
+            assert!(
+                vid_trigger_receiver_2.recv().await.is_err(),
+                "This should not receive anything from vid_trigger_receiver_2"
+            );
+        }
+
+        {
+            // This ensures that the vid_sender that is stored is still the
+            // same, or links to the vid_receiver that we submitted.
+            let (vid_commitment, vid_precompute) = precompute_vid_commitment(&[1, 2, 3, 4, 5], 4);
+            assert_eq!(
+                vid_sender_1
+                    .send((vid_commitment, vid_precompute.clone()))
+                    .await,
+                Ok(()),
+                "The vid_sender should be able to send the vid commitment and precompute"
+            );
+
+            assert!(
+                vid_sender_2
+                    .send((vid_commitment, vid_precompute.clone()))
+                    .await
+                    .is_err(),
+                "The vid_sender should not be able to send the vid commitment and precompute"
+            );
+
+            let mut vid_receiver_write_lock_guard =
+                retrieved_block_info.vid_receiver.write_arc().await;
+
+            // Get and Keep object
+
+            match vid_receiver_write_lock_guard.get().await {
+                Ok((received_vid_commitment, received_vid_precompute)) => {
+                    assert_eq!(
+                        received_vid_commitment, vid_commitment,
+                        "The received vid commitment should match the expected vid commitment"
+                    );
+                    assert_eq!(
+                        received_vid_precompute, vid_precompute,
+                        "The received vid precompute should match the expected vid precompute"
+                    );
+                }
+                _ => {
+                    panic!("did not receive the expected vid commitment and precompute from vid_receiver_write_lock_guard");
+                }
+            }
+        }
+
+        // finish with builder_state_to_last_built_block
+
+        assert_eq!(
+            state.builder_state_to_last_built_block.len(),
+            1,
+            "The builder state to last built block should have a single entry"
+        );
+
+        let last_built_block = state
+            .builder_state_to_last_built_block
+            .get(&builder_state_id);
+
+        assert!(
+            last_built_block.is_some(),
+            "The last built block should be retrievable"
+        );
+
+        let last_built_block = last_built_block.unwrap();
+
+        assert_eq!(
+            last_built_block.builder_hash, builder_hash,
+            "The last built block id should match the block id"
+        );
+
+        assert_eq!(
+            last_built_block.block_size, block_size_2,
+            "The last built block size should match the response message"
+        );
+        assert_ne!(
+            last_built_block.block_size, block_size_1,
+            "The last built block size should not match the previous block size"
+        );
+
+        assert_eq!(
+            last_built_block.offered_fee, offered_fee_2,
+            "The last built block offered fee should match the response message"
+        );
+        assert_ne!(
+            last_built_block.offered_fee, offered_fee_1,
+            "The last built block offered fee should not match the previous block offered fee"
+        );
     }
 
     // Get Available Blocks Tests
