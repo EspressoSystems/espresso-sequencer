@@ -161,7 +161,7 @@ library PlonkVerifier {
             y0: BN254.BaseField.wrap(BETA_H_Y1),
             y1: BN254.BaseField.wrap(BETA_H_Y0)
         });
-        // Check e(A, [x]2) ?= e(B, [1]2)
+        // Check e(A, [x]2) =?= e(B, [1]2)
         // Equivalently, e(A, [x]2) * e(-B, [1]2) =?= 1
         return BN254.pairingProd2(a, betaH, BN254.negate(b), BN254.P2());
     }
@@ -285,11 +285,8 @@ library PlonkVerifier {
             {
                 mstore(statePtr, 0x0) // init state
                 // preimage len: state(0x20) + transcript(0x7c0)
-                mstore(add(dataPtr, 0x7c0), keccak256(statePtr, 0x7e0))
-                // update new state (by updating state pointer)
-                statePtr := add(dataPtr, 0x7c0)
-                // empty transcript
-                dataPtr := add(statePtr, 0x20)
+                // overwrite previous state at freePtr
+                mstore(statePtr, keccak256(statePtr, 0x7e0))
                 // (mod p) to get beta
                 mstore(add(res, 0x60), mod(mload(statePtr), p))
             }
@@ -297,11 +294,8 @@ library PlonkVerifier {
             // challenge: gamma
             {
                 // preimage len: state(0x20) + transcript(0x0)
-                mstore(dataPtr, keccak256(statePtr, 0x20))
-                // update new state (by updating state pointer)
-                statePtr := dataPtr
-                // empty transcript
-                dataPtr := add(statePtr, 0x20)
+                // overwrite previous state at freePtr
+                mstore(statePtr, keccak256(statePtr, 0x20))
                 // (mod p) to get gamma
                 mstore(add(res, 0x80), mod(mload(statePtr), p))
             }
@@ -314,11 +308,7 @@ library PlonkVerifier {
             {
                 // preimage len: state(0x20) + transcript(0x40)
                 let alpha := keccak256(statePtr, 0x60)
-                // update new state (by updating state pointer)
-                statePtr := add(dataPtr, 0x40)
                 mstore(statePtr, alpha)
-                // empty transcript
-                dataPtr := add(statePtr, 0x20)
                 // (mod p) to get challenge
                 mstore(res, mod(alpha, p))
 
@@ -347,11 +337,8 @@ library PlonkVerifier {
             // challenge: zeta
             {
                 // preimage len: state(0x20) + transcript(0x140)
-                mstore(add(dataPtr, 0x140), keccak256(statePtr, 0x160))
-                // update new state (by updating state pointer)
-                statePtr := add(dataPtr, 0x140)
-                // empty transcript
-                dataPtr := add(statePtr, 0x20)
+                // overwrite previous state at freePtr
+                mstore(statePtr, keccak256(statePtr, 0x160))
                 // (mod p) to get challenge
                 mstore(add(res, 0xa0), mod(mload(statePtr), p))
             }
@@ -370,11 +357,8 @@ library PlonkVerifier {
             // challenge: v
             {
                 // preimage len: state(0x20) + transcript(0x140)
-                mstore(add(dataPtr, 0x140), keccak256(statePtr, 0x160))
-                // update new state (by updating state pointer)
-                statePtr := add(dataPtr, 0x140)
-                // empty transcript
-                dataPtr := add(statePtr, 0x20)
+                // overwrite previous state at freePtr
+                mstore(statePtr, keccak256(statePtr, 0x160))
                 // (mod p) to get challenge
                 mstore(add(res, 0xc0), mod(mload(statePtr), p))
             }
