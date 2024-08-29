@@ -97,7 +97,7 @@ pub enum Status {
     ShouldContinue,
 }
 
-/// Builder State to hold the state of the builder
+/// Struct to save built_from_info
 #[derive(Debug, Clone)]
 pub struct BuiltFromProposedBlock<TYPES: NodeType> {
     pub view_number: TYPES::Time,
@@ -113,6 +113,7 @@ impl<TYPES: NodeType> std::fmt::Display for BuiltFromProposedBlock<TYPES> {
     }
 }
 
+/// Builder State to hold the state of the builder
 #[derive(Debug)]
 pub struct BuilderState<TYPES: NodeType> {
     pub included_txns: RotatingSet<Commitment<TYPES::Transaction>>,
@@ -402,12 +403,14 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     }
 
     // build a block
+    // Sishan TODO: the function returns a vec of transactions
     #[tracing::instrument(skip_all, name = "build block",
                                     fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
     async fn build_block(
         &mut self,
         state_id: BuilderStateId<TYPES>,
     ) -> Option<BuildBlockInfo<TYPES>> {
+        // collect all the transactions from the near future
         let timeout_after = Instant::now() + self.maximize_txn_capture_timeout;
         let sleep_interval = self.maximize_txn_capture_timeout / 10;
         while Instant::now() <= timeout_after {
