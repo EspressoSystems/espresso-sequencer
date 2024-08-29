@@ -627,17 +627,6 @@
 <a href="#627" id="627">627</a>
 <a href="#628" id="628">628</a>
 <a href="#629" id="629">629</a>
-<a href="#630" id="630">630</a>
-<a href="#631" id="631">631</a>
-<a href="#632" id="632">632</a>
-<a href="#633" id="633">633</a>
-<a href="#634" id="634">634</a>
-<a href="#635" id="635">635</a>
-<a href="#636" id="636">636</a>
-<a href="#637" id="637">637</a>
-<a href="#638" id="638">638</a>
-<a href="#639" id="639">639</a>
-<a href="#640" id="640">640</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 <span class="kw">use </span>ark_ec::{AffineRepr, CurveGroup};
 <span class="kw">use </span>ark_ed_on_bn254::{EdwardsConfig <span class="kw">as </span>EdOnBn254Config, Fq <span class="kw">as </span>FqEd254};
@@ -652,7 +641,7 @@
 };
 <span class="kw">use </span>hotshot_contract_adapter::{jellyfish::<span class="kw-2">*</span>, light_client::ParsedLightClientState};
 <span class="kw">use </span>hotshot_state_prover::mock_ledger::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
 };
 <span class="kw">use </span>itertools::multiunzip;
 <span class="kw">use </span>jf_pcs::prelude::Commitment;
@@ -1101,13 +1090,12 @@
             <span class="macro">println!</span>(<span class="string">"{}"</span>, (res.encode_hex()));
         }
         Action::MockGenesis =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">2 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numBlockPerEpoch,arg2=numInitValidators"</span>);
+            <span class="kw">if </span>cli.args.len() != <span class="number">1 </span>{
+                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numInitValidators"</span>);
             }
+            <span class="kw">let </span>num_init_validators = cli.args[<span class="number">0</span>].parse::&lt;u64&gt;().unwrap();
 
-            <span class="kw">let </span>block_per_epoch = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
-            <span class="kw">let </span>num_init_validators = cli.args[<span class="number">1</span>].parse::&lt;u64&gt;().unwrap();
-            <span class="kw">let </span>pp = MockSystemParam::init(block_per_epoch);
+            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             <span class="kw">let </span>ledger = MockLedger::init(pp, num_init_validators <span class="kw">as </span>usize);
 
             <span class="kw">let </span>(voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();
@@ -1115,16 +1103,15 @@
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
         }
         Action::MockConsecutiveFinalizedStates =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">4 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numBlockPerEpoch,arg2=numInitValidators,arg3=numRegs,arg4=numExit"</span>);
+            <span class="kw">if </span>cli.args.len() != <span class="number">3 </span>{
+                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numInitValidators,arg2=numRegs,arg3=numExit"</span>);
             }
+            <span class="kw">let </span>block_per_epoch = BLOCKS_PER_EPOCH;
+            <span class="kw">let </span>num_init_validators = cli.args[<span class="number">0</span>].parse::&lt;u64&gt;().unwrap();
+            <span class="kw">let </span>num_reg = cli.args[<span class="number">1</span>].parse::&lt;u64&gt;().unwrap();
+            <span class="kw">let </span>num_exit = cli.args[<span class="number">2</span>].parse::&lt;u64&gt;().unwrap();
 
-            <span class="kw">let </span>block_per_epoch = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
-            <span class="kw">let </span>num_init_validators = cli.args[<span class="number">1</span>].parse::&lt;u64&gt;().unwrap();
-            <span class="kw">let </span>num_reg = cli.args[<span class="number">2</span>].parse::&lt;u64&gt;().unwrap();
-            <span class="kw">let </span>num_exit = cli.args[<span class="number">3</span>].parse::&lt;u64&gt;().unwrap();
-
-            <span class="kw">let </span>pp = MockSystemParam::init(block_per_epoch);
+            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, num_init_validators <span class="kw">as </span>usize);
 
             <span class="kw">let </span><span class="kw-2">mut </span>new_states: Vec&lt;ParsedLightClientState&gt; = <span class="macro">vec!</span>[];
@@ -1154,19 +1141,18 @@
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
         }
         Action::MockSkipBlocks =&gt; {
-            <span class="kw">if </span>cli.args.len() &lt; <span class="number">2 </span>|| cli.args.len() &gt; <span class="number">3 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numBlockPerEpoch,arg2=numBlockSkipped,arg3(opt)=requireValidProof"</span>);
+            <span class="kw">if </span>cli.args.is_empty() || cli.args.len() &gt; <span class="number">2 </span>{
+                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numBlockSkipped,arg2(opt)=requireValidProof"</span>);
             }
 
-            <span class="kw">let </span>block_per_epoch = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
-            <span class="kw">let </span>num_block_skipped = cli.args[<span class="number">1</span>].parse::&lt;u32&gt;().unwrap();
-            <span class="kw">let </span>require_valid_proof: bool = <span class="kw">if </span>cli.args.len() == <span class="number">3 </span>{
-                cli.args[<span class="number">2</span>].parse::&lt;bool&gt;().unwrap()
+            <span class="kw">let </span>num_block_skipped = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
+            <span class="kw">let </span>require_valid_proof: bool = <span class="kw">if </span>cli.args.len() == <span class="number">2 </span>{
+                cli.args[<span class="number">1</span>].parse::&lt;bool&gt;().unwrap()
             } <span class="kw">else </span>{
                 <span class="bool-val">true
             </span>};
 
-            <span class="kw">let </span>pp = MockSystemParam::init(block_per_epoch);
+            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / <span class="number">2</span>);
 
             <span class="comment">// random stake table update
@@ -1188,12 +1174,9 @@
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
         }
         Action::MockMissEndingBlock =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">1 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numBlockPerEpoch"</span>);
-            }
-            <span class="kw">let </span>block_per_epoch = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
+            <span class="kw">let </span>block_per_epoch = BLOCKS_PER_EPOCH;
 
-            <span class="kw">let </span>pp = MockSystemParam::init(block_per_epoch);
+            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / <span class="number">2</span>);
 
             <span class="kw">let </span><span class="kw-2">mut </span>new_states: Vec&lt;ParsedLightClientState&gt; = <span class="macro">vec!</span>[];
@@ -1218,12 +1201,7 @@
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
         }
         Action::MockWrongStakeTable =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">1 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numBlockPerEpoch"</span>);
-            }
-            <span class="kw">let </span>block_per_epoch = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
-
-            <span class="kw">let </span>pp = MockSystemParam::init(block_per_epoch);
+            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / <span class="number">2</span>);
 
             ledger.elapse_with_block();

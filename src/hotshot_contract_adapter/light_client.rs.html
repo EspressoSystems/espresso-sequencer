@@ -168,9 +168,6 @@
 <a href="#168" id="168">168</a>
 <a href="#169" id="169">169</a>
 <a href="#170" id="170">170</a>
-<a href="#171" id="171">171</a>
-<a href="#172" id="172">172</a>
-<a href="#173" id="173">173</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Helpers and test mocks for Light Client logic
 
 </span><span class="kw">use </span>ark_std::str::FromStr;
@@ -312,7 +309,6 @@
 <span class="doccomment">/// `LightClientConstructorArgs` holds the arguments required to initialize a light client contract.
 </span><span class="kw">pub struct </span>LightClientConstructorArgs {
     <span class="kw">pub </span>light_client_state: ParsedLightClientState,
-    <span class="kw">pub </span>num_blocks_per_epoch: u32,
     <span class="kw">pub </span>max_history_seconds: u32,
 }
 
@@ -324,7 +320,6 @@
     </span><span class="kw">pub fn </span>dummy_genesis() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             light_client_state: ParsedLightClientState::dummy_genesis(),
-            num_blocks_per_epoch: <span class="number">10</span>,
             max_history_seconds: <span class="number">864000</span>,
         }
     }
@@ -339,7 +334,6 @@
     </span><span class="kw">fn </span>into_tokens(<span class="self">self</span>) -&gt; Vec&lt;Token&gt; {
         <span class="macro">vec!</span>[
             ethers::abi::Token::Tuple(<span class="self">self</span>.light_client_state.into_tokens()),
-            ethers::abi::Token::Uint(U256::from(<span class="self">self</span>.num_blocks_per_epoch)),
             ethers::abi::Token::Uint(U256::from(<span class="self">self</span>.max_history_seconds)),
         ]
     }

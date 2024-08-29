@@ -542,6 +542,9 @@
 <a href="#542" id="542">542</a>
 <a href="#543" id="543">543</a>
 <a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
+<a href="#546" id="546">546</a>
+<a href="#547" id="547">547</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use </span>anyhow::Result;
@@ -591,6 +594,9 @@
 
 <span class="doccomment">/// Stake table capacity used for testing
 </span><span class="kw">pub const </span>STAKE_TABLE_CAPACITY: usize = <span class="number">10</span>;
+
+<span class="doccomment">/// Number of blocks per epoch for testing
+</span><span class="kw">pub const </span>BLOCKS_PER_EPOCH: u32 = <span class="number">3</span>;
 
 <span class="doccomment">/// Mock for system parameter of `MockLedger`
 </span><span class="kw">pub struct </span>MockSystemParam {

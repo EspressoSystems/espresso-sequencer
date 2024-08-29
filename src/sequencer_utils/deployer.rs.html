@@ -760,7 +760,7 @@
         <span class="kw">let </span>light_client = LightClient::new(lc_address, l1.clone());
 
         <span class="kw">let </span>data = light_client
-            .initialize(genesis.<span class="kw">await</span><span class="question-mark">?</span>.into(), u32::MAX, <span class="number">864000</span>, owner)
+            .initialize(genesis.<span class="kw">await</span><span class="question-mark">?</span>.into(), <span class="number">864000</span>, owner)
             .calldata()
             .context(<span class="string">"calldata for initialize transaction not available"</span>)<span class="question-mark">?</span>;
         contracts
