@@ -18,7 +18,6 @@ import { BN254 } from "bn254/BN254.sol";
 contract LightClientCommonTest is Test {
     LCMock public lc;
     LC.LightClientState public genesis;
-    uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     uint32 public constant DELAY_THRESHOLD = 6;
     uint32 public constant MAX_HISTORY_SECONDS = 1 days;
     uint32 public initialEpoch = 1 days;
@@ -139,13 +138,12 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     function setUp() public {
         init();
 
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(1));
         cmds[4] = vm.toString(uint64(1));
-        cmds[5] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
@@ -287,13 +285,12 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// @dev for benchmarking purposes only
     function testCorrectUpdate() external {
         // Generating a few consecutive states and proofs
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(3));
         cmds[4] = vm.toString(uint64(3));
-        cmds[5] = vm.toString(uint64(3));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
@@ -334,22 +331,20 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         genesis = state;
 
         // Generating a few consecutive states and proofs
-        cmds = new string[](6);
+        cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(numInitValidators);
-        cmds[4] = vm.toString(numRegistrations);
-        cmds[5] = vm.toString(numExits);
+        cmds[2] = vm.toString(numInitValidators);
+        cmds[3] = vm.toString(numRegistrations);
+        cmds[4] = vm.toString(numExits);
 
         result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
-        assert(
-            states.length == BLOCKS_PER_EPOCH_TEST + 1 && proofs.length == BLOCKS_PER_EPOCH_TEST + 1
-        );
 
-        for (uint256 i = 0; i < BLOCKS_PER_EPOCH_TEST + 1; i++) {
+        uint256 statesLen = states.length;
+
+        for (uint256 i = 0; i < statesLen; i++) {
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
             vm.prank(permissionedProver);
@@ -358,22 +353,24 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             // check if LightClient.sol states are updated correctly
             assertEq(abi.encode(lc.getFinalizedState()), abi.encode(states[i]));
             // check against hardcoded epoch advancement expectation
-            if (i == BLOCKS_PER_EPOCH_TEST) {
-                // first block of a new epoch (from epoch 2) should update the following
-                bytes32 genesisComm = lc.computeStakeTableComm(genesis);
-                LC.LightClientState memory lastBlockInFirstEpoch = states[i - 1];
-                bytes32 firstEpochComm = lc.computeStakeTableComm(lastBlockInFirstEpoch);
-                assertEq(lc.votingStakeTableCommitment(), genesisComm);
-                assertEq(lc.frozenStakeTableCommitment(), firstEpochComm);
-                assertEq(lc.votingThreshold(), genesis.threshold);
-                assertEq(lc.frozenThreshold(), lastBlockInFirstEpoch.threshold);
-            } else {
-                bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
-                assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
-                assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
-                assertEq(lc.votingThreshold(), genesis.threshold);
-                assertEq(lc.frozenThreshold(), genesis.threshold);
-            }
+            //            if (i == statesLen - 1) {
+            //                // first block of a new epoch (from epoch 2) should update the
+            // following
+            //                bytes32 genesisComm = lc.computeStakeTableComm(genesis);
+            //                LC.LightClientState memory lastBlockInFirstEpoch = states[i - 1];
+            //                bytes32 firstEpochComm =
+            // lc.computeStakeTableComm(lastBlockInFirstEpoch);
+            //                assertEq(lc.votingStakeTableCommitment(), genesisComm);
+            //                assertEq(lc.frozenStakeTableCommitment(), firstEpochComm);
+            //                assertEq(lc.votingThreshold(), genesis.threshold);
+            //                assertEq(lc.frozenThreshold(), lastBlockInFirstEpoch.threshold);
+            //            } else {
+            bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
+            assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
+            assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
+            assertEq(lc.votingThreshold(), genesis.threshold);
+            assertEq(lc.frozenThreshold(), genesis.threshold);
+            //}
         }
     }
 
@@ -381,20 +378,16 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// forge-config: default.fuzz.runs = 4
     /// forge-config: quick.fuzz.runs = 1
     /// forge-config: ci.fuzz.runs = 10
-    function test_UpdateAfterSkippedBlocks(uint32 numBlockSkipped, uint32 numBlockPerEpoch)
-        external
-    {
-        numBlockPerEpoch = uint32(bound(numBlockPerEpoch, 2, 10));
-        numBlockSkipped = uint32(bound(numBlockSkipped, 1, numBlockPerEpoch - 1));
+    function test_UpdateAfterSkippedBlocks(uint32 numBlockSkipped) external {
+        numBlockSkipped = uint32(bound(numBlockSkipped, 1, 3));
 
         // re-assign LightClient with the same genesis but different numBlockPerEpoch
         deployAndInitProxy(genesis, MAX_HISTORY_SECONDS);
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-skip-blocks";
-        cmds[2] = vm.toString(numBlockPerEpoch);
-        cmds[3] = vm.toString(numBlockSkipped);
+        cmds[2] = vm.toString(numBlockSkipped);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state, V.PlonkProof memory proof) =
@@ -415,12 +408,11 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// @dev Test unhappy path when a valid but oudated finalized state is submitted
     function test_RevertWhen_OutdatedStateSubmitted() external {
         uint32 numBlockSkipped = 1;
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-skip-blocks";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(numBlockSkipped);
-        cmds[4] = vm.toString(false);
+        cmds[2] = vm.toString(numBlockSkipped);
+        cmds[3] = vm.toString(false);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory newState, V.PlonkProof memory proof) =
@@ -446,12 +438,11 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// @dev Test unhappy path when user inputs contain malformed field elements
     function test_RevertWhen_MalformedFieldElements() external {
         uint32 numBlockSkipped = 1;
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-skip-blocks";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(numBlockSkipped);
-        cmds[4] = vm.toString(false);
+        cmds[2] = vm.toString(numBlockSkipped);
+        cmds[3] = vm.toString(false);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory newState, V.PlonkProof memory proof) =
@@ -495,12 +486,11 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// @dev Test unhappy path when the plonk proof or the public inputs are wrong
     function test_RevertWhen_WrongProofOrWrongPublicInput() external {
         uint32 numBlockSkipped = 1;
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "mock-skip-blocks";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(numBlockSkipped);
-        cmds[4] = vm.toString(true);
+        cmds[2] = vm.toString(numBlockSkipped);
+        cmds[3] = vm.toString(true);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory newState, V.PlonkProof memory proof) =
@@ -567,10 +557,9 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
     /// @dev Test that update on finalized state will fail if a different stake table is used
     function test_revertWhenWrongStakeTableUsed() external {
-        string[] memory cmds = new string[](3);
+        string[] memory cmds = new string[](2);
         cmds[0] = "diff-test";
         cmds[1] = "mock-wrong-stake-table";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory newState, V.PlonkProof memory proof) =
@@ -612,13 +601,12 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // Assert owner is correctly set, add this to check owner state
         assertEq(lc.owner(), admin, "Admin should be the owner.");
 
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(1));
         cmds[4] = vm.toString(uint64(1));
-        cmds[5] = vm.toString(uint64(1));
 
         //assert initial conditions
         assertEq(lc.stateHistoryFirstIndex(), 0);
@@ -670,13 +658,12 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     }
 
     function test_stateHistoryHandlingWithOneDayMaxHistory() public {
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(5));
         cmds[4] = vm.toString(uint64(5));
-        cmds[5] = vm.toString(uint64(5));
 
         uint32 numDays = 1;
 
@@ -744,13 +731,12 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     }
 
     function test_stateHistoryHandlingWithTwoDaysMaxHistory() public {
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(5));
         cmds[4] = vm.toString(uint64(5));
-        cmds[5] = vm.toString(uint64(5));
         uint32 numDays = 2;
 
         bytes memory result = vm.ffi(cmds);
@@ -1197,13 +1183,12 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         // Assert owner is correctly set, add this to check owner state
         assertEq(lc.owner(), admin, "Admin should be the owner.");
 
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(1));
         cmds[4] = vm.toString(uint64(1));
-        cmds[5] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs) =
@@ -1236,13 +1221,12 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
     function test_hotShotBlockCommIsUpdatedXTimes() public {
         uint256 blockCommCount = lc.getStateHistoryCount();
 
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(1));
         cmds[4] = vm.toString(uint64(1));
-        cmds[5] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs) =
