@@ -105,7 +105,7 @@ snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 derive_more = { workspace = true }
-portpicker = "0.1"
+portpicker.workspace = true
 lru.workspace = true
 hotshot-task = { path = "../task" }
 hotshot = { path = "../hotshot" }

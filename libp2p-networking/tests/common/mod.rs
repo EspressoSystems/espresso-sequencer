@@ -21,15 +21,14 @@ use async_compatibility_layer::{
 };
 use futures::{future::join_all, Future, FutureExt};
 use hotshot_types::traits::signature_key::SignatureKey;
-use libp2p::{identity::Keypair, Multiaddr};
+use libp2p::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_networking::network::{
     network_node_handle_error::NodeConfigSnafu, spawn_network_node, NetworkEvent,
     NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeReceiver,
-    NetworkNodeType,
 };
 use snafu::{ResultExt, Snafu};
-use tracing::{info, instrument, warn};
+use tracing::{instrument, warn};
 
 #[derive(Clone, Debug)]
 pub(crate) struct HandleWithState<S: Debug + Default + Send, K: SignatureKey + 'static> {
@@ -109,7 +108,6 @@ pub async fn test_bed<
     run_test: F,
     client_handler: G,
     num_nodes: usize,
-    num_of_bootstrap: usize,
     timeout: Duration,
 ) where
     FutF: Future<Output = ()>,
@@ -123,9 +121,7 @@ pub async fn test_bed<
     let mut kill_switches = Vec::new();
     // NOTE we want this to panic if we can't spin up the swarms.
     // that amounts to a failed test.
-    let handles_and_receivers = spin_up_swarms::<S, K>(num_nodes, timeout, num_of_bootstrap)
-        .await
-        .unwrap();
+    let handles_and_receivers = spin_up_swarms::<S, K>(num_nodes, timeout).await.unwrap();
 
     let (handles, receivers): (Vec<_>, Vec<_>) = handles_and_receivers.into_iter().unzip();
     let mut handler_futures = Vec::new();
@@ -190,77 +186,33 @@ pub async fn print_connections<K: SignatureKey + 'static>(handles: &[Arc<Network
 pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static>(
     num_of_nodes: usize,
     timeout_len: Duration,
-    num_bootstrap: usize,
 ) -> Result<Vec<(HandleWithState<S, K>, NetworkNodeReceiver)>, TestError<S>> {
     let mut handles = Vec::new();
-    let mut bootstrap_addrs = Vec::<(PeerId, Multiaddr)>::new();
+    let mut node_addrs = Vec::<(PeerId, Multiaddr)>::new();
     let mut connecting_futs = Vec::new();
     // should never panic unless num_nodes is 0
     let replication_factor = NonZeroUsize::new(num_of_nodes - 1).unwrap();
 
-    for i in 0..num_bootstrap {
-        let mut config = NetworkNodeConfigBuilder::default();
-        let identity = Keypair::generate_ed25519();
-        // let start_port = 5000;
-        // NOTE use this if testing locally and want human readable ports
-        // as opposed to random ports. These are harder to track
-        // especially since the "listener"/inbound connection sees a different
-        // port
-        // let addr = Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/{}/quic-v1", start_port + i)).unwrap();
+    for i in 0..num_of_nodes {
+        // Get an unused port
+        let port = portpicker::pick_unused_port().expect("Failed to get an unused port");
 
-        let addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/0/quic-v1").unwrap();
-        config
-            .identity(identity)
+        // Use the port to create a Multiaddr
+        let addr =
+            Multiaddr::from_str(format!("/ip4/127.0.0.1/udp/{port}/quic-v1").as_str()).unwrap();
+
+        let config = NetworkNodeConfigBuilder::default()
             .replication_factor(replication_factor)
-            .node_type(NetworkNodeType::Bootstrap)
+            .bind_address(Some(addr.clone()))
             .to_connect_addrs(HashSet::default())
-            .bound_addr(Some(addr))
-            .ttl(None)
-            .republication_interval(None)
-            .server_mode(true);
-        let config = config
             .build()
             .context(NodeConfigSnafu)
             .context(HandleSnafu)?;
+
         let (rx, node) = spawn_network_node(config.clone(), i).await.unwrap();
-        let node = Arc::new(node);
-        let addr = node.listen_addr();
-        info!("listen addr for {} is {:?}", i, addr);
-        bootstrap_addrs.push((node.peer_id(), addr));
-        connecting_futs.push({
-            let node = Arc::clone(&node);
-            async move {
-                node.begin_bootstrap().await?;
-                node.lookup_pid(PeerId::random()).await
-            }
-            .boxed_local()
-        });
-        let node_with_state = HandleWithState {
-            handle: Arc::clone(&node),
-            state: Arc::default(),
-        };
-        handles.push((node_with_state, rx));
-    }
 
-    for j in 0..(num_of_nodes - num_bootstrap) {
-        let addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/0/quic-v1").unwrap();
-        // NOTE use this if testing locally and want human readable ports
-        // let addr = Multiaddr::from_str(&format!(
-        //     "/ip4/127.0.0.1/udp/{}/quic-v1",
-        //     start_port + num_bootstrap + j
-        // )).unwrap();
-        let regular_node_config = NetworkNodeConfigBuilder::default()
-            .node_type(NetworkNodeType::Regular)
-            .replication_factor(replication_factor)
-            .bound_addr(Some(addr.clone()))
-            .to_connect_addrs(HashSet::default())
-            .server_mode(true)
-            .build()
-            .context(NodeConfigSnafu)
-            .context(HandleSnafu)?;
-        let (rx, node) = spawn_network_node(regular_node_config.clone(), j + num_bootstrap)
-            .await
-            .unwrap();
+        // Add ourselves to the list of node addresses to connect to
+        node_addrs.push((node.peer_id(), addr));
 
         let node = Arc::new(node);
         connecting_futs.push({
@@ -277,18 +229,9 @@ pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static
         };
         handles.push((node_with_state, rx));
     }
-    info!("BSADDRS ARE: {:?}", bootstrap_addrs);
-
-    info!(
-        "known nodes: {:?}",
-        bootstrap_addrs
-            .iter()
-            .map(|(a, b)| (Some(*a), b.clone()))
-            .collect::<Vec<_>>()
-    );
 
     for (handle, _) in &handles[0..num_of_nodes] {
-        let to_share = bootstrap_addrs.clone();
+        let to_share = node_addrs.clone();
         handle
             .handle
             .add_known_peers(to_share)

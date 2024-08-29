@@ -62,18 +62,19 @@ use libp2p_identity::{
     ed25519::{self, SecretKey},
     Keypair, PeerId,
 };
+pub use libp2p_networking::network::GossipConfig;
 use libp2p_networking::{
     network::{
         behaviours::dht::record::{Namespace, RecordKey, RecordValue},
         spawn_network_node,
         transport::construct_auth_message,
-        MeshParams,
         NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
         NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeReceiver,
-        NetworkNodeType, DEFAULT_REPLICATION_FACTOR,
+        DEFAULT_REPLICATION_FACTOR,
     },
     reexport::{Multiaddr, ResponseChannel},
 };
+
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -268,53 +269,20 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                 )
                 .expect("Failed to sign DHT lookup record");
 
-                // we want the majority of peers to have this lying around.
-                let replication_factor = NonZeroUsize::new(2 * expected_node_count / 3).unwrap();
-                let config = if node_id < num_bootstrap as u64 {
-                    NetworkNodeConfigBuilder::default()
-                        // NOTICE the implicit assumption that bootstrap is less
-                        // than half the network. This seems reasonable.
-                        .mesh_params(Some(MeshParams {
-                            mesh_n_high: expected_node_count,
-                            mesh_n_low: 5,
-                            mesh_outbound_min: 3,
-                            // the worst case of 7/2+3 > 5
-                            mesh_n: (expected_node_count / 2 + 3),
-                        }))
-                        .server_mode(true)
-                        .identity(libp2p_keypair)
-                        .replication_factor(replication_factor)
-                        .node_type(NetworkNodeType::Bootstrap)
-                        .bound_addr(Some(addr))
-                        .to_connect_addrs(HashSet::default())
-                        // setting to sane defaults
-                        .ttl(None)
-                        .republication_interval(None)
-                        .build()
-                        .unwrap()
-                } else {
-                    NetworkNodeConfigBuilder::default()
-                        // NOTE I'm hardcoding these because this is probably the MAX
-                        // parameters. If there aren't this many nodes, gossip keeps looking
-                        // for more. That is fine.
-                        .mesh_params(Some(MeshParams {
-                            mesh_n_high: 15,
-                            mesh_n_low: 5,
-                            mesh_outbound_min: 4,
-                            mesh_n: 8,
-                        }))
-                        .server_mode(true)
-                        .identity(libp2p_keypair)
-                        .replication_factor(replication_factor)
-                        .node_type(NetworkNodeType::Regular)
-                        .bound_addr(Some(addr))
-                        .to_connect_addrs(HashSet::default())
-                        // setting to sane defaults
-                        .ttl(None)
-                        .republication_interval(None)
-                        .build()
-                        .unwrap()
-                };
+                // We want at least 2/3 of the nodes to have any given record in the DHT
+                let replication_factor =
+                    NonZeroUsize::new((2 * expected_node_count).div_ceil(3)).unwrap();
+
+                // Build the network node configuration
+                let config = NetworkNodeConfigBuilder::default()
+                    .keypair(libp2p_keypair)
+                    .replication_factor(replication_factor)
+                    .bind_address(Some(addr))
+                    .to_connect_addrs(HashSet::default())
+                    .republication_interval(None)
+                    .build()
+                    .expect("Failed to build network node config");
+
                 let bootstrap_addrs_ref = Arc::clone(&bootstrap_addrs);
                 let node_ids_ref = Arc::clone(&node_ids);
                 let da = da_keys.clone();
@@ -400,6 +368,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     /// If we are unable to calculate the replication factor
     pub async fn from_config<TYPES: NodeType>(
         mut config: NetworkConfig<K>,
+        gossip_config: GossipConfig,
         bind_address: SocketAddr,
         pub_key: &K,
         priv_key: &K::PrivateKey,
@@ -423,8 +392,11 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         )
         .parse()?;
 
-        // Build our libp2p configuration from our global, network configuration
+        // Build our libp2p configuration
         let mut config_builder = NetworkNodeConfigBuilder::default();
+
+        // Set the gossip configuration
+        config_builder.gossip_config(gossip_config.clone());
 
         // Extrapolate the stake table from the known nodes
         let stake_table: HashSet<K> = config
@@ -464,22 +436,15 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         .with_context(|| "Failed to sign DHT lookup record")?;
 
         config_builder
-            .server_mode(libp2p_config.server_mode)
-            .identity(keypair)
+            .keypair(keypair)
             .replication_factor(replication_factor)
-            .bound_addr(Some(bind_address.clone()))
-            .mesh_params(Some(MeshParams {
-                mesh_n_high: libp2p_config.mesh_n_high,
-                mesh_n_low: libp2p_config.mesh_n_low,
-                mesh_outbound_min: libp2p_config.mesh_outbound_min,
-                mesh_n: libp2p_config.mesh_n,
-            }));
+            .bind_address(Some(bind_address.clone()));
 
         // Choose `mesh_n` random nodes to connect to for bootstrap
         let bootstrap_nodes = libp2p_config
             .bootstrap_nodes
             .into_iter()
-            .choose_multiple(&mut StdRng::from_entropy(), libp2p_config.mesh_n);
+            .choose_multiple(&mut StdRng::from_entropy(), gossip_config.mesh_n);
         config_builder.to_connect_addrs(HashSet::from_iter(bootstrap_nodes.clone()));
 
         // Build the node's configuration
@@ -555,17 +520,11 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         let (mut rx, network_handle) = spawn_network_node::<K>(config.clone(), id)
             .await
             .map_err(Into::<NetworkError>::into)?;
-        // Make bootstrap mappings known
-        if matches!(
-            network_handle.config().node_type,
-            NetworkNodeType::Bootstrap
-        ) {
-            let addr = network_handle.listen_addr();
-            let pid = network_handle.peer_id();
-            let mut bs_cp = bootstrap_addrs.write().await;
-            bs_cp.push((pid, addr));
-            drop(bs_cp);
-        }
+
+        // Add our own address to the bootstrap addresses
+        let addr = network_handle.listen_addr();
+        let pid = network_handle.peer_id();
+        bootstrap_addrs.write().await.push((pid, addr));
 
         let mut pubkey_pid_map = BiHashMap::new();
         pubkey_pid_map.insert(pk.clone(), network_handle.peer_id());

@@ -15,7 +15,7 @@ mod node;
 /// Alternative Libp2p transport implementations
 pub mod transport;
 
-use std::{collections::HashSet, fmt::Debug, str::FromStr};
+use std::{collections::HashSet, fmt::Debug};
 
 use futures::channel::oneshot::{self, Sender};
 use hotshot_types::{
@@ -41,7 +41,6 @@ use libp2p_identity::PeerId;
 use quic::async_std::Transport as QuicTransport;
 #[cfg(async_executor_impl = "tokio")]
 use quic::tokio::Transport as QuicTransport;
-use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use transport::StakeTableAuthentication;
 
@@ -49,48 +48,13 @@ pub use self::{
     def::NetworkDef,
     error::NetworkError,
     node::{
-        network_node_handle_error, spawn_network_node, MeshParams, NetworkNode, NetworkNodeConfig,
-        NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError, NetworkNodeHandle,
-        NetworkNodeHandleError, NetworkNodeReceiver, DEFAULT_REPLICATION_FACTOR,
+        network_node_handle_error, spawn_network_node, GossipConfig, NetworkNode,
+        NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError,
+        NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeReceiver, DEFAULT_REPLICATION_FACTOR,
     },
 };
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
-
-/// this is mostly to estimate how many network connections
-/// a node should allow
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub enum NetworkNodeType {
-    /// bootstrap node accepts all connections
-    Bootstrap,
-    /// regular node has a limit to the
-    /// number of connections to accept
-    Regular,
-    /// conductor node is never pruned
-    Conductor,
-}
-
-impl FromStr for NetworkNodeType {
-    type Err = String;
-
-    fn from_str(input: &str) -> Result<NetworkNodeType, Self::Err> {
-        match input {
-            "Conductor" => Ok(NetworkNodeType::Conductor),
-            "Regular" => Ok(NetworkNodeType::Regular),
-            "Bootstrap" => Ok(NetworkNodeType::Bootstrap),
-            _ => Err(
-                "Couldn't parse node type. Must be one of Conductor, Bootstrap, Regular"
-                    .to_string(),
-            ),
-        }
-    }
-}
-
-impl Default for NetworkNodeType {
-    fn default() -> Self {
-        Self::Bootstrap
-    }
-}
 
 /// Actions to send from the client to the swarm
 #[derive(Debug)]

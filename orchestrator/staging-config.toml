@@ -41,19 +41,6 @@ transaction_size = 100
 start_delay_seconds = 10
 builder = "Simple"
 
-[libp2p_config]
-bootstrap_mesh_n_high = 4
-bootstrap_mesh_n_low = 4
-bootstrap_mesh_outbound_min = 2
-bootstrap_mesh_n = 4
-mesh_n_high = 4
-mesh_n_low = 4
-mesh_outbound_min = 2
-mesh_n = 4
-online_time = 10
-num_txn_per_round = 0
-server_mode = false
-
 [config]
 start_threshold = [ 8, 10 ]
 num_nodes_with_stake = 10

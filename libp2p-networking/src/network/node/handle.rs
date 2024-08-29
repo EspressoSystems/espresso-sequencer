@@ -91,7 +91,7 @@ pub async fn spawn_network_node<K: SignatureKey + 'static>(
         .context(NetworkSnafu)?;
     // randomly assigned port
     let listen_addr = config
-        .bound_addr
+        .bind_address
         .clone()
         .unwrap_or_else(|| gen_multiaddr(0));
     let peer_id = network.peer_id();

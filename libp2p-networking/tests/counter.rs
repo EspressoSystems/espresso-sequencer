@@ -35,11 +35,9 @@ pub type CounterState = u32;
 const NUM_ROUNDS: usize = 100;
 
 const TOTAL_NUM_PEERS_COVERAGE: usize = 10;
-const NUM_OF_BOOTSTRAP_COVERAGE: usize = 5;
 const TIMEOUT_COVERAGE: Duration = Duration::from_secs(120);
 
 const TOTAL_NUM_PEERS_STRESS: usize = 100;
-const NUM_OF_BOOTSTRAP_STRESS: usize = 25;
 const TIMEOUT_STRESS: Duration = Duration::from_secs(60);
 
 const DHT_KV_PADDING: usize = 1024;
@@ -399,7 +397,7 @@ async fn run_dht_rounds<K: SignatureKey + 'static>(
         // Sign the value
         let value = RecordValue::new_signed(&key, value, &private_key).expect("signing failed");
 
-        // put the key
+        // Put the key
         msg_handle
             .handle
             .put_record(key.clone(), value.clone())
@@ -529,7 +527,6 @@ async fn test_coverage_request_response_one_round() {
         run_request_response_one_round::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
-        NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
     ))
     .await;
@@ -544,7 +541,6 @@ async fn test_coverage_request_response_many_rounds() {
         run_request_response_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
-        NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
     ))
     .await;
@@ -559,7 +555,6 @@ async fn test_coverage_intersperse_many_rounds() {
         run_intersperse_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
-        NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
     ))
     .await;
@@ -574,7 +569,6 @@ async fn test_coverage_gossip_many_rounds() {
         run_gossip_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
-        NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
     ))
     .await;
@@ -589,7 +583,6 @@ async fn test_coverage_gossip_one_round() {
         run_gossip_one_round::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
-        NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
     ))
     .await;
@@ -605,7 +598,6 @@ async fn test_stress_request_response_one_round() {
         run_request_response_one_round::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
-        NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
     ))
     .await;
@@ -621,7 +613,6 @@ async fn test_stress_request_response_many_rounds() {
         run_request_response_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
-        NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
     ))
     .await;
@@ -637,7 +628,6 @@ async fn test_stress_intersperse_many_rounds() {
         run_intersperse_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
-        NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
     ))
     .await;
@@ -653,7 +643,6 @@ async fn test_stress_gossip_many_rounds() {
         run_gossip_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
-        NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
     ))
     .await;
@@ -669,7 +658,6 @@ async fn test_stress_gossip_one_round() {
         run_gossip_one_round::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
-        NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
     ))
     .await;
@@ -685,7 +673,6 @@ async fn test_stress_dht_one_round() {
         run_dht_one_round::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
-        NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
     ))
     .await;
@@ -701,7 +688,6 @@ async fn test_stress_dht_many_rounds() {
         run_dht_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
-        NUM_OF_BOOTSTRAP_STRESS,
         TIMEOUT_STRESS,
     ))
     .await;
@@ -716,7 +702,6 @@ async fn test_coverage_dht_one_round() {
         run_dht_one_round::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
-        NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
     ))
     .await;
@@ -731,7 +716,6 @@ async fn test_coverage_dht_many_rounds() {
         run_dht_many_rounds::<BLSPubKey>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
-        NUM_OF_BOOTSTRAP_COVERAGE,
         TIMEOUT_COVERAGE,
     ))
     .await;

@@ -10,7 +10,7 @@ use hotshot_types::traits::signature_key::SignatureKey;
 use libp2p::{identity::Keypair, Multiaddr};
 use libp2p_identity::PeerId;
 
-use crate::network::NetworkNodeType;
+use super::MAX_GOSSIP_MSG_SIZE;
 
 /// The default Kademlia replication factor
 pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(10);
@@ -18,23 +18,20 @@ pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(1
 /// describe the configuration of the network
 #[derive(Clone, Default, derive_builder::Builder, custom_debug::Debug)]
 pub struct NetworkNodeConfig<K: SignatureKey + 'static> {
-    #[builder(default)]
-    /// The type of node (bootstrap etc)
-    pub node_type: NetworkNodeType,
-    /// optional identity
+    /// The keypair for the node
     #[builder(setter(into, strip_option), default)]
     #[debug(skip)]
-    pub identity: Option<Keypair>,
-    /// address to bind to
+    pub keypair: Option<Keypair>,
+    /// The address to bind to
     #[builder(default)]
-    pub bound_addr: Option<Multiaddr>,
+    pub bind_address: Option<Multiaddr>,
     /// Replication factor for entries in the DHT
     #[builder(setter(into, strip_option), default = "DEFAULT_REPLICATION_FACTOR")]
     pub replication_factor: Option<NonZeroUsize>,
 
     #[builder(default)]
-    /// parameters for gossipsub mesh network
-    pub mesh_params: Option<MeshParams>,
+    /// Configuration for `GossipSub`
+    pub gossip_config: GossipConfig,
 
     /// list of addresses to connect to at initialization
     pub to_connect_addrs: HashSet<(PeerId, Multiaddr)>,
@@ -44,9 +41,6 @@ pub struct NetworkNodeConfig<K: SignatureKey + 'static> {
     /// expiratiry for records in DHT
     #[builder(default)]
     pub ttl: Option<Duration>,
-    /// whether to start in libp2p::kad::Mode::Server mode
-    #[builder(default = "false")]
-    pub server_mode: bool,
 
     /// The stake table. Used for authenticating other nodes. If not supplied
     /// we will not check other nodes against the stake table
@@ -59,28 +53,47 @@ pub struct NetworkNodeConfig<K: SignatureKey + 'static> {
     pub auth_message: Option<Vec<u8>>,
 }
 
-/// NOTE: `mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high`
-/// NOTE: `mesh_outbound_min <= self.config.mesh_n / 2`
-/// parameters fed into gossipsub controlling the structure of the mesh
+/// Configuration for Libp2p's Gossipsub
 #[derive(Clone, Debug)]
-pub struct MeshParams {
-    /// mesh_n_high from gossipsub
-    pub mesh_n_high: usize,
-    /// mesh_n_low from gossipsub
-    pub mesh_n_low: usize,
-    /// mesh_outbound_min from gossipsub
-    pub mesh_outbound_min: usize,
-    /// mesh_n from gossipsub
+pub struct GossipConfig {
+    /// The heartbeat interval
+    pub heartbeat_interval: Duration,
+
+    /// The number of past heartbeats to gossip about
+    pub history_gossip: usize,
+    /// The number of past heartbeats to remember the full messages for
+    pub history_length: usize,
+
+    /// The target number of peers in the mesh
     pub mesh_n: usize,
+    /// The maximum number of peers in the mesh
+    pub mesh_n_high: usize,
+    /// The minimum number of peers in the mesh
+    pub mesh_n_low: usize,
+    /// The minimum number of mesh peers that must be outbound
+    pub mesh_outbound_min: usize,
+
+    /// The maximum gossip message size
+    pub max_transmit_size: usize,
 }
 
-impl Default for MeshParams {
+impl Default for GossipConfig {
     fn default() -> Self {
         Self {
-            mesh_n_high: 15,
-            mesh_n_low: 8,
-            mesh_outbound_min: 4,
-            mesh_n: 12,
+            heartbeat_interval: Duration::from_secs(1), // Default of Libp2p
+
+            // The following are slightly modified defaults of Libp2p
+            history_gossip: 6, // The number of past heartbeats to gossip about
+            history_length: 8, // The number of past heartbeats to remember the full messages for
+
+            // The mesh parameters are borrowed from Ethereum:
+            // https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#the-gossip-domain-gossipsub
+            mesh_n: 8,            // The target number of peers in the mesh
+            mesh_n_high: 12,      // The maximum number of peers in the mesh
+            mesh_n_low: 6,        // The minimum number of peers in the mesh
+            mesh_outbound_min: 2, // The minimum number of mesh peers that must be outbound
+
+            max_transmit_size: MAX_GOSSIP_MSG_SIZE, // The maximum gossip message size
         }
     }
 }
