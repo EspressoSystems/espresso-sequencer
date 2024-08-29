@@ -350,31 +350,17 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             vm.prank(permissionedProver);
             lc.newFinalizedState(states[i], proofs[i]);
 
-            // check if LightClient.sol states are updated correctly
             assertEq(abi.encode(lc.getFinalizedState()), abi.encode(states[i]));
-            // check against hardcoded epoch advancement expectation
-            //            if (i == statesLen - 1) {
-            //                // first block of a new epoch (from epoch 2) should update the
-            // following
-            //                bytes32 genesisComm = lc.computeStakeTableComm(genesis);
-            //                LC.LightClientState memory lastBlockInFirstEpoch = states[i - 1];
-            //                bytes32 firstEpochComm =
-            // lc.computeStakeTableComm(lastBlockInFirstEpoch);
-            //                assertEq(lc.votingStakeTableCommitment(), genesisComm);
-            //                assertEq(lc.frozenStakeTableCommitment(), firstEpochComm);
-            //                assertEq(lc.votingThreshold(), genesis.threshold);
-            //                assertEq(lc.frozenThreshold(), lastBlockInFirstEpoch.threshold);
-            //            } else {
+
             bytes32 stakeTableComm = lc.computeStakeTableComm(genesis);
             assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
             assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
             assertEq(lc.votingThreshold(), genesis.threshold);
             assertEq(lc.frozenThreshold(), genesis.threshold);
-            //}
         }
     }
 
-    /// @dev Test happy path for updating after skipping a few blocks (but not an epoch)
+    /// @dev Test happy path for updating after skipping a few blocks
     /// forge-config: default.fuzz.runs = 4
     /// forge-config: quick.fuzz.runs = 1
     /// forge-config: ci.fuzz.runs = 10

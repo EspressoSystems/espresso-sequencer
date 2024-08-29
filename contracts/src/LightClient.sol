@@ -19,8 +19,6 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// Rollup contracts on L1 (Ethereum).
 /// This state is submitted by any state-prover with evidence which is
 /// a SNARK proof that proves consensus.
-/// This contract also keeps track of the current epoch.
-/// For this version, the epoch is not used. <br>
 /// The light client state primarily consists of:<br>
 /// - the merkle root of finalized block commitments,<br>
 /// - the fee ledger commitment and <br>
@@ -49,15 +47,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === Storage ===
     //
-    /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
-    /// of last epoch)
+    /// @notice The commitment of the stake table used in current voting
     bytes32 public votingStakeTableCommitment;
 
     /// @notice The quorum threshold for the stake table used in current voting
     uint256 public votingThreshold;
 
-    /// @notice The commitment of the stake table frozen for change (i.e. snapshot at the start of
-    /// last epoch)
+    /// @notice The commitment of the stake table frozen for change
     bytes32 public frozenStakeTableCommitment;
 
     /// @notice The quorum threshold for the frozen stake table
@@ -238,8 +234,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === State Modifying APIs ===
     //
     /// @notice Update the latest finalized light client state. It must be updated
-    /// periodically (at least once per epoch), especially an update for the last block for every
-    /// epoch has to be submitted
+    /// periodically, especially an update for the last block for every
+    /// period has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
     /// @dev in this version, only a permissioned prover doing the computations
