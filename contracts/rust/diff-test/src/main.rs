@@ -461,13 +461,19 @@ fn main() {
             println!("{}", (res.encode_hex()));
         }
         Action::MockGenesis => {
-            if cli.args.len() != 2 {
-                panic!("Should provide arg1=numBlockPerEpoch,arg2=numInitValidators");
+            if cli.args.is_empty() {
+                panic!("Should provide arg1=numInitValidators,[arg2=numBlockPerEpoch]");
             }
+            let num_init_validators = cli.args[0].parse::<u64>().unwrap();
 
-            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
-            let num_init_validators = cli.args[1].parse::<u64>().unwrap();
-            let pp = MockSystemParam::init(block_per_epoch);
+            // block_per_epoch is an optional parameter with default value 1
+            let blocks_per_epoch = if cli.args.len() == 2 {
+                cli.args[1].parse::<u32>().unwrap()
+            } else {
+                1
+            };
+
+            let pp = MockSystemParam::init(blocks_per_epoch);
             let ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let (voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();

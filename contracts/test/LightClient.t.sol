@@ -51,11 +51,10 @@ contract LightClientCommonTest is Test {
 
     /// @dev initialized ledger like genesis and system params
     function init() public {
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state, bytes32 votingSTComm, bytes32 frozenSTComm) =
@@ -321,11 +320,10 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         // since we have have a fuzzer-provided `numInitValidators`, we should instantiate light
         // client contract separately in each test run
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(numInitValidators);
+        cmds[2] = vm.toString(numInitValidators);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =
