@@ -21,7 +21,7 @@ env:
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  demo-native:
+  demo-native-marketplace:
     runs-on: ubuntu-latest
     steps:
       - name: Install Foundry
@@ -45,7 +45,7 @@ jobs:
       - name: Build
         run: cargo build --locked --release
 
-      - name: Test Demo
+      - name: Test Demo Marketplace
         run: |
           export PATH="$PWD/target/release:$PATH"
           scripts/demo-native --tui=false -c process-compose-mp.yml &
