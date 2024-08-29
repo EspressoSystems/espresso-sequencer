@@ -119,7 +119,7 @@ library PlonkVerifier {
         uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
     ) private view returns (bool) {
-        if (publicInput.length != 8) revert WrongPlonkVK();
+        if (verifyingKey.numInputs != 8) revert WrongPlonkVK();
 
         Challenges memory chal = _computeChallenges(verifyingKey, publicInput, proof);
 
