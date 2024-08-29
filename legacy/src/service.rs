@@ -194,6 +194,14 @@ impl From<GetChannelForMatchingBuilderError> for BuildError {
 }
 
 impl<Types: NodeType> GlobalState<Types> {
+    /// [new] creates a new [GlobalState] with the given parameters.
+    /// The resulting [GlobalState] will have the given
+    /// `last_garbage_collected_view_num` as passed.  Additionally, the
+    /// `highest_view_num_builder_id` will be set to a [BuilderStateId]
+    /// comprised of the given `bootstrapped_builder_state_id` and
+    /// `bootstrapped_view_num`.  The `spawned_builder_states` will be created
+    /// with a single entry of the same [BuilderStateId] and the given
+    /// `bootstrap_sender`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         bootstrap_sender: BroadcastSender<MessageType<Types>>,
@@ -1459,7 +1467,8 @@ mod test {
     };
 
     use crate::{
-        builder_state::{MessageType, ResponseMessage, TriggerStatus},
+        builder_state::{MessageType, RequestMessage, ResponseMessage, TriggerStatus},
+        service::INITIAL_MAX_BLOCK_SIZE,
         BlockId, BuilderStateId,
     };
 
@@ -1467,6 +1476,70 @@ mod test {
         AvailableBlocksError, BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState,
         ProxyGlobalState,
     };
+
+    // GlobalState Tests
+
+    // GlobalState::new Tests
+
+    /// This test checks a [GlobalState] created from [GlobalState::new] has
+    /// the appropriate values stored within it.
+    #[async_std::test]
+    async fn test_global_state_new() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[], 8);
+        let state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(1),
+            ViewNumber::new(2),
+            10,
+        );
+
+        assert_eq!(state.blocks.len(), 0, "The blocks LRU should be empty");
+
+        let builder_state_id = BuilderStateId {
+            parent_commitment: parent_commit,
+            view: ViewNumber::new(1),
+        };
+
+        // There should be a single entry within the spawned_builder_states,
+        // and it should be the one that was just created.
+        assert_eq!(
+            state.spawned_builder_states.len(),
+            1,
+            "There should be a single entry in the spawned builder states hashmap"
+        );
+
+        assert!(state.spawned_builder_states.contains_key(&builder_state_id), "The spawned builder states should contain an entry with the bootstrapped parameters passed into new");
+
+        assert!(!state.spawned_builder_states.contains_key(&BuilderStateId { parent_commitment: parent_commit, view: ViewNumber::new(0) }), "The spawned builder states should not contain any other entry, as such it should not contain any entry with a higher view number, but the same parent commit");
+
+        // We can't compare the Senders directly
+
+        assert_eq!(
+            state.last_garbage_collected_view_num,
+            ViewNumber::new(2),
+            "The last garbage collected view number should be the one passed into new"
+        );
+
+        assert_eq!(
+            state.builder_state_to_last_built_block.len(),
+            0,
+            "The builder state to last built block should be empty"
+        );
+
+        assert_eq!(
+            state.highest_view_num_builder_id, builder_state_id,
+            "The highest view number builder id should be the bootstrapped build state id"
+        );
+
+        assert_eq!(
+            state.max_block_size, INITIAL_MAX_BLOCK_SIZE,
+            "The max block size should be the expected default value"
+        );
+    }
 
     // Get Available Blocks Tests
 
