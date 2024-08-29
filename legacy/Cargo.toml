@@ -1,0 +1,39 @@
+[package]
+name = "hotshot-builder-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hotshot = { workspace = true }
+hotshot-builder-api = { workspace = true }
+hotshot-events-service = { workspace = true }
+hotshot-types = { workspace = true }
+
+anyhow = { workspace = true }
+async-broadcast = { workspace = true }
+async-compatibility-layer = { workspace = true, features = ["logging-utils"] }
+async-lock = { workspace = true }
+async-std = { workspace = true, features = ["unstable", "attributes"] }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+committable = { workspace = true }
+derivative = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+lru = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+sha2 = { workspace = true }
+snafu = { workspace = true }
+surf-disco = { workspace = true }
+tagged-base64 = { workspace = true }
+tide-disco = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+vbs = { workspace = true }
+
+[dev-dependencies]
+hotshot-example-types = { workspace = true }
+
+[lints]
+workspace = true
