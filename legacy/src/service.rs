@@ -85,6 +85,14 @@ pub struct BlockInfo<Types: NodeType> {
 }
 
 // It holds the information for the proposed block
+
+/// [ProposedBlockId] contains information relating to what has been proposed
+/// for a Block.
+///
+/// This is only referenced within [BuilderStatesInfo] and does not seem to be
+/// utilized.
+///
+/// TODO: look into whether it needs to stick around or not.
 #[derive(Debug)]
 pub struct ProposedBlockId<Types: NodeType> {
     pub parent_commitment: VidCommitment,
@@ -106,6 +114,12 @@ impl<Types: NodeType> ProposedBlockId<Types> {
     }
 }
 
+/// [BuilderStatesInfo] holds information concerning [VidCommitment]s and
+/// [ProposedBlockId]s.
+///
+/// It does not seem to be utilized
+///
+/// TODO: look into whether it needs to stick around or not
 #[derive(Debug, Derivative)]
 #[derivative(Default(bound = ""))]
 pub struct BuilderStatesInfo<Types: NodeType> {
@@ -115,6 +129,8 @@ pub struct BuilderStatesInfo<Types: NodeType> {
     pub block_ids: Vec<ProposedBlockId<Types>>,
 }
 
+/// [ReceivedTransaction] represents receipt information concerning a received
+/// [NodeType::Transaction].
 #[derive(Debug)]
 pub struct ReceivedTransaction<Types: NodeType> {
     // the transaction
@@ -129,6 +145,8 @@ pub struct ReceivedTransaction<Types: NodeType> {
     pub time_in: Instant,
 }
 
+/// [GlobalState] represents the internalized state of the Builder service as
+/// represented from its public facing API.
 #[allow(clippy::type_complexity)]
 #[derive(Debug)]
 pub struct GlobalState<Types: NodeType> {
@@ -202,6 +220,12 @@ impl<Types: NodeType> GlobalState<Types> {
         }
     }
 
+    /// [register_builder_state] associates the given [BuilderStateId] with
+    /// the given [BroadcastSender] in the [GlobalState].
+    ///
+    /// Additionally, if the view of the [BuilderStateId] is greater than the
+    /// current highest view number, the [BuilderStateId] is set as the new
+    /// highest view number.
     pub fn register_builder_state(
         &mut self,
         parent_id: BuilderStateId<Types>,
@@ -223,6 +247,17 @@ impl<Types: NodeType> GlobalState<Types> {
         }
     }
 
+    /// [update_global_state] Ensures that the given [BuildBlockInfo]'d id
+    /// is within the [GlobalState]'s [blocks] LRU Cache.  The cache stores the
+    /// [BlockInfo] associated with the given [BuildBlockInfo]'s id.  However
+    /// if it already exists within the LRU cache, then the `BlockInfo` is not
+    /// updated.
+    ///
+    /// Additionally, the [BuilderStateId] is associated with the given
+    /// [ResponseMessage] in the [builder_state_to_last_built_block] hashmap.
+    ///
+    /// No care or consideration is given to anything that may have been
+    /// stored with the same key in the [builder_state_to_last_built_block].
     pub fn update_global_state(
         &mut self,
         state_id: BuilderStateId<Types>,
@@ -283,10 +318,10 @@ impl<Types: NodeType> GlobalState<Types> {
         .await
     }
 
-    /// get_channel_for_matching_builder_or_highest_view_builder is a helper
+    /// [get_channel_for_matching_builder_or_highest_view_builder] is a helper
     /// function that attempts to retrieve the broadcast sender for the given
-    /// `BuilderStateId`. If the sender does not exist, it will return the
-    /// broadcast sender for the for the hightest view number `BuilderStateId``
+    /// [BuilderStateId]. If the sender does not exist, it will return the
+    /// broadcast sender for the for the hightest view number [BuilderStateId]
     /// instead.
     pub(crate) fn get_channel_for_matching_builder_or_highest_view_builder(
         &self,
@@ -612,7 +647,6 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
                 }
             }
         };
-        // };
 
         match response_received {
             Ok(response) => {
@@ -825,37 +859,38 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
                         .div_ceil(MAX_BLOCK_SIZE_CHANGE_DIVISOR);
             }
 
-            if response_received.is_ok() {
-                let (vid_commitment, vid_precompute_data) = response_received?;
+            match response_received {
+                Ok((vid_commitment, vid_precompute_data)) => {
+                    // sign over the vid commitment
+                    let signature_over_vid_commitment =
+                        <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
+                            &sign_key,
+                            vid_commitment.as_ref(),
+                        )
+                        .map_err(ClaimBlockHeaderInputError::FailedToSignVidCommitment)?;
 
-                // sign over the vid commitment
-                let signature_over_vid_commitment =
-                    <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
+                    let signature_over_fee_info = Types::BuilderSignatureKey::sign_fee(
                         &sign_key,
-                        vid_commitment.as_ref(),
+                        offered_fee,
+                        &metadata,
+                        &vid_commitment,
                     )
-                    .map_err(ClaimBlockHeaderInputError::FailedToSignVidCommitment)?;
+                    .map_err(ClaimBlockHeaderInputError::FailedToSignFeeInfo)?;
 
-                let signature_over_fee_info = Types::BuilderSignatureKey::sign_fee(
-                    &sign_key,
-                    offered_fee,
-                    &metadata,
-                    &vid_commitment,
-                )
-                .map_err(ClaimBlockHeaderInputError::FailedToSignFeeInfo)?;
-
-                let response = AvailableBlockHeaderInput::<Types> {
-                    vid_commitment,
-                    vid_precompute_data,
-                    fee_signature: signature_over_fee_info,
-                    message_signature: signature_over_vid_commitment,
-                    sender: pub_key.clone(),
-                };
-                tracing::info!("Sending Claim Block Header Input response for {id}",);
-                Ok(response)
-            } else {
-                tracing::warn!("Claim Block Header Input not found");
-                Err(ClaimBlockHeaderInputError::BlockHeaderNotFound)
+                    let response = AvailableBlockHeaderInput::<Types> {
+                        vid_commitment,
+                        vid_precompute_data,
+                        fee_signature: signature_over_fee_info,
+                        message_signature: signature_over_vid_commitment,
+                        sender: pub_key.clone(),
+                    };
+                    tracing::info!("Sending Claim Block Header Input response for {id}",);
+                    Ok(response)
+                }
+                Err(err) => {
+                    tracing::warn!("Claim Block Header Input not found");
+                    Err(err)
+                }
             }
         } else {
             tracing::warn!("Claim Block Header Input not found");
@@ -1336,6 +1371,15 @@ async fn handle_decide_event<Types: NodeType>(
     }
 }
 
+/// [handle_received_txns] is a utility function that will take the given list
+/// of transactions, [txns], wraps them in a [ReceivedTransaction] struct
+/// and attempt to broadcast them to the given transaction [BroadcastSender]
+/// [tx_sender]. The broadcast itself it a non-blocking operation, and any
+/// failures of the broadcast are collected into the returned vector
+/// of [Result]s.
+///
+/// There is also a [max_txn_len] parameter that is used to check to ensure
+/// that transactions that exceed this threshold will also not be broadcasted.
 pub(crate) async fn handle_received_txns<Types: NodeType>(
     tx_sender: &BroadcastSender<Arc<ReceivedTransaction<Types>>>,
     txns: Vec<Types::Transaction>,
@@ -1395,15 +1439,20 @@ pub(crate) async fn handle_received_txns<Types: NodeType>(
 mod test {
     use std::{sync::Arc, time::Duration};
 
+    use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
     use futures::StreamExt;
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
-    use hotshot_example_types::node_types::TestTypes;
+    use hotshot_example_types::{
+        block_types::{TestBlockPayload, TestMetadata, TestTransaction},
+        node_types::TestTypes,
+    };
     use hotshot_types::{
         data::ViewNumber,
         traits::{
-            block_contents::vid_commitment, node_implementation::ConsensusTime,
+            block_contents::{precompute_vid_commitment, vid_commitment},
+            node_implementation::ConsensusTime,
             signature_key::BuilderSignatureKey,
         },
         utils::BuilderCommitment,
@@ -1411,10 +1460,12 @@ mod test {
 
     use crate::{
         builder_state::{MessageType, ResponseMessage},
-        BuilderStateId,
+        BlockId, BuilderStateId,
     };
 
-    use super::{AvailableBlocksError, GlobalState, ProxyGlobalState};
+    use super::{
+        AvailableBlocksError, BlockInfo, ClaimBlockHeaderInputError, GlobalState, ProxyGlobalState,
+    };
 
     // Get Available Blocks Tests
 
@@ -1602,7 +1653,7 @@ mod test {
     /// When interacted with `GlobalState` via `register_builder_state`, and
     /// `remove_handles`, this error doesn't seem possible immediately possible.
     #[async_std::test]
-    async fn test_get_available_blocks_error_() {
+    async fn test_get_available_blocks_error_get_channel_for_matching_builder() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
         let (builder_public_key, builder_private_key) =
@@ -1653,6 +1704,18 @@ mod test {
             }
         }
     }
+
+    // We have two error cases for `available_blocks_implementation` that we
+    // cannot seem trigger directly due to the nature of how the implementation
+    // performs.
+    //
+    // The first is ChannelUnexpectedlyClosed, which doesn't seem to be
+    // producible as the unbounded channel doesn't seem to be able to be
+    // closed.
+    //
+    // The second is SigningBlockFailed, which doesn't seem to be producible
+    // with a valid private key, and it's not clear how to create an invalid
+    // private key.
 
     /// This test checks that call to `available_blocks_implementation` returns
     /// a successful response when the function is called before blocks are
@@ -1906,6 +1969,396 @@ mod test {
                     }],
                     "get_available_blocks response matches expectation"
                 );
+            }
+        }
+    }
+
+    // Claim Block Header Input Tests
+
+    /// This test checks that the error `ClaimBlockHeaderInputError::SignatureValidationFailed`
+    /// is returned when the signature is invalid.
+    ///
+    /// To trigger this condition, we simply submit a request to the
+    /// implementation of claim_block, but we sign the request with
+    /// the builder's private key instead of the leader's private key.  Since
+    /// these keys do not match, this will result in a signature verification
+    /// error.
+    #[async_std::test]
+    async fn test_claim_block_error_signature_verification_failed() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        let commitment = BuilderCommitment::from_bytes([0; 256]);
+
+        let signature = BLSPubKey::sign(&builder_private_key, commitment.as_ref()).unwrap();
+
+        let result = state
+            .claim_block_header_input_implementation(&commitment, 1, leader_public_key, &signature)
+            .await;
+
+        match result {
+            Err(ClaimBlockHeaderInputError::SignatureValidationFailed) => {
+                // This is what we expect.
+                // This message *should* indicate that the signature passed
+                // did not match the given public key.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that the error `ClaimBlockHeaderInputError::BlockHeaderNotFound`
+    /// is returned when the block header is not found.
+    ///
+    /// To trigger this condition, we simply submit a request to the
+    /// implementation of claim_block, but we do not provide any information
+    /// for the block header requested.  As a result, the implementation will
+    /// ultimately timeout, and return an error that indicates that the block
+    /// header was not found.
+    #[async_std::test]
+    async fn test_claim_block_error_block_header_not_found() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        let commitment = BuilderCommitment::from_bytes([0; 256]);
+
+        let signature = BLSPubKey::sign(&leader_private_key, commitment.as_ref()).unwrap();
+
+        let result = state
+            .claim_block_header_input_implementation(&commitment, 1, leader_public_key, &signature)
+            .await;
+
+        match result {
+            Err(ClaimBlockHeaderInputError::BlockHeaderNotFound) => {
+                // This is what we expect.
+                // This message *should* indicate that the signature passed
+                // did not match the given public key.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that the error `ClaimBlockHeaderInputError::CouldNotGetVidInTime`
+    /// is returned when the VID is not received in time.
+    ///
+    /// To trigger this condition, we simply submit a request to the
+    /// implementation of claim_block, but we do not provide a VID. As a result,
+    /// the implementation will ultimately timeout, and return an error that
+    /// indicates that the VID was not received in time.
+    ///
+    /// At least that's what it should do.  At the moment, this results in a
+    /// deadlock due to attempting to acquire the `write_arc` twice.
+    #[async_std::test]
+    async fn test_claim_block_error_could_not_get_vid_in_time() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        let commitment = BuilderCommitment::from_bytes([0; 256]);
+        let cloned_commitment = commitment.clone();
+        let cloned_state = state.clone();
+
+        let _vid_sender = {
+            let mut global_state_write_lock = state.global_state.write_arc().await;
+            let block_id = BlockId {
+                hash: commitment,
+                view: ViewNumber::new(1),
+            };
+
+            let payload = TestBlockPayload {
+                transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
+            };
+
+            let (vid_trigger_sender, _) = async_compatibility_layer::channel::oneshot();
+            let (vid_sender, vid_receiver) = unbounded();
+
+            global_state_write_lock.blocks.put(
+                block_id,
+                BlockInfo {
+                    block_payload: payload,
+                    metadata: TestMetadata,
+                    vid_trigger: Arc::new(async_lock::RwLock::new(Some(vid_trigger_sender))),
+                    vid_receiver: Arc::new(async_lock::RwLock::new(crate::WaitAndKeep::Wait(
+                        vid_receiver,
+                    ))),
+                    offered_fee: 100,
+                    truncated: false,
+                },
+            );
+
+            vid_sender
+        };
+
+        let claim_block_header_input_join_handle = async_std::task::spawn(async move {
+            let signature =
+                BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
+            cloned_state
+                .claim_block_header_input_implementation(
+                    &cloned_commitment,
+                    1,
+                    leader_public_key,
+                    &signature,
+                )
+                .await
+        });
+
+        let result = claim_block_header_input_join_handle.await;
+
+        match result {
+            Err(ClaimBlockHeaderInputError::CouldNotGetVidInTime) => {
+                // This is what we expect.
+                // This message *should* indicate that the signature passed
+                // did not match the given public key.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that the error `ClaimBlockHeaderInputError::WaitAndKeepGetError`
+    /// is returned when the VID is not received in time.
+    ///
+    /// To trigger this condition, we simply submit a request to the
+    /// implementation of claim_block, but we close the VID receiver channel's
+    /// sender.
+    #[async_std::test]
+    async fn test_claim_block_error_keep_and_wait_get_error() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        let commitment = BuilderCommitment::from_bytes([0; 256]);
+        let cloned_commitment = commitment.clone();
+        let cloned_state = state.clone();
+
+        {
+            let mut global_state_write_lock = state.global_state.write_arc().await;
+            let block_id = BlockId {
+                hash: commitment,
+                view: ViewNumber::new(1),
+            };
+
+            let payload = TestBlockPayload {
+                transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
+            };
+
+            let (vid_trigger_sender, _) = async_compatibility_layer::channel::oneshot();
+            let (_, vid_receiver) = unbounded();
+
+            global_state_write_lock.blocks.put(
+                block_id,
+                BlockInfo {
+                    block_payload: payload,
+                    metadata: TestMetadata,
+                    vid_trigger: Arc::new(async_lock::RwLock::new(Some(vid_trigger_sender))),
+                    vid_receiver: Arc::new(async_lock::RwLock::new(crate::WaitAndKeep::Wait(
+                        vid_receiver,
+                    ))),
+                    offered_fee: 100,
+                    truncated: false,
+                },
+            );
+        };
+
+        let claim_block_header_input_join_handle = async_std::task::spawn(async move {
+            let signature =
+                BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
+            cloned_state
+                .claim_block_header_input_implementation(
+                    &cloned_commitment,
+                    1,
+                    leader_public_key,
+                    &signature,
+                )
+                .await
+        });
+
+        let result = claim_block_header_input_join_handle.await;
+
+        match result {
+            Err(ClaimBlockHeaderInputError::WaitAndKeepGetError(_)) => {
+                // This is what we expect.
+                // This message *should* indicate that the signature passed
+                // did not match the given public key.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that successful response is returned when the VID is
+    /// received in time.
+    #[async_std::test]
+    async fn test_claim_block_success() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        let commitment = BuilderCommitment::from_bytes([0; 256]);
+        let cloned_commitment = commitment.clone();
+        let cloned_state = state.clone();
+
+        let vid_sender = {
+            let mut global_state_write_lock = state.global_state.write_arc().await;
+            let block_id = BlockId {
+                hash: commitment,
+                view: ViewNumber::new(1),
+            };
+
+            let payload = TestBlockPayload {
+                transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
+            };
+
+            let (vid_trigger_sender, _) = async_compatibility_layer::channel::oneshot();
+            let (vid_sender, vid_receiver) = unbounded();
+
+            global_state_write_lock.blocks.put(
+                block_id,
+                BlockInfo {
+                    block_payload: payload,
+                    metadata: TestMetadata,
+                    vid_trigger: Arc::new(async_lock::RwLock::new(Some(vid_trigger_sender))),
+                    vid_receiver: Arc::new(async_lock::RwLock::new(crate::WaitAndKeep::Wait(
+                        vid_receiver,
+                    ))),
+                    offered_fee: 100,
+                    truncated: false,
+                },
+            );
+
+            vid_sender
+        };
+
+        let claim_block_header_input_join_handle = async_std::task::spawn(async move {
+            let signature =
+                BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
+            cloned_state
+                .claim_block_header_input_implementation(
+                    &cloned_commitment,
+                    1,
+                    leader_public_key,
+                    &signature,
+                )
+                .await
+        });
+
+        vid_sender
+            .send(precompute_vid_commitment(&[1, 2, 3, 4], 2))
+            .await
+            .unwrap();
+
+        let result = claim_block_header_input_join_handle.await;
+
+        match result {
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                // This is expected.
             }
         }
     }
