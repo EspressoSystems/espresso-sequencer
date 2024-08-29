@@ -98,7 +98,7 @@ sol-lint:
 # Note: we use an invalid etherscan api key in order to avoid annoying warnings. See https://github.com/EspressoSystems/espresso-sequencer/issues/979
 sol-test:
     cargo build --bin diff-test --release
-    forge test --no-match-contract StakeTable*
+    forge test
 
 # Deploys the light client contract on Sepolia and call it for profiling purposes.
 NUM_INIT_VALIDATORS := "5"
