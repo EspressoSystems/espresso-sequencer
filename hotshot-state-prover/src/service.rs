@@ -660,7 +660,6 @@ mod test {
 
         let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
             light_client_state: genesis,
-            num_blocks_per_epoch: BLOCKS_PER_EPOCH,
             max_history_seconds: MAX_HISTORY_SECONDS,
         };
 
@@ -710,7 +709,6 @@ mod test {
         let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;
 
         // now test if we can read from the contract
-        assert_eq!(contract.blocks_per_epoch().call().await?, BLOCKS_PER_EPOCH);
         let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
         assert_eq!(genesis, dummy_genesis);
 

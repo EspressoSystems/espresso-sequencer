@@ -48,6 +48,9 @@ type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 /// Stake table capacity used for testing
 pub const STAKE_TABLE_CAPACITY: usize = 10;
 
+/// Number of blocks per epoch for testing
+pub const BLOCKS_PER_EPOCH: u32 = 3;
+
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {
     /// max capacity of stake table
