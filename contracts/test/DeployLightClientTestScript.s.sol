@@ -8,19 +8,16 @@ import { LightClient as LC } from "../src/LightClient.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientTestScript is Script {
-    function run(
-        uint32 numBlocksPerEpoch,
-        uint64 numInitValidators,
-        uint32 stateHistoryRetentionPeriod,
-        address owner
-    ) external returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
+    function run(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
+        external
+        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+    {
         // TODO for a production deployment provide the right genesis state and value
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(numInitValidators));
+        cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =
@@ -29,18 +26,17 @@ contract DeployLightClientTestScript is Script {
         return deployContract(state, stateHistoryRetentionPeriod, owner);
     }
 
-    function runBench(
-        uint32 numBlocksPerEpoch,
-        uint64 numInitValidators,
-        uint32 stateHistoryRetentionPeriod
-    ) external returns (address payable, address, LC.LightClientState memory) {
+    function runBench(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod)
+        external
+        returns (address payable, address, LC.LightClientState memory)
+    {
         address payable lcTestProxy;
         address admin;
         LC.LightClientState memory state;
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
         (lcTestProxy, admin, state) =
-            this.run(numBlocksPerEpoch, numInitValidators, stateHistoryRetentionPeriod, admin);
+            this.run(numInitValidators, stateHistoryRetentionPeriod, admin);
         LCMock lc = LCMock(lcTestProxy);
         vm.prank(admin);
         lc.setPermissionedProver(admin);

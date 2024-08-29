@@ -301,7 +301,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         lc.newFinalizedState(states[0], proofs[0]);
     }
 
-    /// @dev Test happy path for (BLOCK_PER_EPOCH + 1) consecutive new finalized blocks
+    /// @dev Test happy path for (the number of states + 1) consecutive new finalized blocks
     /// forge-config: default.fuzz.runs = 1
     /// forge-config: quick.fuzz.runs = 1
     /// forge-config: ci.fuzz.runs = 10
@@ -367,7 +367,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     function test_UpdateAfterSkippedBlocks(uint32 numBlockSkipped) external {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, 3));
 
-        // re-assign LightClient with the same genesis but different numBlockPerEpoch
+        // re-assign LightClient with the same genesis
         deployAndInitProxy(genesis, MAX_HISTORY_SECONDS);
 
         string[] memory cmds = new string[](3);

@@ -12,7 +12,7 @@ use ethers::{
 };
 use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientState};
 use hotshot_state_prover::mock_ledger::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
 };
 use itertools::multiunzip;
 use jf_pcs::prelude::Commitment;
@@ -461,12 +461,13 @@ fn main() {
             println!("{}", (res.encode_hex()));
         }
         Action::MockGenesis => {
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=numInitValidators");
+            if cli.args.len() != 2 {
+                panic!("Should provide arg1=numBlockPerEpoch,arg2=numInitValidators");
             }
-            let num_init_validators = cli.args[0].parse::<u64>().unwrap();
 
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let num_init_validators = cli.args[1].parse::<u64>().unwrap();
+            let pp = MockSystemParam::init(block_per_epoch);
             let ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let (voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();
@@ -474,15 +475,16 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockConsecutiveFinalizedStates => {
-            if cli.args.len() != 3 {
-                panic!("Should provide arg1=numInitValidators,arg2=numRegs,arg3=numExit");
+            if cli.args.len() != 4 {
+                panic!("Should provide arg1=numBlockPerEpoch,arg2=numInitValidators,arg3=numRegs,arg4=numExit");
             }
-            let block_per_epoch = BLOCKS_PER_EPOCH;
-            let num_init_validators = cli.args[0].parse::<u64>().unwrap();
-            let num_reg = cli.args[1].parse::<u64>().unwrap();
-            let num_exit = cli.args[2].parse::<u64>().unwrap();
 
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let num_init_validators = cli.args[1].parse::<u64>().unwrap();
+            let num_reg = cli.args[2].parse::<u64>().unwrap();
+            let num_exit = cli.args[3].parse::<u64>().unwrap();
+
+            let pp = MockSystemParam::init(block_per_epoch);
             let mut ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
@@ -512,18 +514,19 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockSkipBlocks => {
-            if cli.args.is_empty() || cli.args.len() > 2 {
-                panic!("Should provide arg1=numBlockSkipped,arg2(opt)=requireValidProof");
+            if cli.args.len() < 2 || cli.args.len() > 3 {
+                panic!("Should provide arg1=numBlockPerEpoch,arg2=numBlockSkipped,arg3(opt)=requireValidProof");
             }
 
-            let num_block_skipped = cli.args[0].parse::<u32>().unwrap();
-            let require_valid_proof: bool = if cli.args.len() == 2 {
-                cli.args[1].parse::<bool>().unwrap()
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let num_block_skipped = cli.args[1].parse::<u32>().unwrap();
+            let require_valid_proof: bool = if cli.args.len() == 3 {
+                cli.args[2].parse::<bool>().unwrap()
             } else {
                 true
             };
 
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            let pp = MockSystemParam::init(block_per_epoch);
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             // random stake table update
@@ -545,9 +548,12 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockMissEndingBlock => {
-            let block_per_epoch = BLOCKS_PER_EPOCH;
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numBlockPerEpoch");
+            }
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
 
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            let pp = MockSystemParam::init(block_per_epoch);
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
@@ -572,7 +578,12 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockWrongStakeTable => {
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numBlockPerEpoch");
+            }
+            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+
+            let pp = MockSystemParam::init(block_per_epoch);
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             ledger.elapse_with_block();
