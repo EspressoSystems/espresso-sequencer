@@ -234,6 +234,12 @@ impl<Types: NodeType> GlobalState<Types> {
     /// Additionally, if the view of the [BuilderStateId] is greater than the
     /// current highest view number, the [BuilderStateId] is set as the new
     /// highest view number.
+    ///
+    /// There is potential here for data loss.  Since we just blindly insert
+    /// the [BuilderStateId] and [BroadcastSender] into the hashmap, we could
+    /// potentially be overwriting an existing entry.  This would result in
+    /// the loss of access to a [BroadcastSender], and could potentially
+    /// result in unexpected behavior.
     pub fn register_builder_state(
         &mut self,
         parent_id: BuilderStateId<Types>,
@@ -1539,6 +1545,244 @@ mod test {
             state.max_block_size, INITIAL_MAX_BLOCK_SIZE,
             "The max block size should be the expected default value"
         );
+    }
+
+    // GlobalState::register_builder_state Tests
+
+    /// This test checks that the [GlobalState::register_builder_state] function
+    /// will correctly register a new builder state, and that the highest view
+    /// number builder id will be updated to the new builder state id.
+    /// Additionally, it will check that the spawned builder states hashmap
+    /// will contain the new builder state id.
+    #[async_std::test]
+    async fn test_global_state_register_builder_state_different_states() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[], 8);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        {
+            let (req_sender, _) = async_broadcast::broadcast(10);
+            let builder_state_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(5),
+            };
+
+            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+
+            assert_eq!(
+                state.spawned_builder_states.len(),
+                2,
+                "The spawned_builder_states should now have 2 elements in it"
+            );
+            assert_eq!(
+                state.highest_view_num_builder_id, builder_state_id,
+                "The highest view number builder id should now be the one that was just registered"
+            );
+            assert!(
+                state.spawned_builder_states.contains_key(&builder_state_id),
+                "The spawned builder states should contain the new builder state id"
+            );
+        };
+
+        {
+            let (req_sender, _) = async_broadcast::broadcast(10);
+            let builder_state_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(6),
+            };
+
+            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+
+            assert_eq!(
+                state.spawned_builder_states.len(),
+                3,
+                "The spawned_builder_states should now have 3 elements in it"
+            );
+            assert_eq!(
+                state.highest_view_num_builder_id, builder_state_id,
+                "The highest view number builder id should now be the one that was just registered"
+            );
+            assert!(
+                state.spawned_builder_states.contains_key(&builder_state_id),
+                "The spawned builder states should contain the new builder state id"
+            );
+        };
+    }
+
+    /// This test checks that the register_builder_state method will overwrite
+    /// the previous sender in the `spawned_builder_states` hashmap if the same
+    /// `BuilderStateId` is used to register a new sender.
+    ///
+    /// It also demonstrates that doing this will drop the previous sender,
+    /// effectively closing it if it is the only reference to it.
+    #[async_std::test]
+    async fn test_global_state_register_builder_state_same_builder_state_id() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[], 8);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        let mut req_receiver_1 = {
+            let (req_sender, req_receiver) = async_broadcast::broadcast(10);
+            let builder_state_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(5),
+            };
+
+            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+
+            assert_eq!(
+                state.spawned_builder_states.len(),
+                2,
+                "The spawned_builder_states should now have 2 elements in it"
+            );
+            assert_eq!(
+                state.highest_view_num_builder_id, builder_state_id,
+                "The highest view number builder id should now be the one that was just registered"
+            );
+
+            req_receiver
+        };
+
+        let mut req_receiver_2 = {
+            let (req_sender, req_receiver) = async_broadcast::broadcast(10);
+            let builder_state_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(5),
+            };
+
+            // This is the same BuilderStateId as the previous one, so it should
+            // replace the previous one.  Which means that the previous one
+            // may no longer be published to.
+            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+
+            assert_eq!(
+                state.spawned_builder_states.len(),
+                2,
+                "The spawned_builder_states should still have 2 elements in it"
+            );
+            assert_eq!(state.highest_view_num_builder_id, builder_state_id, "The highest view number builder id should still be the one that was just registered");
+
+            req_receiver
+        };
+
+        {
+            let builder_state_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(5),
+            };
+
+            let req_sender = state.spawned_builder_states.get(&builder_state_id).unwrap();
+            let (response_sender, _) = unbounded();
+
+            assert!(
+                req_sender
+                    .broadcast(MessageType::RequestMessage(RequestMessage {
+                        state_id: builder_state_id,
+                        response_channel: response_sender,
+                    }))
+                    .await
+                    .is_ok(),
+                "This should be able to send a Message through the sender"
+            );
+        }
+
+        // The first receiver should have been replaced, so we won't get any
+        // results from it.
+
+        assert!(
+            req_receiver_1.recv().await.is_err(),
+            "This first receiver should be closed"
+        );
+        assert!(
+            req_receiver_2.recv().await.is_ok(),
+            "The second receiver should receive a message"
+        );
+    }
+
+    /// This test checks that the register_builder_state method will only
+    /// update the highest_view_num_builder_id if the new [BuilderStateId] has
+    /// a higher view number than the current highest_view_num_builder_id.
+    #[async_std::test]
+    async fn test_global_state_register_builder_state_decrementing_builder_state_ids() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[], 8);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        {
+            let (req_sender, _) = async_broadcast::broadcast(10);
+            let builder_state_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(6),
+            };
+
+            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+
+            assert_eq!(
+                state.spawned_builder_states.len(),
+                2,
+                "The spawned_builder_states should now have 2 elements in it"
+            );
+            assert_eq!(
+                state.highest_view_num_builder_id, builder_state_id,
+                "The highest view number builder id should now be the one that was just registered"
+            );
+            assert!(
+                state.spawned_builder_states.contains_key(&builder_state_id),
+                "The spawned builder states should contain the new builder state id"
+            );
+        };
+
+        {
+            let (req_sender, _) = async_broadcast::broadcast(10);
+            let builder_state_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(5),
+            };
+
+            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+
+            assert_eq!(
+                state.spawned_builder_states.len(),
+                3,
+                "The spawned_builder_states should now have 3 elements in it"
+            );
+            assert_eq!(
+                state.highest_view_num_builder_id,
+                BuilderStateId {
+                    parent_commitment: parent_commit,
+                    view: ViewNumber::new(6)
+                },
+                "The highest view number builder id should now be the one that was just registered"
+            );
+            assert!(
+                state.spawned_builder_states.contains_key(&builder_state_id),
+                "The spawned builder states should contain the new builder state id"
+            );
+        };
     }
 
     // Get Available Blocks Tests
