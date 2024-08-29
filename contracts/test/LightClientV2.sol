@@ -5,8 +5,6 @@ pragma experimental ABIEncoderV2;
 
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
-import { PlonkVerifier } from "../src/libraries/PlonkVerifier.sol";
-import { LightClientStateUpdateVK as VkLib } from "../src/libraries/LightClientStateUpdateVK.sol";
 import { LightClient } from "../src/LightClient.sol";
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
@@ -63,24 +61,12 @@ contract LightClientV2 is LightClient {
         ) {
             revert OutdatedState();
         }
-        uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
-
-        // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = getFinalizedState().blockHeight == epochEndingBlockHeight;
-        if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
-            revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
-        }
         // format validity check
         BN254.validateScalarField(newState.blockCommRoot);
         BN254.validateScalarField(newState.feeLedgerComm);
         BN254.validateScalarField(newState.stakeTableBlsKeyComm);
         BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
         BN254.validateScalarField(newState.stakeTableAmountComm);
-
-        // If the newState is in a new epoch, increment the `currentEpoch`, update the stake table.
-        if (isNewEpoch) {
-            _advanceEpoch();
-        }
 
         // check plonk proof
         verifyProof(newState, proof);

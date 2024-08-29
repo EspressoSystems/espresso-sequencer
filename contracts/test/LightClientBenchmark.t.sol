@@ -21,13 +21,12 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     function testCorrectUpdateBench() external {
         vm.pauseGasMetering();
         // Generating a few consecutive states and proofs
-        string[] memory cmds = new string[](6);
+        string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
-        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[3] = vm.toString(uint64(3));
         cmds[4] = vm.toString(uint64(3));
-        cmds[5] = vm.toString(uint64(3));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
