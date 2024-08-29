@@ -49,5 +49,5 @@ jobs:
       - name: Test Demo Marketplace
         run: |
           export PATH="$PWD/target/release:$PATH"
-          scripts/demo-native --tui=false -c process-compose-mp.yml &
+          scripts/demo-native --tui=false --config process-compose-mp.yml &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
