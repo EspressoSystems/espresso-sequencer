@@ -548,7 +548,6 @@ pub mod testing {
             hotshot_events_streaming_api_url: Url,
             hotshot_builder_api_url: Url,
             num_nodes: usize,
-            versions: V,
         ) -> Self {
             // generate builder keys
             let seed = [201_u8; 32];
@@ -577,7 +576,6 @@ pub mod testing {
                 15,
                 Duration::from_millis(500),
                 ChainConfig::default().base_fee,
-                versions,
             )
             .await
             .unwrap();

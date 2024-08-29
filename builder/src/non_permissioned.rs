@@ -80,7 +80,7 @@ pub fn build_instance_state<V: Versions>(
 
 impl BuilderConfig {
     #[allow(clippy::too_many_arguments)]
-    pub async fn init<V: Versions>(
+    pub async fn init(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -94,7 +94,6 @@ impl BuilderConfig {
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
-        _: V,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -197,7 +196,7 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, V>(
+            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion>(
                 da_sender,
                 qc_sender,
                 decide_sender,
@@ -315,11 +314,12 @@ mod test {
             .build();
         let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
-        let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
+        let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder::<
+            MockSequencerVersions,
+        >(
             event_service_url.clone(),
             builder_api_url.clone(),
             network.cfg.num_nodes(),
-            MockSequencerVersions::new(),
         )
         .await;
 

@@ -31,14 +31,11 @@ contract LightClientUpgradeToVxTest is Test {
 
     // deploy the first implementation with its proxy
     function setUp() public {
-        (proxy, admin, stateV1) = deployer.run(10, 5, MAX_HISTORY_SECONDS);
+        (proxy, admin, stateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
         lcV1Proxy = LCV1(proxy);
     }
 
     function testCorrectInitialization() public view {
-        assert(lcV1Proxy.blocksPerEpoch() == 10);
-        assert(lcV1Proxy.currentEpoch() == 0);
-
         assertEq(abi.encode(lcV1Proxy.getGenesisState()), abi.encode(stateV1));
 
         assertEq(abi.encode(lcV1Proxy.getFinalizedState()), abi.encode(stateV1));
@@ -59,8 +56,6 @@ contract LightClientUpgradeToVxTest is Test {
         lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
-        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
-        assertEq(lcV2Proxy.currentEpoch(), 0);
 
         LCV1.LightClientState memory expectedLightClientState = LCV1.LightClientState(
             stateV1.viewNum,
@@ -92,8 +87,6 @@ contract LightClientUpgradeToVxTest is Test {
         lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
-        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
-        assertEq(lcV2Proxy.currentEpoch(), 0);
 
         LCV1.LightClientState memory expectedLightClientState = LCV1.LightClientState(
             stateV1.viewNum,
@@ -130,8 +123,6 @@ contract LightClientUpgradeToVxTest is Test {
         lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
-        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
-        assertEq(lcV2Proxy.currentEpoch(), 0);
 
         LCV1.LightClientState memory expectedLightClientState = LCV1.LightClientState(
             stateV1.viewNum,
@@ -158,8 +149,6 @@ contract LightClientUpgradeToVxTest is Test {
 
         assertEq(lcV3Proxy.newField(), myNewField);
         assertEq(lcV3Proxy.anotherField(), myNewFieldV3);
-        assertEq(lcV3Proxy.blocksPerEpoch(), 10);
-        assertEq(lcV3Proxy.currentEpoch(), 0);
 
         assertEq(abi.encode(lcV3Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
         assertEq(
@@ -179,8 +168,6 @@ contract LightClientUpgradeToVxTest is Test {
         lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
-        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
-        assertEq(lcV2Proxy.currentEpoch(), 0);
 
         LCV1.LightClientState memory expectedLightClientState = LCV1.LightClientState(
             stateV1.viewNum,
@@ -207,8 +194,6 @@ contract LightClientUpgradeToVxTest is Test {
 
         assertEq(lcV3Proxy.newField(), myNewField);
         assertEq(lcV3Proxy.anotherField(), myNewFieldV3);
-        assertEq(lcV3Proxy.blocksPerEpoch(), 10);
-        assertEq(lcV3Proxy.currentEpoch(), 0);
 
         assertEq(abi.encode(lcV3Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
         assertEq(

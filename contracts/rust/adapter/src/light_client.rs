@@ -139,7 +139,6 @@ impl From<ParsedLightClientState> for contract_bindings::light_client::LightClie
 /// `LightClientConstructorArgs` holds the arguments required to initialize a light client contract.
 pub struct LightClientConstructorArgs {
     pub light_client_state: ParsedLightClientState,
-    pub num_blocks_per_epoch: u32,
     pub max_history_seconds: u32,
 }
 
@@ -151,7 +150,6 @@ impl LightClientConstructorArgs {
     pub fn dummy_genesis() -> Self {
         Self {
             light_client_state: ParsedLightClientState::dummy_genesis(),
-            num_blocks_per_epoch: 10,
             max_history_seconds: 864000,
         }
     }
@@ -166,7 +164,6 @@ impl Tokenize for LightClientConstructorArgs {
     fn into_tokens(self) -> Vec<Token> {
         vec![
             ethers::abi::Token::Tuple(self.light_client_state.into_tokens()),
-            ethers::abi::Token::Uint(U256::from(self.num_blocks_per_epoch)),
             ethers::abi::Token::Uint(U256::from(self.max_history_seconds)),
         ]
     }

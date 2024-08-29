@@ -53,7 +53,13 @@ use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
+<<<<<<< HEAD
 use crate::hooks::{self, connect_to_solver, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
+=======
+use crate::hooks::{
+    self, fetch_namespaces_to_skip, BidConfig, EspressoFallbackHooks, EspressoReserveHooks,
+};
+>>>>>>> main
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -240,30 +246,12 @@ impl BuilderConfig {
             )
             .await?;
         } else {
-            let solver_client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api_url.clone());
-            let namespaces_to_skip = match solver_client
-                .get::<Vec<RollupRegistration>>("rollup_registrations")
-                .send()
-                .await
-            {
-                Ok(registrations) => {
-                    let mut new_namespaces = HashSet::new();
-                    println!("here registrations {:?} ", registrations.clone());
-                    for registration in registrations {
-                        if registration.body.reserve_url.is_some() || !registration.body.active {
-                            new_namespaces.insert(registration.body.namespace_id);
-                        }
-                    }
-                    RwLock::new(Some(new_namespaces))
-                }
-                Err(e) => {
-                    println!("here no regis");
-                    RwLock::new(None)
-                }
-            };
+            // Fetch the namespaces upon initialization. It will be fetched every 20 views when
+            // handling events.
+            let namespaces_to_skip = fetch_namespaces_to_skip(solver_api_url.clone()).await;
             let hooks = Arc::new(hooks::EspressoFallbackHooks {
                 solver_api_url,
-                namespaces_to_skip,
+                namespaces_to_skip: RwLock::new(namespaces_to_skip),
             });
             Self::start_service(
                 Arc::clone(&global_state),

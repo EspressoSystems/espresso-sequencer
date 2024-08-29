@@ -105,15 +105,10 @@ async fn main() -> anyhow::Result<()> {
 
     match (base, upgrade) {
         (V0_1::VERSION, FeeVersion::VERSION) => {
-            run(genesis, opt, SequencerVersions::<V0_1, FeeVersion>::new()).await
+            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
         }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-            run(
-                genesis,
-                opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
+            run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
         }
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
@@ -124,7 +119,6 @@ async fn main() -> anyhow::Result<()> {
 async fn run<V: Versions>(
     genesis: Genesis,
     opt: NonPermissionedBuilderOptions,
-    versions: V,
 ) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
@@ -164,7 +158,6 @@ async fn run<V: Versions>(
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
-        versions,
     )
     .await?;
 

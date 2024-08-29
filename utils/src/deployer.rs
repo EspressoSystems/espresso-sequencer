@@ -356,7 +356,7 @@ pub async fn deploy(
         let light_client = LightClient::new(lc_address, l1.clone());
 
         let data = light_client
-            .initialize(genesis.await?.into(), u32::MAX, 864000, owner)
+            .initialize(genesis.await?.into(), 864000, owner)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts
