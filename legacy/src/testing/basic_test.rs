@@ -394,7 +394,7 @@ mod tests {
             arc_rwlock_global_state
                 .read_arc()
                 .await
-                .get_channel_for_matching_builder_or_highest_view_buider(&req_msg.1)
+                .get_channel_for_matching_builder_or_highest_view_builder(&req_msg.1)
                 .expect("Failed to get channel for matching builder or highest view builder")
                 .broadcast(req_msg.2.clone())
                 .await

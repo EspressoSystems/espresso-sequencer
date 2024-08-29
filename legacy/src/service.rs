@@ -23,9 +23,7 @@ use hotshot_types::{
     vid::{VidCommitment, VidPrecomputeData},
 };
 use lru::LruCache;
-use vbs::version::StaticVersionType;
 
-use crate::WaitAndKeep;
 use crate::{
     builder_state::{
         BuildBlockInfo, DaProposalMessage, DecideMessage, QCMessage, TransactionSource,
@@ -37,6 +35,7 @@ use crate::{
     builder_state::{MessageType, RequestMessage, ResponseMessage},
     BuilderStateId,
 };
+use crate::{WaitAndKeep, WaitAndKeepGetError};
 use anyhow::{anyhow, Context};
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{Sender as BroadcastSender, TrySendError};
@@ -157,6 +156,25 @@ pub struct GlobalState<Types: NodeType> {
     pub max_block_size: u64,
 }
 
+/// GetChannelForMatchingBuilderError is an error enum that represents the
+/// class of possible errors that can be returned when calling
+/// `get_channel_for_matching_builder_or_highest_view_builder` on a
+/// `GlobalState`.  These errors are used for internal representations for
+/// consistency and testing, and do not leak beyond the `GlobalState` API.
+/// As such, they intentionally do not implement traits for serialization.
+#[derive(Debug)]
+pub(crate) enum GetChannelForMatchingBuilderError {
+    NoBuilderStateFound,
+}
+
+impl From<GetChannelForMatchingBuilderError> for BuildError {
+    fn from(_error: GetChannelForMatchingBuilderError) -> Self {
+        BuildError::Error {
+            message: "No builder state found".to_string(),
+        }
+    }
+}
+
 impl<Types: NodeType> GlobalState<Types> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -265,25 +283,28 @@ impl<Types: NodeType> GlobalState<Types> {
         .await
     }
 
-    pub fn get_channel_for_matching_builder_or_highest_view_buider(
+    /// get_channel_for_matching_builder_or_highest_view_builder is a helper
+    /// function that attempts to retrieve the broadcast sender for the given
+    /// `BuilderStateId`. If the sender does not exist, it will return the
+    /// broadcast sender for the for the hightest view number `BuilderStateId``
+    /// instead.
+    pub(crate) fn get_channel_for_matching_builder_or_highest_view_builder(
         &self,
         key: &BuilderStateId<Types>,
-    ) -> Result<&BroadcastSender<MessageType<Types>>, BuildError> {
+    ) -> Result<&BroadcastSender<MessageType<Types>>, GetChannelForMatchingBuilderError> {
         if let Some(channel) = self.spawned_builder_states.get(key) {
             tracing::info!("Got matching builder for parent {}", key);
             Ok(channel)
         } else {
             tracing::warn!(
-                "failed to recover builder for parent {}, using higest view num builder with {}",
+                "failed to recover builder for parent {}, using highest view num builder with {}",
                 key,
                 self.highest_view_num_builder_id,
             );
             // get the sender for the highest view number builder
             self.spawned_builder_states
                 .get(&self.highest_view_num_builder_id)
-                .ok_or_else(|| BuildError::Error {
-                    message: "No builder state found".to_string(),
-                })
+                .ok_or(GetChannelForMatchingBuilderError::NoBuilderStateFound)
         }
     }
 
@@ -338,24 +359,131 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
     }
 }
 
-/*
-Handling Builder API responses
-*/
-#[async_trait]
-impl<Types: NodeType> BuilderDataSource<Types> for ProxyGlobalState<Types>
-where
-    for<'a> <<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
-        &'a TaggedBase64,
-    >>::Error: Display,
-    for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
-{
-    async fn available_blocks(
+/// AvailableBlocksError is an error enum that represents the class of possible
+/// errors  that can be returned when calling `available_blocks` on a
+/// `ProxyGlobalState`.  These errors are used for internal representations
+/// for consistency and testing, and do not leak beyond the `ProxyGlobalState`
+/// API.  As such, they intentionally do not implement traits for serialization.
+#[derive(Debug)]
+enum AvailableBlocksError<Types: NodeType> {
+    SignatureValidationFailed,
+    RequestForAvailableViewThatHasAlreadyBeenDecided,
+    SigningBlockFailed(
+        <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::SignError,
+    ),
+    GetChannelForMatchingBuilderError(GetChannelForMatchingBuilderError),
+    NoBlocksAvailable,
+    ChannelUnexpectedlyClosed,
+}
+
+impl<Types: NodeType> From<GetChannelForMatchingBuilderError> for AvailableBlocksError<Types> {
+    fn from(error: GetChannelForMatchingBuilderError) -> Self {
+        AvailableBlocksError::GetChannelForMatchingBuilderError(error)
+    }
+}
+
+impl<Types: NodeType> From<AvailableBlocksError<Types>> for BuildError {
+    fn from(error: AvailableBlocksError<Types>) -> Self {
+        match error {
+            AvailableBlocksError::SignatureValidationFailed => BuildError::Error {
+                message: "Signature validation failed in get_available_blocks".to_string(),
+            },
+            AvailableBlocksError::RequestForAvailableViewThatHasAlreadyBeenDecided => {
+                BuildError::Error {
+                    message:
+                        "Request for available blocks for a view that has already been decided."
+                            .to_string(),
+                }
+            }
+            AvailableBlocksError::SigningBlockFailed(e) => BuildError::Error {
+                message: format!("Signing over block info failed: {:?}", e),
+            },
+            AvailableBlocksError::GetChannelForMatchingBuilderError(e) => e.into(),
+            AvailableBlocksError::NoBlocksAvailable => BuildError::Error {
+                message: "No blocks available".to_string(),
+            },
+            AvailableBlocksError::ChannelUnexpectedlyClosed => BuildError::Error {
+                message: "Channel unexpectedly closed".to_string(),
+            },
+        }
+    }
+}
+
+/// ClaimBlockError is an error enum that represents the class of possible
+/// errors that can be returned when calling `claim_block` on a
+/// `ProxyGlobalState`.  These errors are used for internal representations
+/// for consistency and testing, and do not leak beyond the `ProxyGlobalState`
+/// API.  As such, they intentionally do not implement traits for serialization.
+#[derive(Debug)]
+enum ClaimBlockError<Types: NodeType> {
+    SignatureValidationFailed,
+    SigningCommitmentFailed(
+        <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::SignError,
+    ),
+    BlockDataNotFound,
+}
+
+impl<Types: NodeType> From<ClaimBlockError<Types>> for BuildError {
+    fn from(error: ClaimBlockError<Types>) -> Self {
+        match error {
+            ClaimBlockError::SignatureValidationFailed => BuildError::Error {
+                message: "Signature validation failed in claim block".to_string(),
+            },
+            ClaimBlockError::SigningCommitmentFailed(e) => BuildError::Error {
+                message: format!("Signing over builder commitment failed: {:?}", e),
+            },
+            ClaimBlockError::BlockDataNotFound => BuildError::Error {
+                message: "Block data not found".to_string(),
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ClaimBlockHeaderInputError<Types: NodeType> {
+    SignatureValidationFailed,
+    BlockHeaderNotFound,
+    CouldNotGetVidInTime,
+    WaitAndKeepGetError(WaitAndKeepGetError),
+    FailedToSignVidCommitment(
+        <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::SignError,
+    ),
+    FailedToSignFeeInfo(
+        <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::SignError,
+    ),
+}
+
+impl<Types: NodeType> From<ClaimBlockHeaderInputError<Types>> for BuildError {
+    fn from(error: ClaimBlockHeaderInputError<Types>) -> Self {
+        match error {
+            ClaimBlockHeaderInputError::SignatureValidationFailed => BuildError::Error {
+                message: "Signature validation failed in claim block header input".to_string(),
+            },
+            ClaimBlockHeaderInputError::BlockHeaderNotFound => BuildError::Error {
+                message: "Block header not found".to_string(),
+            },
+            ClaimBlockHeaderInputError::CouldNotGetVidInTime => BuildError::Error {
+                message: "Couldn't get vid in time".to_string(),
+            },
+            ClaimBlockHeaderInputError::WaitAndKeepGetError(e) => e.into(),
+            ClaimBlockHeaderInputError::FailedToSignVidCommitment(e) => BuildError::Error {
+                message: format!("Failed to sign VID commitment: {:?}", e),
+            },
+            ClaimBlockHeaderInputError::FailedToSignFeeInfo(e) => BuildError::Error {
+                message: format!("Failed to sign fee info: {:?}", e),
+            },
+        }
+    }
+}
+
+impl<Types: NodeType> ProxyGlobalState<Types> {
+    async fn available_blocks_implementation(
         &self,
         for_parent: &VidCommitment,
         view_number: u64,
         sender: Types::SignatureKey,
         signature: &<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<Vec<AvailableBlockInfo<Types>>, BuildError> {
+    ) -> Result<Vec<AvailableBlockInfo<Types>>, AvailableBlocksError<Types>> {
         let starting_time = Instant::now();
 
         let state_id = BuilderStateId {
@@ -366,9 +494,7 @@ where
         // verify the signature
         if !sender.validate(signature, state_id.parent_commitment.as_ref()) {
             tracing::error!("Signature validation failed in get_available_blocks");
-            return Err(BuildError::Error {
-                message: "Signature validation failed in get_available_blocks".to_string(),
-            });
+            return Err(AvailableBlocksError::SignatureValidationFailed);
         }
 
         tracing::info!("Requesting available blocks for {state_id}",);
@@ -394,11 +520,7 @@ where
                     global_state.last_garbage_collected_view_num,
                     global_state.highest_view_num_builder_id.view
                 );
-                return Err(BuildError::Error {
-                    message:
-                        "Request for available blocks for a view that has already been decided."
-                            .to_string(),
-                });
+                return Err(AvailableBlocksError::RequestForAvailableViewThatHasAlreadyBeenDecided);
             }
         }
 
@@ -449,7 +571,7 @@ where
                 .global_state
                 .read_arc()
                 .await
-                .get_channel_for_matching_builder_or_highest_view_buider(&state_id)?
+                .get_channel_for_matching_builder_or_highest_view_builder(&state_id)?
                 .broadcast(MessageType::RequestMessage(req_msg.clone()))
                 .await
             {
@@ -477,9 +599,7 @@ where
                             tracing::info!("Returning last built block for parent {state_id}",);
                             break Ok(last_built_block.clone());
                         }
-                        break Err(BuildError::Error {
-                            message: "No blocks available".to_string(),
-                        });
+                        break Err(AvailableBlocksError::NoBlocksAvailable);
                     }
                     continue;
                 }
@@ -487,9 +607,8 @@ where
                     if let Err(ref e) = recv_attempt {
                         tracing::error!(%e, "Channel closed while getting available blocks for parent {state_id}");
                     }
-                    break recv_attempt.map_err(|_| BuildError::Error {
-                        message: "channel unexpectedly closed".to_string(),
-                    });
+                    break recv_attempt
+                        .map_err(|_| AvailableBlocksError::ChannelUnexpectedlyClosed);
                 }
             }
         };
@@ -506,9 +625,7 @@ where
                         response.offered_fee,
                         &response.builder_hash,
                     )
-                    .map_err(|e| BuildError::Error {
-                        message: format!("Signing over block info failed: {:?}", e),
-                    })?;
+                    .map_err(AvailableBlocksError::SigningBlockFailed)?;
 
                 // insert the block info into local hashmap
                 let initial_block_info = AvailableBlockInfo::<Types> {
@@ -534,25 +651,23 @@ where
         }
     }
 
-    async fn claim_block(
+    async fn claim_block_implementation(
         &self,
-        _block_hash: &BuilderCommitment,
-        _view_number: u64,
+        block_hash: &BuilderCommitment,
+        view_number: u64,
         sender: Types::SignatureKey,
         signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockData<Types>, BuildError> {
+    ) -> Result<AvailableBlockData<Types>, ClaimBlockError<Types>> {
         let block_id = BlockId {
-            hash: _block_hash.clone(),
-            view: Types::Time::new(_view_number),
+            hash: block_hash.clone(),
+            view: Types::Time::new(view_number),
         };
 
         tracing::info!("Received request for claiming block {block_id}",);
         // verify the signature
         if !sender.validate(signature, block_id.hash.as_ref()) {
             tracing::error!("Signature validation failed in claim block");
-            return Err(BuildError::Error {
-                message: "Signature validation failed in claim block".to_string(),
-            });
+            return Err(ClaimBlockError::SignatureValidationFailed);
         }
         let (pub_key, sign_key) = self.builder_keys.clone();
 
@@ -588,16 +703,14 @@ where
             tracing::info!("Done Trying sending vid trigger info for {block_id}",);
 
             // sign over the builder commitment, as the proposer can computer it based on provide block_payload
-            // and the metata data
+            // and the met data data
             let response_block_hash = block_payload.builder_commitment(&metadata);
             let signature_over_builder_commitment =
                 <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
                     &sign_key,
                     response_block_hash.as_ref(),
                 )
-                .map_err(|e| BuildError::Error {
-                    message: format!("Signing over builder commitment failed: {:?}", e),
-                })?;
+                .map_err(ClaimBlockError::SigningCommitmentFailed)?;
 
             let block_data = AvailableBlockData::<Types> {
                 block_payload: block_payload.clone(),
@@ -609,31 +722,27 @@ where
             Ok(block_data)
         } else {
             tracing::warn!("Claim Block not found");
-            Err(BuildError::Error {
-                message: "Block data not found".to_string(),
-            })
+            Err(ClaimBlockError::BlockDataNotFound)
         }
     }
 
-    async fn claim_block_header_input(
+    async fn claim_block_header_input_implementation(
         &self,
-        _block_hash: &BuilderCommitment,
-        _view_number: u64,
+        block_hash: &BuilderCommitment,
+        view_number: u64,
         sender: Types::SignatureKey,
         signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<Types>, BuildError> {
+    ) -> Result<AvailableBlockHeaderInput<Types>, ClaimBlockHeaderInputError<Types>> {
         let id = BlockId {
-            hash: _block_hash.clone(),
-            view: Types::Time::new(_view_number),
+            hash: block_hash.clone(),
+            view: Types::Time::new(view_number),
         };
 
         tracing::info!("Received request for claiming block header input for block {id}");
         // verify the signature
         if !sender.validate(signature, id.hash.as_ref()) {
             tracing::error!("Signature validation failed in claim block header input");
-            return Err(BuildError::Error {
-                message: "Signature validation failed in claim block header input".to_string(),
-            });
+            return Err(ClaimBlockHeaderInputError::SignatureValidationFailed);
         }
         let (pub_key, sign_key) = self.builder_keys.clone();
 
@@ -683,21 +792,18 @@ where
                                     MAX_BLOCK_SIZE_FLOOR,
                                 );
                             }
-                            break Err(BuildError::Error {
-                                message: "Couldn't get vid commitment in time".to_string(),
-                            });
+                            break Err(ClaimBlockHeaderInputError::CouldNotGetVidInTime);
                         }
                         continue;
                     }
                     Ok(recv_attempt) => {
-                        if let Err(ref _e) = recv_attempt {
+                        if recv_attempt.is_err() {
                             tracing::error!(
                                 "Channel closed while getting vid commitment for block {id}",
                             );
                         }
-                        break recv_attempt.map_err(|_| BuildError::Error {
-                            message: "channel unexpectedly closed".to_string(),
-                        });
+                        break recv_attempt
+                            .map_err(ClaimBlockHeaderInputError::WaitAndKeepGetError);
                     }
                 }
             };
@@ -720,10 +826,7 @@ where
             }
 
             if response_received.is_ok() {
-                let (vid_commitment, vid_precompute_data) =
-                    response_received.map_err(|err| BuildError::Error {
-                        message: format!("Error getting vid commitment: {:?}", err),
-                    })?;
+                let (vid_commitment, vid_precompute_data) = response_received?;
 
                 // sign over the vid commitment
                 let signature_over_vid_commitment =
@@ -731,9 +834,7 @@ where
                         &sign_key,
                         vid_commitment.as_ref(),
                     )
-                    .map_err(|e| BuildError::Error {
-                        message: format!("Failed to sign VID commitment: {:?}", e),
-                    })?;
+                    .map_err(ClaimBlockHeaderInputError::FailedToSignVidCommitment)?;
 
                 let signature_over_fee_info = Types::BuilderSignatureKey::sign_fee(
                     &sign_key,
@@ -741,9 +842,7 @@ where
                     &metadata,
                     &vid_commitment,
                 )
-                .map_err(|e| BuildError::Error {
-                    message: format!("Failed to sign fee info: {:?}", e),
-                })?;
+                .map_err(ClaimBlockHeaderInputError::FailedToSignFeeInfo)?;
 
                 let response = AvailableBlockHeaderInput::<Types> {
                     vid_commitment,
@@ -756,17 +855,63 @@ where
                 Ok(response)
             } else {
                 tracing::warn!("Claim Block Header Input not found");
-                Err(BuildError::Error {
-                    message: "Block Header not found".to_string(),
-                })
+                Err(ClaimBlockHeaderInputError::BlockHeaderNotFound)
             }
         } else {
             tracing::warn!("Claim Block Header Input not found");
-            Err(BuildError::Error {
-                message: "Block Header not found".to_string(),
-            })
+            Err(ClaimBlockHeaderInputError::BlockHeaderNotFound)
         }
     }
+}
+
+/*
+Handling Builder API responses
+*/
+#[async_trait]
+impl<Types: NodeType> BuilderDataSource<Types> for ProxyGlobalState<Types>
+where
+    for<'a> <<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
+        &'a TaggedBase64,
+    >>::Error: Display,
+    for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
+{
+    async fn available_blocks(
+        &self,
+        for_parent: &VidCommitment,
+        view_number: u64,
+        sender: Types::SignatureKey,
+        signature: &<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ) -> Result<Vec<AvailableBlockInfo<Types>>, BuildError> {
+        Ok(self
+            .available_blocks_implementation(for_parent, view_number, sender, signature)
+            .await?)
+    }
+
+    async fn claim_block(
+        &self,
+        block_hash: &BuilderCommitment,
+        view_number: u64,
+        sender: Types::SignatureKey,
+        signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ) -> Result<AvailableBlockData<Types>, BuildError> {
+        Ok(self
+            .claim_block_implementation(block_hash, view_number, sender, signature)
+            .await?)
+    }
+
+    async fn claim_block_header_input(
+        &self,
+        block_hash: &BuilderCommitment,
+        view_number: u64,
+        sender: Types::SignatureKey,
+        signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ) -> Result<AvailableBlockHeaderInput<Types>, BuildError> {
+        Ok(self
+            .claim_block_header_input_implementation(block_hash, view_number, sender, signature)
+            .await?)
+    }
+
+    /// Returns the public key of the builder
     async fn builder_address(
         &self,
     ) -> Result<<Types as NodeType>::BuilderSignatureKey, BuildError> {
@@ -815,18 +960,18 @@ impl<Types: NodeType> ReadState for ProxyGlobalState<Types> {
     }
 }
 
-async fn connect_to_events_service<Types: NodeType, ApiVer: StaticVersionType>(
+async fn connect_to_events_service<Types: NodeType, V: Versions>(
     hotshot_events_api_url: Url,
 ) -> Option<(
     surf_disco::socket::Connection<
         Event<Types>,
         surf_disco::socket::Unsupported,
         EventStreamError,
-        ApiVer,
+        V::Base,
     >,
     GeneralStaticCommittee<Types, <Types as NodeType>::SignatureKey>,
 )> {
-    let client = surf_disco::Client::<hotshot_events_service::events::Error, ApiVer>::new(
+    let client = surf_disco::Client::<hotshot_events_service::events::Error, V::Base>::new(
         hotshot_events_api_url.clone(),
     );
 
@@ -875,10 +1020,7 @@ async fn connect_to_events_service<Types: NodeType, ApiVer: StaticVersionType>(
 /*
 Running Non-Permissioned Builder Service
 */
-pub async fn run_non_permissioned_standalone_builder_service<
-    Types: NodeType,
-    ApiVer: StaticVersionType,
->(
+pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, V: Versions>(
     // sending a DA proposal from the hotshot to the builder states
     da_sender: BroadcastSender<MessageType<Types>>,
 
@@ -895,7 +1037,7 @@ pub async fn run_non_permissioned_standalone_builder_service<
     global_state: Arc<RwLock<GlobalState<Types>>>,
 ) -> Result<(), anyhow::Error> {
     // connection to the events stream
-    let connected = connect_to_events_service::<_, ApiVer>(hotshot_events_api_url.clone()).await;
+    let connected = connect_to_events_service::<_, V>(hotshot_events_api_url.clone()).await;
     if connected.is_none() {
         return Err(anyhow!(
             "failed to connect to API at {hotshot_events_api_url}"
@@ -979,7 +1121,7 @@ pub async fn run_non_permissioned_standalone_builder_service<
             None => {
                 tracing::error!("Event stream ended");
                 let connected =
-                    connect_to_events_service::<_, ApiVer>(hotshot_events_api_url.clone()).await;
+                    connect_to_events_service::<_, V>(hotshot_events_api_url.clone()).await;
                 if connected.is_none() {
                     return Err(anyhow!(
                         "failed to reconnect to API at {hotshot_events_api_url}"
@@ -1247,4 +1389,524 @@ pub(crate) async fn handle_received_txns<Types: NodeType>(
         results.push(res);
     }
     results
+}
+
+#[cfg(test)]
+mod test {
+    use std::{sync::Arc, time::Duration};
+
+    use async_lock::RwLock;
+    use futures::StreamExt;
+    use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
+    use hotshot_example_types::node_types::TestTypes;
+    use hotshot_types::{
+        data::ViewNumber,
+        traits::{
+            block_contents::vid_commitment, node_implementation::ConsensusTime,
+            signature_key::BuilderSignatureKey,
+        },
+        utils::BuilderCommitment,
+    };
+
+    use crate::{
+        builder_state::{MessageType, ResponseMessage},
+        BuilderStateId,
+    };
+
+    use super::{AvailableBlocksError, GlobalState, ProxyGlobalState};
+
+    // Get Available Blocks Tests
+
+    /// This test checks that the error `AvailableBlocksError::NoBlocksAvailable`
+    /// is returned when no blocks are available.
+    ///
+    /// To Trigger this condition, we simply submit a request to the
+    /// implementation of get_available_blocks, and we do not provide any
+    /// information for the block view number requested.  As a result, the
+    /// implementation will ultimately timeout, and return an error that
+    /// indicates that no blocks were available.
+    #[async_std::test]
+    async fn test_get_available_blocks_error_no_blocks_available() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key),
+            Duration::from_millis(100),
+        );
+
+        // leader_private_key
+        let signature = BLSPubKey::sign(&leader_private_key, parent_commit.as_ref()).unwrap();
+
+        // This *should* just time out
+        let result = state
+            .available_blocks_implementation(
+                &vid_commitment(&[], 8),
+                1,
+                leader_public_key,
+                &signature,
+            )
+            .await;
+
+        match result {
+            Err(AvailableBlocksError::NoBlocksAvailable) => {
+                // This is what we expect.
+                // This message *should* indicate that no blocks were available.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that the error `AvailableBlocksError::SignatureValidationFailed`
+    /// is returned when the signature is invalid.
+    ///
+    /// To trigger this condition, we simply submit a request to the
+    /// implementation of get_available_blocks, but we sign the request with
+    /// the builder's private key instead of the leader's private key.  Since
+    /// these keys do not match, this will result in a signature verification
+    /// error.
+    #[async_std::test]
+    async fn test_get_available_blocks_error_invalid_signature() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_millis(100),
+        );
+
+        // leader_private_key
+        let signature = BLSPubKey::sign(&builder_private_key, parent_commit.as_ref()).unwrap();
+
+        // This *should* just time out
+        let result = state
+            .available_blocks_implementation(
+                &vid_commitment(&[], 8),
+                1,
+                leader_public_key,
+                &signature,
+            )
+            .await;
+
+        match result {
+            Err(AvailableBlocksError::SignatureValidationFailed) => {
+                // This is what we expect.
+                // This message *should* indicate that the signature passed
+                // did not match the given public key.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that the error `AvailableBlocksError::RequestForAvailableViewThatHasAlreadyBeenDecided`
+    /// is returned when the requested view number has already been garbage
+    /// collected.
+    ///
+    /// To trigger this condition, we initialize the GlobalState with a
+    /// garbage collected view number that is higher than the view that will
+    /// be requested.
+    #[async_std::test]
+    async fn test_get_available_blocks_error_requesting_previous_view_number() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(2),
+                10,
+            ))),
+            (builder_public_key, builder_private_key),
+            Duration::from_millis(100),
+        );
+
+        // leader_private_key
+        let signature = BLSPubKey::sign(&leader_private_key, parent_commit.as_ref()).unwrap();
+
+        // This *should* just time out
+        let result = state
+            .available_blocks_implementation(
+                &vid_commitment(&[], 8),
+                1,
+                leader_public_key,
+                &signature,
+            )
+            .await;
+
+        match result {
+            Err(AvailableBlocksError::RequestForAvailableViewThatHasAlreadyBeenDecided) => {
+                // This is what we expect.
+                // This message *should* indicate that the signature passed
+                // did not match the given public key.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that the error `AvailableBlocksError::GetChannelForMatchingBuilderError`
+    /// is returned when attempting to retrieve a view that is not stored within the state, and
+    /// the highest view is also no longer stored within the state.
+    ///
+    /// To trigger this condition, we initialize the GlobalState with an initial
+    /// state, and then we mutate the state to record the wrong latest state id.
+    /// When interacted with `GlobalState` via `register_builder_state`, and
+    /// `remove_handles`, this error doesn't seem possible immediately possible.
+    #[async_std::test]
+    async fn test_get_available_blocks_error_() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(4),
+                ViewNumber::new(4),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        {
+            let mut write_locked_global_state = state.global_state.write_arc().await;
+            write_locked_global_state.highest_view_num_builder_id = BuilderStateId {
+                parent_commitment: parent_commit,
+                view: ViewNumber::new(5),
+            };
+        }
+
+        // As a result, we **should** be receiving a request for the available
+        // blocks with our expected state id on the receiver, along with a channel
+        // to send the response back to the caller.
+
+        let signature = BLSPubKey::sign(&leader_private_key, parent_commit.as_ref()).unwrap();
+        let result = state
+            .available_blocks_implementation(&parent_commit, 6, leader_public_key, &signature)
+            .await;
+        match result {
+            Err(AvailableBlocksError::GetChannelForMatchingBuilderError(_)) => {
+                // This is what we expect.
+                // This message *should* indicate that the response channel was closed.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+        }
+    }
+
+    /// This test checks that call to `available_blocks_implementation` returns
+    /// a successful response when the function is called before blocks are
+    /// made available.
+    #[async_std::test]
+    async fn test_get_available_blocks_requested_before_blocks_available() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        let cloned_parent_commit = parent_commit;
+        let cloned_state = state.clone();
+        let cloned_leader_private_key = leader_private_key.clone();
+
+        // We want to trigger a request for the available blocks, before we make the available block available
+        let get_available_blocks_handle = async_std::task::spawn(async move {
+            // leader_private_key
+            let signature =
+                BLSPubKey::sign(&cloned_leader_private_key, cloned_parent_commit.as_ref()).unwrap();
+            cloned_state
+                .available_blocks_implementation(
+                    &cloned_parent_commit,
+                    1,
+                    leader_public_key,
+                    &signature,
+                )
+                .await
+        });
+
+        // Now we want to make the block data available to the state.
+        let expected_builder_state_id = BuilderStateId {
+            parent_commitment: parent_commit,
+            view: ViewNumber::new(1),
+        };
+
+        let mut response_receiver = {
+            // We only want to keep this write lock for the time needed, and
+            // no more.
+            let mut write_locked_global_state = state.global_state.write_arc().await;
+
+            // We insert a sender so that the next time this stateId is requested,
+            // it will be available to send data back.
+            let (response_sender, response_receiver) = async_broadcast::broadcast(10);
+            write_locked_global_state
+                .register_builder_state(expected_builder_state_id.clone(), response_sender);
+
+            response_receiver
+        };
+
+        // As a result, we **should** be receiving a request for the available
+        // blocks with our expected state id on the receiver, along with a channel
+        // to send the response back to the caller.
+
+        let response_channel = match response_receiver.next().await {
+            None => {
+                panic!("Expected a request for available blocks, but didn't get one");
+            }
+            Some(MessageType::RequestMessage(req_msg)) => {
+                assert_eq!(req_msg.state_id, expected_builder_state_id);
+                req_msg.response_channel
+            }
+            Some(message) => {
+                panic!(
+                    "Expected a request for available blocks, but got a different message: {:?}",
+                    message
+                );
+            }
+        };
+
+        // We want to send a ResponseMessage to the channel
+        let expected_response = ResponseMessage {
+            block_size: 9,
+            offered_fee: 7,
+            builder_hash: BuilderCommitment::from_bytes([1, 2, 3, 4, 5]),
+        };
+
+        assert!(
+            response_channel
+                .send(expected_response.clone())
+                .await
+                .is_ok(),
+            "failed to send ResponseMessage"
+        );
+
+        let result = get_available_blocks_handle.await;
+        match result {
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(result) => {
+                assert_eq!(
+                    result,
+                    vec![AvailableBlockInfo {
+                        block_hash: expected_response.builder_hash.clone(),
+                        block_size: expected_response.block_size,
+                        offered_fee: expected_response.offered_fee,
+                        signature: <BLSPubKey as BuilderSignatureKey>::sign_block_info(
+                            &builder_private_key,
+                            expected_response.block_size,
+                            expected_response.offered_fee,
+                            &expected_response.builder_hash,
+                        )
+                        .unwrap(),
+                        sender: builder_public_key,
+                        _phantom: Default::default(),
+                    }],
+                    "get_available_blocks response matches expectation"
+                );
+            }
+        }
+    }
+
+    /// This test checks that call to `available_blocks_implementation` returns
+    /// a successful response when the function is called before after are
+    /// made available.
+    #[async_std::test]
+    async fn test_get_available_blocks_requested_after_blocks_available() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let (builder_public_key, builder_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let parent_commit = vid_commitment(&[], 8);
+
+        let state = Arc::new(ProxyGlobalState::<TestTypes>::new(
+            Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+                bootstrap_sender,
+                tx_sender,
+                parent_commit,
+                ViewNumber::new(0),
+                ViewNumber::new(0),
+                10,
+            ))),
+            (builder_public_key, builder_private_key.clone()),
+            Duration::from_secs(1),
+        ));
+
+        let cloned_parent_commit = parent_commit;
+        let cloned_state = state.clone();
+        let cloned_leader_private_key = leader_private_key.clone();
+
+        // Now we want to make the block data available to the state.
+        let expected_builder_state_id = BuilderStateId {
+            parent_commitment: parent_commit,
+            view: ViewNumber::new(1),
+        };
+
+        let mut response_receiver = {
+            // We only want to keep this write lock for the time needed, and
+            // no more.
+            let mut write_locked_global_state = state.global_state.write_arc().await;
+
+            // We insert a sender so that the next time this stateId is requested,
+            // it will be available to send data back.
+            let (response_sender, response_receiver) = async_broadcast::broadcast(10);
+            write_locked_global_state
+                .register_builder_state(expected_builder_state_id.clone(), response_sender);
+
+            response_receiver
+        };
+
+        // We want to trigger a request for the available blocks, before we make the available block available
+        let get_available_blocks_handle = async_std::task::spawn(async move {
+            // leader_private_key
+            let signature =
+                BLSPubKey::sign(&cloned_leader_private_key, cloned_parent_commit.as_ref()).unwrap();
+            cloned_state
+                .available_blocks_implementation(
+                    &cloned_parent_commit,
+                    1,
+                    leader_public_key,
+                    &signature,
+                )
+                .await
+        });
+
+        // As a result, we **should** be receiving a request for the available
+        // blocks with our expected state id on the receiver, along with a channel
+        // to send the response back to the caller.
+
+        let response_channel = match response_receiver.next().await {
+            None => {
+                panic!("Expected a request for available blocks, but didn't get one");
+            }
+            Some(MessageType::RequestMessage(req_msg)) => {
+                assert_eq!(req_msg.state_id, expected_builder_state_id);
+                req_msg.response_channel
+            }
+            Some(message) => {
+                panic!(
+                    "Expected a request for available blocks, but got a different message: {:?}",
+                    message
+                );
+            }
+        };
+
+        // We want to send a ResponseMessage to the channel
+        let expected_response = ResponseMessage {
+            block_size: 9,
+            offered_fee: 7,
+            builder_hash: BuilderCommitment::from_bytes([1, 2, 3, 4, 5]),
+        };
+
+        assert!(
+            response_channel
+                .send(expected_response.clone())
+                .await
+                .is_ok(),
+            "failed to send ResponseMessage"
+        );
+
+        let result = get_available_blocks_handle.await;
+        match result {
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+            Ok(result) => {
+                assert_eq!(
+                    result,
+                    vec![AvailableBlockInfo {
+                        block_hash: expected_response.builder_hash.clone(),
+                        block_size: expected_response.block_size,
+                        offered_fee: expected_response.offered_fee,
+                        signature: <BLSPubKey as BuilderSignatureKey>::sign_block_info(
+                            &builder_private_key,
+                            expected_response.block_size,
+                            expected_response.offered_fee,
+                            &expected_response.builder_hash,
+                        )
+                        .unwrap(),
+                        sender: builder_public_key,
+                        _phantom: Default::default(),
+                    }],
+                    "get_available_blocks response matches expectation"
+                );
+            }
+        }
+    }
 }
