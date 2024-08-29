@@ -21,10 +21,15 @@ pub struct StakeTableEntry<K: SignatureKey> {
     pub stake_amount: U256,
 }
 
-impl<K: SignatureKey> StakeTableEntryType for StakeTableEntry<K> {
+impl<K: SignatureKey> StakeTableEntryType<K> for StakeTableEntry<K> {
     /// Get the stake amount
     fn stake(&self) -> U256 {
         self.stake_amount
+    }
+
+    /// Get the public key
+    fn public_key(&self) -> K {
+        self.stake_key.clone()
     }
 }
 

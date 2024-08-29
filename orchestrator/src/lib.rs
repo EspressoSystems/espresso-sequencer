@@ -23,7 +23,10 @@ use client::{BenchResults, BenchResultsDownloadConfig};
 use config::BuilderType;
 use csv::Writer;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
-use hotshot_types::{traits::signature_key::SignatureKey, PeerConfig};
+use hotshot_types::{
+    traits::signature_key::{SignatureKey, StakeTableEntryType},
+    PeerConfig,
+};
 use libp2p::{
     identity::{
         ed25519::{Keypair as EdKeypair, SecretKey},
@@ -225,10 +228,10 @@ pub trait OrchestratorApi<KEY: SignatureKey> {
     /// # Errors
     /// if unable to serve
     fn post_run_results(&mut self, metrics: BenchResults) -> Result<(), ServerError>;
-    /// post endpoint for whether or not all nodes are ready
+    /// A node POSTs its public key to let the orchestrator know that it is ready
     /// # Errors
     /// if unable to serve
-    fn post_ready(&mut self) -> Result<(), ServerError>;
+    fn post_ready(&mut self, peer_config: &PeerConfig<KEY>) -> Result<(), ServerError>;
     /// post endpoint for manually starting the orchestrator
     /// # Errors
     /// if unable to serve
@@ -328,7 +331,22 @@ where
 
         let node_index = self.pub_posted.len() as u64;
 
+        // Deserialize the public key
         let staked_pubkey = PeerConfig::<KEY>::from_bytes(pubkey).unwrap();
+
+        // Check if the node is allowed to connect
+        if self.config.enable_registration_verification
+            && !self
+                .config
+                .public_keys
+                .contains(&staked_pubkey.stake_table_entry.public_key())
+        {
+            return Err(ServerError {
+                status: tide_disco::StatusCode::FORBIDDEN,
+                message: "You are unauthorized to register with the orchestrator".to_string(),
+            });
+        }
+
         self.config
             .config
             .known_nodes_with_stake
@@ -371,7 +389,7 @@ where
             }
         }
 
-        println!("Posted public key for node_index {node_index}");
+        tracing::error!("Posted public key for node_index {node_index}");
 
         // node_index starts at 0, so once it matches `num_nodes_with_stake`
         // we will have registered one node too many. hence, we want `node_index + 1`.
@@ -416,11 +434,24 @@ where
     }
 
     // Assumes nodes do not post 'ready' twice
-    // TODO ED Add a map to verify which nodes have posted they're ready
-    fn post_ready(&mut self) -> Result<(), ServerError> {
+    fn post_ready(&mut self, peer_config: &PeerConfig<KEY>) -> Result<(), ServerError> {
+        // If we have not disabled registration verification.
+        // Is this node allowed to connect?
+        if !self
+            .config
+            .config
+            .known_nodes_with_stake
+            .contains(peer_config)
+        {
+            return Err(ServerError {
+                status: tide_disco::StatusCode::FORBIDDEN,
+                message: "You are unauthorized to register with the orchestrator".to_string(),
+            });
+        }
+
         self.nodes_connected += 1;
 
-        println!("Nodes connected: {}", self.nodes_connected);
+        tracing::error!("Nodes connected: {}", self.nodes_connected);
 
         // i.e. nodes_connected >= num_nodes_with_stake * (start_threshold.0 / start_threshold.1)
         if self.nodes_connected * self.config.config.start_threshold.1
@@ -636,7 +667,21 @@ where
     })?
     .post(
         "post_ready",
-        |_req, state: &mut <State as ReadState>::State| async move { state.post_ready() }.boxed(),
+        |req, state: &mut <State as ReadState>::State| {
+            async move {
+                let mut body_bytes = req.body_bytes();
+                body_bytes.drain(..12);
+                // Decode the payload-supplied pubkey
+                let Some(pubkey) = PeerConfig::<KEY>::from_bytes(&body_bytes) else {
+                    return Err(ServerError {
+                        status: tide_disco::StatusCode::BAD_REQUEST,
+                        message: "Malformed body".to_string(),
+                    });
+                };
+                state.post_ready(&pubkey)
+            }
+            .boxed()
+        },
     )?
     .post(
         "post_manual_start",
@@ -725,6 +770,10 @@ where
 
     network_config.config.known_nodes_with_stake = vec![];
     network_config.config.known_da_nodes = vec![];
+
+    if network_config.enable_registration_verification {
+        tracing::error!("REGISTRATION VERIFICATION IS TURNED OFF");
+    }
 
     let web_api =
         define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));

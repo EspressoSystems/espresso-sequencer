@@ -442,12 +442,13 @@ impl OrchestratorClient {
     /// # Panics
     /// Panics if unable to post.
     #[instrument(skip(self), name = "orchestrator ready signal")]
-    pub async fn wait_for_all_nodes_ready(&self, node_index: u64) -> bool {
+    pub async fn wait_for_all_nodes_ready(&self, peer_config: Vec<u8>) -> bool {
         let send_ready_f = |client: Client<ClientError, OrchestratorVersion>| {
+            let pk = peer_config.clone();
             async move {
                 let result: Result<_, ClientError> = client
                     .post("api/ready")
-                    .body_json(&node_index)
+                    .body_binary(&pk)
                     .unwrap()
                     .send()
                     .await
