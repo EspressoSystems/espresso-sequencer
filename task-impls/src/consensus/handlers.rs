@@ -137,11 +137,6 @@ pub async fn create_and_send_proposal<TYPES: NodeType, V: Versions>(
         proposed_leaf.view_number(),
     );
 
-    consensus
-        .write()
-        .await
-        .update_last_proposed_view(message.clone())?;
-
     async_sleep(Duration::from_millis(round_start_delay)).await;
 
     broadcast_event(
@@ -523,7 +518,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
         .entry(proposal.data.view_number())
         .or_default()
         .push(async_spawn(
-            validate_proposal_safety_and_liveness(
+            validate_proposal_safety_and_liveness::<TYPES, I, V>(
                 proposal.clone(),
                 parent_leaf,
                 OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
@@ -534,6 +529,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
                 task_state.output_event_stream.clone(),
                 task_state.id,
                 task_state.upgrade_lock.clone(),
+                Arc::clone(&task_state.storage),
             )
             .map(AnyhowTracing::err_as_debug),
         ));

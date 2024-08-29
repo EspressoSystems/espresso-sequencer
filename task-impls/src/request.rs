@@ -88,6 +88,7 @@ type Signature<TYPES> =
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequestState<TYPES, I> {
     type Event = HotShotEvent<TYPES>;
 
+    #[instrument(skip_all, target = "NetworkRequestState", fields(id = self.id))]
     async fn handle_event(
         &mut self,
         event: Arc<Self::Event>,

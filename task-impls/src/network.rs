@@ -39,8 +39,6 @@ pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool 
     !matches!(
         event.as_ref(),
         HotShotEvent::QuorumProposalSend(_, _)
-            | HotShotEvent::QuorumProposalRequestSend(..)
-            | HotShotEvent::QuorumProposalResponseSend(..)
             | HotShotEvent::QuorumVoteSend(_)
             | HotShotEvent::DacSend(_, _)
             | HotShotEvent::TimeoutVoteSend(_)
@@ -63,6 +61,8 @@ pub fn da_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
     !matches!(
         event.as_ref(),
         HotShotEvent::DaProposalSend(_, _)
+            | HotShotEvent::QuorumProposalRequestSend(..)
+            | HotShotEvent::QuorumProposalResponseSend(..)
             | HotShotEvent::DaVoteSend(_)
             | HotShotEvent::ViewChange(_)
     )
@@ -315,7 +315,7 @@ impl<
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ProposalRequested(req.clone(), signature),
                     )),
-                    TransmitType::Direct(membership.leader(req.view_number)),
+                    TransmitType::DaCommitteeAndLeaderBroadcast(membership.leader(req.view_number)),
                 ),
                 HotShotEvent::QuorumProposalResponseSend(sender_key, proposal) => (
                     sender_key.clone(),
@@ -464,6 +464,7 @@ impl<
             {
                 return;
             }
+
             if let MessageKind::Consensus(SequencingMessage::General(
                 GeneralConsensusMessage::Proposal(prop),
             )) = &message.kind
@@ -490,6 +491,22 @@ impl<
                         .await
                 }
                 TransmitType::DaCommitteeBroadcast => {
+                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
+                        .await
+                }
+                TransmitType::DaCommitteeAndLeaderBroadcast(recipient) => {
+                    // Short-circuit exit from this call if we get an error during the direct leader broadcast.
+                    // NOTE: An improvement to this is to check if the leader is in the DA committee but it's
+                    // just a single extra message to the leader, so it's not an optimization that we need now.
+                    if let Err(e) = net
+                        .direct_message(serialized_message.clone(), recipient)
+                        .await
+                    {
+                        error!("Failed to send message from network task: {e:?}");
+                        return;
+                    }
+
+                    // Otherwise, send the next message.
                     net.da_broadcast_message(serialized_message, committee, broadcast_delay)
                         .await
                 }

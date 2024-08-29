@@ -84,6 +84,8 @@ pub enum TransmitType<TYPES: NodeType> {
     Broadcast,
     /// broadcast to DA committee
     DaCommitteeBroadcast,
+    /// broadcast to the leader and the DA
+    DaCommitteeAndLeaderBroadcast(TYPES::SignatureKey),
 }
 
 /// Error type for networking

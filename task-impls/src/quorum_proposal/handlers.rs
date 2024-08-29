@@ -229,10 +229,6 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             proposed_leaf.view_number(),
         );
 
-        self.consensus
-            .write()
-            .await
-            .update_last_proposed_view(message.clone())?;
         async_sleep(Duration::from_millis(self.round_start_delay)).await;
         broadcast_event(
             Arc::new(HotShotEvent::QuorumProposalSend(
