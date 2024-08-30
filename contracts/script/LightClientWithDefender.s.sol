@@ -49,9 +49,18 @@ contract LightClientDefenderDeployScript is Script {
         opts.defender.useDefenderDeploy = true;
         opts.defender.salt = bytes32(abi.encodePacked(contractSalt));
 
+        LC.StakeState memory stakeState = LC.StakeState(
+            state.threshold,
+            state.stakeTableBlsKeyComm,
+            state.stakeTableSchnorrKeyComm,
+            state.stakeTableAmountComm
+        );
+
         proxy = Upgrades.deployUUPSProxy(
             contractName,
-            abi.encodeCall(LC.initialize, (state, stateHistoryRetentionPeriod, multisig)),
+            abi.encodeCall(
+                LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, multisig)
+            ),
             opts
         );
 

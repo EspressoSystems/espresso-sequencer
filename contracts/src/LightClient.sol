@@ -56,6 +56,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
 
+    /// @notice genesis stake commitment
+    StakeState public genesisStakeState;
+
     /// @notice genesis block commitment
     LightClientState public genesisState;
 
@@ -105,6 +108,18 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField stakeTableSchnorrKeyComm;
         BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
+    }
+
+    /// @notice The finalized HotShot Stake state (as the digest of the entire HotShot state)
+    /// @param threshold The (stake-weighted) quorum threshold for a QC to be considered as valid
+    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake table
+    /// @param stakeTableSchnorrKeyComm The commitment to the SchnorrVerKey column of the table
+    /// @param stakeTableAmountComm The commitment to the stake amount column of the stake table
+    struct StakeState {
+        uint256 threshold;
+        BN254.ScalarField stakeTableBlsKeyComm;
+        BN254.ScalarField stakeTableSchnorrKeyComm;
+        BN254.ScalarField stakeTableAmountComm;
     }
 
     /// @notice Simplified HotShot commitment struct
@@ -168,12 +183,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
+        StakeState memory _genesisStakeState,
         uint32 _stateHistoryRetentionPeriod,
         address owner
     ) public initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
-        _initializeState(_genesis, _stateHistoryRetentionPeriod);
+        _initializeState(_genesis, _genesisStakeState, _stateHistoryRetentionPeriod);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -197,11 +213,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param _genesis The initial state of the light client
+    /// @param _genesisStakeState The initial stake state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history
-    function _initializeState(LightClientState memory _genesis, uint32 _stateHistoryRetentionPeriod)
-        internal
-    {
+    function _initializeState(
+        LightClientState memory _genesis,
+        StakeState memory _genesisStakeState,
+        uint32 _stateHistoryRetentionPeriod
+    ) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -216,6 +235,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InvalidArgs();
         }
         genesisState = _genesis;
+        genesisStakeState = _genesisStakeState;
         finalizedState = _genesis;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
@@ -280,6 +300,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Simple getter function for the genesis state
     function getGenesisState() public view virtual returns (LightClientState memory) {
         return genesisState;
+    }
+
+    /// @dev Simple getter function for the genesis stake state
+    function getGenesisStakeState() public view virtual returns (StakeState memory) {
+        return genesisStakeState;
     }
 
     /// @dev Simple getter function for the finalized state

@@ -22,7 +22,14 @@ contract DeployLightClientContractScript is Script {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, stateHistoryRetentionPeriod);
+        LC.StakeState memory stakeState = LC.StakeState(
+            state.threshold,
+            state.stakeTableBlsKeyComm,
+            state.stakeTableSchnorrKeyComm,
+            state.stakeTableAmountComm
+        );
+
+        return deployContract(state, stakeState, stateHistoryRetentionPeriod);
     }
 
     function runDemo(uint32 stateHistoryRetentionPeriod)
@@ -34,18 +41,25 @@ contract DeployLightClientContractScript is Script {
 
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+        LC.StakeState memory stakeState = LC.StakeState(
+            state.threshold,
+            state.stakeTableBlsKeyComm,
+            state.stakeTableSchnorrKeyComm,
+            state.stakeTableAmountComm
+        );
 
-        return deployContract(state, stateHistoryRetentionPeriod);
+        return deployContract(state, stakeState, stateHistoryRetentionPeriod);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
 
-    function deployContract(LC.LightClientState memory state, uint32 stateHistoryRetentionPeriod)
-        private
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
+    function deployContract(
+        LC.LightClientState memory state,
+        LC.StakeState memory stakeState,
+        uint32 stateHistoryRetentionPeriod
+    ) private returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(admin);
@@ -54,8 +68,9 @@ contract DeployLightClientContractScript is Script {
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
+            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),(uint256,uint256,uint256,uint256),uint32,address)",
             state,
+            stakeState,
             stateHistoryRetentionPeriod,
             admin
         );

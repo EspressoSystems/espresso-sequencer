@@ -23,7 +23,14 @@ contract DeployLightClientTestScript is Script {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, stateHistoryRetentionPeriod, owner);
+        LC.StakeState memory stakeState = LC.StakeState(
+            state.threshold,
+            state.stakeTableBlsKeyComm,
+            state.stakeTableSchnorrKeyComm,
+            state.stakeTableAmountComm
+        );
+
+        return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
     }
 
     function runBench(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod)
@@ -53,8 +60,14 @@ contract DeployLightClientTestScript is Script {
 
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+        LC.StakeState memory stakeState = LC.StakeState(
+            state.threshold,
+            state.stakeTableBlsKeyComm,
+            state.stakeTableSchnorrKeyComm,
+            state.stakeTableAmountComm
+        );
 
-        return deployContract(state, stateHistoryRetentionPeriod, owner);
+        return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
@@ -63,17 +76,19 @@ contract DeployLightClientTestScript is Script {
     /// @return the light client state
     function deployContract(
         LC.LightClientState memory state,
+        LC.StakeState memory stakeState,
         uint32 stateHistoryRetentionPeriod,
         address owner
     ) public returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         vm.startBroadcast(owner);
 
-        LCMock lightClientContract = new LCMock(state, stateHistoryRetentionPeriod);
+        LCMock lightClientContract = new LCMock(state, stakeState, stateHistoryRetentionPeriod);
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
+            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),(uint256,uint256,uint256,uint256),uint32,address)",
             state,
+            stakeState,
             stateHistoryRetentionPeriod,
             owner
         );

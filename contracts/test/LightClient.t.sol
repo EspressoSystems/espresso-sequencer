@@ -18,6 +18,7 @@ import { BN254 } from "bn254/BN254.sol";
 contract LightClientCommonTest is Test {
     LCMock public lc;
     LC.LightClientState public genesis;
+    LC.StakeState public genesisStakeState;
     uint32 public constant DELAY_THRESHOLD = 6;
     uint32 public constant MAX_HISTORY_SECONDS = 1 days;
     uint32 public initialBlockTimestamp = 1 days;
@@ -30,12 +31,13 @@ contract LightClientCommonTest is Test {
 
     function deployAndInitProxy(
         LC.LightClientState memory state,
+        LC.StakeState memory stakeState,
         uint32 stateHistoryRetentionPeriod
     ) public returns (address payable, address) {
         vm.warp(1 days);
         //deploy light client test with a proxy
         (lcTestProxy, admin, state) =
-            deployer.deployContract(state, stateHistoryRetentionPeriod, admin);
+            deployer.deployContract(state, stakeState, stateHistoryRetentionPeriod, admin);
 
         //cast the proxy to be of type light client test
         lc = LCMock(lcTestProxy);
@@ -59,8 +61,14 @@ contract LightClientCommonTest is Test {
         (LC.LightClientState memory state, bytes32 votingSTComm, bytes32 frozenSTComm) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
+        genesisStakeState = LC.StakeState(
+            state.threshold,
+            state.stakeTableBlsKeyComm,
+            state.stakeTableSchnorrKeyComm,
+            state.stakeTableAmountComm
+        );
 
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeState, MAX_HISTORY_SECONDS);
 
         bytes32 expectedStakeTableComm = lc.computeStakeTableComm(state);
         assertEq(votingSTComm, expectedStakeTableComm);
@@ -96,7 +104,14 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         uint32 _stateHistoryRetentionPeriod
     ) private {
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCMock(_genesis, _stateHistoryRetentionPeriod);
+        LC.StakeState memory _genesisStakeState = LC.StakeState(
+            _genesis.threshold,
+            _genesis.stakeTableBlsKeyComm,
+            _genesis.stakeTableSchnorrKeyComm,
+            _genesis.stakeTableAmountComm
+        );
+
+        lc = new LCMock(_genesis, _genesisStakeState, _stateHistoryRetentionPeriod);
     }
 
     function test_RevertWhen_InvalidGenesis() external {
@@ -326,7 +341,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeState, MAX_HISTORY_SECONDS);
 
         genesis = state;
 
@@ -368,7 +383,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, 3));
 
         // re-assign LightClient with the same genesis
-        deployAndInitProxy(genesis, MAX_HISTORY_SECONDS);
+        deployAndInitProxy(genesis, genesisStakeState, MAX_HISTORY_SECONDS);
 
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";

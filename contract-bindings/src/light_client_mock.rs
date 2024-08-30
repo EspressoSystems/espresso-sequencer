@@ -33,6 +33,18 @@ pub mod light_client_mock {
                         ),
                     },
                     ::ethers::core::abi::ethabi::Param {
+                        name: ::std::borrow::ToOwned::to_owned("genesisStakeState"),
+                        kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                        ],),
+                        internal_type: ::core::option::Option::Some(
+                            ::std::borrow::ToOwned::to_owned("struct LightClient.StakeState",),
+                        ),
+                    },
+                    ::ethers::core::abi::ethabi::Param {
                         name: ::std::borrow::ToOwned::to_owned("maxHistorySeconds"),
                         kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
                         internal_type: ::core::option::Option::Some(
@@ -201,6 +213,45 @@ pub mod light_client_mock {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("genesisStakeState"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("genesisStakeState"),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("threshold"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint256"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("stakeTableBlsKeyComm",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("stakeTableSchnorrKeyComm",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("stakeTableAmountComm",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                        ],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("genesisState"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("genesisState"),
@@ -288,6 +339,27 @@ pub mod light_client_mock {
                                 ::std::borrow::ToOwned::to_owned(
                                     "struct LightClient.LightClientState",
                                 ),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("getGenesisStakeState"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("getGenesisStakeState",),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                            ],),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("struct LightClient.StakeState",),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -416,6 +488,20 @@ pub mod light_client_mock {
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned(
                                         "struct LightClient.LightClientState",
+                                    ),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("_genesisStakeState",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ],),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned(
+                                        "struct LightClient.StakeState",
                                     ),
                                 ),
                             },
@@ -1363,6 +1449,22 @@ pub mod light_client_mock {
                 .method_hash([202, 111, 232, 85], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `genesisStakeState` (0xa9a9c9f5) function
+        pub fn genesis_stake_state(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+                ::ethers::core::types::U256,
+            ),
+        > {
+            self.0
+                .method_hash([169, 169, 201, 245], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `genesisState` (0xd24d933d) function
         pub fn genesis_state(
             &self,
@@ -1389,6 +1491,14 @@ pub mod light_client_mock {
         ) -> ::ethers::contract::builders::ContractCall<M, LightClientState> {
             self.0
                 .method_hash([130, 208, 127, 243], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `getGenesisStakeState` (0x0c693a22) function
+        pub fn get_genesis_stake_state(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, StakeState> {
+            self.0
+                .method_hash([12, 105, 58, 34], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `getGenesisState` (0x4847ae5d) function
@@ -1422,17 +1532,23 @@ pub mod light_client_mock {
                 .method_hash([13, 142, 110, 44], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `initialize` (0xa244d596) function
+        ///Calls the contract's `initialize` (0x8ed3e045) function
         pub fn initialize(
             &self,
             genesis: LightClientState,
+            genesis_stake_state: StakeState,
             state_history_retention_period: u32,
             owner: ::ethers::core::types::Address,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash(
-                    [162, 68, 213, 150],
-                    (genesis, state_history_retention_period, owner),
+                    [142, 211, 224, 69],
+                    (
+                        genesis,
+                        genesis_stake_state,
+                        state_history_retention_period,
+                        owner,
+                    ),
                 )
                 .expect("method not found (this should never happen)")
         }
@@ -2762,6 +2878,21 @@ pub mod light_client_mock {
     )]
     #[ethcall(name = "frozenThreshold", abi = "frozenThreshold()")]
     pub struct FrozenThresholdCall;
+    ///Container type for all input parameters for the `genesisStakeState` function with signature `genesisStakeState()` and selector `0xa9a9c9f5`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "genesisStakeState", abi = "genesisStakeState()")]
+    pub struct GenesisStakeStateCall;
     ///Container type for all input parameters for the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
     #[derive(
         Clone,
@@ -2792,6 +2923,21 @@ pub mod light_client_mock {
     )]
     #[ethcall(name = "getFinalizedState", abi = "getFinalizedState()")]
     pub struct GetFinalizedStateCall;
+    ///Container type for all input parameters for the `getGenesisStakeState` function with signature `getGenesisStakeState()` and selector `0x0c693a22`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(name = "getGenesisStakeState", abi = "getGenesisStakeState()")]
+    pub struct GetGenesisStakeStateCall;
     ///Container type for all input parameters for the `getGenesisState` function with signature `getGenesisState()` and selector `0x4847ae5d`
     #[derive(
         Clone,
@@ -2854,7 +3000,7 @@ pub mod light_client_mock {
     )]
     #[ethcall(name = "getVersion", abi = "getVersion()")]
     pub struct GetVersionCall;
-    ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)` and selector `0xa244d596`
+    ///Container type for all input parameters for the `initialize` function with signature `initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),(uint256,uint256,uint256,uint256),uint32,address)` and selector `0x8ed3e045`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -2869,10 +3015,11 @@ pub mod light_client_mock {
     )]
     #[ethcall(
         name = "initialize",
-        abi = "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)"
+        abi = "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),(uint256,uint256,uint256,uint256),uint32,address)"
     )]
     pub struct InitializeCall {
         pub genesis: LightClientState,
+        pub genesis_stake_state: StakeState,
         pub state_history_retention_period: u32,
         pub owner: ::ethers::core::types::Address,
     }
@@ -3245,8 +3392,10 @@ pub mod light_client_mock {
         FinalizedState(FinalizedStateCall),
         FrozenStakeTableCommitment(FrozenStakeTableCommitmentCall),
         FrozenThreshold(FrozenThresholdCall),
+        GenesisStakeState(GenesisStakeStateCall),
         GenesisState(GenesisStateCall),
         GetFinalizedState(GetFinalizedStateCall),
+        GetGenesisStakeState(GetGenesisStakeStateCall),
         GetGenesisState(GetGenesisStateCall),
         GetHotShotCommitment(GetHotShotCommitmentCall),
         GetStateHistoryCount(GetStateHistoryCountCall),
@@ -3309,6 +3458,11 @@ pub mod light_client_mock {
             {
                 return Ok(Self::FrozenThreshold(decoded));
             }
+            if let Ok(decoded) =
+                <GenesisStakeStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::GenesisStakeState(decoded));
+            }
             if let Ok(decoded) = <GenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::GenesisState(decoded));
@@ -3317,6 +3471,11 @@ pub mod light_client_mock {
                 <GetFinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::GetFinalizedState(decoded));
+            }
+            if let Ok(decoded) =
+                <GetGenesisStakeStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::GetGenesisStakeState(decoded));
             }
             if let Ok(decoded) =
                 <GetGenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -3458,8 +3617,12 @@ pub mod light_client_mock {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::FrozenThreshold(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GenesisStakeState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GetFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::GetGenesisStakeState(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::GetGenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GetHotShotCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -3524,8 +3687,10 @@ pub mod light_client_mock {
                 Self::FinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FrozenStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
                 Self::FrozenThreshold(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GenesisStakeState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
+                Self::GetGenesisStakeState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetGenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetHotShotCommitment(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetStateHistoryCount(element) => ::core::fmt::Display::fmt(element, f),
@@ -3587,6 +3752,11 @@ pub mod light_client_mock {
             Self::FrozenThreshold(value)
         }
     }
+    impl ::core::convert::From<GenesisStakeStateCall> for LightClientMockCalls {
+        fn from(value: GenesisStakeStateCall) -> Self {
+            Self::GenesisStakeState(value)
+        }
+    }
     impl ::core::convert::From<GenesisStateCall> for LightClientMockCalls {
         fn from(value: GenesisStateCall) -> Self {
             Self::GenesisState(value)
@@ -3595,6 +3765,11 @@ pub mod light_client_mock {
     impl ::core::convert::From<GetFinalizedStateCall> for LightClientMockCalls {
         fn from(value: GetFinalizedStateCall) -> Self {
             Self::GetFinalizedState(value)
+        }
+    }
+    impl ::core::convert::From<GetGenesisStakeStateCall> for LightClientMockCalls {
+        fn from(value: GetGenesisStakeStateCall) -> Self {
+            Self::GetGenesisStakeState(value)
         }
     }
     impl ::core::convert::From<GetGenesisStateCall> for LightClientMockCalls {
@@ -3806,6 +3981,25 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct FrozenThresholdReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `genesisStakeState` function with signature `genesisStakeState()` and selector `0xa9a9c9f5`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct GenesisStakeStateReturn {
+        pub threshold: ::ethers::core::types::U256,
+        pub stake_table_bls_key_comm: ::ethers::core::types::U256,
+        pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
+        pub stake_table_amount_comm: ::ethers::core::types::U256,
+    }
     ///Container type for all return fields from the `genesisState` function with signature `genesisState()` and selector `0xd24d933d`
     #[derive(
         Clone,
@@ -3843,6 +4037,20 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct GetFinalizedStateReturn(pub LightClientState);
+    ///Container type for all return fields from the `getGenesisStakeState` function with signature `getGenesisStakeState()` and selector `0x0c693a22`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct GetGenesisStakeStateReturn(pub StakeState);
     ///Container type for all return fields from the `getGenesisState` function with signature `getGenesisState()` and selector `0x4847ae5d`
     #[derive(
         Clone,

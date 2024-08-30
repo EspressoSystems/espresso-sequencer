@@ -24,6 +24,7 @@ use futures::FutureExt;
 use hotshot_contract_adapter::{
     jellyfish::{u256_to_field, ParsedPlonkProof},
     light_client::ParsedLightClientState,
+    light_client::ParsedStakeState,
 };
 use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
 use hotshot_types::{
@@ -537,7 +538,7 @@ mod test {
         abi::AbiEncode,
         utils::{Anvil, AnvilInstance},
     };
-    use hotshot_contract_adapter::light_client::LightClientConstructorArgs;
+    use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedStakeState};
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
@@ -559,6 +560,7 @@ mod test {
     #[allow(clippy::type_complexity)]
     fn init_ledger_for_test() -> (
         ParsedLightClientState,
+        ParsedStakeState,
         Vec<BLSPubKey>,
         Vec<(StateSignKey, StateVerKey)>,
         StakeTable<BLSPubKey, StateVerKey, CircuitField>,
@@ -567,6 +569,12 @@ mod test {
         let ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS as usize);
 
         let genesis = ledger.get_state();
+        let stake_genesis: ParsedStakeState = (
+            genesis.threshold,
+            genesis.bls_key_comm.encode_hex(),
+            genesis.schnorr_key_comm.encode_hex(),
+            genesis.amount_comm.encode_hex(),
+        );
         let qc_keys = ledger.qc_keys;
         let state_keys = ledger.state_keys;
         let st = ledger.st;
@@ -586,7 +594,7 @@ mod test {
             genesis.amount_comm.encode_hex(),
             genesis.threshold,
         );
-        (genesis, qc_keys, state_keys, st)
+        (genesis, stake_genesis, qc_keys, state_keys, st)
     }
 
     // everybody signs, then generate a proof
@@ -652,6 +660,7 @@ mod test {
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
         genesis: ParsedLightClientState,
+        stake_genesis: ParsedStakeState,
     ) -> Result<(Arc<SignerWallet>, LightClient<SignerWallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
         let signer = Wallet::from(anvil.keys()[0].clone())
@@ -660,6 +669,7 @@ mod test {
 
         let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
             light_client_state: genesis,
+            stake_state: stake_state,
             max_history_seconds: MAX_HISTORY_SECONDS,
         };
 
@@ -706,11 +716,17 @@ mod test {
         setup_test();
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;
+        let dummy_stake_genesis = ParsedStakeState::dummy_genesis();
+        let (_wallet, contract) =
+            deploy_contract_for_test(&anvil, dummy_genesis.clone(), dummy_stake_genesis.clone())
+                .await?;
 
         // now test if we can read from the contract
         let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
         assert_eq!(genesis, dummy_genesis);
+
+        let stake_genesis: ParsedStakeState = contract.get_genesis_stake_state().await?.into();
+        assert_eq!(stake_genesis, dummy_stake_genesis);
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
@@ -729,10 +745,11 @@ mod test {
     async fn test_submit_state_and_proof() -> Result<()> {
         setup_test();
 
-        let (genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
+        let (genesis, stake_genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 
         let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil, genesis.clone()).await?;
+        let (_wallet, contract) =
+            deploy_contract_for_test(&anvil, genesis.clone(), stake_genesis.clone()).await?;
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
 

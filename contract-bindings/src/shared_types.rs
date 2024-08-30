@@ -128,3 +128,22 @@ pub struct LightClientState {
     pub stake_table_amount_comm: ::ethers::core::types::U256,
     pub threshold: ::ethers::core::types::U256,
 }
+///`StakeState(uint256,uint256,uint256,uint256)`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct StakeState {
+    pub threshold: ::ethers::core::types::U256,
+    pub stake_table_bls_key_comm: ::ethers::core::types::U256,
+    pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
+    pub stake_table_amount_comm: ::ethers::core::types::U256,
+}

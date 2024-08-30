@@ -9,7 +9,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput};
+use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput, StakeState};
 
 /// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
@@ -136,9 +136,107 @@ impl From<ParsedLightClientState> for contract_bindings::light_client::LightClie
     }
 }
 
+/// Parsed Stake State
+pub struct ParsedStakeState {
+    pub threshold: U256,
+    pub bls_key_comm: U256,
+    pub schnorr_key_comm: U256,
+    pub amount_comm: U256,
+}
+
+impl ParsedStakeState {
+    /// Return a dummy new genesis stake state that will pass constructor/initializer sanity checks
+    /// in the contract.
+    ///
+    /// # Warning
+    /// NEVER use this for production, this is test only.
+    pub fn dummy_genesis() -> Self {
+        Self {
+            threshold: U256::from(1),
+            bls_key_comm: U256::from(123),
+            schnorr_key_comm: U256::from(123),
+            amount_comm: U256::from(20),
+        }
+    }
+}
+
+impl FromStr for ParsedStakeState {
+    type Err = AbiError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parsed: (Self,) = AbiDecode::decode_hex(s)?;
+        Ok(parsed.0)
+    }
+}
+
+impl From<PublicInput> for ParsedStakeState {
+    fn from(pi: PublicInput) -> Self {
+        Self {
+            threshold: field_to_u256(pi.threshold()),
+            bls_key_comm: field_to_u256(pi.qc_key_comm()),
+            schnorr_key_comm: field_to_u256(pi.state_key_comm()),
+            amount_comm: field_to_u256(pi.stake_amount_comm()),
+        }
+    }
+}
+
+impl From<contract_bindings::light_client::StakeState> for ParsedStakeState {
+    fn from(state: contract_bindings::light_client::StakeState) -> Self {
+        Self {
+            threshold: state.threshold,
+            bls_key_comm: state.stake_table_bls_key_comm,
+            schnorr_key_comm: state.stake_table_schnorr_key_comm,
+            amount_comm: state.stake_table_amount_comm,
+        }
+    }
+}
+
+impl From<ParsedStakeState> for PublicInput {
+    fn from(s: ParsedStakeState) -> Self {
+        let fields = vec![
+            u256_to_field(s.threshold),
+            u256_to_field(s.bls_key_comm),
+            u256_to_field(s.schnorr_key_comm),
+            u256_to_field(s.amount_comm),
+        ];
+        Self::from(fields)
+    }
+}
+
+impl From<(U256, U256, U256, U256)> for ParsedStakeState {
+    fn from(s: (U256, U256, U256, U256)) -> Self {
+        Self {
+            threshold: s.7,
+            bls_key_comm: s.4,
+            schnorr_key_comm: s.5,
+            amount_comm: s.6,
+        }
+    }
+}
+
+impl From<ParsedStakeState> for StakeState {
+    fn from(s: ParsedStakeState) -> Self {
+        Self {
+            stake_table_comm: (
+                u256_to_field(s.bls_key_comm),
+                u256_to_field(s.schnorr_key_comm),
+                u256_to_field(s.amount_comm),
+            ),
+            threshold: u256_to_field(s.threshold),
+        }
+    }
+}
+
+impl From<ParsedStakeState> for contract_bindings::light_client::StakeState {
+    fn from(s: ParsedStakeState) -> Self {
+        // exactly the same struct with same field types, safe to transmute
+        unsafe { std::mem::transmute(s) }
+    }
+}
+
 /// `LightClientConstructorArgs` holds the arguments required to initialize a light client contract.
 pub struct LightClientConstructorArgs {
     pub light_client_state: ParsedLightClientState,
+    pub stake_state: ParsedStakeState,
     pub max_history_seconds: u32,
 }
 
@@ -150,6 +248,7 @@ impl LightClientConstructorArgs {
     pub fn dummy_genesis() -> Self {
         Self {
             light_client_state: ParsedLightClientState::dummy_genesis(),
+            stake_state: ParsedStakeState::dummy_genesis(),
             max_history_seconds: 864000,
         }
     }
@@ -164,6 +263,7 @@ impl Tokenize for LightClientConstructorArgs {
     fn into_tokens(self) -> Vec<Token> {
         vec![
             ethers::abi::Token::Tuple(self.light_client_state.into_tokens()),
+            ethers::abi::Token::Tuple(self.stake_state.into_tokens()),
             ethers::abi::Token::Uint(U256::from(self.max_history_seconds)),
         ]
     }
