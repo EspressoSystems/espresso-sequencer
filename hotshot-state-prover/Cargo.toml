@@ -13,13 +13,11 @@ ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-srs = { workspace = true }
 ark-std = { workspace = true }
-async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
 clap = { workspace = true }
-cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 displaydoc = { version = "0.2.3", default-features = false }
-es-version = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter = { workspace = true }
@@ -36,7 +34,6 @@ jf-utils = { workspace = true }
 reqwest = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
-snafu = { workspace = true }
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }

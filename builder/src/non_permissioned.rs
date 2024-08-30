@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use anyhow::Context;
 use async_broadcast::{
@@ -10,8 +10,8 @@ use async_compatibility_layer::{
 };
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
-    SeqTypes, ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
+    NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -24,8 +24,7 @@ use hotshot_builder_api::v0_1::builder::{
 };
 use hotshot_builder_core::{
     builder_state::{
-        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
-        ResponseMessage,
+        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
     },
     service::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
@@ -40,16 +39,16 @@ use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
 };
-use sequencer::{catchup::StatePeers, L1Params, NetworkParams};
+use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::run_builder_api_service;
 
@@ -60,21 +59,21 @@ pub struct BuilderConfig {
     pub hotshot_builder_apis_url: Url,
 }
 
-pub fn build_instance_state<Ver: StaticVersionType + 'static>(
+pub fn build_instance_state<V: Versions>(
     chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(
+        Arc::new(StatePeers::<SequencerApiVersion>::from_urls(
             state_peers,
             Default::default(),
         )),
+        V::Base::VERSION,
     );
     Ok(instance_state)
 }
@@ -165,7 +164,7 @@ impl BuilderConfig {
             qc_receiver,
             req_receiver,
             tx_receiver,
-            Vec::new() /* tx_queue */,
+            VecDeque::new() /* tx_queue */,
             global_state_clone,
             node_count,
             maximize_txns_count_timeout_duration,
@@ -194,14 +193,15 @@ impl BuilderConfig {
 
         // spawn the builder service
         let events_url = hotshot_events_api_url.clone();
+        let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service(
+            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion>(
                 da_sender,
                 qc_sender,
                 decide_sender,
-                tx_sender,
                 events_url,
+                global_state_clone,
             )
             .await;
             tracing::error!(?res, "builder service exited");
@@ -221,26 +221,25 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use async_compatibility_layer::{
         art::{async_sleep, async_spawn},
         logging::{setup_backtrace, setup_logging},
     };
     use async_lock::RwLock;
-    use async_std::task;
-    use es_version::SequencerVersion;
-    use espresso_types::{FeeAccount, NamespaceId, Transaction};
+    use async_std::{stream::StreamExt, task};
+    use espresso_types::{Event, FeeAccount, NamespaceId, Transaction};
+    use ethers::utils::Anvil;
+    use futures::Stream;
+    use hotshot::types::EventType;
     use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::{
-        builder_state::BuilderProgress,
-        service::{
-            run_non_permissioned_standalone_builder_service,
-            run_permissioned_standalone_builder_service,
-        },
+    use hotshot_builder_core::service::{
+        run_non_permissioned_standalone_builder_service,
+        run_permissioned_standalone_builder_service,
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -254,13 +253,27 @@ mod test {
             signature_key::SignatureKey,
         },
     };
-    use sequencer::persistence::no_storage::{self, NoStorage};
+    use portpicker::pick_unused_port;
+    use sequencer::{
+        api::{
+            options::HotshotEvents,
+            test_helpers::{TestNetwork, TestNetworkConfigBuilder},
+            Options,
+        },
+        persistence::{
+            self,
+            no_storage::{self, NoStorage},
+        },
+        testing::TestConfigBuilder,
+    };
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
+    use tempfile::TempDir;
+    use vbs::version::StaticVersion;
 
     use super::*;
     use crate::testing::{
-        hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
+        hotshot_builder_url, test_builder_impl, HotShotTestConfig, NonPermissionedBuilderTestConfig,
     };
 
     /// Test the non-permissioned builder core
@@ -270,169 +283,64 @@ mod test {
     async fn test_non_permissioned_builder() {
         setup_test();
 
-        let ver = SequencerVersion::instance();
-        // Hotshot Test Config
-        let hotshot_config = HotShotTestConfig::default();
+        let query_port = pick_unused_port().expect("No ports free");
 
-        // Get the handle for all the nodes, including both the non-builder and builder nodes
-        let handles = hotshot_config.init_nodes(ver, no_storage::Options).await;
+        let event_port = pick_unused_port().expect("No ports free");
+        let event_service_url: Url = format!("http://localhost:{event_port}").parse().unwrap();
 
-        // start consensus for all the nodes
-        for (handle, ..) in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
+        let builder_port = pick_unused_port().expect("No ports free");
+        let builder_api_url: Url = format!("http://localhost:{builder_port}").parse().unwrap();
 
-        // get the required stuff for the election config
-        let known_nodes_with_stake = hotshot_config.config.known_nodes_with_stake.clone();
+        // Set up and start the network
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
 
-        // get count of non-staking nodes
-        let num_non_staking_nodes = hotshot_config.config.num_nodes_without_stake;
+        let tmpdir = TempDir::new().unwrap();
 
-        // non-staking node handle
-        let hotshot_context_handle =
-            &handles[NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID].0;
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(
+                Options::with_port(query_port)
+                    .submit(Default::default())
+                    .query_fs(
+                        Default::default(),
+                        persistence::fs::Options::new(tmpdir.path().to_owned()),
+                    )
+                    .hotshot_events(HotshotEvents {
+                        events_service_port: event_port,
+                    }),
+            )
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
-        // hotshot event streaming api url
-        let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
-
-        // enable a hotshot node event streaming
-        HotShotTestConfig::enable_hotshot_node_event_streaming::<NoStorage>(
-            hotshot_events_streaming_api_url.clone(),
-            known_nodes_with_stake,
-            num_non_staking_nodes,
-            Arc::clone(hotshot_context_handle),
-        );
-
-        // builder api url
-        let hotshot_builder_api_url = hotshot_config.config.builder_urls[0].clone();
-
-        let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
-            &hotshot_config,
-            hotshot_events_streaming_api_url.clone(),
-            hotshot_builder_api_url.clone(),
+        let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder::<
+            MockSequencerVersions,
+        >(
+            event_service_url.clone(),
+            builder_api_url.clone(),
+            network.cfg.num_nodes(),
         )
         .await;
 
-        let builder_pub_key = builder_config.fee_account;
+        let events_service_client = Client::<
+            hotshot_events_service::events::Error,
+            SequencerApiVersion,
+        >::new(event_service_url.clone());
+        events_service_client.connect(None).await;
 
-        // Start a builder api client
-        let builder_client = Client::<
-            hotshot_builder_api::v0_1::builder::Error,
-            <SeqTypes as NodeType>::Base,
-        >::new(hotshot_builder_api_url.clone());
-        assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
-
-        let seed = [207_u8; 32];
-
-        // Hotshot client Public, Private key
-        let (hotshot_client_pub_key, hotshot_client_private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
-
-        let parent_commitment = vid_commitment(&[], GENESIS_VID_NUM_STORAGE_NODES);
-
-        // sign the parent_commitment using the client_private_key
-        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-            &hotshot_client_private_key,
-            parent_commitment.as_ref(),
-        )
-        .expect("Claim block signing failed");
-
-        // sleep and wait for builder service to startup
-        async_sleep(Duration::from_millis(500)).await;
-
-        let test_view_num = 0;
-
-        // test getting available blocks
-        let available_block_info = match builder_client
-            .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            ))
-            .send()
+        let subscribed_events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<hotshot_types::event::Event<SeqTypes>>()
             .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Available Blocks: {:?}", response);
-                assert!(!response.is_empty());
-                response
-            }
-            Err(e) => {
-                panic!("Error getting available blocks {:?}", e);
-            }
-        };
-
-        let builder_commitment = available_block_info[0].block_hash.clone();
-
-        // sign the builder_commitment using the client_private_key
-        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-            &hotshot_client_private_key,
-            builder_commitment.as_ref(),
-        )
-        .expect("Claim block signing failed");
-
-        // Test claiming blocks
-        let _available_block_data = match builder_client
-            .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            ))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Block Data: {:?}", response);
-                response
-            }
-            Err(e) => {
-                panic!("Error while claiming block {:?}", e);
-            }
-        };
-
-        // Test claiming block header input
-        let _available_block_header = match builder_client
-            .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            ))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Block Header : {:?}", response);
-                response
-            }
-            Err(e) => {
-                panic!("Error getting claiming block header {:?}", e);
-            }
-        };
-
-        // test getting builder key
-        match builder_client
-            .get::<FeeAccount>("block_info/builderaddress")
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Builder Key : {:?}", response);
-                assert_eq!(response, builder_pub_key);
-            }
-            Err(e) => {
-                panic!("Error getting builder key {:?}", e);
-            }
-        }
-
-        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
-        match builder_client
-            .post::<()>("txn_submit/submit")
-            .body_json(&txn)
             .unwrap()
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received txn submitted response : {:?}", response);
-                return;
-            }
-            Err(e) => {
-                panic!("Error submitting private transaction {:?}", e);
-            }
-        }
+            .map(|item| item.expect("Failed to get event from event service"));
+
+        test_builder_impl(
+            builder_api_url,
+            subscribed_events,
+            builder_config.fee_account,
+        )
+        .await;
     }
 }

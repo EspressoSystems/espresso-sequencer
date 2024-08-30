@@ -13,16 +13,11 @@ contract LightClientMock is LC {
     bool internal hotShotDown;
     uint256 internal frozenL1Height;
 
-    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
-        _initializeState(genesis, numBlockPerEpoch);
+    constructor(LC.LightClientState memory genesis, uint32 maxHistorySeconds) LC() {
+        _initializeState(genesis, maxHistorySeconds);
     }
 
-    /// @dev Directly mutate `currentEpoch` variable for test
-    function setCurrentEpoch(uint64 newEpoch) public {
-        currentEpoch = newEpoch;
-    }
-
-    /// @dev Directly mutate `finalizedState` variable for test
+    /// @dev Directly mutate finalizedState variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
         states[finalizedState] = state;
     }
@@ -51,21 +46,13 @@ contract LightClientMock is LC {
         }
     }
 
-    function setStateUpdateBlockNumbers(uint256[] memory values) public {
-        // Empty the array
-        delete stateUpdateBlockNumbers;
+    function setStateHistory(StateHistoryCommitment[] memory _stateHistoryCommitments) public {
+        // delete the previous stateHistoryCommitments
+        delete stateHistoryCommitments;
 
-        // Set the stateUpdateBlockNumbers to the new values
-        stateUpdateBlockNumbers = values;
-    }
-
-    function setHotShotCommitments(HotShotCommitment[] memory values) public {
-        // Empty the array
-        delete hotShotCommitments;
-
-        // Set the hotShotCommitments to the new values
-        for (uint256 i = 0; i < values.length; i++) {
-            hotShotCommitments.push(values[i]);
+        // Set the stateHistoryCommitments to the new values
+        for (uint256 i = 0; i < _stateHistoryCommitments.length; i++) {
+            stateHistoryCommitments.push(_stateHistoryCommitments[i]);
         }
     }
 
@@ -85,9 +72,8 @@ contract LightClientMock is LC {
         override
         returns (bool)
     {
-        if (hotShotDown) {
-            return blockNumber - frozenL1Height > threshold;
-        }
-        return super.lagOverEscapeHatchThreshold(blockNumber, threshold);
+        return hotShotDown
+            ? blockNumber - frozenL1Height > threshold
+            : super.lagOverEscapeHatchThreshold(blockNumber, threshold);
     }
 }

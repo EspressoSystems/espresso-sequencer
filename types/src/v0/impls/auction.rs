@@ -1,17 +1,17 @@
-use super::state::ValidatedState;
+use super::{state::ValidatedState, MarketplaceVersion};
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
     FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
 };
+use anyhow::Context;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use ethers::types::Signature;
 use hotshot_types::{
     data::ViewNumber,
     traits::{
-        auction_results_provider::{AuctionResultsProvider, HasUrls},
-        node_implementation::{ConsensusTime, NodeType},
+        auction_results_provider::AuctionResultsProvider,
+        node_implementation::{ConsensusTime, HasUrls, NodeType},
         signature_key::BuilderSignatureKey,
     },
 };
@@ -19,7 +19,6 @@ use std::str::FromStr;
 use thiserror::Error;
 use tide_disco::error::ServerError;
 use url::Url;
-use vbs::version::StaticVersion;
 
 impl FullNetworkTx {
     /// Proxy for `execute` method of each transaction variant.
@@ -55,6 +54,7 @@ impl BidTxBody {
         view: ViewNumber,
         namespaces: Vec<NamespaceId>,
         url: Url,
+        gas_price: FeeAmount,
     ) -> Self {
         Self {
             account,
@@ -62,26 +62,19 @@ impl BidTxBody {
             view,
             namespaces,
             url,
-            // TODO gas_price will come from config probably, but we
-            // can use any value for first round of integration
-            ..Self::default()
+            gas_price,
         }
     }
 
-    /// Sign `BidTxBody` and return the signature.
-    fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
-        FeeAccount::sign_builder_message(key, self.commit().as_ref())
-    }
     /// Sign Body and return a `BidTx`. This is the expected way to obtain a `BidTx`.
     /// ```
     /// # use espresso_types::FeeAccount;
     /// # use espresso_types::v0_3::BidTxBody;
     ///
-    /// let key = FeeAccount::test_key_pair();
-    /// BidTxBody::default().signed(&key).unwrap();
+    /// BidTxBody::default().signed(&FeeAccount::test_key_pair()).unwrap();
     /// ```
     pub fn signed(self, key: &EthKeyPair) -> Result<BidTx, SigningError> {
-        let signature = self.sign(key)?;
+        let signature = FeeAccount::sign_builder_message(key, self.commit().as_ref())?;
         let bid = BidTx {
             body: self,
             signature,
@@ -163,9 +156,9 @@ impl From<FeeError> for ExecutionError {
 
 impl BidTx {
     /// Execute `BidTx`.
-    /// * verify signature
-    /// * charge bid amount
-    /// * charge gas
+    ///   * verify signature
+    ///   * charge bid amount
+    ///   * charge gas
     pub fn execute(&self, state: &mut ValidatedState) -> Result<(), ExecutionError> {
         self.verify()?;
 
@@ -212,12 +205,6 @@ impl BidTx {
     pub fn body(self) -> BidTxBody {
         self.body
     }
-    /// Instantiate a `BidTx` containing the values of `self`
-    /// with a new `url` field on `body`.
-    pub fn with_url(self, url: Url) -> Self {
-        let body = self.body.with_url(url);
-        Self { body, ..self }
-    }
     /// get gas price
     pub fn gas_price(&self) -> FeeAmount {
         self.body.gas_price
@@ -235,12 +222,13 @@ impl BidTx {
         self.body.view
     }
     /// Get the `url` field from the body.
-    fn url(&self) -> Url {
+    pub fn url(&self) -> Url {
         self.body.url()
     }
 }
 
 impl SolverAuctionResults {
+    /// Construct a `SolverAuctionResults`
     pub fn new(
         view_number: ViewNumber,
         winning_bids: Vec<BidTx>,
@@ -252,17 +240,19 @@ impl SolverAuctionResults {
             reserve_bids,
         }
     }
-
+    /// Get the view number for these auction results
     pub fn view(&self) -> ViewNumber {
         self.view_number
     }
-
+    /// Get the winning bids of the auction
     pub fn winning_bids(&self) -> &[BidTx] {
         &self.winning_bids
     }
+    /// Get the reserve bids of the auction
     pub fn reserve_bids(&self) -> &[(NamespaceId, Url)] {
         &self.reserve_bids
     }
+    /// Empty results for the genesis view.
     pub fn genesis() -> Self {
         Self {
             view_number: ViewNumber::genesis(),
@@ -272,7 +262,14 @@ impl SolverAuctionResults {
     }
 }
 
+impl Default for SolverAuctionResults {
+    fn default() -> Self {
+        Self::genesis()
+    }
+}
+
 impl HasUrls for SolverAuctionResults {
+    /// Get the urls to fetch bids from builders.
     fn urls(&self) -> Vec<Url> {
         self.winning_bids()
             .iter()
@@ -282,24 +279,41 @@ impl HasUrls for SolverAuctionResults {
     }
 }
 
-const SOLVER_URL: &str = "https://solver:1234";
-type Ver = StaticVersion<0, 3>;
-type SurfClient<Ver> = surf_disco::Client<ServerError, Ver>;
+type SurfClient = surf_disco::Client<ServerError, MarketplaceVersion>;
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+/// Auction Results provider holding the Url of the solver in order to fetch auction results.
+pub struct SolverAuctionResultsProvider {
+    pub url: Url,
+    pub marketplace_path: String,
+    pub results_path: String,
+}
+
+impl Default for SolverAuctionResultsProvider {
+    fn default() -> Self {
+        Self {
+            url: Url::from_str("http://localhost:25000").unwrap(),
+            marketplace_path: "marketplace-solver/".into(),
+            results_path: "auction_results/".into(),
+        }
+    }
+}
 
 #[async_trait]
-impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResults {
-    type AuctionResult = SolverAuctionResults;
-
-    /// Fetch the auction results.
+impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProvider {
+    /// Fetch the auction results from the solver.
     async fn fetch_auction_result(
         &self,
         view_number: TYPES::Time,
-    ) -> anyhow::Result<Self::AuctionResult> {
-        let resp = SurfClient::<Ver>::new(Url::from_str(SOLVER_URL).unwrap())
-            .get::<SolverAuctionResults>(&format!("/v0/api/auction_results/{}", *view_number))
-            .send()
-            .await
-            .unwrap();
+    ) -> anyhow::Result<TYPES::AuctionResult> {
+        let resp = SurfClient::new(
+            self.url
+                .join(&self.marketplace_path)
+                .context("Malformed solver URL")?,
+        )
+        .get::<TYPES::AuctionResult>(&format!("{}{}", self.results_path, *view_number))
+        .send()
+        .await?;
         Ok(resp)
     }
 }
@@ -337,7 +351,8 @@ mod test {
             FeeAmount::from(1),
             ViewNumber::genesis(),
             vec![NamespaceId::from(999u64)],
-            Url::from_str("https://sequencer:3131").unwrap(),
+            Url::from_str("https://my.builder:3131").unwrap(),
+            FeeAmount::default(),
         )
         .signed(&key_pair)
         .unwrap()

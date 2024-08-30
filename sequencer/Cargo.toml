@@ -7,7 +7,7 @@ edition = "2021"
 
 [features]
 default = ["libp2p"]
-testing = ["hotshot-testing"]
+testing = ["hotshot-testing", "marketplace-builder-core", "hotshot-builder-api"]
 libp2p = []
 benchmarking = []
 
@@ -33,34 +33,32 @@ vergen = { workspace = true }
 anyhow = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
+async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-once-cell = { workspace = true }
 async-std = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
-bytesize = { workspace = true }
 
 # CDN imports
 cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
 
 clap = { workspace = true }
-cld = { workspace = true }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 csv = "1"
 derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
-es-version = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-builder-api = { workspace = true, optional = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
-hotshot-example-types = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
@@ -68,6 +66,8 @@ hotshot-state-prover = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
+marketplace-builder-core = { workspace = true, optional = true }
+
 hotshot-types = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
@@ -77,9 +77,8 @@ jf-rescue = { workspace = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
-libp2p = { workspace = true } 
-marketplace-solver = { git = "https://github.com/EspressoSystems/marketplace-solver.git", tag = "0.1.2" }
-num-traits = "0.2.18"
+libp2p = { workspace = true }
+marketplace-solver = { path = "../marketplace-solver" }
 num_enum = "0.7"
 portpicker = { workspace = true }
 rand = { workspace = true }
@@ -89,7 +88,7 @@ sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"                                                      # TODO temporary, used only for VID, should be set in hotshot
-snafu = { workspace = true }
+snafu = "0.8"
 static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
@@ -102,7 +101,6 @@ tracing-subscriber = "0.3.18"
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
-
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
 
@@ -110,3 +108,6 @@ normal = ["hotshot-testing"]
 unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(async_executor_impl, values("tokio", "async-std"))',
 ] }
+
+[package.metadata.cargo-machete]
+ignored = ["vergen", "include_dir", "hotshot_builder_api"]

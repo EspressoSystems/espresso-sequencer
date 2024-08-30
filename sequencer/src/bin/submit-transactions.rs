@@ -8,8 +8,7 @@ use std::{
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
-use es_version::{SequencerVersion, SEQUENCER_VERSION};
-use espresso_types::{SeqTypes, Transaction};
+use espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
@@ -19,7 +18,7 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::options::{parse_duration, parse_size};
+use sequencer::SequencerApiVersion;
 use sequencer_utils::logging;
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
@@ -175,7 +174,7 @@ async fn main() {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
     // Subscribe to block stream so we can check that our transactions are getting sequenced.
-    let client = Client::<Error, SequencerVersion>::new(opt.url.clone());
+    let client = Client::<Error, SequencerApiVersion>::new(opt.url.clone());
     let block_height: usize = client.get("status/block-height").send().await.unwrap();
     let mut blocks = client
         .socket(&format!("availability/stream/blocks/{}", block_height - 1))
@@ -190,13 +189,13 @@ async fn main() {
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(&mut rng).unwrap(),
-            SEQUENCER_VERSION,
+            SequencerApiVersion::instance(),
         ));
     }
 
     // Start healthcheck endpoint once tasks are running.
     if let Some(port) = opt.port {
-        spawn(server(port, SEQUENCER_VERSION));
+        spawn(server(port, SequencerApiVersion::instance()));
     }
 
     // Keep track of the results.
@@ -382,15 +381,15 @@ struct SubmittedTransaction {
     submitted_at: Instant,
 }
 
-async fn submit_transactions<Ver: StaticVersionType>(
+async fn submit_transactions<ApiVer: StaticVersionType>(
     opt: Options,
     mut sender: Sender<SubmittedTransaction>,
     mut rng: ChaChaRng,
-    _: Ver,
+    _: ApiVer,
 ) {
     let url = opt.submit_url();
     tracing::info!(%url, "starting load generator task");
-    let client = Client::<Error, Ver>::new(url);
+    let client = Client::<Error, ApiVer>::new(url);
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -432,7 +431,10 @@ async fn submit_transactions<Ver: StaticVersionType>(
                     .send()
                     .await
             } {
-                tracing::error!("failed to submit batch of {txns_batch_count} transactions: {err}");
+                tracing::error!(
+                    ?err,
+                    "failed to submit batch of {txns_batch_count} transactions"
+                );
             } else {
                 tracing::info!("submitted batch of {txns_batch_count} transactions");
                 let submitted_at = Instant::now();
@@ -456,7 +458,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
     }
 }
 
-async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
+async fn server<ApiVer: StaticVersionType + 'static>(port: u16, bind_version: ApiVer) {
     if let Err(err) = App::<(), ServerError>::with_state(())
         .serve(format!("0.0.0.0:{port}"), bind_version)
         .await

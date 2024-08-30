@@ -1,11 +1,11 @@
 use crate::{
     v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
-    SeqTypes, Timestamp, Upgrade, UpgradeMode,
+    Timestamp, Upgrade, UpgradeMode,
 };
-use hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
+use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
 use std::{collections::BTreeMap, sync::Arc};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 use super::state::ValidatedState;
 
@@ -46,6 +46,7 @@ impl NodeState {
         chain_config: ChainConfig,
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
+        current_version: Version,
     ) -> Self {
         Self {
             node_id,
@@ -59,17 +60,20 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            current_version: <SeqTypes as NodeType>::Base::version(),
+            current_version,
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
+        use vbs::version::StaticVersion;
+
         Self::new(
             0,
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             mock::MockStateCatchup::default(),
+            StaticVersion::<0, 1>::version(),
         )
     }
 
@@ -92,6 +96,11 @@ impl NodeState {
         self.upgrades = upgrades;
         self
     }
+
+    pub fn with_current_version(mut self, ver: Version) -> Self {
+        self.current_version = ver;
+        self
+    }
 }
 
 // This allows us to turn on `Default` on InstanceState trait
@@ -104,6 +113,7 @@ impl Default for NodeState {
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             mock::MockStateCatchup::default(),
+            StaticVersion::<0, 1>::version(),
         )
     }
 }
@@ -127,11 +137,9 @@ impl Upgrade {
                 config.start_proposing_time = t.start_proposing_time.unix_timestamp();
                 config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
                 config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
-                // this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
-                // using i64::MAX
                 config.stop_voting_time = t
                     .stop_voting_time
-                    .unwrap_or(Timestamp::max().expect("overflow"))
+                    .unwrap_or(Timestamp::max())
                     .unix_timestamp();
                 config.start_proposing_view = 0;
                 config.stop_proposing_view = u64::MAX;

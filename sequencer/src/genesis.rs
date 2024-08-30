@@ -38,13 +38,17 @@ pub enum L1Finalized {
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
+    #[serde(with = "version_ser")]
+    pub base_version: Version,
+    #[serde(with = "version_ser")]
+    pub upgrade_version: Version,
     pub chain_config: ChainConfig,
     pub stake_table: StakeTableConfig,
     #[serde(default)]
     pub accounts: HashMap<FeeAccount, FeeAmount>,
     pub l1_finalized: Option<L1Finalized>,
     pub header: GenesisHeader,
-    #[serde(rename = "upgrade", with = "upgrade_serialization")]
+    #[serde(rename = "upgrade", with = "upgrade_ser")]
     #[serde(default)]
     pub upgrades: BTreeMap<Version, Upgrade>,
 }
@@ -56,10 +60,8 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            match upgrade.upgrade_type {
-                UpgradeType::ChainConfig { chain_config } => {
-                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
-                }
+            if let UpgradeType::Fee { chain_config } = upgrade.upgrade_type {
+                base_fee = std::cmp::max(chain_config.base_fee, base_fee);
             }
         }
 
@@ -67,7 +69,41 @@ impl Genesis {
     }
 }
 
-mod upgrade_serialization {
+mod version_ser {
+
+    use vbs::version::Version;
+
+    use serde::{de, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(ver: &Version, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&ver.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Version, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let version_str = String::deserialize(deserializer)?;
+
+        let version: Vec<_> = version_str.split('.').collect();
+
+        let version = Version {
+            major: version[0]
+                .parse()
+                .map_err(|_| de::Error::custom("invalid version format"))?,
+            minor: version[1]
+                .parse()
+                .map_err(|_| de::Error::custom("invalid version format"))?,
+        };
+
+        Ok(version)
+    }
+}
+
+mod upgrade_ser {
 
     use std::{collections::BTreeMap, fmt};
 
@@ -144,8 +180,12 @@ mod upgrade_serialization {
                     let version: Vec<_> = fields.version.split('.').collect();
 
                     let version = Version {
-                        major: version[0].parse().expect("invalid version"),
-                        minor: version[1].parse().expect("invalid version"),
+                        major: version[0]
+                            .parse()
+                            .map_err(|_| de::Error::custom("invalid version format"))?,
+                        minor: version[1]
+                            .parse()
+                            .map_err(|_| de::Error::custom("invalid version format"))?,
                     };
 
                     match (fields.time_based, fields.view_based) {
@@ -232,6 +272,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -307,6 +350,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_without_optional_fields() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -347,6 +393,9 @@ mod test {
     #[test]
     fn test_genesis_l1_finalized_number_only() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -374,6 +423,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_units() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -401,10 +453,13 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_view_mode() {
+    fn test_genesis_toml_fee_upgrade_view_mode() {
         // without optional fields
         // with view settings
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -432,7 +487,9 @@ mod test {
             start_proposing_view = 1
             stop_proposing_view = 15
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -454,7 +511,7 @@ mod test {
                 start_proposing_view: 1,
                 stop_proposing_view: 15,
             }),
-            upgrade_type: UpgradeType::ChainConfig {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -463,10 +520,13 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_time_mode() {
+    fn test_genesis_toml_fee_upgrade_time_mode() {
         // without optional fields
         // with time settings
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -494,7 +554,9 @@ mod test {
             start_proposing_time = "2024-01-01T00:00:00Z"
             stop_proposing_time = "2024-01-02T00:00:00Z"
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -518,7 +580,7 @@ mod test {
                 stop_proposing_time: Timestamp::from_string("2024-01-02T00:00:00Z".to_string())
                     .unwrap(),
             }),
-            upgrade_type: UpgradeType::ChainConfig {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -527,10 +589,13 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_view_and_time_mode() {
+    fn test_genesis_toml_fee_upgrade_view_and_time_mode() {
         // set both time and view parameters
         // this should err
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -560,7 +625,9 @@ mod test {
             start_proposing_time = 1
             stop_proposing_time = 10
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -570,5 +637,114 @@ mod test {
         .to_string();
 
         toml::from_str::<Genesis>(&toml).unwrap_err();
+    }
+
+    #[test]
+    fn test_marketplace_upgrade_toml() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap();
+    }
+
+    #[test]
+    fn test_marketplace_and_fee_upgrade_toml() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 1
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap();
     }
 }

@@ -2,13 +2,12 @@ use std::{num::NonZeroUsize, time::Duration};
 
 use clap::Parser;
 use derive_more::From;
-use espresso_types::PubKey;
+use espresso_types::{parse_duration, PubKey, Ratio};
 use ethers::utils::hex::{self, FromHexError};
 use hotshot_orchestrator::{
     config::{Libp2pConfig, NetworkConfig},
     run_orchestrator,
 };
-use sequencer::options::{parse_duration, Ratio};
 use sequencer_utils::logging;
 use snafu::Snafu;
 use url::Url;
@@ -68,7 +67,11 @@ struct Args {
 
     /// The number of nodes a Libp2p node should try to maintain
     /// a connection with at one time.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N",
+        default_value = "20"
+    )]
     libp2p_mesh_n: usize,
 
     /// Seed to use for generating node keys.

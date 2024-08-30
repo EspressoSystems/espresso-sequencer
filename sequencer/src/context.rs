@@ -15,11 +15,11 @@ use futures::{
 };
 use hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
-    types::{Event, SystemContextHandle},
-    Memberships, SystemContext,
+    types::{Event, EventType, SystemContextHandle},
+    MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
-use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
+
 use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
@@ -29,29 +29,29 @@ use hotshot_types::{
         election::Membership,
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
+        node_implementation::Versions,
     },
 };
 use url::Url;
-use vbs::version::StaticVersionType;
 
-use crate::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
+use crate::{
+    external_event_handler::{self, ExternalEventHandler},
+    state_signature::StateSigner,
+    static_stake_table_commitment, Node, SeqTypes, SequencerApiVersion,
+};
 /// The consensus handle
-pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
+pub type Consensus<N, P, V> = SystemContextHandle<SeqTypes, Node<N, P>, V>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct SequencerContext<
-    N: ConnectedNetwork<PubKey>,
-    P: SequencerPersistence,
-    Ver: StaticVersionType + 'static,
-> {
+pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> {
     /// The consensus handle
     #[derivative(Debug = "ignore")]
-    handle: Arc<RwLock<Consensus<N, P>>>,
+    handle: Arc<RwLock<Consensus<N, P, V>>>,
 
     /// Context for generating state signatures.
-    state_signer: Arc<StateSigner<Ver>>,
+    state_signer: Arc<StateSigner<SequencerApiVersion>>,
 
     /// An orchestrator to wait for before starting consensus.
     #[derivative(Debug = "ignore")]
@@ -70,9 +70,7 @@ pub struct SequencerContext<
     config: NetworkConfig<PubKey>,
 }
 
-impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
-    SequencerContext<N, P, Ver>
-{
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> SequencerContext<N, P, V> {
     #[tracing::instrument(skip_all, fields(node_id = instance_state.node_id))]
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
@@ -83,7 +81,9 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
-        _: Ver,
+        public_api_url: Option<Url>,
+        _: V,
+        marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
@@ -141,11 +141,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             instance_state.node_id,
             config.clone(),
             memberships,
-            network,
+            network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
-            TestAuctionResultsProvider::default(),
+            marketplace_config,
         )
         .await?
         .0;
@@ -155,10 +155,19 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             state_signer = state_signer.with_relay_server(url);
         }
 
+        // Create the roll call info we will be using
+        let roll_call_info = external_event_handler::RollCallInfo { public_api_url };
+
+        // Create the external event handler
+        let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
+            .await
+            .with_context(|| "Failed to create external event handler")?;
+
         Ok(Self::new(
             handle,
             persistence,
             state_signer,
+            external_event_handler,
             event_streamer,
             instance_state,
             network_config,
@@ -167,9 +176,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
     /// Constructor
     fn new(
-        handle: Consensus<N, P>,
+        handle: Consensus<N, P, V>,
         persistence: Arc<RwLock<P>>,
-        state_signer: StateSigner<Ver>,
+        state_signer: StateSigner<SequencerApiVersion>,
+        external_event_handler: ExternalEventHandler<V>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
         config: NetworkConfig<PubKey>,
@@ -192,6 +202,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
                 events,
                 persistence,
                 ctx.state_signer.clone(),
+                external_event_handler,
                 Some(event_streamer.clone()),
             ),
         );
@@ -212,7 +223,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     }
 
     /// Return a reference to the consensus state signer.
-    pub fn state_signer(&self) -> Arc<StateSigner<Ver>> {
+    pub fn state_signer(&self) -> Arc<StateSigner<SequencerApiVersion>> {
         self.state_signer.clone()
     }
 
@@ -232,7 +243,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     }
 
     /// Return a reference to the underlying consensus handle.
-    pub fn consensus(&self) -> Arc<RwLock<Consensus<N, P>>> {
+    pub fn consensus(&self) -> Arc<RwLock<Consensus<N, P, V>>> {
         Arc::clone(&self.handle)
     }
 
@@ -304,8 +315,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     }
 }
 
-impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static> Drop
-    for SequencerContext<N, P, Ver>
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
+    for SequencerContext<N, P, V>
 {
     fn drop(&mut self) {
         if !self.detached {
@@ -314,10 +325,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     }
 }
 
-async fn handle_events<Ver: StaticVersionType>(
+async fn handle_events<V: Versions>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<RwLock<impl SequencerPersistence>>,
-    state_signer: Arc<StateSigner<Ver>>,
+    state_signer: Arc<StateSigner<SequencerApiVersion>>,
+    external_event_handler: ExternalEventHandler<V>,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
 ) {
     while let Some(event) = events.next().await {
@@ -330,6 +342,16 @@ async fn handle_events<Ver: StaticVersionType>(
         }
         // Generate state signature.
         state_signer.handle_event(&event).await;
+
+        // Handle external messages
+        if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
+            if let Err(err) = external_event_handler
+                .handle_event(external_message_bytes)
+                .await
+            {
+                tracing::warn!("Failed to handle external message: {:?}", err);
+            };
+        }
 
         // Send the event via the event streaming service
         if let Some(events_streamer) = events_streamer.as_ref() {

@@ -38,7 +38,7 @@ pub mod relay_server;
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
 #[derive(Debug)]
-pub struct StateSigner<Ver: StaticVersionType> {
+pub struct StateSigner<ApiVer: StaticVersionType> {
     /// Key pair for signing a new light client state
     key_pair: StateKeyPair,
 
@@ -49,10 +49,10 @@ pub struct StateSigner<Ver: StaticVersionType> {
     stake_table_comm: StakeTableCommitmentType,
 
     /// The state relay server url
-    relay_server_client: Option<Client<ServerError, Ver>>,
+    relay_server_client: Option<Client<ServerError, ApiVer>>,
 }
 
-impl<Ver: StaticVersionType> StateSigner<Ver> {
+impl<ApiVer: StaticVersionType> StateSigner<ApiVer> {
     pub fn new(key_pair: StateKeyPair, stake_table_comm: StakeTableCommitmentType) -> Self {
         Self {
             key_pair,

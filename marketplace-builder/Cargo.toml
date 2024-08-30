@@ -1,0 +1,47 @@
+[package]
+name = "marketplace-builder"
+description = "A standalone builder service, marketplace version"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[features]
+default = ["libp2p"]
+libp2p = ["sequencer/libp2p"]
+
+[dependencies]
+anyhow = { workspace = true }
+async-broadcast = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-lock = "2.2"
+async-std = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+committable = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
+ethers = { workspace = true }
+futures = { workspace = true }
+hotshot = { workspace = true }
+hotshot-builder-api = { workspace = true }
+hotshot-events-service = { workspace = true }
+hotshot-orchestrator = { workspace = true }
+hotshot-stake-table = { workspace = true }
+hotshot-types = { workspace = true }
+jf-merkle-tree = { workspace = true }
+jf-signature = { workspace = true, features = ["bls"] }
+marketplace-builder-core = { workspace = true }
+marketplace-solver = { path = "../marketplace-solver" }
+portpicker = { workspace = true }
+sequencer = { path = "../sequencer", features = ["testing"] }
+surf = "2.3.1"
+surf-disco = { workspace = true }
+tide-disco = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+vbs = { workspace = true }
+
+[dev-dependencies]
+hotshot-query-service = { workspace = true }
+sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer-utils = { path = "../utils" }
+tempfile = "3.10.1"

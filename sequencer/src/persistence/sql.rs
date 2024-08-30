@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
 use espresso_types::{
+    parse_duration,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, NetworkConfig,
 };
@@ -31,7 +32,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
-use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
+use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]
@@ -554,8 +555,12 @@ impl SequencerPersistence for Persistence {
     async fn record_action(
         &mut self,
         view: ViewNumber,
-        _action: HotShotAction,
+        action: HotShotAction,
     ) -> anyhow::Result<()> {
+        // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
+        if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
+            return Ok(());
+        }
         let stmt = "
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";

@@ -10,6 +10,7 @@ use hotshot_types::{
     },
     vid::{VidCommon, VidSchemeType},
 };
+
 use itertools::Itertools;
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
@@ -25,8 +26,8 @@ use thiserror::Error;
 use vbs::version::Version;
 
 use super::{
-    auction::ExecutionError, fee_info::FeeError, header::ProposalValidationError,
-    instance_state::NodeState,
+    auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
+    BlockSize, FeeMerkleCommitment,
 };
 use crate::{
     v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
@@ -34,6 +35,15 @@ use crate::{
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,
 };
+
+/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+#[allow(dead_code)]
+pub enum StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
 
 /// Possible builder validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -46,13 +56,44 @@ pub enum BuilderValidationError {
     InvalidBuilderSignature,
 }
 
-/// This enum is not used in code but functions as an index of
-/// possible validation errors.
-#[allow(dead_code)]
-pub enum StateValidationError {
-    ProposalValidation(ProposalValidationError),
-    BuilderValidation(BuilderValidationError),
-    Fee(FeeError),
+/// Possible proposal validation failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum ProposalValidationError {
+    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
+    InvalidChainConfig { expected: String, proposal: String },
+
+    #[error(
+        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
+    )]
+    MaxBlockSizeExceeded {
+        max_block_size: BlockSize,
+        block_size: BlockSize,
+    },
+    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
+    InsufficientFee {
+        max_block_size: BlockSize,
+        base_fee: FeeAmount,
+        proposed_fee: FeeAmount,
+    },
+    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
+    InvalidHeight {
+        parent_height: u64,
+        proposal_height: u64,
+    },
+    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidBlockRoot {
+        expected_root: BlockMerkleCommitment,
+        proposal_root: BlockMerkleCommitment,
+    },
+    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidFeeRoot {
+        expected_root: FeeMerkleCommitment,
+        proposal_root: FeeMerkleCommitment,
+    },
+    #[error("Invalid namespace table: {err}")]
+    InvalidNsTable { err: NsTableValidationError },
+    #[error("Some fee amount or their sum total out of range")]
+    SomeFeeAmountOutOfRange,
 }
 
 impl StateDelta for Delta {}
@@ -469,11 +510,12 @@ impl ValidatedState {
             return;
         };
 
-        match upgrade.upgrade_type {
-            UpgradeType::ChainConfig { chain_config } => {
-                self.chain_config = chain_config.into();
-            }
-        }
+        let cf = match upgrade.upgrade_type {
+            UpgradeType::Fee { chain_config } => chain_config,
+            UpgradeType::Marketplace { chain_config } => chain_config,
+        };
+
+        self.chain_config = cf.into();
     }
 
     /// Retrieves the `ChainConfig`.
@@ -750,16 +792,16 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
-    use hotshot_types::traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey};
-    use hotshot_types::vid::vid_scheme;
+    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
+    use tracing::debug;
 
     use super::*;
     use crate::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
-        v0_1,
-        v0_3::BidTx,
+        v0_1, v0_2,
+        v0_3::{self, BidTx},
         BlockSize, FeeAccountProof, FeeMerkleProof,
     };
 
@@ -1025,7 +1067,7 @@ mod test {
         let metadata = parent.block_header().metadata();
         let vid_commitment = parent.payload_commitment();
 
-        dbg!(header.version());
+        debug!("{:?}", header.version());
 
         let key_pair = EthKeyPair::random();
         let account = key_pair.fee_account();
@@ -1048,7 +1090,16 @@ mod test {
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            _ => unimplemented!(),
+            Header::V2(header) => Header::V2(v0_2::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V3(header) => Header::V3(v0_3::Header {
+                builder_signature: vec![sig],
+                fee_info: vec![FeeInfo::new(account, data)],
+                ..header
+            }),
         };
 
         validate_builder_fee(&header).unwrap();
@@ -1067,7 +1118,16 @@ mod test {
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            _ => unimplemented!(),
+            Header::V2(header) => Header::V2(v0_2::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V3(header) => Header::V3(v0_3::Header {
+                builder_signature: vec![sig],
+                fee_info: vec![FeeInfo::new(account, data)],
+                ..header
+            }),
         };
 
         let sig: Vec<BuilderSignature> = header.builder_signature();

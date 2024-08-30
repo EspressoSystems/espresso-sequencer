@@ -3,12 +3,9 @@
 use anyhow::{Context, Result};
 use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config};
 use clap::Parser;
-use espresso_types::SeqTypes;
+use espresso_types::{parse_size, SeqTypes};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
-use sequencer::{
-    network::cdn::{ProductionDef, WrappedSignatureKey},
-    options::parse_size,
-};
+use sequencer::network::cdn::{ProductionDef, WrappedSignatureKey};
 use sha2::Digest;
 use tracing_subscriber::EnvFilter;
 

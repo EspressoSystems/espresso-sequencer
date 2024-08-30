@@ -18,62 +18,23 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 use serde_json::{Map, Value};
-use snafu::Snafu;
 use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
-    v0::header::{EitherOrVersion, VersionedHeader},
+    v0::{
+        header::{EitherOrVersion, VersionedHeader},
+        MarketplaceVersion,
+    },
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
-    BlockMerkleCommitment, BlockSize, BuilderSignature, FeeAccount, FeeAmount, FeeInfo,
-    FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable,
-    NsTableValidationError, SeqTypes, UpgradeType,
+    BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
-
-/// Possible proposal validation failures
-#[derive(Error, Debug, Eq, PartialEq)]
-pub enum ProposalValidationError {
-    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
-    InvalidChainConfig { expected: String, proposal: String },
-
-    #[error(
-        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
-    )]
-    MaxBlockSizeExceeded {
-        max_block_size: BlockSize,
-        block_size: BlockSize,
-    },
-    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
-    InsufficientFee {
-        max_block_size: BlockSize,
-        base_fee: FeeAmount,
-        proposed_fee: FeeAmount,
-    },
-    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
-    InvalidHeight {
-        parent_height: u64,
-        proposal_height: u64,
-    },
-    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidBlockRoot {
-        expected_root: BlockMerkleCommitment,
-        proposal_root: BlockMerkleCommitment,
-    },
-    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidFeeRoot {
-        expected_root: FeeMerkleCommitment,
-        proposal_root: FeeMerkleCommitment,
-    },
-    #[error("Invalid namespace table: {err}")]
-    InvalidNsTable { err: NsTableValidationError },
-    #[error("Some fee amount or their sum total out of range")]
-    SomeFeeAmountOutOfRange,
-}
 
 impl v0_1::Header {
     pub(crate) fn commit(&self) -> Commitment<Header> {
@@ -125,16 +86,6 @@ impl Committable for Header {
         // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
         // thus be more intuitive to users than "HEADER".
         "BLOCK".into()
-    }
-}
-
-impl Header {
-    pub fn version(&self) -> Version {
-        match self {
-            Self::V1(_) => Version { major: 0, minor: 1 },
-            Self::V2(_) => Version { major: 0, minor: 2 },
-            Self::V3(_) => Version { major: 0, minor: 3 },
-        }
     }
 }
 
@@ -283,6 +234,13 @@ impl<'de> Deserialize<'de> for Header {
 }
 
 impl Header {
+    pub fn version(&self) -> Version {
+        match self {
+            Self::V1(_) => Version { major: 0, minor: 1 },
+            Self::V2(_) => Version { major: 0, minor: 2 },
+            Self::V3(_) => Version { major: 0, minor: 3 },
+        }
+    }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create(
         chain_config: ChainConfig,
@@ -387,7 +345,7 @@ impl Header {
     #[allow(clippy::too_many_arguments)]
     fn from_info(
         payload_commitment: VidCommitment,
-        builder_commitment: Option<BuilderCommitment>,
+        builder_commitment: BuilderCommitment,
         ns_table: NsTable,
         parent_leaf: &Leaf,
         mut l1: L1Snapshot,
@@ -469,15 +427,23 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            ensure!(
-                fee_account.validate_fee_signature(
-                    fee_signature,
-                    *fee_amount,
-                    &ns_table,
-                    &payload_commitment,
-                ),
-                "invalid builder signature"
-            );
+            if version < MarketplaceVersion::version() {
+                ensure!(
+                    fee_account.validate_fee_signature(
+                        fee_signature,
+                        *fee_amount,
+                        &ns_table,
+                        &payload_commitment,
+                    ),
+                    "invalid builder signature"
+                );
+            } else {
+                ensure!(
+                    fee_account
+                        .validate_sequencing_fee_signature_marketplace(fee_signature, *fee_amount,),
+                    "invalid builder signature"
+                );
+            }
 
             let fee_info = FeeInfo::new(*fee_account, *fee_amount);
             state
@@ -506,7 +472,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -522,7 +488,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -536,7 +502,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -726,8 +692,8 @@ impl Header {
     }
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(display("Invalid Block Header {msg}"))]
+#[derive(Debug, Error)]
+#[error("Invalid Block Header {msg}")]
 pub struct InvalidBlockHeader {
     msg: String,
 }
@@ -745,7 +711,6 @@ impl From<anyhow::Error> for InvalidBlockHeader {
 
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
-    type AuctionResult = SolverAuctionResults;
 
     /// Get the results of the auction for this Header. Only used in post-marketplace versions
     fn get_auction_results(&self) -> Option<SolverAuctionResults> {
@@ -772,6 +737,7 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &<<SeqTypes as NodeType>::ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Instance,
         parent_leaf: &hotshot_types::data::Leaf<SeqTypes>,
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
         _vid_common: VidCommon,
@@ -783,14 +749,12 @@ impl BlockHeader<SeqTypes> for Header {
 
         let mut validated_state = parent_state.clone();
 
-        let chain_config = if version > instance_state.current_version {
-            match instance_state
-                .upgrades
-                .get(&version)
-                .map(|upgrade| match upgrade.upgrade_type {
-                    UpgradeType::ChainConfig { chain_config } => chain_config,
-                }) {
-                Some(cf) => cf,
+        let chain_config = if version >= MarketplaceVersion::version() {
+            match instance_state.upgrades.get(&version) {
+                Some(upgrade) => match upgrade.upgrade_type {
+                    UpgradeType::Marketplace { chain_config } => chain_config,
+                    UpgradeType::Fee { chain_config } => chain_config,
+                },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }
         } else {
@@ -872,7 +836,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Ok(Self::from_info(
             payload_commitment,
-            None,
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -903,13 +867,11 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         let chain_config = if version > instance_state.current_version {
-            match instance_state
-                .upgrades
-                .get(&version)
-                .map(|upgrade| match upgrade.upgrade_type {
-                    UpgradeType::ChainConfig { chain_config } => chain_config,
-                }) {
-                Some(cf) => cf,
+            match instance_state.upgrades.get(&version) {
+                Some(upgrade) => match upgrade.upgrade_type {
+                    UpgradeType::Fee { chain_config } => chain_config,
+                    _ => Header::get_chain_config(&validated_state, instance_state).await,
+                },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }
         } else {
@@ -988,7 +950,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Ok(Self::from_info(
             payload_commitment,
-            Some(builder_commitment),
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -1122,7 +1084,7 @@ mod test_headers {
     use super::*;
     use crate::{
         eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal,
+        validate_proposal, ProposalValidationError,
     };
 
     #[derive(Debug, Default)]
@@ -1190,7 +1152,7 @@ mod test_headers {
 
             let header = Header::from_info(
                 genesis.header.payload_commitment(),
-                Some(genesis.header.builder_commitment().clone()),
+                genesis.header.builder_commitment().clone(),
                 genesis.ns_table,
                 &parent_leaf,
                 L1Snapshot {
@@ -1429,7 +1391,7 @@ mod test_headers {
         *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
 
-        let ver = StaticVersion::<1, 0>::version();
+        let ver = StaticVersion::<0, 1>::version();
 
         // Pass a different chain config to trigger a chain config validation error.
         let state = validated_state
@@ -1508,8 +1470,9 @@ mod test_headers {
         setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let mut genesis_state =
-            NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
+        let mut genesis_state = NodeState::mock()
+            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
+            .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
@@ -1564,7 +1527,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
-            <SeqTypes as NodeType>::Base::version(),
+            StaticVersion::<0, 1>::version(),
         )
         .await
         .unwrap();
@@ -1586,7 +1549,7 @@ mod test_headers {
                 &genesis_state,
                 &parent_leaf,
                 &proposal,
-                StaticVersion::<1, 0>::version(),
+                StaticVersion::<0, 1>::version(),
             )
             .await
             .unwrap()
