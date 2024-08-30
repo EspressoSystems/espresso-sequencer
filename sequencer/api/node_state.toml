@@ -1,5 +1,5 @@
 [route.version]
-PATH = ["/version"]
+PATH = ["/current_version"]
 METHOD = "GET"
 DOC = "Get the version from the node's state."
 
