@@ -54,7 +54,8 @@ async fn test_builder_order() {
     async_compatibility_layer::logging::setup_backtrace();
     tracing::info!("Testing the builder core with multiple messages from the channels");
 
-    /// Number of views to simulate
+    /// Number of views to simulate, make sure it's larger than 5
+    /// so that we have enough rounds to play with
     const NUM_ROUNDS: usize = 10;
     /// Number of transactions to submit per round
     const NUM_TXNS_PER_ROUND: usize = 5;
@@ -76,9 +77,6 @@ async fn test_builder_order() {
 
     // generate three different random number between (0..(NUM_ROUNDS-2)) to do some changes for output transactions
     // it's not the last two rounds as they'll be used to test propose_in_advance
-    // assertion added here to make sure we have enough rounds to play with
-    #[allow(clippy::assertions_on_constants)]
-    assert!(NUM_ROUNDS > 5);
     let round_range: Vec<_> = (0..(NUM_ROUNDS - 2)).collect();
     let mut rng = thread_rng();
     let random_rounds: Vec<_> = round_range.choose_multiple(&mut rng, 3).cloned().collect();
