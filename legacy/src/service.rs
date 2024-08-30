@@ -301,7 +301,18 @@ impl<Types: NodeType> GlobalState<Types> {
             .insert(state_id, response_msg);
     }
 
-    // remove the builder state handles based on the decide event
+    /// [remove_handles] cleans up the [GlobalState] by removing all
+    /// `spawned_builder_states` that have been stored, up to a derived
+    /// reference view.  This cutoff point can be up to the given
+    /// `on_decide_view` so long as the provided value is less than or equal
+    /// to the `highest_view_num_builder_id`'s view stored on the state.
+    /// Beyond that, the state prefers to drop all `spawned_builder_states`
+    /// preceding the derived cutoff view.
+    ///
+    /// In addition, for tracking purposes, the `last_garbage_collected_view_num`
+    /// is updated to the target cutoff view number for tracking purposes.  The
+    /// value returned is the cutoff view number such that the returned value
+    /// indicates the point before which everything was cleaned up.
     pub fn remove_handles(&mut self, on_decide_view: Types::Time) -> Types::Time {
         // remove everything from the spawned builder states when view_num <= on_decide_view;
         // if we don't have a highest view > decide, use highest view as cutoff.
@@ -2266,6 +2277,338 @@ mod test {
             "The last built block offered fee should not match the previous block offered fee"
         );
     }
+
+    // GlobalState::remove_handles Tests
+
+    /// This test checks to ensure that remove_handles will only consider
+    /// views up to what is known to have been stored. As a result it will
+    /// indicate that is has only targeted to the highest view number that it
+    /// is aware of.
+    #[async_std::test]
+    async fn test_global_state_remove_handles_prune_up_to_latest() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[0], 4);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        // We register a few builder states.
+        for i in 1..=10 {
+            state.register_builder_state(
+                BuilderStateId {
+                    parent_commitment: vid_commitment(&[i], 4),
+                    view: ViewNumber::new(i as u64),
+                },
+                async_broadcast::broadcast(10).0,
+            );
+        }
+
+        assert_eq!(
+            state.remove_handles(ViewNumber::new(100)),
+            ViewNumber::new(10),
+            "It should only be able to prune up to what has been stored"
+        );
+
+        assert_eq!(
+            state.spawned_builder_states.len(),
+            1,
+            "The spawned_builder_states should only have a single entry in it"
+        );
+
+        for i in 0..10 {
+            let builder_state_id = BuilderStateId {
+                parent_commitment: vid_commitment(&[i], 4),
+                view: ViewNumber::new(i as u64),
+            };
+            assert!(
+                !state.spawned_builder_states.contains_key(&builder_state_id),
+                "the spawned builder states should not contain the builder state id, {builder_state_id}"
+            );
+        }
+
+        let builder_state_id = BuilderStateId {
+            parent_commitment: vid_commitment(&[10], 4),
+            view: ViewNumber::new(10),
+        };
+        assert_eq!(
+            state.highest_view_num_builder_id, builder_state_id,
+            "The highest view number builder id should be the one that was just registered"
+        );
+
+        assert_eq!(
+            state.last_garbage_collected_view_num,
+            ViewNumber::new(9),
+            "The last garbage collected view number should match expected value"
+        );
+
+        assert!(
+            state.spawned_builder_states.contains_key(&BuilderStateId {
+                parent_commitment: vid_commitment(&[10], 4),
+                view: ViewNumber::new(10),
+            }),
+            "The spawned builder states should contain the builder state id: {builder_state_id}"
+        );
+    }
+
+    /// This test checks that the remove_handles doesn't ensure that the
+    /// `last_garbage_collected_view_num` is strictly increasing. By first
+    /// removing a higher view  number, followed by a smaller view number
+    /// (with the highest_view_num_builder_id having a view greater than or
+    /// equal to both targets) we can demonstrate this property.
+    ///
+    /// Furthermore this demonstrates that by supplying any view number to
+    /// remove_handles that is less than `last_garbage_collected_view_num` will
+    /// result in `last_garbage_collected_view_num` being updated to the given
+    /// value minus 1, without regard for it actually removing / cleaning
+    /// anything, or whether it is moving backwards in view numbers.
+    ///
+    /// If we were to account for the view numbers actually being cleaned up,
+    /// we could still trigger this behavior be re-adding the builder states
+    /// with a view number that precedes the last garbage collected view number,
+    /// then removing them would trigger the same behavior.
+    #[async_std::test]
+    async fn test_global_state_remove_handles_can_reduce_last_garbage_collected_view_num_simple() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[0], 4);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        // We register a few builder states.
+        for i in 1..=10 {
+            state.register_builder_state(
+                BuilderStateId {
+                    parent_commitment: vid_commitment(&[i], 4),
+                    view: ViewNumber::new(i as u64),
+                },
+                async_broadcast::broadcast(10).0,
+            );
+        }
+
+        assert_eq!(
+            state.highest_view_num_builder_id,
+            BuilderStateId {
+                parent_commitment: vid_commitment(&[10], 4),
+                view: ViewNumber::new(10),
+            },
+            "The highest view number builder id should be the one that was just registered"
+        );
+
+        assert_eq!(
+            state.remove_handles(ViewNumber::new(10)),
+            ViewNumber::new(10),
+            "It should remove what has been stored"
+        );
+
+        assert_eq!(
+            state.last_garbage_collected_view_num,
+            ViewNumber::new(9),
+            "The last garbage collected view number should match expected value"
+        );
+
+        assert_eq!(
+            state.remove_handles(ViewNumber::new(5)),
+            ViewNumber::new(5),
+            "If we only remove up to view 5, then only entries preceding view 5 should be removed"
+        );
+
+        // The last garbage collected view has gone down as a result of our
+        // new remove_handles target, demonstrating that this number isn't
+        // strictly increasing in value.
+        assert_eq!(
+            state.last_garbage_collected_view_num,
+            ViewNumber::new(4),
+            "The last garbage collected view number should match expected value",
+        );
+    }
+
+    /// This test checks that the remove_handles doesn't ensure that the
+    /// `last_garbage_collected_view_num` is strictly increasing. It is very
+    /// similar to `test_global_state_remove_handles_can_reduce_last_garbage_collected_view_num_simple`
+    /// but differs in that it re-adds the removed builder states, just in case
+    /// the previous test's behavior is erroneous and fixed by ensuring that we
+    /// only consider removed view numbers.
+    #[async_std::test]
+    async fn test_global_state_remove_handles_can_reduce_last_garbage_collected_view_num_strict() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[0], 4);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        // We register a few builder states.
+        for i in 1..=10 {
+            state.register_builder_state(
+                BuilderStateId {
+                    parent_commitment: vid_commitment(&[i], 4),
+                    view: ViewNumber::new(i as u64),
+                },
+                async_broadcast::broadcast(10).0,
+            );
+        }
+
+        assert_eq!(
+            state.highest_view_num_builder_id,
+            BuilderStateId {
+                parent_commitment: vid_commitment(&[10], 4),
+                view: ViewNumber::new(10),
+            },
+            "The highest view number builder id should be the one that was just registered"
+        );
+
+        assert_eq!(
+            state.remove_handles(ViewNumber::new(10)),
+            ViewNumber::new(10),
+            "It should remove what has been stored"
+        );
+
+        assert_eq!(
+            state.last_garbage_collected_view_num,
+            ViewNumber::new(9),
+            "The last garbage collected view number should match expected value"
+        );
+
+        // We re-add these removed builder_state_ids
+        for i in 1..10 {
+            state.register_builder_state(
+                BuilderStateId {
+                    parent_commitment: vid_commitment(&[i], 4),
+                    view: ViewNumber::new(i as u64),
+                },
+                async_broadcast::broadcast(10).0,
+            );
+        }
+
+        assert_eq!(
+            state.remove_handles(ViewNumber::new(5)),
+            ViewNumber::new(5),
+            "If we only remove up to view 5, then only entries preceding view 5 should be removed"
+        );
+
+        // The last garbage collected view has gone down as a result of our
+        // new remove_handles target, demonstrating that this number isn't
+        // strictly increasing in value.
+        assert_eq!(
+            state.last_garbage_collected_view_num,
+            ViewNumber::new(4),
+            "The last garbage collected view number should match expected value",
+        );
+    }
+
+    /// This test checks that the remove_handles methods will correctly remove
+    /// The expected number of builder states from the spawned_builder_states
+    /// hashmap.  It does this by specifically controlling the number of builder
+    /// states that are registered, and then removing a subset of them. It
+    /// verifies the absence of the entries that should have been removed, and
+    /// the presence of the entries that should have been kept.
+    #[async_std::test]
+    async fn test_global_state_remove_handles_expected() {
+        let (bootstrap_sender, _) = async_broadcast::broadcast(10);
+        let (tx_sender, _) = async_broadcast::broadcast(10);
+        let parent_commit = vid_commitment(&[0], 4);
+        let mut state = GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            tx_sender,
+            parent_commit,
+            ViewNumber::new(0),
+            ViewNumber::new(0),
+            10,
+        );
+
+        // We register a few builder states.
+        for i in 1..=10 {
+            state.register_builder_state(
+                BuilderStateId {
+                    parent_commitment: vid_commitment(&[i], 4),
+                    view: ViewNumber::new(i as u64),
+                },
+                async_broadcast::broadcast(10).0,
+            );
+        }
+
+        assert_eq!(
+            state.spawned_builder_states.len(),
+            11,
+            "The spawned_builder_states should have 11 elements in it"
+        );
+
+        assert_eq!(
+            state.highest_view_num_builder_id,
+            BuilderStateId {
+                parent_commitment: vid_commitment(&[10], 4),
+                view: ViewNumber::new(10),
+            },
+            "The highest view number builder id should be the one that was just registered"
+        );
+
+        assert_eq!(
+            state.last_garbage_collected_view_num,
+            ViewNumber::new(0),
+            "The last garbage collected view number should be hat was passed in"
+        );
+
+        // Now we want to clean up some previous builder states to ensure that we
+        // remove the appropriate targets.
+
+        // This should remove the view builder states preceding the view number 5
+        assert_eq!(
+            state.remove_handles(ViewNumber::new(5)),
+            ViewNumber::new(5),
+            "The last garbage collected view number should match expected value"
+        );
+
+        // There should be 11 - 5 entries remaining
+        assert_eq!(
+            state.spawned_builder_states.len(),
+            6,
+            "The spawned_builder_states should have 6 elements in it"
+        );
+
+        for i in 0..5 {
+            let builder_state_id = BuilderStateId {
+                parent_commitment: vid_commitment(&[i], 4),
+                view: ViewNumber::new(i as u64),
+            };
+            assert!(
+                !state.spawned_builder_states.contains_key(&builder_state_id),
+                "the spawned builder states should contain the builder state id, {builder_state_id}"
+            );
+        }
+
+        for i in 5..=10 {
+            let builder_state_id = BuilderStateId {
+                parent_commitment: vid_commitment(&[i], 4),
+                view: ViewNumber::new(i as u64),
+            };
+            assert!(
+                state.spawned_builder_states.contains_key(&builder_state_id),
+                "The spawned builder states should contain the builder state id: {builder_state_id}"
+            );
+        }
+    }
+
+    // submit_client_txns
+    // get_channel_for_matching_builder_or_highest_view_builder
+    // check_builder_state_existence_for_a_view
+    // should_view_handle_other_proposals
 
     // Get Available Blocks Tests
 
