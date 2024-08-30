@@ -6,10 +6,10 @@ use sequencer::{
 };
 use sequencer_utils::logging;
 
-/// Reset the persistent storage of a sequencer.
+/// Options for resetting persistent storage.
 ///
-/// This will remove all the persistent storage of a sequencer node, effectively resetting it to
-/// its genesis state. Do not run this program while the sequencer is running.
+/// This will remove all the persistent storage of a sequencer node or marketplace solver, effectively resetting it to
+/// its genesis state. Do not run this program while the sequencer or solver is running.
 #[derive(Clone, Debug, Parser)]
 struct Options {
     #[clap(flatten)]
@@ -21,8 +21,10 @@ struct Options {
 
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
+    /// Contains subcommands for resetting sequencer storage.
     #[command(subcommand)]
     Sequencer(SequencerStorage),
+    /// resetting marketplace solver storage.
     Solver(marketplace_solver::DatabaseOptions),
 }
 
