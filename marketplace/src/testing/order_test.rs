@@ -17,7 +17,7 @@ use crate::{
     service::handle_received_txns,
     testing::{calc_proposal_msg, get_req_msg, start_builder_state},
 };
-use hotshot::rand;
+use hotshot::rand::{self, seq::SliceRandom, thread_rng};
 use std::time::Duration;
 
 /// The function checks whether the common part of two transaction vectors have the same order
@@ -74,18 +74,21 @@ async fn test_builder_order() {
         })
         .collect::<Vec<_>>();
 
-    // generate three different random number between (0..NUM_ROUNDS) to do some changes for output transactions
-    let mut unique_rounds = HashSet::new();
-    #[deny(clippy::modulo_one)]
-    while unique_rounds.len() < 3 {
-        let random_round = std::cmp::max(rand::random::<usize>() % (NUM_ROUNDS - 2), 1);
-        unique_rounds.insert(random_round);
-    }
-    let random_rounds: Vec<_> = unique_rounds.into_iter().collect();
-    let skip_round = random_rounds[0]; // the round we want to skip all the transactions
-    let adjust_add_round = random_rounds[1]; // the round we want to randomly add some transactions
-    let adjust_remove_tail_round = random_rounds[2]; // the round we want to cut off the end of the bundle
-    let propose_in_advance_round = NUM_ROUNDS - 2; // the round we want to include tx in later round to propose in advance
+    // generate three different random number between (0..(NUM_ROUNDS-2)) to do some changes for output transactions
+    // it's not the last two rounds as they'll be used to test propose_in_advance
+    // assertion added here to make sure we have enough rounds to play with
+    assert!(NUM_ROUNDS > 5);
+    let round_range: Vec<_> = (0..(NUM_ROUNDS - 2)).collect();
+    let mut rng = thread_rng();
+    let random_rounds: Vec<_> = round_range.choose_multiple(&mut rng, 3).cloned().collect();
+    // the round we want to skip all the transactions
+    let skip_round = random_rounds[0];
+    // the round we want to randomly add some transactions
+    let adjust_add_round = random_rounds[1];
+    // the round we want to cut off the end of the bundle
+    let adjust_remove_tail_round = random_rounds[2];
+    // the round we want to include tx in later round (NUM_ROUNDS -1 which is also the final round) to propose in advance
+    let propose_in_advance_round = NUM_ROUNDS - 2;
 
     // set up state to track between simulated consensus rounds
     let mut prev_proposed_transactions: Option<Vec<TestTransaction>> = None;
@@ -435,8 +438,9 @@ async fn test_builder_order_should_fail() {
         .collect::<Vec<_>>();
 
     // generate a random number between (0..NUM_ROUNDS) to do some changes for output transactions
-    let adjust_remove_round = rand::random::<usize>() % (NUM_ROUNDS - 1); // the round we want to skip some transactions (cannot be the final round), after it is enabled the test is expected to fail
-                                                                          // set up state to track between simulated consensus rounds
+    // the round we want to skip some transactions (cannot be the final round), after it is enabled the test is expected to fail
+    let adjust_remove_round = rand::random::<usize>() % (NUM_ROUNDS - 1);
+    // set up state to track between simulated consensus rounds
     let mut prev_proposed_transactions: Option<Vec<TestTransaction>> = None;
     let mut prev_quorum_proposal: Option<QuorumProposal<TestTypes>> = None;
     let mut transaction_history = Vec::new();
