@@ -5,7 +5,7 @@ use hotshot_types::{
 
 use crate::builder_state::MessageType;
 
-use std::{collections::HashSet, fmt::Debug};
+use std::fmt::Debug;
 
 use async_compatibility_layer::art::async_sleep;
 use async_std::prelude::FutureExt;
@@ -77,6 +77,7 @@ async fn test_builder_order() {
     // generate three different random number between (0..(NUM_ROUNDS-2)) to do some changes for output transactions
     // it's not the last two rounds as they'll be used to test propose_in_advance
     // assertion added here to make sure we have enough rounds to play with
+    #[allow(clippy::assertions_on_constants)]
     assert!(NUM_ROUNDS > 5);
     let round_range: Vec<_> = (0..(NUM_ROUNDS - 2)).collect();
     let mut rng = thread_rng();
@@ -208,13 +209,20 @@ async fn test_builder_order_chain_fork() {
     tracing::info!("Testing the builder core with multiple messages from the channels");
 
     // Number of views to simulate
-    const NUM_ROUNDS: usize = 3;
+    const NUM_ROUNDS: usize = 4;
     // Number of transactions to submit per round
     const NUM_TXNS_PER_ROUND: usize = 5;
     // Capacity of broadcast channels
     const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
     // Number of nodes on DA committee
     const NUM_STORAGE_NODES: usize = 4;
+
+    // the round we want to skip all the transactions for the fork chain
+    // round 0 is pre-fork
+    // round 1 is where the fork happens
+    // round 2 is exactly after the fork, they have different parents and the builder should give out different batches
+    // round 3 should be back to normal, there's no fork anymore
+    let fork_round = 1;
 
     let (senders, global_state) = start_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
@@ -227,8 +235,6 @@ async fn test_builder_order_chain_fork() {
         })
         .collect::<Vec<_>>();
 
-    let fork_round = 1; // the round we want to skip all the transactions for the fork chain
-
     // set up state to track between simulated consensus rounds
     let mut prev_proposed_transactions: Option<Vec<TestTransaction>> = None;
     let mut prev_quorum_proposal: Option<QuorumProposal<TestTypes>> = None;
@@ -238,6 +244,8 @@ async fn test_builder_order_chain_fork() {
     let mut prev_proposed_transactions_2: Option<Vec<TestTransaction>> = None;
     let mut prev_quorum_proposal_2: Option<QuorumProposal<TestTypes>> = None;
     let mut transaction_history_2 = Vec::new();
+    // the parameter to track whether there's a fork by pending whether the transactions submitted in
+    // the previous round are the same
     let mut fork: bool;
 
     // Simulate NUM_ROUNDS of consensus. First we submit the transactions for this round to the builder,
@@ -300,6 +308,8 @@ async fn test_builder_order_chain_fork() {
 
         prev_quorum_proposal_2 = Some(quorum_proposal_2.clone());
         // send quorum and DA proposals for this round
+        // we also need to send out the message for the fork-ed chain although it's not forked yet
+        // to prevent builders resend the transactions we've already committeed
         senders
             .da_proposal
             .broadcast(da_proposal_msg_2)
@@ -337,6 +347,7 @@ async fn test_builder_order_chain_fork() {
             .unwrap()
             .unwrap();
 
+        // we have to get separate request message and response message when there's a fork
         if fork {
             let req_msg_2 = get_req_msg(round as u64, builder_state_id_2).await;
             // give builder state time to fork
@@ -370,18 +381,18 @@ async fn test_builder_order_chain_fork() {
         // play with transactions propsed by proposers: at the fork_round, one chain propose while the other chain does not propose any
         let proposed_transactions = res_msg.transactions.clone();
         prev_proposed_transactions = Some(proposed_transactions);
-        if !fork {
-            if let MessageType::<TestTypes>::RequestMessage(ref request) = req_msg.2 {
-                let view_number = request.requested_view_number;
-                if view_number == ViewNumber::new(fork_round as u64) {
-                    prev_proposed_transactions_2 = None;
-                } else {
-                    prev_proposed_transactions_2 = prev_proposed_transactions.clone();
-                }
+        // if it's the `fork_round` we'll change what we want to propse to `None` for the fork-ed chain
+        if let MessageType::<TestTypes>::RequestMessage(ref request) = req_msg.2 {
+            let view_number = request.requested_view_number;
+            if view_number == ViewNumber::new(fork_round as u64) {
+                prev_proposed_transactions_2 = None;
             } else {
-                tracing::error!("Unable to get request from RequestMessage");
+                prev_proposed_transactions_2 = prev_proposed_transactions.clone();
             }
+        } else {
+            tracing::error!("Unable to get request from RequestMessage");
         }
+
         // save transactions to history
         if prev_proposed_transactions.is_some() {
             transaction_history.extend(prev_proposed_transactions.clone().unwrap());
