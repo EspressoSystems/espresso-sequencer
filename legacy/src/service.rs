@@ -1390,12 +1390,52 @@ async fn handle_da_event_implementation<Types: NodeType>(
     Ok(())
 }
 
+/// [HandleQcEventError] represents the internal class of errors that can
+/// occur when attempting to process an incoming qc proposal event.  More
+/// specifically these are the class of error that can be returned from
+/// [handle_qc_event_implementation].
+#[derive(Debug)]
+enum HandleQcEventError<Types: NodeType> {
+    SenderIsNotLeader,
+    SignatureValidationFailed,
+    BroadcastFailed(async_broadcast::SendError<MessageType<Types>>),
+}
+
+/// [handle_qc_event] is a utility function that will attempt to broadcast the
+/// given `qc_proposal` to the given `qc_channel_sender` if the given details
+/// pass validation checks, and the [BroadcastSender] `qc_channel_sender` is
+/// still open.
 async fn handle_qc_event<Types: NodeType>(
     qc_channel_sender: &BroadcastSender<MessageType<Types>>,
     qc_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
     leader: <Types as NodeType>::SignatureKey,
 ) {
+    // We're explicitly not inspecting this error, as this function is not
+    // expected to return an error or any indication of an error.
+    let _ = handle_qc_event_implementation(qc_channel_sender, qc_proposal, sender, leader).await;
+}
+
+/// [handle_qc_event_implementation] is a utility function that will attempt
+/// to broadcast the given qc_proposal to the given [qc_channel_sender] if the
+/// given details pass all relevant checks.
+///
+/// There are only three conditions under which this will fail to send the
+/// message via the given `qc_channel_sender`, and they are all represented
+/// via [HandleQcEventError]. They are as follows:
+/// - [HandleQcEventError::SenderIsNotLeader]: The sender is not the leader
+/// - [HandleQcEventError::SignatureValidationFailed]: The signature validation
+///   failed
+/// - [HandleQcEventError::BroadcastFailed]: The broadcast failed as no receiver
+///   is in place to receive the message
+///
+/// This function is the implementation for [handle_qc_event].
+async fn handle_qc_event_implementation<Types: NodeType>(
+    qc_channel_sender: &BroadcastSender<MessageType<Types>>,
+    qc_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+    sender: <Types as NodeType>::SignatureKey,
+    leader: <Types as NodeType>::SignatureKey,
+) -> Result<(), HandleQcEventError<Types>> {
     tracing::debug!(
         "QCProposal: Leader: {:?} for the view: {:?}",
         leader,
@@ -1405,28 +1445,38 @@ async fn handle_qc_event<Types: NodeType>(
     let leaf = Leaf::from_quorum_proposal(&qc_proposal.data);
 
     // check if the sender is the leader and the signature is valid; if yes, broadcast the QC proposal
-    if sender == leader && sender.validate(&qc_proposal.signature, leaf.commit().as_ref()) {
-        let qc_msg = QCMessage::<Types> {
-            proposal: qc_proposal,
-            sender: leader,
-        };
-        let view_number = qc_msg.proposal.data.view_number;
-        tracing::debug!(
-            "Sending QC proposal to the builder states for view {:?}",
+    if sender != leader {
+        tracing::error!("Sender is not Leader on QCProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", qc_proposal.data.view_number, leader, sender);
+        return Err(HandleQcEventError::SenderIsNotLeader);
+    }
+
+    if !sender.validate(&qc_proposal.signature, leaf.commit().as_ref()) {
+        tracing::error!("Validation Failure on QCProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", qc_proposal.data.view_number, leader, sender);
+        return Err(HandleQcEventError::SignatureValidationFailed);
+    }
+
+    let qc_msg = QCMessage::<Types> {
+        proposal: qc_proposal,
+        sender: leader,
+    };
+    let view_number = qc_msg.proposal.data.view_number;
+    tracing::debug!(
+        "Sending QC proposal to the builder states for view {:?}",
+        view_number
+    );
+
+    if let Err(e) = qc_channel_sender
+        .broadcast(MessageType::QCMessage(qc_msg))
+        .await
+    {
+        tracing::warn!(
+            "Error {e}, failed to send QC proposal to builder states for view {:?}",
             view_number
         );
-        if let Err(e) = qc_channel_sender
-            .broadcast(MessageType::QCMessage(qc_msg))
-            .await
-        {
-            tracing::warn!(
-                "Error {e}, failed to send QC proposal to builder states for view {:?}",
-                view_number
-            );
-        }
-    } else {
-        tracing::error!("Validation Failure on QCProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", qc_proposal.data.view_number, leader, sender);
+        return Err(HandleQcEventError::BroadcastFailed(e));
     }
+
+    Ok(())
 }
 
 async fn handle_decide_event<Types: NodeType>(
@@ -1521,6 +1571,7 @@ mod test {
 
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
+    use committable::Committable;
     use futures::StreamExt;
     use hotshot::{
         traits::BlockPayload,
@@ -1533,8 +1584,9 @@ mod test {
         state_types::{TestInstanceState, TestValidatedState},
     };
     use hotshot_types::{
-        data::{DaProposal, ViewNumber},
+        data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
         message::Proposal,
+        simple_certificate::QuorumCertificate,
         traits::{
             block_contents::{precompute_vid_commitment, vid_commitment},
             node_implementation::ConsensusTime,
@@ -1553,8 +1605,9 @@ mod test {
     };
 
     use super::{
-        handle_da_event_implementation, AvailableBlocksError, BlockInfo, ClaimBlockError,
-        ClaimBlockHeaderInputError, GlobalState, HandleDaEventError, ProxyGlobalState,
+        handle_da_event_implementation, handle_qc_event_implementation, AvailableBlocksError,
+        BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
+        HandleQcEventError, ProxyGlobalState,
     };
 
     // GlobalState Tests
@@ -3983,4 +4036,286 @@ mod test {
             }
         }
     }
+
+    // handle_qc_event Tests
+
+    /// This test checks that the error [HandleQcEventError::SenderIsNotLeader]
+    /// is returned under the right conditions of invoking
+    /// [handle_qc_event_implementation].
+    ///
+    /// To trigger this error, we simply need to ensure that the public keys
+    /// provided for the leader and the sender do not match.
+    #[async_std::test]
+    async fn test_handle_qc_event_error_sender_is_not_leader() {
+        let (sender_public_key, sender_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let (qc_channel_sender, _) = async_broadcast::broadcast(10);
+        let view_number = ViewNumber::new(10);
+
+        let qc_proposal = {
+            let leaf = Leaf::<TestTypes>::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await;
+
+            QuorumProposal::<TestTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number,
+                justify_qc: QuorumCertificate::genesis(
+                    &TestValidatedState::default(),
+                    &TestInstanceState::default(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            }
+        };
+
+        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.commit().as_ref()).unwrap();
+
+        let signed_qc_proposal = Arc::new(Proposal {
+            data: qc_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_qc_event_implementation(
+            &qc_channel_sender,
+            signed_qc_proposal.clone(),
+            sender_public_key,
+            leader_public_key,
+        )
+        .await;
+
+        match result {
+            Err(HandleQcEventError::SenderIsNotLeader) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("expected an error, but received a successful attempt instead");
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks that the error [HandleQcEventError::SignatureValidationFailed]
+    /// is returned under the right conditions of invoking
+    /// [handle_qc_event_implementation].
+    ///
+    /// To trigger this error, we simply need to ensure that the signature
+    /// provided to the [Proposal] does not match the public key of the sender.
+    ///
+    /// Additionally, the public keys passed for both the leader and the sender
+    /// need to match each other.
+    #[async_std::test]
+    async fn test_handle_qc_event_error_signature_validation_failed() {
+        let (sender_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (_, leader_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let (qc_channel_sender, _) = async_broadcast::broadcast(10);
+        let view_number = ViewNumber::new(10);
+
+        let qc_proposal = {
+            let leaf = Leaf::<TestTypes>::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await;
+
+            QuorumProposal::<TestTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number,
+                justify_qc: QuorumCertificate::genesis(
+                    &TestValidatedState::default(),
+                    &TestInstanceState::default(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            }
+        };
+
+        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&leader_private_key, leaf.commit().as_ref()).unwrap();
+
+        let signed_qc_proposal = Arc::new(Proposal {
+            data: qc_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_qc_event_implementation(
+            &qc_channel_sender,
+            signed_qc_proposal.clone(),
+            sender_public_key,
+            sender_public_key,
+        )
+        .await;
+
+        match result {
+            Err(HandleQcEventError::SignatureValidationFailed) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("expected an error, but received a successful attempt instead");
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks that the error [HandleQcEventError::BroadcastFailed]
+    /// is returned under the right conditions of invoking
+    /// [handle_qc_event_implementation].
+    ///
+    /// To trigger this error, we simply need to ensure that the broadcast
+    /// channel receiver has been closed / dropped before the attempt to
+    /// send on the broadcast sender is performed.
+    #[async_std::test]
+    async fn test_handle_qc_event_error_broadcast_failed() {
+        let (sender_public_key, sender_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let qc_channel_sender = {
+            let (qc_channel_sender, _) = async_broadcast::broadcast(10);
+            qc_channel_sender
+        };
+
+        let view_number = ViewNumber::new(10);
+
+        let qc_proposal = {
+            let leaf = Leaf::<TestTypes>::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await;
+
+            QuorumProposal::<TestTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number,
+                justify_qc: QuorumCertificate::genesis(
+                    &TestValidatedState::default(),
+                    &TestInstanceState::default(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            }
+        };
+
+        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.commit().as_ref()).unwrap();
+
+        let signed_qc_proposal = Arc::new(Proposal {
+            data: qc_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_qc_event_implementation(
+            &qc_channel_sender,
+            signed_qc_proposal.clone(),
+            sender_public_key,
+            leader_public_key,
+        )
+        .await;
+
+        match result {
+            Err(HandleQcEventError::BroadcastFailed(_)) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks to ensure that [handle_qc_event_implementation]
+    /// completes successfully as expected when the correct conditions are met.
+    #[async_std::test]
+    async fn test_handle_qc_event_success() {
+        let (sender_public_key, sender_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (qc_channel_sender, qc_channel_receiver) = async_broadcast::broadcast(10);
+        let view_number = ViewNumber::new(10);
+
+        let qc_proposal = {
+            let leaf = Leaf::<TestTypes>::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await;
+
+            QuorumProposal::<TestTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number,
+                justify_qc: QuorumCertificate::genesis(
+                    &TestValidatedState::default(),
+                    &TestInstanceState::default(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            }
+        };
+
+        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.commit().as_ref()).unwrap();
+
+        let signed_qc_proposal = Arc::new(Proposal {
+            data: qc_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_qc_event_implementation(
+            &qc_channel_sender,
+            signed_qc_proposal.clone(),
+            sender_public_key,
+            leader_public_key,
+        )
+        .await;
+
+        match result {
+            Ok(_) => {
+                // This is expected.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+
+        let mut qc_channel_receiver = qc_channel_receiver;
+        match qc_channel_receiver.next().await {
+            Some(MessageType::QCMessage(da_proposal_message)) => {
+                assert_eq!(da_proposal_message.proposal, signed_qc_proposal);
+            }
+            _ => {
+                panic!("Expected a QCMessage, but got something else");
+            }
+        }
+    }
+
 }
