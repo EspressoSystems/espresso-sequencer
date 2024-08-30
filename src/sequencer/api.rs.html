@@ -1793,6 +1793,8 @@
 <a href="#1793" id="1793">1793</a>
 <a href="#1794" id="1794">1794</a>
 <a href="#1795" id="1795">1795</a>
+<a href="#1796" id="1796">1796</a>
+<a href="#1797" id="1797">1797</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -2334,7 +2336,9 @@
                 legacy_builder_url = url;
             };
 
-            <span class="kw">if </span>&lt;V <span class="kw">as </span>Versions&gt;::Upgrade::VERSION &gt;= MarketplaceVersion::VERSION {
+            <span class="kw">if </span>&lt;V <span class="kw">as </span>Versions&gt;::Upgrade::VERSION &gt;= MarketplaceVersion::VERSION
+                || &lt;V <span class="kw">as </span>Versions&gt;::Base::VERSION &gt;= MarketplaceVersion::VERSION
+            {
                 <span class="kw">let </span>(task, url) = run_marketplace_builder::&lt;{ NUM_NODES }&gt;(
                     cfg.network_config.marketplace_builder_port(),
                     NodeState::default(),
