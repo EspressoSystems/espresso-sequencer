@@ -1291,9 +1291,21 @@ pub async fn run_permissioned_standalone_builder_service<
     }
 }
 
-/*
-Utility functions to handle the hotshot events
-*/
+/// [HandleDaEventError] represents the internal class of errors that can
+/// occur when attempting to process an incoming da proposal event.  More
+/// specifically these are the class of error that can be returned from
+/// [handle_da_event_implementation].
+#[derive(Debug)]
+enum HandleDaEventError<Types: NodeType> {
+    SenderIsNotLeader,
+    SignatureValidationFailed,
+    BroadcastFailed(async_broadcast::SendError<MessageType<Types>>),
+}
+
+/// [handle_da_event] is a utility function that will attempt to broadcast the
+/// given `da_proposal` to the given `da_channel_sender` if the given details
+/// pass validation checks, and the [BroadcastSender] `da_channel_sender` is
+/// still open.
 async fn handle_da_event<Types: NodeType>(
     da_channel_sender: &BroadcastSender<MessageType<Types>>,
     da_proposal: Arc<Proposal<Types, DaProposal<Types>>>,
@@ -1301,6 +1313,34 @@ async fn handle_da_event<Types: NodeType>(
     leader: <Types as NodeType>::SignatureKey,
     total_nodes: NonZeroUsize,
 ) {
+    // We're explicitly not inspecting this error, as this function is not
+    // expected to return an error or any indication of an error.
+    let _ =
+        handle_da_event_implementation(da_channel_sender, da_proposal, sender, leader, total_nodes)
+            .await;
+}
+
+/// [handle_da_event_implementation] is a utility function that will attempt
+/// to broadcast the given da_proposal to the given [da_channel_sender] if the
+/// given details pass all relevant checks.
+///
+/// There are only three conditions under which this will fail to send the
+/// message via the given `da_channel_sender`, and they are all represented
+/// via [HandleDaEventError]. They are as follows:
+/// - [HandleDaEventError::SenderIsNotLeader]: The sender is not the leader
+/// - [HandleDaEventError::SignatureValidationFailed]: The signature validation
+///    failed
+/// - [HandleDaEventError::BroadcastFailed]: The broadcast failed as no receiver
+///    is in place to receive the message
+///
+/// This function is the implementation for [handle_da_event].
+async fn handle_da_event_implementation<Types: NodeType>(
+    da_channel_sender: &BroadcastSender<MessageType<Types>>,
+    da_proposal: Arc<Proposal<Types, DaProposal<Types>>>,
+    sender: <Types as NodeType>::SignatureKey,
+    leader: <Types as NodeType>::SignatureKey,
+    total_nodes: NonZeroUsize,
+) -> Result<(), HandleDaEventError<Types>> {
     tracing::debug!(
         "DaProposal: Leader: {:?} for the view: {:?}",
         leader,
@@ -1310,29 +1350,44 @@ async fn handle_da_event<Types: NodeType>(
     // get the encoded transactions hash
     let encoded_txns_hash = Sha256::digest(&da_proposal.data.encoded_transactions);
     // check if the sender is the leader and the signature is valid; if yes, broadcast the DA proposal
-    if leader == sender && sender.validate(&da_proposal.signature, &encoded_txns_hash) {
-        let da_msg = DaProposalMessage::<Types> {
-            proposal: da_proposal,
-            sender: leader,
-            total_nodes: total_nodes.into(),
-        };
-        let view_number = da_msg.proposal.data.view_number;
-        tracing::debug!(
-            "Sending DA proposal to the builder states for view {:?}",
+
+    // We check the failure condition first to prevent unnecessary conditional
+    // blocks
+    if leader != sender {
+        tracing::error!("Sender is not Leader on DaProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", da_proposal.data.view_number, leader, sender);
+        return Err(HandleDaEventError::SenderIsNotLeader);
+    }
+
+    if !sender.validate(&da_proposal.signature, &encoded_txns_hash) {
+        tracing::error!("Validation Failure on DaProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", da_proposal.data.view_number, leader, sender);
+        return Err(HandleDaEventError::SignatureValidationFailed);
+    }
+
+    let da_msg = DaProposalMessage::<Types> {
+        proposal: da_proposal,
+        sender: leader,
+        total_nodes: total_nodes.into(),
+    };
+
+    let view_number = da_msg.proposal.data.view_number;
+    tracing::debug!(
+        "Sending DA proposal to the builder states for view {:?}",
+        view_number
+    );
+
+    if let Err(e) = da_channel_sender
+        .broadcast(MessageType::DaProposalMessage(da_msg))
+        .await
+    {
+        tracing::warn!(
+            "Error {e}, failed to send DA proposal to builder states for view {:?}",
             view_number
         );
-        if let Err(e) = da_channel_sender
-            .broadcast(MessageType::DaProposalMessage(da_msg))
-            .await
-        {
-            tracing::warn!(
-                "Error {e}, failed to send DA proposal to builder states for view {:?}",
-                view_number
-            );
-        }
-    } else {
-        tracing::error!("Validation Failure on DaProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", da_proposal.data.view_number, leader, sender);
+
+        return Err(HandleDaEventError::BroadcastFailed(e));
     }
+
+    Ok(())
 }
 
 async fn handle_qc_event<Types: NodeType>(
@@ -1462,7 +1517,7 @@ pub(crate) async fn handle_received_txns<Types: NodeType>(
 
 #[cfg(test)]
 mod test {
-    use std::{sync::Arc, time::Duration};
+    use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
@@ -1478,7 +1533,8 @@ mod test {
         state_types::{TestInstanceState, TestValidatedState},
     };
     use hotshot_types::{
-        data::ViewNumber,
+        data::{DaProposal, ViewNumber},
+        message::Proposal,
         traits::{
             block_contents::{precompute_vid_commitment, vid_commitment},
             node_implementation::ConsensusTime,
@@ -1486,6 +1542,7 @@ mod test {
         },
         utils::BuilderCommitment,
     };
+    use sha2::{Digest, Sha256};
 
     use crate::{
         builder_state::{
@@ -1496,8 +1553,8 @@ mod test {
     };
 
     use super::{
-        AvailableBlocksError, BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState,
-        ProxyGlobalState,
+        handle_da_event_implementation, AvailableBlocksError, BlockInfo, ClaimBlockError,
+        ClaimBlockHeaderInputError, GlobalState, HandleDaEventError, ProxyGlobalState,
     };
 
     // GlobalState Tests
@@ -2605,11 +2662,6 @@ mod test {
         }
     }
 
-    // submit_client_txns
-    // get_channel_for_matching_builder_or_highest_view_builder
-    // check_builder_state_existence_for_a_view
-    // should_view_handle_other_proposals
-
     // Get Available Blocks Tests
 
     /// This test checks that the error `AvailableBlocksError::NoBlocksAvailable`
@@ -3700,6 +3752,234 @@ mod test {
             }
             Ok(_) => {
                 // This is expected.
+            }
+        }
+    }
+
+    // handle_da_event Tests
+
+    /// This test checks that the error [HandleDaEventError::SignatureValidationFailed]
+    /// is returned under the right conditions of invoking
+    /// [handle_da_event_implementation].
+    ///
+    /// To trigger this error, we simply need to ensure that the public keys
+    /// provided for the leader and the sender do not match.
+    #[async_std::test]
+    async fn test_handle_da_event_implementation_error_sender_is_not_leader() {
+        let (sender_public_key, sender_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let (da_channel_sender, _) = async_broadcast::broadcast(10);
+        let total_nodes = NonZeroUsize::new(10).unwrap();
+        let view_number = ViewNumber::new(10);
+
+        let da_proposal = DaProposal::<TestTypes> {
+            encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
+            metadata: TestMetadata,
+            view_number,
+        };
+
+        let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, &encoded_txns_hash).unwrap();
+
+        let signed_da_proposal = Arc::new(Proposal {
+            data: da_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_da_event_implementation(
+            &da_channel_sender,
+            signed_da_proposal.clone(),
+            sender_public_key,
+            leader_public_key,
+            total_nodes,
+        )
+        .await;
+
+        match result {
+            Err(HandleDaEventError::SenderIsNotLeader) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("expected an error, but received a successful attempt instead")
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks that the error [HandleDaEventError::SignatureValidationFailed]
+    /// is returned under the right conditions of invoking
+    /// [handle_da_event_implementation].
+    ///
+    /// To trigger this error, we simply need to ensure that signature provided
+    /// to the [Proposal] does not match the public key of the sender.
+    /// Additionally, the public keys passed for both the leader and the sender
+    /// need to match each other.
+    #[async_std::test]
+    async fn test_handle_da_event_implementation_error_signature_validation_failed() {
+        let (sender_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (_, leader_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
+        let (da_channel_sender, _) = async_broadcast::broadcast(10);
+        let total_nodes = NonZeroUsize::new(10).unwrap();
+        let view_number = ViewNumber::new(10);
+
+        let da_proposal = DaProposal::<TestTypes> {
+            encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
+            metadata: TestMetadata,
+            view_number,
+        };
+
+        let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&leader_private_key, &encoded_txns_hash).unwrap();
+
+        let signed_da_proposal = Arc::new(Proposal {
+            data: da_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_da_event_implementation(
+            &da_channel_sender,
+            signed_da_proposal.clone(),
+            sender_public_key,
+            sender_public_key,
+            total_nodes,
+        )
+        .await;
+
+        match result {
+            Err(HandleDaEventError::SignatureValidationFailed) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("expected an error, but received a successful attempt instead")
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks that the error [HandleDaEventError::BroadcastFailed]
+    /// is returned under the right conditions of invoking
+    /// [handle_da_event_implementation].
+    ///
+    /// To trigger this error, we simply need to ensure that the broadcast
+    /// channel receiver has been closed / dropped before the attempt to
+    /// send on the broadcast sender is performed.
+    #[async_std::test]
+    async fn test_handle_da_event_implementation_error_broadcast_failed() {
+        let (sender_public_key, sender_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let da_channel_sender = {
+            let (da_channel_sender, _) = async_broadcast::broadcast(10);
+            da_channel_sender
+        };
+
+        let total_nodes = NonZeroUsize::new(10).unwrap();
+        let view_number = ViewNumber::new(10);
+
+        let da_proposal = DaProposal::<TestTypes> {
+            encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
+            metadata: TestMetadata,
+            view_number,
+        };
+
+        let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, &encoded_txns_hash).unwrap();
+
+        let signed_da_proposal = Arc::new(Proposal {
+            data: da_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_da_event_implementation(
+            &da_channel_sender,
+            signed_da_proposal.clone(),
+            sender_public_key,
+            leader_public_key,
+            total_nodes,
+        )
+        .await;
+
+        match result {
+            Err(HandleDaEventError::BroadcastFailed(_)) => {
+                // This error is expected
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks the expected successful behavior of the
+    /// [handle_da_event_implementation] function.
+    #[async_std::test]
+    async fn test_handle_da_event_implementation_success() {
+        let (sender_public_key, sender_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (leader_public_key, _) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        let (da_channel_sender, da_channel_receiver) = async_broadcast::broadcast(10);
+        let total_nodes = NonZeroUsize::new(10).unwrap();
+        let view_number = ViewNumber::new(10);
+
+        let da_proposal = DaProposal::<TestTypes> {
+            encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
+            metadata: TestMetadata,
+            view_number,
+        };
+
+        let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
+        let signature =
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, &encoded_txns_hash).unwrap();
+
+        let signed_da_proposal = Arc::new(Proposal {
+            data: da_proposal,
+            signature,
+            _pd: Default::default(),
+        });
+
+        let result = handle_da_event_implementation(
+            &da_channel_sender,
+            signed_da_proposal.clone(),
+            sender_public_key,
+            leader_public_key,
+            total_nodes,
+        )
+        .await;
+
+        match result {
+            Ok(_) => {
+                // This is expected.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+
+        let mut da_channel_receiver = da_channel_receiver;
+        match da_channel_receiver.next().await {
+            Some(MessageType::DaProposalMessage(da_proposal_message)) => {
+                assert_eq!(da_proposal_message.proposal, signed_da_proposal);
+            }
+            _ => {
+                panic!("Expected a DaProposalMessage, but got something else");
             }
         }
     }
