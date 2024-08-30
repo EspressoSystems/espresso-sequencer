@@ -7,3 +7,9 @@ DOC = "Get the version from the node's state."
 PATH = ["/chain_config"]
 METHOD = "GET"
 DOC = "Get the chain_config for the node's state."
+
+[route.version]
+PATH = ["/api_version"]
+METHOD = "GET"
+DOC = "Get the API version for the current node."
+
