@@ -84,7 +84,6 @@ async fn test_builder_order() {
     let random_rounds: Vec<_> = unique_rounds.into_iter().collect();
     let skip_round = random_rounds[0]; // the round we want to skip all the transactions
     let adjust_add_round = random_rounds[1]; // the round we want to randomly add some transactions
-    let adjust_remove_round = NUM_ROUNDS + 1; // the round we want to skip some transactions, after it is enabled the test is expected to fail
     let adjust_remove_tail_round = random_rounds[2]; // the round we want to cut off the end of the bundle
     let propose_in_advance_round = NUM_ROUNDS - 2; // the round we want to include tx in later round to propose in advance
 
@@ -171,8 +170,6 @@ async fn test_builder_order() {
                             (NUM_TXNS_PER_ROUND + 1) as u8,
                         ]),
                     );
-                } else if view_number == ViewNumber::new(adjust_remove_round as u64) {
-                    proposed_transactions.remove(rand::random::<usize>() % NUM_TXNS_PER_ROUND);
                 } else if view_number == ViewNumber::new(adjust_remove_tail_round as u64) {
                     proposed_transactions.pop();
                 } else if view_number == ViewNumber::new(propose_in_advance_round as u64) {
@@ -352,7 +349,6 @@ async fn test_builder_order_chain_fork() {
                 .broadcast(req_msg_2.2.clone())
                 .await
                 .unwrap();
-            // async_sleep(Duration::from_secs(1)).await;
 
             // get response
             let res_msg_2 = req_msg_2
@@ -406,4 +402,125 @@ async fn test_builder_order_chain_fork() {
         transaction_history_2,
         all_transactions.into_iter().flatten().collect::<Vec<_>>()
     );
+}
+
+/// This test simulates multiple builder states receiving messages from the channels and processing them
+/// and focus specifically on orders.
+/// It should fail as the proposer randomly drop a subset of transactions within a bundle,
+/// which leads to different order of transaction.
+#[async_std::test]
+async fn test_builder_order_should_fail() {
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+    tracing::info!("Testing the builder core with multiple messages from the channels");
+
+    // Number of views to simulate
+    const NUM_ROUNDS: usize = 10;
+    // Number of transactions to submit per round
+    const NUM_TXNS_PER_ROUND: usize = 5;
+    // Capacity of broadcast channels
+    const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
+    // Number of nodes on DA committee
+    const NUM_STORAGE_NODES: usize = 4;
+
+    let (senders, global_state) = start_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+
+    // Transactions to send
+    let all_transactions = (0..NUM_ROUNDS)
+        .map(|round| {
+            (0..NUM_TXNS_PER_ROUND)
+                .map(|tx_num| TestTransaction::new(vec![round as u8, tx_num as u8]))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    // generate a random number between (0..NUM_ROUNDS) to do some changes for output transactions
+    let adjust_remove_round = rand::random::<usize>() % (NUM_ROUNDS - 1); // the round we want to skip some transactions (cannot be the final round), after it is enabled the test is expected to fail
+    // set up state to track between simulated consensus rounds
+    let mut prev_proposed_transactions: Option<Vec<TestTransaction>> = None;
+    let mut prev_quorum_proposal: Option<QuorumProposal<TestTypes>> = None;
+    let mut transaction_history = Vec::new();
+
+    // Simulate NUM_ROUNDS of consensus. First we submit the transactions for this round to the builder,
+    // then construct DA and Quorum Proposals based on what we received from builder in the previous round
+    // and request a new bundle.
+    #[allow(clippy::needless_range_loop)] // intent is clearer this way
+    for round in 0..NUM_ROUNDS {
+        // simulate transaction being submitted to the builder
+        for res in handle_received_txns(
+            &senders.transactions,
+            all_transactions[round].clone(),
+            TransactionSource::HotShot,
+        )
+        .await
+        {
+            res.unwrap();
+        }
+
+        // get transactions submitted in previous rounds, [] for genesis
+        // and simulate the block built from those
+        let transactions = prev_proposed_transactions.take().unwrap_or_default();
+        let (quorum_proposal, quorum_proposal_msg, da_proposal_msg, builder_state_id) =
+            calc_proposal_msg(NUM_STORAGE_NODES, round, prev_quorum_proposal, transactions).await;
+
+        prev_quorum_proposal = Some(quorum_proposal.clone());
+
+        // send quorum and DA proposals for this round
+        senders
+            .da_proposal
+            .broadcast(da_proposal_msg)
+            .await
+            .unwrap();
+        senders
+            .quorum_proposal
+            .broadcast(quorum_proposal_msg)
+            .await
+            .unwrap();
+
+        let req_msg = get_req_msg(round as u64, builder_state_id).await;
+
+        // give builder state time to fork
+        async_sleep(Duration::from_millis(100)).await;
+
+        // get the builder state for parent view we've just simulated
+        global_state
+            .read_arc()
+            .await
+            .spawned_builder_states
+            .get(&req_msg.1)
+            .expect("Failed to get channel for matching builder")
+            .broadcast(req_msg.2.clone())
+            .await
+            .unwrap();
+
+        // get response
+        // in the next round we will use received transactions to simulate
+        // the block being proposed
+        let res_msg = req_msg
+            .0
+            .recv()
+            .timeout(Duration::from_secs(10))
+            .await
+            .unwrap()
+            .unwrap();
+
+        // play with transactions propsed by proposers: skip the whole round OR interspersed some txs randomly OR remove some txs randomly
+        if let MessageType::<TestTypes>::RequestMessage(ref request) = req_msg.2 {
+            let view_number = request.requested_view_number;
+            let mut proposed_transactions = res_msg.transactions.clone();
+            if view_number == ViewNumber::new(adjust_remove_round as u64) {
+                proposed_transactions.remove(rand::random::<usize>() % (NUM_TXNS_PER_ROUND - 1)); // cannot be the last transaction
+            }
+            prev_proposed_transactions = Some(proposed_transactions);
+        } else {
+            tracing::error!("Unable to get request from RequestMessage");
+        }
+        // save transactions to history
+        if prev_proposed_transactions.is_some() {
+            transaction_history.extend(prev_proposed_transactions.clone().unwrap());
+        }
+    }
+    // we should've served all transactions submitted, and in correct order
+    // the test will fail if the common part of two vectors of transactions don't have the same order
+    assert_eq!(order_check(transaction_history, all_transactions), false);
 }
