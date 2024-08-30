@@ -436,7 +436,7 @@ async fn test_builder_order_should_fail() {
 
     // generate a random number between (0..NUM_ROUNDS) to do some changes for output transactions
     let adjust_remove_round = rand::random::<usize>() % (NUM_ROUNDS - 1); // the round we want to skip some transactions (cannot be the final round), after it is enabled the test is expected to fail
-    // set up state to track between simulated consensus rounds
+                                                                          // set up state to track between simulated consensus rounds
     let mut prev_proposed_transactions: Option<Vec<TestTransaction>> = None;
     let mut prev_quorum_proposal: Option<QuorumProposal<TestTypes>> = None;
     let mut transaction_history = Vec::new();
@@ -509,7 +509,8 @@ async fn test_builder_order_should_fail() {
             let view_number = request.requested_view_number;
             let mut proposed_transactions = res_msg.transactions.clone();
             if view_number == ViewNumber::new(adjust_remove_round as u64) {
-                proposed_transactions.remove(rand::random::<usize>() % (NUM_TXNS_PER_ROUND - 1)); // cannot be the last transaction
+                proposed_transactions.remove(rand::random::<usize>() % (NUM_TXNS_PER_ROUND - 1));
+                // cannot be the last transaction
             }
             prev_proposed_transactions = Some(proposed_transactions);
         } else {
