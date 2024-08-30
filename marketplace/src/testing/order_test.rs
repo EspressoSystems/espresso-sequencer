@@ -523,5 +523,5 @@ async fn test_builder_order_should_fail() {
     }
     // we should've served all transactions submitted, and in correct order
     // the test will fail if the common part of two vectors of transactions don't have the same order
-    assert_eq!(order_check(transaction_history, all_transactions), false);
+    assert!(!order_check(transaction_history, all_transactions));
 }
