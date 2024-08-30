@@ -60,6 +60,7 @@ impl NodeType for TestTypes {
     type AuctionResult = TestAuctionResult;
 }
 
+/// set up the broadcast channels and instatiate the global state with fixed channel capacity and num nodes
 async fn start_builder_state(
     channel_capacity: usize,
     num_storage_nodes: usize,
@@ -109,8 +110,8 @@ async fn start_builder_state(
     (senders, global_state)
 }
 
-// get transactions submitted in previous rounds, [] for genesis
-// and simulate the block built from those
+/// get transactions submitted in previous rounds, [] for genesis
+/// and simulate the block built from those
 async fn calc_proposal_msg(
     num_storage_nodes: usize,
     round: usize,
@@ -217,6 +218,8 @@ async fn calc_proposal_msg(
     )
 }
 
+/// get request message
+/// it contains receiver, builder state id ( which helps looking up builder state in global state) and request message in view number and response channel
 async fn get_req_msg(
     round: u64,
     builder_state_id: BuilderStateId<TestTypes>,

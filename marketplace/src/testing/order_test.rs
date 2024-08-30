@@ -54,13 +54,13 @@ async fn test_builder_order() {
     async_compatibility_layer::logging::setup_backtrace();
     tracing::info!("Testing the builder core with multiple messages from the channels");
 
-    // Number of views to simulate
+    /// Number of views to simulate
     const NUM_ROUNDS: usize = 10;
-    // Number of transactions to submit per round
+    /// Number of transactions to submit per round
     const NUM_TXNS_PER_ROUND: usize = 5;
-    // Capacity of broadcast channels
+    /// Capacity of broadcast channels
     const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
-    // Number of nodes on DA committee
+    /// Number of nodes on DA committee
     const NUM_STORAGE_NODES: usize = 4;
 
     let (senders, global_state) = start_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
