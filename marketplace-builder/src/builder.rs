@@ -11,9 +11,10 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::{ChainConfig, RollupRegistration}, FeeAmount, L1Client, MarketplaceVersion,
-    MockSequencerVersions, NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions,
-    ValidatedState, V0_1,
+    eth_signature_key::EthKeyPair,
+    v0_3::{ChainConfig, RollupRegistration},
+    FeeAmount, L1Client, MarketplaceVersion, MockSequencerVersions, NamespaceId, NodeState,
+    Payload, SeqTypes, SequencerVersions, ValidatedState, V0_1,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -53,13 +54,9 @@ use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
-<<<<<<< HEAD
-use crate::hooks::{self, connect_to_solver, BidConfig, EspressoFallbackHooks, EspressoReserveHooks};
-=======
 use crate::hooks::{
     self, fetch_namespaces_to_skip, BidConfig, EspressoFallbackHooks, EspressoReserveHooks,
 };
->>>>>>> main
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -298,6 +295,7 @@ mod test {
         Transaction,
     };
     use ethers::utils::Anvil;
+    use hotshot::rand;
     use hotshot::types::{BLSPrivKey, Event, EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
     use hotshot_events_service::{

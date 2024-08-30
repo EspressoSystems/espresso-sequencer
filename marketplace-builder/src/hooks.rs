@@ -186,10 +186,10 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
             return;
         };
 
-        // // Re-query the solver every 5 views
-        // if view_number.rem_euclid(5) != 0 {
-        //     return;
-        // }
+        // Re-query the solver every 5 views
+        if view_number.rem_euclid(5) != 0 {
+            return;
+        }
 
         let self = Arc::clone(self);
         async_spawn(async move {

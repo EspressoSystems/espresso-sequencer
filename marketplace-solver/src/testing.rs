@@ -19,8 +19,8 @@ use crate::{
 };
 
 pub struct MockSolver {
-    pub events_api: Url,
-    pub solver_api: Url,
+    pub events_url: Url,
+    pub solver_url: Url,
     pub state: Arc<RwLock<GlobalState>>,
     pub database: PostgresClient,
     pub handles: Vec<JoinHandle<()>>,
@@ -29,7 +29,7 @@ pub struct MockSolver {
 
 impl MockSolver {
     pub fn solver_api(&self) -> Url {
-        self.solver_api.clone()
+        self.solver_url.clone().join(SOLVER_API_PATH).unwrap()
     }
 
     pub fn state(&self) -> Arc<RwLock<GlobalState>> {
@@ -80,7 +80,7 @@ impl MockSolver {
         let mut api = define_api(Default::default()).unwrap();
         api.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
 
-        app.register_module::<SolverError, MarketplaceVersion>("solver_api", api)
+        app.register_module::<SolverError, MarketplaceVersion>(SOLVER_API_PATH, api)
             .unwrap();
 
         let solver_api_port = pick_unused_port().expect("no free port");
@@ -93,8 +93,6 @@ impl MockSolver {
             }
         });
 
-        let solver_api = solver_url.join(SOLVER_API_PATH).unwrap();
-
         let handles = vec![
             generate_events_handle,
             event_handler_handle,
@@ -103,8 +101,8 @@ impl MockSolver {
         ];
 
         MockSolver {
-            events_api: url,
-            solver_api,
+            events_url: url,
+            solver_url,
             state,
             database,
             tmp_db,
