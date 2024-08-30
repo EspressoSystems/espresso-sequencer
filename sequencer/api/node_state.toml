@@ -1,4 +1,4 @@
-[route.version]
+[route.current_version]
 PATH = ["/current_version"]
 METHOD = "GET"
 DOC = "Get the current version for the node."
@@ -8,7 +8,7 @@ PATH = ["/chain_config"]
 METHOD = "GET"
 DOC = "Get the chain_config for the node."
 
-[route.version]
+[route.api_version]
 PATH = ["/api_version"]
 METHOD = "GET"
 DOC = "Get the API version for the node."
