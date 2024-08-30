@@ -1501,6 +1501,48 @@ async fn handle_decide_event<Types: NodeType>(
     }
 }
 
+#[derive(Debug)]
+enum HandleReceivedTxnsError<Types: NodeType> {
+    TransactionTooBig {
+        estimated_length: u64,
+        max_txn_len: u64,
+    },
+
+    TooManyTransactions,
+
+    Internal(TrySendError<Arc<ReceivedTransaction<Types>>>),
+}
+
+impl<Types: NodeType> From<HandleReceivedTxnsError<Types>> for BuildError {
+    fn from(error: HandleReceivedTxnsError<Types>) -> Self {
+        match error {
+            HandleReceivedTxnsError::TransactionTooBig {
+                estimated_length,
+                max_txn_len,
+            } => BuildError::Error {
+                message: format!("Transaction too big (estimated length {estimated_length}, currently accepting <= {max_txn_len})"),
+            },
+            HandleReceivedTxnsError::TooManyTransactions => BuildError::Error {
+                message: "Too many transactions".to_owned(),
+            },
+            HandleReceivedTxnsError::Internal(err) => BuildError::Error {
+                message: format!("Internal error when submitting transaction: {}", err),
+            },
+        }
+    }
+}
+
+impl<Types: NodeType> From<TrySendError<Arc<ReceivedTransaction<Types>>>>
+    for HandleReceivedTxnsError<Types>
+{
+    fn from(err: TrySendError<Arc<ReceivedTransaction<Types>>>) -> Self {
+        match err {
+            TrySendError::Full(_) => HandleReceivedTxnsError::TooManyTransactions,
+            err => HandleReceivedTxnsError::Internal(err),
+        }
+    }
+}
+
 /// [handle_received_txns] is a utility function that will take the given list
 /// of transactions, [txns], wraps them in a [ReceivedTransaction] struct
 /// and attempt to broadcast them to the given transaction [BroadcastSender]
@@ -1516,28 +1558,85 @@ pub(crate) async fn handle_received_txns<Types: NodeType>(
     source: TransactionSource,
     max_txn_len: u64,
 ) -> Vec<Result<Commitment<<Types as NodeType>::Transaction>, BuildError>> {
-    let mut results = Vec::with_capacity(txns.len());
-    let time_in = Instant::now();
-    for tx in txns.into_iter() {
+    HandleReceivedTxns::new(tx_sender.clone(), txns, source, max_txn_len)
+        .map(|res| res.map_err(Into::into))
+        .collect()
+}
+
+/// HandleReceivedTxns is a struct that is used to handle the processing of
+/// the function [handle_received_txns].  In order to avoid the need to
+/// double allocate a [Vec] from processing these entries, this struct exists
+/// to be processed as an [Iterator] instead.
+struct HandleReceivedTxns<Types: NodeType> {
+    tx_sender: BroadcastSender<Arc<ReceivedTransaction<Types>>>,
+    txns: Vec<Types::Transaction>,
+    source: TransactionSource,
+    max_txn_len: u64,
+    offset: usize,
+    txns_length: usize,
+    time_in: Instant,
+}
+
+impl<Types: NodeType> HandleReceivedTxns<Types> {
+    fn new(
+        tx_sender: BroadcastSender<Arc<ReceivedTransaction<Types>>>,
+        txns: Vec<Types::Transaction>,
+        source: TransactionSource,
+        max_txn_len: u64,
+    ) -> Self {
+        let txns_length = txns.len();
+
+        Self {
+            tx_sender,
+            txns,
+            source,
+            max_txn_len,
+            offset: 0,
+            txns_length,
+            time_in: Instant::now(),
+        }
+    }
+}
+
+impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> {
+    type Item =
+        Result<Commitment<<Types as NodeType>::Transaction>, HandleReceivedTxnsError<Types>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.txns.is_empty() {
+            return None;
+        }
+
+        if self.offset >= self.txns_length {
+            return None;
+        }
+
+        let offset = self.offset;
+        // increment the offset so we can ensure we're making progress;
+        self.offset += 1;
+
+        let tx = self.txns[offset].clone();
         let commit = tx.commit();
         // This is a rough estimate, but we don't have any other way to get real
         // encoded transaction length. Luckily, this being roughly proportional
         // to encoded length is enough, because we only use this value to estimate
         // our limitations on computing the VID in time.
         let len = bincode::serialized_size(&tx).unwrap_or_default();
-        if len > max_txn_len {
+        if len > self.max_txn_len {
             tracing::warn!(%commit, %len, %max_txn_len, "Transaction too big");
-            results.push(Err(BuildError::Error {
-                message: format!("Transaction {commit} too big (estimated length {len}, currently accepting <= {max_txn_len})"),
+            return Some(Err(HandleReceivedTxnsError::TransactionTooBig {
+                estimated_length: len,
+                max_txn_len: self.max_txn_len,
             }));
-            continue;
         }
-        let res = tx_sender
+
+        let res = self
+            .tx_sender
             .try_broadcast(Arc::new(ReceivedTransaction {
                 tx,
-                source: source.clone(),
+                source: self.source.clone(),
                 commit,
-                time_in,
+                time_in: self.time_in,
                 len,
             }))
             .inspect(|val| {
@@ -1552,17 +1651,17 @@ pub(crate) async fn handle_received_txns<Types: NodeType>(
             .inspect_err(|err| {
                 tracing::warn!("Failed to broadcast txn with commit {:?}: {}", commit, err);
             })
-            .map_err(|err| match err {
-                TrySendError::Full(_) => BuildError::Error {
-                    message: "Too many transactions".to_owned(),
-                },
-                e => BuildError::Error {
-                    message: format!("Internal error when submitting transaction: {}", e),
-                },
-            });
-        results.push(res);
+            .map_err(HandleReceivedTxnsError::from);
+
+        Some(res)
     }
-    results
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (
+            self.txns_length - self.offset,
+            Some(self.txns.capacity() - self.offset),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1598,16 +1697,17 @@ mod test {
 
     use crate::{
         builder_state::{
-            BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TriggerStatus,
+            BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TransactionSource,
+            TriggerStatus,
         },
-        service::INITIAL_MAX_BLOCK_SIZE,
+        service::{HandleReceivedTxnsError, INITIAL_MAX_BLOCK_SIZE},
         BlockId, BuilderStateId,
     };
 
     use super::{
         handle_da_event_implementation, handle_qc_event_implementation, AvailableBlocksError,
         BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
-        HandleQcEventError, ProxyGlobalState,
+        HandleQcEventError, HandleReceivedTxns, ProxyGlobalState,
     };
 
     // GlobalState Tests
@@ -4318,4 +4418,204 @@ mod test {
         }
     }
 
+    // HandleReceivedTxns Tests
+
+    /// This test checks that the error [HandleReceivedTxnsError::TooManyTransactions]
+    /// is returned when the conditions are met.
+    ///
+    /// To trigger this error we simply provide a broadcast channel with a
+    /// buffer smaller than the number of transactions we are attempting to
+    /// send through it.
+    #[async_std::test]
+    async fn test_handle_received_txns_error_too_many_transactions() {
+        let (tx_sender, tx_receiver) = async_broadcast::broadcast(2);
+        let num_transactions = 5;
+        let mut txns = Vec::with_capacity(num_transactions);
+        for index in 0..num_transactions {
+            txns.push(TestTransaction::new(vec![index as u8]));
+        }
+        let txns = txns;
+
+        {
+            let mut handle_received_txns_iter = HandleReceivedTxns::<TestTypes>::new(
+                tx_sender,
+                txns.clone(),
+                TransactionSource::HotShot,
+                10,
+            );
+
+            assert!(handle_received_txns_iter.next().is_some());
+            assert!(handle_received_txns_iter.next().is_some());
+            match handle_received_txns_iter.next() {
+                Some(Err(HandleReceivedTxnsError::TooManyTransactions)) => {
+                    // This is expected,
+                }
+                Some(Err(err)) => {
+                    panic!("Unexpected error: {:?}", err);
+                }
+                Some(Ok(_)) => {
+                    panic!("Expected an error, but got a result");
+                }
+                None => {
+                    panic!("Expected an error, but got a result");
+                }
+            }
+        }
+
+        let mut tx_receiver = tx_receiver;
+        assert!(tx_receiver.next().await.is_some());
+        assert!(tx_receiver.next().await.is_some());
+        assert!(tx_receiver.next().await.is_none());
+    }
+
+    /// This test checks that the error [HandleReceivedTxnsError::TransactionTooBig]
+    /// when the conditions are met.
+    ///
+    /// To trigger this error we simply provide a [TestTransaction] whose size
+    /// exceeds the maximum transaction length. we pass to [HandleReceivedTxns].
+    #[async_std::test]
+    async fn test_handle_received_txns_error_transaction_too_big() {
+        let (tx_sender, tx_receiver) = async_broadcast::broadcast(10);
+        let num_transactions = 2;
+        let mut txns = Vec::with_capacity(num_transactions + 1);
+        for index in 0..num_transactions {
+            txns.push(TestTransaction::new(vec![index as u8]));
+        }
+        txns.push(TestTransaction::new(vec![0; 256]));
+        let txns = txns;
+
+        {
+            let mut handle_received_txns_iter = HandleReceivedTxns::<TestTypes>::new(
+                tx_sender,
+                txns.clone(),
+                TransactionSource::HotShot,
+                10,
+            );
+
+            assert!(handle_received_txns_iter.next().is_some());
+            assert!(handle_received_txns_iter.next().is_some());
+            match handle_received_txns_iter.next() {
+                Some(Err(HandleReceivedTxnsError::TransactionTooBig {
+                    estimated_length,
+                    max_txn_len,
+                })) => {
+                    // This is expected,
+                    assert!(estimated_length >= 256);
+                    assert_eq!(max_txn_len, 10);
+                }
+                Some(Err(err)) => {
+                    panic!("Unexpected error: {:?}", err);
+                }
+                Some(Ok(_)) => {
+                    panic!("Expected an error, but got a result");
+                }
+                None => {
+                    panic!("Expected an error, but got a result");
+                }
+            }
+        }
+
+        let mut tx_receiver = tx_receiver;
+        assert!(tx_receiver.next().await.is_some());
+        assert!(tx_receiver.next().await.is_some());
+        assert!(tx_receiver.next().await.is_none());
+    }
+
+    /// This test checks that the error [HandleReceivedTxnsError::Internal]
+    /// is returned when the broadcast channel is closed.
+    ///
+    /// To trigger this error we simply close the broadcast channel receiver
+    /// before attempting to send any transactions through the broadcast channel
+    /// sender.
+    #[async_std::test]
+    async fn test_handle_received_txns_error_something() {
+        let tx_sender = {
+            let (tx_sender, _) = async_broadcast::broadcast(10);
+            tx_sender
+        };
+
+        let num_transactions = 10;
+        let mut txns = Vec::with_capacity(num_transactions);
+        for index in 0..num_transactions {
+            txns.push(TestTransaction::new(vec![index as u8]));
+        }
+        txns.push(TestTransaction::new(vec![0; 256]));
+        let txns = txns;
+
+        {
+            let mut handle_received_txns_iter = HandleReceivedTxns::<TestTypes>::new(
+                tx_sender,
+                txns.clone(),
+                TransactionSource::HotShot,
+                10,
+            );
+
+            match handle_received_txns_iter.next() {
+                Some(Err(HandleReceivedTxnsError::Internal(err))) => {
+                    // This is expected,
+
+                    match err {
+                        async_broadcast::TrySendError::Closed(_) => {
+                            // This is expected.
+                        }
+                        _ => {
+                            panic!("Unexpected error: {:?}", err);
+                        }
+                    }
+                }
+                Some(Err(err)) => {
+                    panic!("Unexpected error: {:?}", err);
+                }
+                Some(Ok(_)) => {
+                    panic!("Expected an error, but got a result");
+                }
+                None => {
+                    panic!("Expected an error, but got a result");
+                }
+            }
+        }
+    }
+
+    /// This test checks that [HandleReceivedTxns] processes completely without
+    /// issue when the conditions are correct for it to do so.
+    #[async_std::test]
+    async fn test_handle_received_txns_success() {
+        let (tx_sender, tx_receiver) = async_broadcast::broadcast(10);
+        let num_transactions = 10;
+        let mut txns = Vec::with_capacity(num_transactions);
+        for index in 0..num_transactions {
+            txns.push(TestTransaction::new(vec![index as u8]));
+        }
+        let txns = txns;
+
+        let handle_received_txns_iter = HandleReceivedTxns::<TestTypes>::new(
+            tx_sender,
+            txns.clone(),
+            TransactionSource::HotShot,
+            10,
+        );
+
+        for iteration in handle_received_txns_iter {
+            match iteration {
+                Ok(_) => {
+                    // This is expected.
+                }
+                Err(err) => {
+                    panic!("Unexpected error: {:?}", err);
+                }
+            }
+        }
+
+        let mut tx_receiver = tx_receiver;
+        for tx in txns {
+            match tx_receiver.next().await {
+                Some(received_txn) => {
+                    assert_eq!(received_txn.tx, tx);
+                }
+                _ => {
+                    panic!("Expected a TransactionMessage, but got something else");
+                }
+            }
+        }
+    }
 }
