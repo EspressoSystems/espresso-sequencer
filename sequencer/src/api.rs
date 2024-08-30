@@ -30,7 +30,9 @@ use hotshot_types::{
 };
 use jf_merkle_tree::MerkleTreeScheme;
 
-use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
+use self::data_source::{
+    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
+};
 use crate::{
     context::Consensus, network, persistence::ChainConfigPersistence, state_signature::StateSigner,
     SeqTypes, SequencerApiVersion, SequencerContext,
@@ -343,6 +345,22 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> HotShotC
 {
     async fn get_config(&self) -> PublicNetworkConfig {
         self.network_config().await.into()
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence> NodeStateDataSource
+    for StorageState<N, P, D, V>
+{
+    async fn get_node_state(&self) -> NodeState {
+        self.as_ref().node_state().await.clone()
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> NodeStateDataSource
+    for ApiState<N, P, V>
+{
+    async fn get_node_state(&self) -> NodeState {
+        self.node_state().await.clone()
     }
 }
 

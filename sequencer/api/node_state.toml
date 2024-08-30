@@ -1,0 +1,9 @@
+[route.version]
+PATH = ["/version"]
+METHOD = "GET"
+DOC = "Get the version from the node's state."
+
+[route.chain_config]
+PATH = ["/chain_config"]
+METHOD = "GET"
+DOC = "Get the chain_config for the node's state."

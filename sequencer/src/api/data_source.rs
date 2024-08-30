@@ -6,7 +6,7 @@ use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
     v0_3::ChainConfig,
-    PubKey, Transaction,
+    NodeState, PubKey, Transaction,
 };
 use ethers::prelude::Address;
 use futures::future::Future;
@@ -103,6 +103,10 @@ pub(crate) trait SubmitDataSource<N: ConnectedNetwork<PubKey>, P: SequencerPersi
 
 pub(crate) trait HotShotConfigDataSource {
     fn get_config(&self) -> impl Send + Future<Output = PublicNetworkConfig>;
+}
+
+pub(crate) trait NodeStateDataSource {
+    fn get_node_state(&self) -> impl Send + Future<Output = NodeState>;
 }
 
 #[async_trait]

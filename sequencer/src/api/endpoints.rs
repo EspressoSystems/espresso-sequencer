@@ -37,8 +37,8 @@ use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
-        SubmitDataSource,
+        CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource, SequencerDataSource,
+        StateSignatureDataSource, SubmitDataSource,
     },
     StorageState,
 };
@@ -215,6 +215,28 @@ where
     Ok(api)
 }
 
+pub(super) fn node_state<S, ApiVer: StaticVersionType + 'static>(
+    _: ApiVer,
+) -> Result<Api<S, Error, ApiVer>>
+where
+    S: 'static + Send + Sync + ReadState,
+    S::State: Send + Sync + NodeStateDataSource,
+{
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/node_state.toml"))?;
+    let mut api = Api::<S, Error, ApiVer>::new(toml)?;
+    api.get("current_version", move |_, state| {
+        async move { Ok(state.get_node_state().await.current_version) }.boxed()
+    })?
+    .get("api_version", move |_, _| {
+        async move { Ok(ApiVer::version()) }.boxed()
+    })?
+    .get("chain_config", move |_, state| {
+        async move { Ok(state.get_node_state().await.chain_config) }.boxed()
+    })?;
+
+    Ok(api)
+}
+
 pub(super) fn catchup<S, ApiVer: StaticVersionType + 'static>(
     _: ApiVer,
 ) -> Result<Api<S, Error, ApiVer>>
@@ -330,6 +352,9 @@ where
             async move { Ok(env_variables) }
         }
         .boxed()
+    })?
+    .get("version", move |_, _| {
+        { async move { Ok(ApiVer::version()) } }.boxed()
     })?;
 
     Ok(api)

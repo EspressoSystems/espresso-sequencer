@@ -28,8 +28,8 @@ use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource,
+        SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
     update::update_loop,
@@ -400,7 +400,8 @@ impl Options {
             + SubmitDataSource<N, P>
             + StateSignatureDataSource<N>
             + CatchupDataSource
-            + HotShotConfigDataSource,
+            + HotShotConfigDataSource
+            + NodeStateDataSource,
         N: ConnectedNetwork<PubKey>,
     {
         let bind_version = SequencerApiVersion::instance();
@@ -423,6 +424,9 @@ impl Options {
         if self.config.is_some() {
             app.register_module("config", endpoints::config(bind_version)?)?;
         }
+
+        let node_state_api = endpoints::node_state(bind_version)?;
+        app.register_module("node_config", node_state_api)?;
 
         Ok(())
     }
