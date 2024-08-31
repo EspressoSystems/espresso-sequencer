@@ -9,7 +9,7 @@ use espresso_types::{
 };
 use hotshot::types::BLSPubKey;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
-use marketplace_solver::SolverError;
+use marketplace_solver::{SolverError, SOLVER_API_PATH};
 
 use sequencer_utils::logging;
 use url::Url;
@@ -126,7 +126,7 @@ async fn register(opt: RegisterArgs) -> Result<()> {
     } = opt;
 
     let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(
-        solver_url.join("marketplace-solver").unwrap(),
+        solver_url.join(SOLVER_API_PATH).unwrap(),
     );
 
     let (pubkey, privkey) = if let Some(privkey) = private_key {
@@ -185,7 +185,7 @@ async fn update(opt: UpdateArgs) -> Result<()> {
     } = opt;
 
     let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(
-        solver_url.join("marketplace-solver").unwrap(),
+        solver_url.join(SOLVER_API_PATH).unwrap(),
     );
     let (pubkey, privkey) = if let Some(privkey) = private_key {
         let privkey = <BLSPubKey as SignatureKey>::PrivateKey::from_str(&privkey)
