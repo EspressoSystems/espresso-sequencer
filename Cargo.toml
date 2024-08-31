@@ -53,23 +53,22 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "lc-contract-updates" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.72" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "lc-contract-updates" }
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.45" }
 marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.0.8" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.44" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "lc-contract-updates" }
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.54" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
-hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
-hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "lc-contract-updates" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "lc-contract-updates" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "lc-contract-updates" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "lc-contract-updates" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.72" }
-
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "lc-contract-changes" }
+hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
+hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",

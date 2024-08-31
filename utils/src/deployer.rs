@@ -16,7 +16,9 @@ use contract_bindings::{
 use derive_more::Display;
 use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 use futures::future::{BoxFuture, FutureExt};
-use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedLightClientState};
+use hotshot_contract_adapter::light_client::{
+    LightClientConstructorArgs, ParsedLightClientState, ParsedStakeState,
+};
 use url::Url;
 
 /// Set of predeployed contracts.
@@ -355,8 +357,11 @@ pub async fn deploy(
         };
         let light_client = LightClient::new(lc_address, l1.clone());
 
+        let genesis = genesis.await?.clone();
+        let parsed_stake_state: ParsedStakeState = genesis.clone().into();
+
         let data = light_client
-            .initialize(genesis.await?.into(), 864000, owner)
+            .initialize(genesis.into(), parsed_stake_state.into(), 864000, owner)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts

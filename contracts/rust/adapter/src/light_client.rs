@@ -137,6 +137,7 @@ impl From<ParsedLightClientState> for contract_bindings::light_client::LightClie
 }
 
 /// Parsed Stake State
+#[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
 pub struct ParsedStakeState {
     pub threshold: U256,
     pub bls_key_comm: U256,
@@ -156,6 +157,16 @@ impl ParsedStakeState {
             bls_key_comm: U256::from(123),
             schnorr_key_comm: U256::from(123),
             amount_comm: U256::from(20),
+        }
+    }
+}
+impl From<ParsedLightClientState> for ParsedStakeState {
+    fn from(s: ParsedLightClientState) -> Self {
+        Self {
+            threshold: s.threshold,
+            bls_key_comm: s.bls_key_comm,
+            schnorr_key_comm: s.schnorr_key_comm,
+            amount_comm: s.amount_comm,
         }
     }
 }
@@ -205,10 +216,10 @@ impl From<ParsedStakeState> for PublicInput {
 impl From<(U256, U256, U256, U256)> for ParsedStakeState {
     fn from(s: (U256, U256, U256, U256)) -> Self {
         Self {
-            threshold: s.7,
-            bls_key_comm: s.4,
-            schnorr_key_comm: s.5,
-            amount_comm: s.6,
+            threshold: s.0,
+            bls_key_comm: s.1,
+            schnorr_key_comm: s.2,
+            amount_comm: s.3,
         }
     }
 }
@@ -216,12 +227,10 @@ impl From<(U256, U256, U256, U256)> for ParsedStakeState {
 impl From<ParsedStakeState> for StakeState {
     fn from(s: ParsedStakeState) -> Self {
         Self {
-            stake_table_comm: (
-                u256_to_field(s.bls_key_comm),
-                u256_to_field(s.schnorr_key_comm),
-                u256_to_field(s.amount_comm),
-            ),
             threshold: u256_to_field(s.threshold),
+            stake_table_bls_key_comm: u256_to_field(s.bls_key_comm),
+            stake_table_schnorr_key_comm: u256_to_field(s.schnorr_key_comm),
+            stake_table_amount_comm: u256_to_field(s.amount_comm),
         }
     }
 }
