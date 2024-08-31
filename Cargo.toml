@@ -66,6 +66,7 @@ hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "bump/rc-0.5.73" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "bump/rc-0.5.73" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "bump/rc-0.5.73" }
+libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", branch = "bump/rc-0.5.73" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
 hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "bump/rc-0.5.73" }

@@ -31,6 +31,7 @@ use hotshot_types::{
         network::{ConnectedNetwork, Topic},
         node_implementation::Versions,
     },
+    PeerConfig,
 };
 use url::Url;
 
@@ -271,8 +272,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     pub async fn start_consensus(&self) {
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
+            let peer_config =
+                PeerConfig::to_bytes(&self.config.config.my_own_validator_config.public_config())
+                    .clone();
             orchestrator_client
-                .wait_for_all_nodes_ready(self.node_state.node_id)
+                .wait_for_all_nodes_ready(peer_config)
                 .await;
         } else {
             tracing::error!("Cannot get info from orchestrator client");
