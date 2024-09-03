@@ -153,3 +153,15 @@ wait_for 60 builder "$BUILDER_URL"
 
 PROVER_URL="http://localhost:$ESPRESSO_PROVER_SERVICE_PORT/healthcheck"
 wait_for 300 prover "$PROVER_URL"
+
+echo 'Check what version is set on Header.'
+#get block height
+block_height=$(curl -sL $SEQUENCER_API/node/block-height)
+echo $block_height
+# get version
+version_minor=`curl -sL $SEQUENCER_API/availability/block/summary/$block_height | jq .header.version.Version.minor`
+
+if [[ $version_minor -lt $1 ]]; then
+    echo "Upgrade failed!"
+    exit 1
+fi
