@@ -4,6 +4,60 @@ environment:
   - ESPRESSO_SEQUENCER_GENESIS_FILE=data/genesis/demo-marketplace.toml
   - ESPRESSO_BUILDER_GENESIS_FILE=data/genesis/demo-marketplace.toml
 processes:
+
+  marketplace-reserve-builder:
+    command: marketplace-builder
+    ports:
+      - "$ESPRESSO_RESERVE_BUILDER_SERVER_PORT:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT"
+    environment:
+      - ESPRESSO_RESERVE_BUILDER_SERVER_PORT=$ESPRESSO_RESERVE_BUILDER_SERVER_PORT
+      - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=true
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+      - ESPRESSO_BUILDER_GENESIS_FILE
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+      fund-builder:
+        condition: process_completed
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_RESERVE_BUILDER_SERVER_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  marketplace-fallback-builder:
+    command: marketplace-builder
+    ports:
+      - "$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT"
+    environment:
+      - ESPRESSO_BUILDER_SERVER_PORT=$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT
+      - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=false
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+      - ESPRESSO_BUILDER_GENESIS_FILE
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+      fund-builder:
+        condition: process_completed
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_FALLBACK_BUILDER_SERVER_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  permissionless-builder:
+    disabled: true
+
   submit-transactions-public:
     command: submit-transactions
     environment:
@@ -11,60 +65,50 @@ processes:
       - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=6
 
   submit-transactions-private:
-    command: submit-transactions
-    environment:
-      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=1
-      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=3
+    disabled: true
 
   submit-transactions-private-fallback:
     command: submit-transactions
     environment:
-      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT
       - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT/txn_submit
       - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=4
       - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=6
     depends_on:
       sequencer0:
         condition: process_healthy
-      permissionless-builder:
+      marketplace-fallback-builder:
         condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
         host: localhost
-        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT
         path: /healthcheck
       failure_threshold: 100
 
   submit-transactions-private-reserve:
     command: submit-transactions
     environment:
-      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
-      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT/txn_submit
-      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=4
-      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=6
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_RESERVE_PORT
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT/txn_submit
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=1
+      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=3
     depends_on:
       sequencer0:
         condition: process_healthy
-      permissionless-builder:
+      marketplace-reserve-builder:
         condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
         host: localhost
-        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_RESERVE_PORT
         path: /healthcheck
       failure_threshold: 100
 
-  marketplace-reserve-builder:
-    disabled: false
 
-  marketplace-fallback-builder:
-    disabled: false
-
-  permissionless-builder:
-    disabled: true
 
   dev-rollup:
     environment:
-      - ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
+      - ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL=http://localhost:$ESPRESSO_RESERVE_BUILDER_SERVER_PORT
