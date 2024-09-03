@@ -771,7 +771,7 @@ where
     network_config.config.known_nodes_with_stake = vec![];
     network_config.config.known_da_nodes = vec![];
 
-    if network_config.enable_registration_verification {
+    if !network_config.enable_registration_verification {
         tracing::error!("REGISTRATION VERIFICATION IS TURNED OFF");
     }
 
