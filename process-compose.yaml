@@ -611,12 +611,3 @@ processes:
     depends_on:
       sequencer1:
         condition: process_healthy
-
-  dev-rollup:
-    command:
-      dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
-    environment:
-      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
-    depends_on:
-      marketplace-solver:
-        condition: process_healthy
