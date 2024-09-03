@@ -540,7 +540,7 @@ pub struct Config;
 #[derive(Parser, Clone, Debug, Default)]
 pub struct Query {
     /// Peers for fetching missing data for the query service.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS", value_delimiter = ',')]
     pub peers: Vec<Url>,
 }
 
