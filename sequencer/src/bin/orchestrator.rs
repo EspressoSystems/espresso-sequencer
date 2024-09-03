@@ -123,6 +123,7 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,
         indexed_da: false,
+        enable_registration_verification: false,
         ..Default::default()
     };
 
