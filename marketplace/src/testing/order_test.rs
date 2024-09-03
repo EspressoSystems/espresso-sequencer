@@ -321,7 +321,7 @@ async fn test_builder_order_chain_fork() {
 
         let req_msg = get_req_msg(round as u64, builder_state_id).await;
         // give builder state time to fork
-        // async_sleep(Duration::from_secs(1)).await;
+        async_sleep(Duration::from_millis(100)).await;
 
         // get the builder state for parent view we've just simulated
         global_state
@@ -333,6 +333,7 @@ async fn test_builder_order_chain_fork() {
             .broadcast(req_msg.2.clone())
             .await
             .unwrap();
+        async_sleep(Duration::from_millis(100)).await;
 
         // get response
         // in the next round we will use received transactions to simulate
@@ -349,7 +350,7 @@ async fn test_builder_order_chain_fork() {
         if fork {
             let req_msg_2 = get_req_msg(round as u64, builder_state_id_2).await;
             // give builder state time to fork
-            // async_sleep(Duration::from_secs(1)).await;
+            async_sleep(Duration::from_millis(100)).await;
 
             // get the builder state for parent view we've just simulated
             global_state
@@ -361,6 +362,7 @@ async fn test_builder_order_chain_fork() {
                 .broadcast(req_msg_2.2.clone())
                 .await
                 .unwrap();
+            async_sleep(Duration::from_millis(100)).await;
 
             // get response
             let res_msg_2 = req_msg_2
@@ -402,6 +404,7 @@ async fn test_builder_order_chain_fork() {
 
     // we should've served all transactions submitted, and in correct order
     // the test will fail if any transaction is skipped or re-ordered
+    async_sleep(Duration::from_millis(500)).await;
     assert_eq!(
         transaction_history,
         all_transactions
