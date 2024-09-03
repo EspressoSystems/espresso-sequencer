@@ -1,15 +1,15 @@
 //! Utility program to verify properties of headers sequenced by HotShot.
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use std::{cmp::max, process::exit, time::Duration};
+
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
+use espresso_types::{Header, L1BlockInfo};
 use ethers::prelude::*;
 use futures::future::join_all;
 use itertools::Itertools;
-use sequencer::{Header, L1BlockInfo};
-use std::cmp::max;
-use std::process::exit;
-use std::time::Duration;
+use sequencer::SequencerApiVersion;
+use sequencer_utils::logging;
 use surf_disco::Url;
 use vbs::version::StaticVersionType;
 
@@ -49,13 +49,16 @@ struct Options {
 
     /// URL of the HotShot query service.
     url: Url,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
-type SequencerClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
+type SequencerClient<ApiVer> = surf_disco::Client<hotshot_query_service::Error, ApiVer>;
 
-async fn verify_header<Ver: StaticVersionType>(
+async fn verify_header<ApiVer: StaticVersionType>(
     opt: &Options,
-    seq: &SequencerClient<Ver>,
+    seq: &SequencerClient<ApiVer>,
     l1: Option<&Provider<Http>>,
     parent: Option<Header>,
     height: usize,
@@ -76,31 +79,31 @@ async fn verify_header<Ver: StaticVersionType>(
 
     let mut ok = true;
 
-    if !opt.no_timestamps && header.timestamp < parent.timestamp {
+    if !opt.no_timestamps && header.timestamp() < parent.timestamp() {
         tracing::error!(
             "header {height} has decreasing timestamp: {} -> {}",
-            parent.timestamp,
-            header.timestamp
+            parent.timestamp(),
+            header.timestamp()
         );
         ok = false;
     }
-    if !opt.no_l1_heads && header.l1_head < parent.l1_head {
+    if !opt.no_l1_heads && header.l1_head() < parent.l1_head() {
         tracing::error!(
             "header {height} has decreasing L1 head: {} -> {}",
-            parent.l1_head,
-            header.l1_head
+            parent.l1_head(),
+            header.l1_head()
         );
         ok = false;
     }
-    if !opt.no_l1_finalized && header.l1_finalized < parent.l1_finalized {
+    if !opt.no_l1_finalized && header.l1_finalized() < parent.l1_finalized() {
         tracing::error!(
             "header {height} has decreasing L1 finalized: {:?} -> {:?}",
-            parent.l1_finalized,
-            header.l1_finalized
+            parent.l1_finalized(),
+            header.l1_finalized()
         );
         ok = false;
 
-        if let (Some(l1), Some(l1_finalized)) = (l1, &header.l1_finalized) {
+        if let (Some(l1), Some(l1_finalized)) = (l1, &header.l1_finalized()) {
             let l1_block = get_l1_block(l1, l1_finalized.number).await;
             if *l1_finalized != l1_block {
                 tracing::error!(
@@ -114,7 +117,10 @@ async fn verify_header<Ver: StaticVersionType>(
     (header, ok)
 }
 
-async fn get_header<Ver: StaticVersionType>(seq: &SequencerClient<Ver>, height: usize) -> Header {
+async fn get_header<ApiVer: StaticVersionType>(
+    seq: &SequencerClient<ApiVer>,
+    height: usize,
+) -> Header {
     loop {
         match seq
             .get(&format!("availability/header/{height}"))
@@ -164,13 +170,10 @@ async fn get_l1_block(l1: &Provider<Http>, height: u64) -> L1BlockInfo {
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let opt = Arc::new(Options::parse());
-    let seq = Arc::new(SequencerClient::<es_version::SequencerVersion>::new(
-        opt.url.clone(),
-    ));
+    opt.logging.init();
+
+    let seq = Arc::new(SequencerClient::<SequencerApiVersion>::new(opt.url.clone()));
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);

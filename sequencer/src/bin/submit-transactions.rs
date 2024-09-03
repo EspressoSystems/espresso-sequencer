@@ -1,10 +1,14 @@
 //! Utility program to submit random transactions to an Espresso Sequencer.
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
-use es_version::{SequencerVersion, SEQUENCER_VERSION};
+use espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
@@ -14,17 +18,18 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::{
-    options::{parse_duration, parse_size},
-    SeqTypes, Transaction,
-};
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use sequencer::SequencerApiVersion;
+use sequencer_utils::logging;
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use vbs::version::StaticVersionType;
+
+#[cfg(feature = "benchmarking")]
+use csv::Writer;
+#[cfg(feature = "benchmarking")]
+use std::fs::OpenOptions;
+#[cfg(feature = "benchmarking")]
+use std::num::NonZeroUsize;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -124,6 +129,24 @@ struct Options {
     /// URL of the query service.
     #[clap(env = "ESPRESSO_SEQUENCER_URL")]
     url: Url,
+
+    /// Relay num_nodes for benchmark results output
+    #[cfg(feature = "benchmarking")]
+    #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_NUM_NODES")]
+    num_nodes: NonZeroUsize,
+
+    /// The first block that benchmark starts counting in
+    #[cfg(feature = "benchmarking")]
+    #[clap(short, long, env = "ESPRESSO_BENCH_START_BLOCK")]
+    benchmark_start_block: NonZeroUsize,
+
+    /// The final block that benchmark counts in
+    #[cfg(feature = "benchmarking")]
+    #[clap(short, long, env = "ESPRESSO_BENCH_END_BLOCK")]
+    benchmark_end_block: NonZeroUsize,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 impl Options {
@@ -139,10 +162,9 @@ impl Options {
 
 #[async_std::main]
 async fn main() {
-    setup_backtrace();
-    setup_logging();
-
     let opt = Options::parse();
+    opt.logging.init();
+
     tracing::warn!("starting load generator for sequencer {}", opt.url);
 
     let (sender, mut receiver) = mpsc::channel(opt.channel_bound);
@@ -152,7 +174,7 @@ async fn main() {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
     // Subscribe to block stream so we can check that our transactions are getting sequenced.
-    let client = Client::<Error, SequencerVersion>::new(opt.url.clone());
+    let client = Client::<Error, SequencerApiVersion>::new(opt.url.clone());
     let block_height: usize = client.get("status/block-height").send().await.unwrap();
     let mut blocks = client
         .socket(&format!("availability/stream/blocks/{}", block_height - 1))
@@ -167,19 +189,40 @@ async fn main() {
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(&mut rng).unwrap(),
-            SEQUENCER_VERSION,
+            SequencerApiVersion::instance(),
         ));
     }
 
     // Start healthcheck endpoint once tasks are running.
     if let Some(port) = opt.port {
-        spawn(server(port, SEQUENCER_VERSION));
+        spawn(server(port, SequencerApiVersion::instance()));
     }
 
     // Keep track of the results.
     let mut pending = HashMap::new();
     let mut total_latency = Duration::default();
     let mut total_transactions = 0;
+
+    // Keep track of the latency after warm up for benchmarking
+    #[cfg(feature = "benchmarking")]
+    let mut num_block = 0;
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_total_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_minimum_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_maximum_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_total_transactions = 0;
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_finish = false;
+    #[cfg(feature = "benchmarking")]
+    let mut total_throughput = 0;
+    #[cfg(feature = "benchmarking")]
+    let mut start: Instant = Instant::now(); // will be re-assign once has_started turned to true
+    #[cfg(feature = "benchmarking")]
+    let mut has_started: bool = false;
+
     while let Some(block) = blocks.next().await {
         let block: BlockQueryData<SeqTypes> = match block {
             Ok(block) => block,
@@ -190,6 +233,14 @@ async fn main() {
         };
         let received_at = Instant::now();
         tracing::debug!("got block {}", block.height());
+        #[cfg(feature = "benchmarking")]
+        {
+            num_block += 1;
+            if !has_started && (num_block as usize) >= opt.benchmark_start_block.into() {
+                has_started = true;
+                start = Instant::now();
+            }
+        }
 
         // Get all transactions which were submitted before this block.
         while let Ok(Some(tx)) = receiver.try_next() {
@@ -208,7 +259,94 @@ async fn main() {
                 total_latency += latency;
                 total_transactions += 1;
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
+                #[cfg(feature = "benchmarking")]
+                {
+                    if has_started && !benchmark_finish {
+                        benchmark_minimum_latency = if total_transactions == 0 {
+                            latency
+                        } else {
+                            std::cmp::min(benchmark_minimum_latency, latency)
+                        };
+                        benchmark_maximum_latency = if total_transactions == 0 {
+                            latency
+                        } else {
+                            std::cmp::max(benchmark_maximum_latency, latency)
+                        };
+
+                        benchmark_total_latency += latency;
+                        benchmark_total_transactions += 1;
+                        // Transaction = NamespaceId(u64) + payload(Vec<u8>)
+                        let payload_length = tx.into_payload().len();
+                        let tx_sz = payload_length * std::mem::size_of::<u8>() // size of payload
+                        + std::mem::size_of::<u64>() // size of the namespace
+                        + std::mem::size_of::<Transaction>(); // size of the struct wrapper
+                        total_throughput += tx_sz;
+                    }
+                }
             }
+        }
+
+        #[cfg(feature = "benchmarking")]
+        if !benchmark_finish && (num_block as usize) >= opt.benchmark_end_block.into() {
+            let block_range = format!("{}~{}", opt.benchmark_start_block, opt.benchmark_end_block,);
+            let transaction_size_range_in_bytes = format!("{}~{}", opt.min_size, opt.max_size,);
+            let transactions_per_batch_range = format!(
+                "{}~{}",
+                (opt.jobs as u64 * opt.min_batch_size),
+                (opt.jobs as u64 * opt.max_batch_size),
+            );
+            let benchmark_average_latency = benchmark_total_latency / benchmark_total_transactions;
+            let avg_transaction_size = total_throughput as u32 / benchmark_total_transactions;
+            let total_time_elapsed_in_sec = start.elapsed(); // in seconds
+            let avg_throughput_bytes_per_sec = (total_throughput as u64)
+                / std::cmp::max(total_time_elapsed_in_sec.as_secs(), 1u64);
+            // Open the CSV file in append mode
+            let results_csv_file = OpenOptions::new()
+                .create(true)
+                .append(true) // Open in append mode
+                .open("scripts/benchmarks_results/results.csv")
+                .unwrap();
+            // Open a file for writing
+            let mut wtr = Writer::from_writer(results_csv_file);
+            let mut pub_or_priv_pool = "private";
+            if opt.use_public_mempool() {
+                pub_or_priv_pool = "public";
+            }
+            let _ = wtr.write_record([
+                "total_nodes",
+                "da_committee_size",
+                "block_range",
+                "transaction_size_range_in_bytes",
+                "transaction_per_batch_range",
+                "pub_or_priv_pool",
+                "avg_latency_in_sec",
+                "minimum_latency_in_sec",
+                "maximum_latency_in_sec",
+                "avg_throughput_bytes_per_sec",
+                "total_transactions",
+                "avg_transaction_size_in_bytes",
+                "total_time_elapsed_in_sec",
+            ]);
+            let _ = wtr.write_record(&[
+                opt.num_nodes.to_string(),
+                opt.num_nodes.to_string(),
+                block_range,
+                transaction_size_range_in_bytes,
+                transactions_per_batch_range,
+                pub_or_priv_pool.to_string(),
+                benchmark_average_latency.as_secs().to_string(),
+                benchmark_minimum_latency.as_secs().to_string(),
+                benchmark_maximum_latency.as_secs().to_string(),
+                avg_throughput_bytes_per_sec.to_string(),
+                benchmark_total_transactions.to_string(),
+                avg_transaction_size.to_string(),
+                total_time_elapsed_in_sec.as_secs().to_string(),
+            ]);
+            let _ = wtr.flush();
+            println!(
+                "Latency results successfully saved in scripts/benchmarks_results/results.csv"
+            );
+            benchmark_finish = true;
         }
 
         // If a lot of transactions are pending, it might indicate the sequencer is struggling to
@@ -243,15 +381,15 @@ struct SubmittedTransaction {
     submitted_at: Instant,
 }
 
-async fn submit_transactions<Ver: StaticVersionType>(
+async fn submit_transactions<ApiVer: StaticVersionType>(
     opt: Options,
     mut sender: Sender<SubmittedTransaction>,
     mut rng: ChaChaRng,
-    _: Ver,
+    _: ApiVer,
 ) {
     let url = opt.submit_url();
     tracing::info!(%url, "starting load generator task");
-    let client = Client::<Error, Ver>::new(url);
+    let client = Client::<Error, ApiVer>::new(url);
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -293,7 +431,10 @@ async fn submit_transactions<Ver: StaticVersionType>(
                     .send()
                     .await
             } {
-                tracing::error!("failed to submit batch of {txns_batch_count} transactions: {err}");
+                tracing::error!(
+                    ?err,
+                    "failed to submit batch of {txns_batch_count} transactions"
+                );
             } else {
                 tracing::info!("submitted batch of {txns_batch_count} transactions");
                 let submitted_at = Instant::now();
@@ -317,7 +458,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
     }
 }
 
-async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
+async fn server<ApiVer: StaticVersionType + 'static>(port: u16, bind_version: ApiVer) {
     if let Err(err) = App::<(), ServerError>::with_state(())
         .serve(format!("0.0.0.0:{port}"), bind_version)
         .await

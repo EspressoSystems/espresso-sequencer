@@ -34,10 +34,7 @@ jobs:
         with:
           version: nightly
 
-      - name: Install just command runner
-        run: |
-          sudo snap install --edge --classic just
-          just --version
+      - uses: taiki-e/install-action@nextest
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -47,21 +44,21 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
-      # sometimes `Test` fail with out-of-disk-space error
-      # thus free some space first
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          # this might remove tools that are actually needed,
-          # if set to "true" but frees about 6 GB
-          tool-cache: false
-
-      - name: Test
+      - name: Build
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           cargo build --locked --bin diff-test --release
-          cargo test --locked --release --workspace --all-features --no-run
-          cargo test --locked --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
-        timeout-minutes: 40
+          cargo nextest run --locked --release --workspace --all-features --no-run
+        timeout-minutes: 90
+
+      - name: Test
+        env:
+          CARGO_TERM_COLOR: always
+        # Build test binary with `testing` feature, which requires `hotshot_example` config
+        run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          export PATH="$PWD/target/release:$PATH"
+          cargo nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
+        timeout-minutes: 5

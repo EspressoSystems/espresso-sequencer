@@ -1,16 +1,20 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
+
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
-use cld::ClDuration;
-use es_version::SEQUENCER_VERSION;
+use espresso_types::{
+    eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
+    SequencerVersions, V0_1,
+};
 use hotshot::traits::ValidatedState;
-use hotshot_types::data::ViewNumber;
-use hotshot_types::traits::node_implementation::ConsensusTime;
-use sequencer::{eth_signature_key::EthKeyPair, Genesis, L1Params};
-use snafu::Snafu;
-use std::num::NonZeroUsize;
-use std::{path::PathBuf, str::FromStr, time::Duration};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::node_implementation::{ConsensusTime, Versions},
+};
+use sequencer::{Genesis, L1Params};
+use sequencer_utils::logging;
 use url::Url;
+use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 struct NonPermissionedBuilderOptions {
@@ -19,7 +23,7 @@ struct NonPermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL",
-        default_value = "http://localhost:8081"
+        default_value = "http://localhost:22001"
     )]
     hotshot_event_streaming_url: Url,
 
@@ -83,31 +87,39 @@ struct NonPermissionedBuilderOptions {
     /// Path to TOML file containing genesis state.
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
-}
 
-#[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
-    reason: String,
-}
-
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let opt = NonPermissionedBuilderOptions::parse();
+    opt.logging.init();
+
     let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
 
-    let sequencer_version = SEQUENCER_VERSION;
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
 
+    match (base, upgrade) {
+        (V0_1::VERSION, FeeVersion::VERSION) => {
+            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
+        }
+        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+            run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
+        }
+        _ => panic!(
+            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
+        ),
+    }
+}
+
+async fn run<V: Versions>(
+    genesis: Genesis,
+    opt: NonPermissionedBuilderOptions,
+) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
@@ -118,13 +130,10 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state = build_instance_state(
-        genesis.chain_config,
-        l1_params,
-        opt.state_peers,
-        sequencer_version,
-    )
-    .unwrap();
+    let instance_state =
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
+
+    let base_fee = genesis.max_base_fee();
 
     let validated_state = ValidatedState::genesis(&instance_state).0;
 
@@ -148,8 +157,9 @@ async fn main() -> anyhow::Result<()> {
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
+        base_fee,
     )
-    .await;
+    .await?;
 
     // Sleep forever
     async_std::future::pending::<()>().await;

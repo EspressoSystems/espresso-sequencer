@@ -1,7 +1,10 @@
+use std::{error::Error, time::Duration};
+
 use anyhow::anyhow;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
 use contract_bindings::hot_shot::{HotShot, HotShotErrors, Qc};
+use espresso_types::Header;
 use ethers::prelude::*;
 use futures::{
     future,
@@ -12,16 +15,14 @@ use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
 use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
-use std::error::Error;
-use std::time::Duration;
 use surf_disco::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{Header, SeqTypes};
+use crate::SeqTypes;
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type HotShotClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
+type HotShotClient<ApiVer> = surf_disco::Client<hotshot_query_service::Error, ApiVer>;
 
 #[derive(Clone, Debug)]
 pub struct CommitmentTaskOptions {
@@ -61,9 +62,9 @@ pub struct CommitmentTaskOptions {
 }
 
 /// main logic for the commitment task, which sync the latest blocks from HotShot to L1 contracts
-pub async fn run_hotshot_commitment_task<Ver: StaticVersionType>(opt: &CommitmentTaskOptions) {
+pub async fn run_hotshot_commitment_task<ApiVer: StaticVersionType>(opt: &CommitmentTaskOptions) {
     // init a client connecting to HotShot query service
-    let hotshot = HotShotClient::<Ver>::builder(
+    let hotshot = HotShotClient::<ApiVer>::builder(
         opt.query_service_url
             .clone()
             .expect("query service URL must be specified"),
@@ -86,8 +87,8 @@ pub async fn run_hotshot_commitment_task<Ver: StaticVersionType>(opt: &Commitmen
     sequence(hotshot, contract, opt.delay).await;
 }
 
-async fn sequence<Ver: StaticVersionType>(
-    hotshot: HotShotClient<Ver>,
+async fn sequence<ApiVer: StaticVersionType>(
+    hotshot: HotShotClient<ApiVer>,
     contract: HotShot<Signer>,
     delay: Option<Duration>,
 ) {
@@ -146,7 +147,7 @@ trait HotShotDataSource {
 }
 
 #[async_trait]
-impl<Ver: StaticVersionType> HotShotDataSource for HotShotClient<Ver> {
+impl<ApiVer: StaticVersionType> HotShotDataSource for HotShotClient<ApiVer> {
     type Error = hotshot_query_service::Error;
 
     async fn block_height(&self) -> Result<u64, Self::Error> {
@@ -274,18 +275,20 @@ fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::{l1_client::L1Client, Leaf, NodeState, ValidatedState};
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use committable::Committable;
     use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
+    use espresso_types::{L1Client, Leaf, NodeState, ValidatedState};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
     use hotshot_types::simple_certificate::QuorumCertificate;
-    use sequencer_utils::test_utils::TestL1System;
-    use sequencer_utils::AnvilOptions;
+    use sequencer_utils::{
+        test_utils::{setup_test, TestL1System},
+        AnvilOptions,
+    };
     use surf_disco::{Error, StatusCode};
+
+    use super::*;
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
@@ -330,7 +333,7 @@ mod test {
     async fn mock_leaf(height: u64, node_state: &NodeState) -> LeafQueryData<SeqTypes> {
         let mut leaf = Leaf::genesis(&ValidatedState::default(), node_state).await;
         let mut qc = QuorumCertificate::genesis(&ValidatedState::default(), node_state).await;
-        leaf.block_header_mut().height = height;
+        *leaf.block_header_mut().height_mut() = height;
         qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }
@@ -355,8 +358,7 @@ mod test {
 
     #[async_std::test]
     async fn test_sequencer_task() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = AnvilOptions::default().spawn().await;
 
@@ -430,8 +432,7 @@ mod test {
 
     #[async_std::test]
     async fn test_idempotency() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = AnvilOptions::default().spawn().await;
 
@@ -495,8 +496,7 @@ mod test {
 
     #[async_std::test]
     async fn test_error_handling() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = AnvilOptions::default().spawn().await;
 

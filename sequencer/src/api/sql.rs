@@ -1,18 +1,7 @@
-use super::{
-    data_source::{CatchupDataSource, Provider, SequencerDataSource},
-    AccountQueryData, BlocksFrontier,
-};
-use crate::{
-    persistence::{
-        sql::{sql_param, transaction, Options},
-        ChainConfigPersistence,
-    },
-    state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
-    ChainConfig, SeqTypes,
-};
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
+use espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccountProof, FeeMerkleTree};
 use ethers::prelude::Address;
 use futures::FutureExt;
 use hotshot_query_service::{
@@ -25,6 +14,18 @@ use hotshot_query_service::{
 };
 use hotshot_types::data::ViewNumber;
 use jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
+
+use super::{
+    data_source::{CatchupDataSource, Provider, SequencerDataSource},
+    AccountQueryData, BlocksFrontier,
+};
+use crate::{
+    persistence::{
+        sql::{sql_param, transaction, Options},
+        ChainConfigPersistence,
+    },
+    SeqTypes,
+};
 
 pub type DataSource = SqlDataSource<SeqTypes, Provider>;
 
@@ -183,10 +184,10 @@ impl ChainConfigPersistence for DataSource {
 #[cfg(test)]
 mod impl_testable_data_source {
 
+    use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
+
     use super::*;
     use crate::api::{self, data_source::testing::TestableSequencerDataSource};
-
-    use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
 
     fn tmp_options(db: &TmpDb) -> Options {
         Options {
@@ -218,9 +219,7 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod generic_tests {
-    use super::super::api_tests;
-    use super::DataSource;
-
+    use super::{super::api_tests, DataSource};
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;

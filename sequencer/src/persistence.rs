@@ -8,259 +8,13 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{
-    catchup::BackoffParams, ChainConfig, Leaf, NodeState, PubKey, SeqTypes, StateCatchup,
-    ValidatedState, ViewNumber,
-};
-use anyhow::{bail, ensure, Context};
-use async_std::sync::Arc;
 use async_trait::async_trait;
-use committable::{Commitment, Committable};
-use hotshot::{
-    traits::ValidatedState as _,
-    types::{Event, EventType},
-    HotShotInitializer,
-};
-use hotshot_types::{
-    consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
-    event::{HotShotAction, LeafInfo},
-    message::Proposal,
-    simple_certificate::QuorumCertificate,
-    traits::node_implementation::ConsensusTime,
-    utils::View,
-};
-use std::{cmp::max, collections::BTreeMap};
+use committable::Commitment;
+use espresso_types::v0_3::ChainConfig;
 
 pub mod fs;
 pub mod no_storage;
 pub mod sql;
-
-pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
-
-#[async_trait]
-pub trait PersistenceOptions: Clone + Send + Sync + 'static {
-    type Persistence: SequencerPersistence;
-
-    async fn create(self) -> anyhow::Result<Self::Persistence>;
-    async fn reset(self) -> anyhow::Result<()>;
-
-    async fn create_catchup_provider(
-        self,
-        backoff: BackoffParams,
-    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        self.create().await?.into_catchup_provider(backoff)
-    }
-}
-
-#[async_trait]
-pub trait SequencerPersistence: Sized + Send + Sync + 'static {
-    /// Use this storage as a state catchup backend, if supported.
-    fn into_catchup_provider(
-        self,
-        _backoff: BackoffParams,
-    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        bail!("state catchup is not implemented for this persistence type");
-    }
-
-    /// Load the orchestrator config from storage.
-    ///
-    /// Returns `None` if no config exists (we are joining a network for the first time). Fails with
-    /// `Err` if it could not be determined whether a config exists or not.
-    async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>>;
-
-    /// Save the orchestrator config to storage.
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
-
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()>;
-
-    /// Saves the latest decided leaf.
-    ///
-    /// If the height of the new leaf is not greater than the height of the previous decided leaf,
-    /// storage is not updated.
-    async fn save_anchor_leaf(
-        &mut self,
-        leaf: &Leaf,
-        qc: &QuorumCertificate<SeqTypes>,
-    ) -> anyhow::Result<()>;
-
-    /// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
-    async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
-
-    /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
-    async fn load_anchor_leaf(&self)
-        -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
-
-    /// Load undecided state saved by consensus before we shut down.
-    async fn load_undecided_state(
-        &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
-
-    /// Load the proposals saved by consensus
-    async fn load_quorum_proposals(
-        &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>;
-
-    async fn load_vid_share(
-        &self,
-        view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>>;
-    async fn load_da_proposal(
-        &self,
-        view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>>;
-
-    /// Load the latest known consensus state.
-    ///
-    /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
-    /// if there is no saved state).
-    async fn load_consensus_state(
-        &self,
-        state: NodeState,
-    ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
-        let genesis_validated_state = ValidatedState::genesis(&state).0;
-        let highest_voted_view = match self
-            .load_latest_acted_view()
-            .await
-            .context("loading last voted view")?
-        {
-            Some(view) => {
-                tracing::info!(?view, "starting from saved view");
-                view
-            }
-            None => {
-                tracing::info!("no saved view, starting from genesis");
-                ViewNumber::genesis()
-            }
-        };
-        let (leaf, high_qc) = match self
-            .load_anchor_leaf()
-            .await
-            .context("loading anchor leaf")?
-        {
-            Some((leaf, high_qc)) => {
-                tracing::info!(?leaf, ?high_qc, "starting from saved leaf");
-                ensure!(
-                    leaf.view_number() == high_qc.view_number,
-                    format!(
-                        "loaded anchor leaf from view {:?}, but high QC is from view {:?}",
-                        leaf.view_number(),
-                        high_qc.view_number
-                    )
-                );
-                (leaf, high_qc)
-            }
-            None => {
-                tracing::info!("no saved leaf, starting from genesis leaf");
-                (
-                    Leaf::genesis(&genesis_validated_state, &state).await,
-                    QuorumCertificate::genesis(&genesis_validated_state, &state).await,
-                )
-            }
-        };
-        let validated_state = if leaf.block_header().height == 0 {
-            // If we are starting from genesis, we can provide the full state.
-            Some(Arc::new(genesis_validated_state))
-        } else {
-            // Otherwise, we will have to construct a sparse state and fetch missing data during
-            // catchup.
-            None
-        };
-
-        // If we are not starting from genesis, we start from the view following the maximum view
-        // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
-        // starting in a view in which we had already voted before the restart, and prevents
-        // unnecessary catchup from starting in a view earlier than the anchor leaf.
-        let mut view = max(highest_voted_view, leaf.view_number());
-        if view != ViewNumber::genesis() {
-            view += 1;
-        }
-
-        let (undecided_leaves, undecided_state) = self
-            .load_undecided_state()
-            .await
-            .context("loading undecided state")?
-            .unwrap_or_default();
-
-        let saved_proposals = self
-            .load_quorum_proposals()
-            .await
-            .context("loading saved proposals")
-            .unwrap_or_default()
-            .unwrap_or_default();
-
-        tracing::info!(
-            ?leaf,
-            ?view,
-            ?high_qc,
-            ?validated_state,
-            ?undecided_leaves,
-            ?undecided_state,
-            ?saved_proposals,
-            "loaded consensus state"
-        );
-        Ok(HotShotInitializer::from_reload(
-            leaf,
-            state,
-            validated_state,
-            view,
-            saved_proposals,
-            high_qc,
-            undecided_leaves.into_values().collect(),
-            undecided_state,
-        ))
-    }
-
-    /// Update storage based on an event from consensus.
-    async fn handle_event(&mut self, event: &Event<SeqTypes>) {
-        if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
-            if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
-                if qc.view_number != leaf.view_number() {
-                    tracing::error!(
-                        leaf_view = ?leaf.view_number(),
-                        qc_view = ?qc.view_number,
-                        "latest leaf and QC are from different views!",
-                    );
-                    return;
-                }
-                if let Err(err) = self.save_anchor_leaf(leaf, qc).await {
-                    tracing::error!(
-                        ?leaf,
-                        hash = %leaf.commit(),
-                        "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}",
-                    );
-                }
-
-                if let Err(err) = self.collect_garbage(leaf.view_number()).await {
-                    tracing::error!("Failed to garbage collect. {err:#}",);
-                }
-            }
-        }
-    }
-
-    async fn append_vid(
-        &mut self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()>;
-    async fn append_da(
-        &mut self,
-        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-    ) -> anyhow::Result<()>;
-    async fn record_action(
-        &mut self,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -> anyhow::Result<()>;
-    async fn update_undecided_state(
-        &mut self,
-        leaves: CommitmentMap<Leaf>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()>;
-    async fn append_quorum_proposal(
-        &mut self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-    ) -> anyhow::Result<()>;
-}
 
 #[async_trait]
 pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
@@ -271,11 +25,13 @@ pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
     ) -> anyhow::Result<ChainConfig>;
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 mod testing {
 
-    use super::*;
+    use espresso_types::v0::traits::SequencerPersistence;
 
+    use super::*;
+    #[allow(dead_code)]
     #[async_trait]
     pub trait TestablePersistence: SequencerPersistence {
         type Storage;
@@ -288,22 +44,30 @@ mod testing {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
+    use std::collections::BTreeMap;
+
+    use committable::Committable;
+    use espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
+    use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_types::{
+        data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
+        event::HotShotAction,
+        message::Proposal,
+        simple_certificate::QuorumCertificate,
+        simple_vote::QuorumData,
+        traits::{node_implementation::ConsensusTime, EncodeBytes},
+        vid::vid_scheme,
+    };
+    use jf_vid::VidScheme;
+    use sequencer_utils::test_utils::setup_test;
+    use std::marker::PhantomData;
+    use testing::TestablePersistence;
 
     use super::*;
-    use crate::NodeState;
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-
-    use hotshot::types::BLSPubKey;
-    use hotshot::types::SignatureKey;
-    use hotshot_types::traits::EncodeBytes;
-    use hotshot_types::{event::HotShotAction, vid::vid_scheme};
-    use jf_vid::VidScheme;
-    use testing::TestablePersistence;
 
     #[async_std::test]
     pub async fn test_anchor_leaf<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let tmp = P::tmp_storage().await;
         let mut storage = P::connect(&tmp).await;
@@ -322,10 +86,17 @@ mod persistence_tests {
 
         // Store a newer leaf, make sure storage gets updated.
         let mut leaf2 = leaf1.clone();
-        leaf2.block_header_mut().height += 1;
-        let mut qc2 = qc1.clone();
-        qc2.data.leaf_commit = leaf2.commit();
-        qc2.vote_commitment = qc2.data.commit();
+        *leaf2.block_header_mut().height_mut() += 1;
+        let qc2 = QuorumCertificate::new(
+            qc1.data.clone(),
+            QuorumData {
+                leaf_commit: leaf2.commit(),
+            }
+            .commit(),
+            qc1.view_number,
+            qc1.signatures.clone(),
+            PhantomData,
+        );
         storage.save_anchor_leaf(&leaf2, &qc2).await.unwrap();
         assert_eq!(
             storage.load_anchor_leaf().await.unwrap().unwrap(),
@@ -342,8 +113,7 @@ mod persistence_tests {
 
     #[async_std::test]
     pub async fn test_voted_view<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let tmp = P::tmp_storage().await;
         let mut storage = P::connect(&tmp).await;
@@ -386,8 +156,7 @@ mod persistence_tests {
 
     #[async_std::test]
     pub async fn test_append_and_collect_garbage<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let tmp = P::tmp_storage().await;
         let mut storage = P::connect(&tmp).await;

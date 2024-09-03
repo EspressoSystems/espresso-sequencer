@@ -1,16 +1,15 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use std::{num::NonZeroUsize, time::Duration};
+
 use clap::Parser;
 use derive_more::From;
+use espresso_types::{parse_duration, PubKey, Ratio};
 use ethers::utils::hex::{self, FromHexError};
-use hotshot_orchestrator::config::Libp2pConfig;
-use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
-use sequencer::{
-    options::{parse_duration, Ratio},
-    PubKey,
+use hotshot_orchestrator::{
+    config::{Libp2pConfig, NetworkConfig},
+    run_orchestrator,
 };
+use sequencer_utils::logging;
 use snafu::Snafu;
-use std::num::NonZeroUsize;
-use std::time::Duration;
 use url::Url;
 use vec1::Vec1;
 
@@ -68,7 +67,11 @@ struct Args {
 
     /// The number of nodes a Libp2p node should try to maintain
     /// a connection with at one time.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N",
+        default_value = "20"
+    )]
     libp2p_mesh_n: usize,
 
     /// Seed to use for generating node keys.
@@ -92,6 +95,9 @@ struct Args {
         value_parser = parse_duration
     )]
     builder_timeout: Duration,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[derive(Debug, Snafu, From)]
@@ -110,9 +116,9 @@ fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
     let args = Args::parse();
+    args.logging.init();
+
     let mut config = NetworkConfig::<PubKey> {
         start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,

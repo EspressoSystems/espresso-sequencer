@@ -49,16 +49,12 @@
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
-      ASYNC_FLAGS =
-        " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" ";
+      ASYNC_FLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" ";
       RUSTFLAGS = "${ASYNC_FLAGS} --cfg hotshot_example";
       RUSTDOCFLAGS = ASYNC_FLAGS;
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
-      rustEnvVars = {
-        inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS
-          CARGO_TARGET_DIR;
-      };
+      rustEnvVars = { inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR; };
 
       solhintPkg = { buildNpmPackage, fetchFromGitHub }:
         buildNpmPackage rec {
@@ -96,10 +92,11 @@
             inherit overlays localSystem crossSystem;
           };
         in
-        import ./cross-shell.nix {
-          inherit pkgs;
-          envVars = rustEnvVars;
-        };
+        import ./cross-shell.nix
+          {
+            inherit pkgs;
+            envVars = rustEnvVars;
+          };
     in
     with pkgs; {
       checks = {
@@ -147,13 +144,6 @@
               entry = "solhint --fix 'contracts/{script,src,test}/**/*.sol'";
               types_or = [ "solidity" ];
               pass_filenames = true;
-            };
-            gas-report = {
-              enable = true;
-              description = "Update gas benchmark in .gas-snapshot";
-              entry = "just gas-benchmarks";
-              types_or = [ "solidity" ];
-              pass_filenames = false;
             };
             contract-bindings = {
               enable = true;
@@ -207,6 +197,7 @@
             cargo-audit
             cargo-edit
             cargo-sort
+            cargo-nextest
             typos
             just
             fenix.packages.${system}.rust-analyzer
@@ -268,8 +259,10 @@
           ];
         });
       devShells.coverage =
-        let toolchain = pkgs.rust-bin.nightly.latest.minimal;
-        in mkShell (rustEnvVars // {
+        let
+          toolchain = pkgs.rust-bin.nightly.latest.minimal;
+        in
+        mkShell (rustEnvVars // {
           buildInputs = [
             # Rust dependencies
             pkg-config
@@ -283,8 +276,7 @@
           shellHook = ''
             RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
           '';
-          RUSTDOCFLAGS =
-            "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests";
+          RUSTDOCFLAGS = "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests";
         });
 
       devShells.rustShell =

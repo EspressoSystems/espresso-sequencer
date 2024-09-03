@@ -1,14 +1,11 @@
 //! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
 use anyhow::{Context, Result};
-use cdn_broker::reexports::crypto::signature::KeyPair;
-use cdn_broker::{Broker, Config};
+use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config};
 use clap::Parser;
-use hotshot_types::traits::node_implementation::NodeType;
-use hotshot_types::traits::signature_key::SignatureKey;
+use espresso_types::{parse_size, SeqTypes};
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use sequencer::network::cdn::{ProductionDef, WrappedSignatureKey};
-use sequencer::options::parse_size;
-use sequencer::SeqTypes;
 use sha2::Digest;
 use tracing_subscriber::EnvFilter;
 

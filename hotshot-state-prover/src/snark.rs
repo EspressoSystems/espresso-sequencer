@@ -5,6 +5,8 @@ use ark_std::{
     rand::{CryptoRng, RngCore},
 };
 use ethers::types::U256;
+/// BLS verification key, base field and Schnorr verification key
+pub use hotshot_stake_table::vec_based::config::QCVerKey;
 use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput, StateVerKey};
 use jf_plonk::{
     errors::PlonkError,
@@ -12,9 +14,6 @@ use jf_plonk::{
     transcript::SolidityTranscript,
 };
 use jf_signature::schnorr::Signature;
-
-/// BLS verification key, base field and Schnorr verification key
-pub use hotshot_stake_table::vec_based::config::QCVerKey;
 /// Proving key
 pub type ProvingKey = jf_plonk::proof_system::structs::ProvingKey<Bn254>;
 /// Verifying key
@@ -44,12 +43,15 @@ pub fn preprocess(
 /// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a bit vector indicates the signers
 /// - a quorum threshold
+///
 /// Returns error or a pair `(proof, public_inputs)` asserting that
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all schnorr signatures over the light client state are valid
+///
 /// # Errors
 /// Errors if unable to generate proof
+///
 /// # Panics
 /// if the stake table is not up to date
 #[allow(clippy::too_many_arguments)]
@@ -96,11 +98,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_state_update_proof, preprocess, CircuitField, UniversalSrs};
-    use crate::{
-        circuit::build_for_preprocessing,
-        test_utils::{key_pairs_for_testing, stake_table_for_testing},
-    };
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
     use ark_ed_on_bn254::EdwardsConfig as Config;
@@ -125,6 +122,12 @@ mod tests {
         SignatureScheme,
     };
     use jf_utils::test_rng;
+
+    use super::{generate_state_update_proof, preprocess, CircuitField, UniversalSrs};
+    use crate::{
+        circuit::build_for_preprocessing,
+        test_utils::{key_pairs_for_testing, stake_table_for_testing},
+    };
 
     const ST_CAPACITY: usize = 20;
 

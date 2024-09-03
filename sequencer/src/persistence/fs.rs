@@ -1,9 +1,17 @@
-use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, SeqTypes, ViewNumber};
+use std::{
+    collections::BTreeMap,
+    fs::{self, File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+};
+
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use clap::Parser;
-
+use espresso_types::{
+    v0::traits::{PersistenceOptions, SequencerPersistence},
+    Leaf, NetworkConfig, SeqTypes,
+};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
@@ -14,12 +22,8 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
-use std::{
-    collections::BTreeMap,
-    fs::{self, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
-};
+
+use crate::ViewNumber;
 
 /// Options for file system backed persistence.
 #[derive(Parser, Clone, Debug)]
@@ -375,8 +379,12 @@ impl SequencerPersistence for Persistence {
     async fn record_action(
         &mut self,
         view: ViewNumber,
-        _action: HotShotAction,
+        action: HotShotAction,
     ) -> anyhow::Result<()> {
+        // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
+        if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
+            return Ok(());
+        }
         self.replace(
             &self.voted_view_path(),
             |mut file| {
@@ -556,9 +564,9 @@ fn migrate_network_config(
 
 #[cfg(test)]
 mod testing {
-    use super::super::testing::TestablePersistence;
-    use super::*;
     use tempfile::TempDir;
+
+    use super::{super::testing::TestablePersistence, *};
 
     #[async_trait]
     impl TestablePersistence for Persistence {
@@ -576,9 +584,7 @@ mod testing {
 
 #[cfg(test)]
 mod generic_tests {
-    use super::super::persistence_tests;
-    use super::Persistence;
-
+    use super::{super::persistence_tests, Persistence};
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
@@ -588,8 +594,9 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn test_config_migrations_add_builder_urls() {

@@ -2,10 +2,7 @@
 //! LightClient updates by running `cargo run -p gen-vk-contract --release`.
 //! Adapted from [CAPE project][https://github.com/EspressoSystems/cape/blob/main/contracts/rust/src/bin/gen-vk-libraries.rs]
 
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::Command;
+use std::{fs::OpenOptions, io::Write, path::PathBuf, process::Command};
 
 use ethers::core::abi::AbiEncode;
 use hotshot_contract_adapter::jellyfish::ParsedVerifyingKey;

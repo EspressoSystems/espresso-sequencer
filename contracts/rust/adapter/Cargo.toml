@@ -8,11 +8,8 @@ edition = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 ark-bn254 = { workspace = true }
-ark-ec = { workspace = true }
-ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-poly = { workspace = true }
-ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 contract-bindings = { path = "../../../contract-bindings" }
 diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }

@@ -1,9 +1,10 @@
+use std::time::Duration;
+
 use anyhow::{bail, ensure, Context};
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::Arc, task::sleep};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use contract_bindings::fee_contract::FeeContract;
-use es_version::SequencerVersion;
+use espresso_types::{eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header};
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
@@ -14,20 +15,25 @@ use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
 };
-use sequencer::{
-    eth_signature_key::EthKeyPair,
-    state::{FeeAccount, FeeAmount, FeeMerkleTree},
-    Header,
-};
-use std::time::Duration;
+use sequencer::SequencerApiVersion;
+use sequencer_utils::logging;
 use surf_disco::{error::ClientError, Url};
 
-type EspressoClient = surf_disco::Client<ClientError, SequencerVersion>;
+type EspressoClient = surf_disco::Client<ClientError, SequencerApiVersion>;
 
 type FeeMerkleProof = MerkleProof<FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }>;
 
 /// Command-line utility for working with the Espresso bridge.
 #[derive(Debug, Parser)]
+struct Options {
+    #[clap(flatten)]
+    logging: logging::Config,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
 enum Command {
     Deposit(Deposit),
     Balance(Balance),
@@ -204,15 +210,15 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
                 continue;
             }
         };
-        let Some(l1_finalized) = header.l1_finalized else {
+        let Some(l1_finalized) = header.l1_finalized() else {
             continue;
         };
         if l1_finalized.number >= l1_block {
-            tracing::info!(block = header.height, "deposit finalized on Espresso");
-            break header.height;
+            tracing::info!(block = header.height(), "deposit finalized on Espresso");
+            break header.height();
         } else {
             tracing::debug!(
-                block = header.height,
+                block = header.height(),
                 l1_block,
                 ?l1_finalized,
                 "waiting for deposit on Espresso"
@@ -332,10 +338,10 @@ async fn get_espresso_balance(
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
+    let opt = Options::parse();
+    opt.logging.init();
 
-    match Command::parse() {
+    match opt.command {
         Command::Deposit(opt) => deposit(opt).await,
         Command::Balance(opt) => balance(opt).await,
         Command::L1Balance(opt) => l1_balance(opt).await,

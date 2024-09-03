@@ -11,16 +11,15 @@ libp2p = ["sequencer/libp2p"]
 
 [dependencies]
 anyhow = { workspace = true }
-async-broadcast = "0.7.0"
+async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = "2.2"
 async-std = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
-cld = { workspace = true }
 committable = { workspace = true }
 dotenvy = { workspace = true }
-es-version = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot = { workspace = true }
@@ -38,11 +37,10 @@ libp2p = { workspace = true }
 portpicker = { workspace = true }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
-snafu = { workspace = true }
 surf = "2.3.1"
 surf-disco = { workspace = true }
-tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
@@ -51,3 +49,4 @@ vec1 = { workspace = true }
 
 [dev-dependencies]
 sequencer = { path = "../sequencer", features = ["testing"] }
+tempfile = "3.10.1"

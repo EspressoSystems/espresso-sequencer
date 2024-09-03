@@ -1,6 +1,10 @@
 //! Utility program to generate keypairs
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
 use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
@@ -9,11 +13,7 @@ use ethers::utils::hex;
 use hotshot::types::SignatureKey;
 use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 use rand::{RngCore, SeedableRng};
-use std::{
-    fs::{self, File},
-    io::Write,
-    path::PathBuf,
-};
+use sequencer_utils::logging;
 use tracing::info_span;
 
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
@@ -100,6 +100,9 @@ struct Options {
     /// called .seed.
     #[clap(short, long, name = "OUT")]
     out: PathBuf,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 fn parse_seed(s: &str) -> Result<[u8; 32], anyhow::Error> {
@@ -118,10 +121,8 @@ fn gen_default_seed() -> [u8; 32] {
 }
 
 fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let opts = Options::parse();
+    opts.logging.init();
 
     tracing::debug!(
         "Generating {} keypairs with scheme {}",

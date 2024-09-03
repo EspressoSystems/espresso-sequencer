@@ -69,7 +69,7 @@ library PlonkVerifier {
         IPlonkVerifier.VerifyingKey memory verifyingKey,
         uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
-    ) internal view returns (bool) {
+    ) external view returns (bool) {
         _validateProof(proof);
 
         BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[0]));

@@ -1,0 +1,61 @@
+[meta]
+NAME = "espresso_dev_node_server"
+DESCRIPTION = "A server for debugging and developing with the espresso dev node"
+FORMAT_VERSION = "0.1.0"
+
+[route.devinfo]
+PATH = ["/dev-info"]
+DOC = """
+Get the debug info
+
+Returns
+```
+{
+    "builder_url": string,
+    "l1_prover_port": integer,
+    "l1_url": string,
+    "l1_light_client_address": address,
+    "alt_chains": 
+        [{ 
+        "chain_id" : integer, 
+        "provider_url": string, 
+        "light_client_address": address
+        "prover_port" : integer
+        }]
+}
+```
+"""
+
+[route.sethotshotdown]
+PATH = ["set-hotshot-down"]
+METHOD = "POST"
+DOC = """
+Set the hotshot down since the given L1 height.
+
+Body:
+```
+{
+    "chain_id: Option<u64>
+    "height": integer,
+}
+```
+By doing this, the L1 height in the light contract will be frozen and rollups will detect
+the HotShot failure. This is intended to be used when testing the rollups' functionalities.
+"""
+
+[route.sethotshotup]
+PATH = ["set-hotshot-up"]
+METHOD = "POST"
+DOC = """
+Set the hotshot up in the light client contract.
+
+Body:
+```
+{
+    "chain_id": u64
+}
+
+
+This is intended to be used when `set-hotshot-down` has been called previously. By calling this,
+rollups will detect the reactivity of HotShot.
+"""

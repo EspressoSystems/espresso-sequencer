@@ -1,17 +1,19 @@
 //! Utilities for generating and storing the most recent light client state signatures.
 
-use crate::{Leaf, SeqTypes, StateKeyPair};
+use std::collections::{HashMap, VecDeque};
+
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use async_std::sync::RwLock;
+use espresso_types::Leaf;
 use hotshot::types::{Event, EventType};
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_types::light_client::{
-    CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
-};
 use hotshot_types::{
     event::LeafInfo,
-    light_client::{StateSignature, StateSignatureScheme},
+    light_client::{
+        CircuitField, LightClientState, StateSignature, StateSignatureRequestBody,
+        StateSignatureScheme, StateVerKey,
+    },
     signature_key::BLSPubKey,
     traits::{
         node_implementation::ConsensusTime,
@@ -21,13 +23,13 @@ use hotshot_types::{
     PeerConfig,
 };
 use jf_crhf::CRHF;
-use jf_rescue::crhf::VariableLengthRescueCRHF;
-use jf_rescue::RescueError;
+use jf_rescue::{crhf::VariableLengthRescueCRHF, RescueError};
 use jf_signature::SignatureScheme;
-use std::collections::{HashMap, VecDeque};
 use surf_disco::{Client, Url};
 use tide_disco::error::ServerError;
 use vbs::version::StaticVersionType;
+
+use crate::{SeqTypes, StateKeyPair};
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;
@@ -36,7 +38,7 @@ pub mod relay_server;
 const SIGNATURE_STORAGE_CAPACITY: usize = 100;
 
 #[derive(Debug)]
-pub struct StateSigner<Ver: StaticVersionType> {
+pub struct StateSigner<ApiVer: StaticVersionType> {
     /// Key pair for signing a new light client state
     key_pair: StateKeyPair,
 
@@ -47,10 +49,10 @@ pub struct StateSigner<Ver: StaticVersionType> {
     stake_table_comm: StakeTableCommitmentType,
 
     /// The state relay server url
-    relay_server_client: Option<Client<ServerError, Ver>>,
+    relay_server_client: Option<Client<ServerError, ApiVer>>,
 }
 
-impl<Ver: StaticVersionType> StateSigner<Ver> {
+impl<ApiVer: StaticVersionType> StateSigner<ApiVer> {
     pub fn new(key_pair: StateKeyPair, stake_table_comm: StakeTableCommitmentType) -> Self {
         Self {
             key_pair,
@@ -151,12 +153,12 @@ fn form_light_client_state(
     let header = leaf.block_header();
     let mut block_comm_root_bytes = vec![];
     header
-        .block_merkle_tree_root
+        .block_merkle_tree_root()
         .serialize_compressed(&mut block_comm_root_bytes)?;
 
     let mut fee_ledger_comm_bytes = vec![];
     header
-        .fee_merkle_tree_root
+        .fee_merkle_tree_root()
         .serialize_compressed(&mut fee_ledger_comm_bytes)?;
     Ok(LightClientState {
         view_number: leaf.view_number().u64() as usize,

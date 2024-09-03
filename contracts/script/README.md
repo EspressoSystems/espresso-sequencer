@@ -4,16 +4,6 @@ Upgradeable Smart contracts are deployed with Openzeppelin Defender to enable a 
 and also uses a multi-sig Safe wallet. When deploying using openzeppelin the `defender` profile in the `foundry.toml`
 file is used.
 
-Note: One must set the environment variable `FOUNDRY_PROFILE` accordingly to use the appropriate profile in the
-`foundry.toml` settings. E.g.
-
-```bash
-export FOUNDRY_PROFILE=defender
-```
-
-The profile, `profile.default` is used by default. Setting the `FOUNDRY_PROFILE` variable overrides the `foundry.toml`
-settings.
-
 ## Prerequisites
 
 1. Create a multisig wallet using [Safe](https://app.safe.global/welcome/accounts) on the network you'd like to deploy
@@ -29,8 +19,10 @@ settings.
    Sepolia) and "Production Environment" for mainnet.
    1. Choose a network
    1. Select the approval process created in Step 2
-   1. Be sure to save DEFENDER_SECRET ("Team Secret key") and DEFENDER_KEY ("Team API Key"), that is shown at the end of
-      this step, into the .env file. The keys won't be available later at a later point.
+   1. Be sure to save `DEFENDER_SECRET` ("Team Secret key") and `DEFENDER_KEY` ("Team API Key"), that is shown at the
+      end of this step, into the `.env.contracts` file. The keys won't be available later at a later point.
+4. In the home folder of this repo, you're in a nix shell: Enter `nix-shell` in the terminal
+5. If the contracts have never been compiled run, `forge build`
 
 ## Deployments
 
@@ -41,7 +33,18 @@ Steps:
 1. Run the Deployment command.
 
    ```bash
-   forge clean && forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
+   source .env.contracts && \
+   forge clean && \
+   FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript \
+   --ffi \
+   --rpc-url https://ethereum-sepolia.publicnode.com  \
+   --build-info true
+   source .env.contracts && \
+   forge clean && \
+   FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript \
+   --ffi \
+   --rpc-url https://ethereum-sepolia.publicnode.com  \
+   --build-info true
    ```
 
    1. Go to the [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab OpenZeppelin Defender's UI and click on the
@@ -85,15 +88,37 @@ multisig: address 0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE
 
 ### Deploying the Light Client Contract
 
-Read Deploying the Fee Contract for a more detailed version of this.
+Read Deploying the Fee Contract for a more detailed version of this. Since the LightClient contract uses the
+PlonkVerifier library, the PlonkVerifier library has to be deployed and then referenced at deployment time. Thus ensure
+you've deployed the PlonkVerifier ([see steps below](#deploy-the-plonk-verifier-library-with-defender)) and set the
+`$PLONK_VERIFIER_ADDRESS` variable in the command below. Each time modifications are made to the Plonk Verifier,
+contracts that depend on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier
+contract address as part of the deployment. Read Deploying the Fee Contract for a more detailed version of this. Since
+the LightClient contract uses the PlonkVerifier library, the PlonkVerifier library has to be deployed and then
+referenced at deployment time. Thus ensure you've deployed the PlonkVerifier
+([see steps below](#deploy-the-plonk-verifier-library-with-defender)) and set the `$PLONK_VERIFIER_ADDRESS` variable in
+the command below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light
+Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
 
 1. Initiate the Deployment with OpenZeppelin Defender
 
 ```bash
-forge clean && forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript \
+--ffi --rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
 ```
 
-Follow the same steps as for the deployment of the fee contract above.
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript \
+--ffi --rpc-url https://ethereum-sepolia.publicnode.com \
+--build-info true \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
+
+````
 
 2. Verify the Contract
 
@@ -101,7 +126,7 @@ Follow the same steps as for the deployment of the fee contract above.
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
-$LIGHT_CLIENT_CONTRACT_ADDRESS \
+$LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS \
 contracts/src/LightClient.sol:LightClient --watch
 ```
 
@@ -115,14 +140,21 @@ contracts/src/LightClient.sol:LightClient --watch
 
 Steps:
 
-1.  Ensure that the salt has been updated in the `.env` file. The upgrade script retrieves the proxyAddress from the
-    previous deployment by reading a file in the following path:
+1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
+    from the previous deployment by reading a file in the following path:
+1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
+    from the previous deployment by reading a file in the following path:
     `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
     deployment by reading the `saltHistory.json` file. Run the following command:
 
 ```bash
+source .env.contracts && \
+source .env.contracts && \
 forge clean && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
+forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which
@@ -135,16 +167,41 @@ The transactions being confirmed are: (i) the deployment of the new fee contract
 
 Ensure that you update the version in the `getVersion()` method of the latest implementation contract.
 
+Since the LightClient contract uses the PlonkVerifier library, the PlonkVerifier library has to be deployed and then
+referenced at deployment time. Thus ensure you've deployed the PlonkVerifier
+([see steps below](#deploy-the-plonk-verifier-library-with-defender)) and set the `$PLONK_VERIFIER_ADDRESS` variable in
+the command below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light
+Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
+
+Since the LightClient contract uses the PlonkVerifier library, the PlonkVerifier library has to be deployed and then
+referenced at deployment time. Thus ensure you've deployed the PlonkVerifier
+([see steps below](#deploy-the-plonk-verifier-library-with-defender)) and set the `$PLONK_VERIFIER_ADDRESS` variable in
+the command below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light
+Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
+
 Steps:
 
-1.  Ensure that the salt has been updated in the `.env` file. The upgrade script retrieves the proxyAddress from the
-    previous deployment by reading a file in the following path:
+1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
+    from the previous deployment by reading a file in the following path:
+1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
+    from the previous deployment by reading a file in the following path:
     `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
     deployment by reading the `saltHistory.json` file. Run the following command:
 
 ```bash
+source .env.contracts && \
+source .env.contracts && \
 forge clean && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which
@@ -169,3 +226,134 @@ This error occurs when build_info is set to true in the foundry.toml configurati
 foundry profile is set to default when running commands like `just gen-bindings`.
 
 Solution: `export FOUNDRY_PROFILE=default`
+
+# Deploying Upgradable Contracts without OpenZeppelin Defender or a Safe Multisig Wallet
+
+## LightClient Contract Deployment
+
+```bash
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
+--sig 'run(uint32, uint32)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com
+```
+
+## LightClient Contract Upgrade
+
+```bash
+forge script contracts/script/UpgradeLightClient.s.sol:UpgradeLightClientScript $admin $mostRecentlyDeployedProxy \
+--sig 'run(address, address)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com
+```
+
+# Deploy and Upgrade without Defender
+
+Change the $MNEMONIC in the .env file to the one of the admin
+
+To Deploy
+
+```bash
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
+--sig 'run(uint32, uint32)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com\
+--broadcast --legacy
+```
+
+To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
+
+```bash
+forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mnemonicOffset $mostRecentlyDeployedProxy \
+--sig 'run(uint32, address)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com \
+--broadcast --legacy
+```
+
+Note: the `$mnemonicOffset` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is the
+first address in that wallet. Otherwise, please specify the correct `$mnemonicOffset`
+
+# Deploy the Plonk Verifier Library with Defender
+
+The Plonk Verifier contract is not upgradeable and deploying we deploy with defender as part of our workflow so that we
+can also deploy it with a multisig wallet. Each time modifications are made to the Plonk Verifier, contracts that depend
+on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier contract address as
+part of the deployment.
+
+Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` file before each deployment.
+
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDefenderDeployScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com \
+--build-info true
+```
+
+# Deploying Upgradable Contracts without OpenZeppelin Defender or a Safe Multisig Wallet
+
+## LightClient Contract Deployment
+
+```bash
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
+--sig 'run(uint32, uint32)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com
+```
+
+## LightClient Contract Upgrade
+
+```bash
+forge script contracts/script/UpgradeLightClient.s.sol:UpgradeLightClientScript $admin $mostRecentlyDeployedProxy \
+--sig 'run(address, address)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com
+```
+
+# Deploy and Upgrade without Defender
+
+Change the $MNEMONIC in the .env file to the one of the admin
+
+To Deploy
+
+```bash
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
+--sig 'run(uint32, uint32)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com\
+--broadcast --legacy
+```
+
+To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
+
+```bash
+forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mnemonicOffset $mostRecentlyDeployedProxy \
+--sig 'run(uint32, address)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com \
+--broadcast --legacy
+```
+
+Note: the `$mnemonicOffset` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is the
+first address in that wallet. Otherwise, please specify the correct `$mnemonicOffset`
+
+# Deploy the Plonk Verifier Library with Defender
+
+The Plonk Verifier contract is not upgradeable and deploying we deploy with defender as part of our workflow so that we
+can also deploy it with a multisig wallet. Each time modifications are made to the Plonk Verifier, contracts that depend
+on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier contract address as
+part of the deployment.
+
+Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` file before each deployment.
+
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDefenderDeployScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com \
+--build-info true
+```
+````

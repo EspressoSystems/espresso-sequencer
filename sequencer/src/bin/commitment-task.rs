@@ -1,15 +1,16 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use std::{io, time::Duration};
+
 use async_std::task::spawn;
 use clap::Parser;
-use es_version::SEQUENCER_VERSION;
+use espresso_types::parse_duration;
 use ethers::prelude::*;
 use futures::FutureExt;
-use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
-use sequencer::options::parse_duration;
-use std::io;
-use std::time::Duration;
-use tide_disco::error::ServerError;
-use tide_disco::Api;
+use sequencer::{
+    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+    SequencerApiVersion,
+};
+use sequencer_utils::logging;
+use tide_disco::{error::ServerError, Api};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -57,16 +58,17 @@ pub struct Options {
     /// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
     #[clap(long, name = "DELAY", value_parser = parse_duration, env = "ESPRESSO_COMMITMENT_TASK_DELAY")]
     pub delay: Option<Duration>,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let opt = Options::parse();
+    opt.logging.init();
 
     if let Some(port) = opt.port {
-        start_http_server(port, opt.hotshot_address, SEQUENCER_VERSION).unwrap();
+        start_http_server(port, opt.hotshot_address, SequencerApiVersion::instance()).unwrap();
     }
 
     let hotshot_contract_options = CommitmentTaskOptions {
@@ -80,19 +82,19 @@ async fn main() {
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
-    run_hotshot_commitment_task::<es_version::SequencerVersion>(&hotshot_contract_options).await;
+    run_hotshot_commitment_task::<SequencerApiVersion>(&hotshot_contract_options).await;
 }
 
-fn start_http_server<Ver: StaticVersionType + 'static>(
+fn start_http_server<ApiVer: StaticVersionType + 'static>(
     port: u16,
     hotshot_address: Address,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> io::Result<()> {
     let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
+    let mut api = Api::<(), ServerError, ApiVer>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("gethotshotcontract", move |_, _| {
@@ -109,28 +111,26 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
 
 #[cfg(test)]
 mod test {
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use portpicker::pick_unused_port;
+    use sequencer::SequencerApiVersion;
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
+    use vbs::version::StaticVersionType;
 
-    use super::start_http_server;
-    use super::Address;
-    use super::ServerError;
+    use super::{start_http_server, Address, ServerError};
 
     #[async_std::test]
     async fn test_get_hotshot_contract() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let expected_addr = "0xED15E1FE0789c524398137a066ceb2EF9884E5D8"
             .parse::<Address>()
             .unwrap();
-        start_http_server(port, expected_addr, SEQUENCER_VERSION)
+        start_http_server(port, expected_addr, SequencerApiVersion::instance())
             .expect("Failed to start the server");
 
-        let client: Client<ServerError, SequencerVersion> =
+        let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 

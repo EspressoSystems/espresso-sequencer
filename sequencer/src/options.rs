@@ -1,26 +1,22 @@
-use crate::{api, catchup::BackoffParams, persistence};
-use anyhow::{bail, Context};
-use bytesize::ByteSize;
-use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
-use cld::ClDuration;
 use core::fmt::Display;
-use derivative::Derivative;
-use derive_more::From;
-use hotshot_types::light_client::StateSignKey;
-use hotshot_types::signature_key::BLSPrivKey;
-use libp2p::Multiaddr;
-use snafu::Snafu;
+use sequencer_utils::logging;
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
     fmt::{self, Formatter},
     iter::once,
-    num::ParseIntError,
     path::PathBuf,
-    str::FromStr,
-    time::Duration,
 };
+
+use anyhow::{bail, Context};
+use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
+use derivative::Derivative;
+use espresso_types::BackoffParams;
+use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
+use libp2p::Multiaddr;
 use url::Url;
+
+use crate::{api, persistence};
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
 // can be added, in any combination, to the service. These include, for example, the API server.
@@ -73,6 +69,11 @@ pub struct Options {
     )]
     pub libp2p_bind_address: String,
 
+    /// The URL we advertise to other nodes as being for our public API.
+    /// Should be supplied in `http://host:port` form.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PUBLIC_API_URL")]
+    pub public_api_url: Option<Url>,
+
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
@@ -102,6 +103,37 @@ pub struct Options {
     )]
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub state_relay_server_url: Url,
+
+    /// URL of the Auction Results Solver
+    #[clap(
+        long,
+        env = "ESPRESSO_AUCTION_RESULTS_SOLVER_URL",
+        default_value = "http://localhost:25000"
+    )]
+    #[derivative(Debug(format_with = "Display::fmt"))]
+    pub auction_results_solver_url: Url,
+    #[clap(
+        long,
+        env = "ESPRESSO_MARKETPLACE_SOLVER_PATH",
+        default_value = "marketplace-solver/"
+    )]
+    /// API path of marketplace-solver
+    pub marketplace_solver_path: String,
+    #[clap(
+        long,
+        env = "ESPRESSO_AUCTION_RESULTS_PATH",
+        default_value = "auction_results/"
+    )]
+    /// API path of marketplace-solver auction results
+    pub auction_results_path: String,
+    /// URL of generic builder
+    #[clap(
+        long,
+        env = "ESPRESSO_FALLBACK_BUILDER_URL",
+        default_value = "http://localhost:31004"
+    )]
+    #[derivative(Debug(format_with = "Display::fmt"))]
+    pub fallback_builder_url: Url,
 
     /// Path to TOML file containing genesis state.
     #[clap(
@@ -186,9 +218,25 @@ pub struct Options {
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
 
+    /// Peer nodes use to fetch missing config
+    ///
+    /// Typically, the network-wide config is fetched from the orchestrator on startup and then
+    /// persisted and loaded from local storage each time the node restarts. However, if the
+    /// persisted config is missing when the node restarts (for example, the node is being migrated
+    /// to new persistent storage), it can instead be fetched directly from a peer.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CONFIG_PEERS", value_delimiter = ',')]
+    #[derivative(Debug(format_with = "fmt_opt_urls"))]
+    pub config_peers: Option<Vec<Url>>,
+
     /// Exponential backoff for fetching missing state from peers.
     #[clap(flatten)]
     pub catchup_backoff: BackoffParams,
+
+    #[clap(flatten)]
+    pub logging: logging::Config,
+
+    #[clap(flatten)]
+    pub identity: Identity,
 }
 
 impl Options {
@@ -219,6 +267,41 @@ impl Options {
     }
 }
 
+/// Identity represents identifying information concerning the sequencer node.
+/// This information is used to populate relevant information in the metrics
+/// endpoint.  This information will also potentially be scraped and displayed
+/// in a public facing dashboard.
+#[derive(Parser, Clone, Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct Identity {
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE")]
+    pub country_code: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_LATITUDE")]
+    pub latitude: Option<f64>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE")]
+    pub longitude: Option<f64>,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_NAME")]
+    pub node_name: Option<String>,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_NAME")]
+    pub company_name: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_WEBSITE")]
+    pub company_website: Option<Url>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM", default_value = std::env::consts::OS)]
+    pub operating_system: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE", default_value = get_default_node_type())]
+    pub node_type: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NETWORK_TYPE")]
+    pub network_type: Option<String>,
+}
+
+/// get_default_node_type returns the current public facing binary name and
+/// version of this program.
+fn get_default_node_type() -> String {
+    format!("espresso-sequencer {}", env!("CARGO_PKG_VERSION"))
+}
+
 // The Debug implementation for Url is noisy, we just want to see the URL
 fn fmt_urls(v: &[Url], fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
     write!(
@@ -228,26 +311,21 @@ fn fmt_urls(v: &[Url], fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Er
     )
 }
 
-#[derive(Clone, Debug, Snafu)]
-pub struct ParseDurationError {
-    reason: String,
-}
-
-pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
-}
-
-#[derive(Clone, Debug, From, Snafu)]
-pub struct ParseSizeError {
-    msg: String,
-}
-
-pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
-    Ok(s.parse::<ByteSize>()?.0)
+fn fmt_opt_urls(
+    v: &Option<Vec<Url>>,
+    fmt: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    match v {
+        Some(urls) => {
+            write!(fmt, "Some(")?;
+            fmt_urls(urls, fmt)?;
+            write!(fmt, ")")?;
+        }
+        None => {
+            write!(fmt, "None")?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -277,34 +355,6 @@ impl PartialOrd for Ratio {
 impl Ord for Ratio {
     fn cmp(&self, other: &Self) -> Ordering {
         (self.numerator * other.denominator).cmp(&(other.numerator * self.denominator))
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum ParseRatioError {
-    #[snafu(display("numerator and denominator must be separated by :"))]
-    MissingDelimiter,
-    InvalidNumerator {
-        err: ParseIntError,
-    },
-    InvalidDenominator {
-        err: ParseIntError,
-    },
-}
-
-impl FromStr for Ratio {
-    type Err = ParseRatioError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (num, den) = s.split_once(':').ok_or(ParseRatioError::MissingDelimiter)?;
-        Ok(Self {
-            numerator: num
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidNumerator { err })?,
-            denominator: den
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidDenominator { err })?,
-        })
     }
 }
 

@@ -123,6 +123,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
 /// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a quorum threshold
+///
 /// Lengths of input vectors should not exceed the `stake_table_capacity`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `stake_table_capacity`.
 /// It checks that
@@ -130,6 +131,7 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - the signers' accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all Schnorr signatures over the light client state are valid
+///
 /// and returns
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
@@ -372,20 +374,20 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{build, GenericLightClientState};
-    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
     use ark_ed_on_bn254::EdwardsConfig as Config;
     use ethers::types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
     use jf_crhf::CRHF;
+    use jf_relation::Circuit;
     use jf_rescue::crhf::VariableLengthRescueCRHF;
     use jf_signature::{
         schnorr::{SchnorrSignatureScheme, Signature},
         SignatureScheme,
     };
-
-    use jf_relation::Circuit;
     use jf_utils::test_rng;
+
+    use super::{build, GenericLightClientState};
+    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
 
     type F = ark_ed_on_bn254::Fq;
     const ST_CAPACITY: usize = 20;

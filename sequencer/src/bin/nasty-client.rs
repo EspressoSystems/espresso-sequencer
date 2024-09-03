@@ -13,7 +13,6 @@
 //! count of various types of actions performed and the number of open streams.
 
 use anyhow::{bail, ensure, Context};
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{
     sync::RwLock,
     task::{sleep, spawn},
@@ -21,7 +20,9 @@ use async_std::{
 use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
-use es_version::{SequencerVersion, SEQUENCER_VERSION};
+use espresso_types::{
+    parse_duration, v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes,
+};
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
@@ -36,12 +37,8 @@ use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use rand::{seq::SliceRandom, RngCore};
-use sequencer::{
-    api::endpoints::NamespaceProofQueryData,
-    options::parse_duration,
-    state::{BlockMerkleTree, FeeMerkleTree},
-    Header, SeqTypes,
-};
+use sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
+use sequencer_utils::logging;
 use serde::de::DeserializeOwned;
 use std::{
     borrow::Cow,
@@ -57,6 +54,7 @@ use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
 use toml::toml;
 use tracing::info_span;
+use vbs::version::StaticVersionType;
 
 /// An adversarial stress test for sequencer APIs.
 #[derive(Clone, Debug, Parser)]
@@ -79,6 +77,9 @@ struct Options {
 
     #[clap(flatten)]
     distribution: ActionDistribution,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[derive(Clone, Copy, Debug, Parser)]
@@ -382,7 +383,7 @@ impl Queryable for Header {
     }
 
     fn payload_hash(&self) -> String {
-        self.payload_commitment.to_string()
+        self.payload_commitment().to_string()
     }
 }
 
@@ -400,7 +401,7 @@ impl Queryable for PayloadQueryData<SeqTypes> {
     }
 }
 
-type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, SequencerVersion>;
+type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, SequencerApiVersion>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -413,7 +414,7 @@ struct Subscription<T: Queryable> {
 
 #[derive(Debug)]
 struct ResourceManager<T: Queryable> {
-    client: surf_disco::Client<ClientError, SequencerVersion>,
+    client: surf_disco::Client<ClientError, SequencerApiVersion>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
     metrics: Arc<Metrics>,
@@ -791,42 +792,43 @@ impl ResourceManager<Header> {
         // Sanity check the window: prev and next should be correct bookends.
         if let Some(prev) = &window.prev {
             ensure!(
-                prev.timestamp < start,
-                format!("prev header {} is later than {start}", prev.height)
+                prev.timestamp() < start,
+                format!("prev header {} is later than {start}", prev.height())
             );
         }
         if let Some(next) = &window.next {
             ensure!(
-                next.timestamp >= end,
-                format!("next header {} is earlier than {end}", next.height)
+                next.timestamp() >= end,
+                format!("next header {} is earlier than {end}", next.height())
             );
         }
         // Each header in the window proper should have an appropriate timestamp.
         let mut prev = window.prev;
         for header in window.window {
             ensure!(
-                header.timestamp >= start && header.timestamp < end,
+                header.timestamp() >= start && header.timestamp() < end,
                 format!(
                     "header {} with timestamp {} is not in window [{start}, {end})",
-                    header.height, header.timestamp
+                    header.height(),
+                    header.timestamp()
                 )
             );
 
             if let Some(prev) = prev {
                 ensure!(
-                    prev.height + 1 == header.height,
+                    prev.height() + 1 == header.height(),
                     format!(
                         "headers in window from {start} to {end} are not consecutive (prev = {}, curr = {})",
-                        prev.height,
-                        header.height,
+                        prev.height(),
+                        header.height(),
                     ),
                 );
                 ensure!(
-                    prev.timestamp <= header.timestamp,
+                    prev.timestamp() <= header.timestamp(),
                     format!(
                         "headers in window from {start} to {end} have decreasing timestamps (prev = {}, curr = {})",
-                        prev.timestamp,
-                        header.timestamp,
+                        prev.timestamp(),
+                        header.timestamp(),
                     ),
                 );
             }
@@ -877,9 +879,13 @@ impl ResourceManager<Header> {
 
         // Check that the proof proves inclusion of `index_header` at position `index` relative to
         // `block_header`.
-        BlockMerkleTree::verify(block_header.block_merkle_tree_root.digest(), index, &proof)
-            .context("malformed merkle proof")?
-            .or_else(|_| bail!("invalid merkle proof"))?;
+        BlockMerkleTree::verify(
+            block_header.block_merkle_tree_root().digest(),
+            index,
+            &proof,
+        )
+        .context("malformed merkle proof")?
+        .or_else(|_| bail!("invalid merkle proof"))?;
         ensure!(
             proof.elem() == Some(&index_header.commit()),
             "merkle proof is for wrong element: {:?} != {:?}",
@@ -895,12 +901,12 @@ impl ResourceManager<Header> {
                     "get block proof by state commitment",
                     block,
                     index,
-                    commitment = %block_header.block_merkle_tree_root,
+                    commitment = %block_header.block_merkle_tree_root(),
                 ),
                 || async {
                     self.get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(format!(
                         "block-state/commit/{}/{index}",
-                        block_header.block_merkle_tree_root,
+                        block_header.block_merkle_tree_root(),
                     ))
                     .await
                 },
@@ -927,7 +933,10 @@ impl ResourceManager<Header> {
                     .await
             })
             .await?;
-        let builder_address = builder_header.fee_info.account();
+
+        // Since we have multiple fee accounts, we need to select one.
+        let accounts = builder_header.fee_info().accounts();
+        let builder_address = accounts.first().unwrap();
 
         // Get the header of the state snapshot we're going to query so we can later verify our
         // results.
@@ -954,7 +963,7 @@ impl ResourceManager<Header> {
         // Check that the proof is valid relative to `builder_header`.
         if proof.elem().is_some() {
             FeeMerkleTree::verify(
-                block_header.fee_merkle_tree_root.digest(),
+                block_header.fee_merkle_tree_root().digest(),
                 builder_address,
                 &proof,
             )
@@ -962,7 +971,7 @@ impl ResourceManager<Header> {
             .or_else(|_| bail!("invalid membership proof"))?;
         } else {
             ensure!(
-                FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root)
+                FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root())
                     .non_membership_verify(builder_address, &proof)
                     .context("malformed non-membership proof")?,
                 "invalid non-membership proof"
@@ -977,12 +986,12 @@ impl ResourceManager<Header> {
                     "get account proof by state commitment",
                     block,
                     %builder_address,
-                    commitment = %block_header.fee_merkle_tree_root,
+                    commitment = %block_header.fee_merkle_tree_root(),
                 ),
                 || async {
                     self.get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(format!(
                         "fee-state/commit/{}/{builder_address}",
-                        block_header.fee_merkle_tree_root,
+                        block_header.fee_merkle_tree_root(),
                     ))
                     .await
                 },
@@ -1011,13 +1020,17 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                 self.get(format!("availability/header/{block}")).await
             })
             .await?;
-        let num_namespaces = header.ns_table.iter().count();
+        let num_namespaces = header.ns_table().iter().count();
         if num_namespaces == 0 {
             tracing::info!("not fetching namespace because block {block} is empty");
             return Ok(());
         }
-        let ns_index = header.ns_table.iter().nth(index % num_namespaces).unwrap();
-        let ns = header.ns_table.read_ns_id(&ns_index).unwrap();
+        let ns_index = header
+            .ns_table()
+            .iter()
+            .nth(index % num_namespaces)
+            .unwrap();
+        let ns = header.ns_table().read_ns_id(&ns_index).unwrap();
 
         let ns_proof: NamespaceProofQueryData = self
             .retry(info_span!("fetch namespace", %ns), || async {
@@ -1041,8 +1054,8 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                 .proof
                 .unwrap()
                 .verify(
-                    &header.ns_table,
-                    &header.payload_commitment,
+                    header.ns_table(),
+                    &header.payload_commitment(),
                     vid_common.common()
                 )
                 .is_some(),
@@ -1246,14 +1259,14 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         METHOD = "METRICS"
     };
     let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
-    app.module::<ServerError, SequencerVersion>("status", api)
+    app.module::<ServerError, SequencerApiVersion>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()
         })
         .unwrap();
     if let Err(err) = app
-        .serve(format!("0.0.0.0:{port}"), SEQUENCER_VERSION)
+        .serve(format!("0.0.0.0:{port}"), SequencerApiVersion::instance())
         .await
     {
         tracing::error!("web server exited unexpectedly: {err:#}");
@@ -1262,10 +1275,9 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let opt = Options::parse();
+    opt.logging.init();
+
     let metrics = PrometheusMetrics::default();
     let total_actions = metrics.create_counter("total_actions".into(), None);
     let failed_actions = metrics.create_counter("failed_actions".into(), None);

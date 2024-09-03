@@ -4,30 +4,28 @@ pragma solidity ^0.8.0;
 import "forge-std/Script.sol";
 
 import { LightClient as LC } from "../src/LightClient.sol";
-import { LightClientMock as LCMock } from "../test/mocks/LightClientMock.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientContractScript is Script {
-    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
+    function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
         // TODO for a production deployment provide the right genesis state and value
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(numInitValidators));
+        cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, numBlocksPerEpoch);
+        return deployContract(state, stateHistoryRetentionPeriod);
     }
 
-    function runDemo(uint32 numBlocksPerEpoch)
+    function runDemo(uint32 stateHistoryRetentionPeriod)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -37,14 +35,14 @@ contract DeployLightClientContractScript is Script {
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
-        return deployContract(state, numBlocksPerEpoch);
+        return deployContract(state, stateHistoryRetentionPeriod);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
 
-    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
+    function deployContract(LC.LightClientState memory state, uint32 stateHistoryRetentionPeriod)
         private
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -58,7 +56,7 @@ contract DeployLightClientContractScript is Script {
         bytes memory data = abi.encodeWithSignature(
             "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
             state,
-            numBlocksPerEpoch,
+            stateHistoryRetentionPeriod,
             admin
         );
 

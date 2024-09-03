@@ -1,9 +1,9 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use es_version::SEQUENCER_VERSION;
 use ethers::types::U256;
 use hotshot_state_prover::service::one_honest_threshold;
-use sequencer::state_signature::relay_server::run_relay_server;
+use sequencer::{state_signature::relay_server::run_relay_server, SequencerApiVersion};
+use sequencer_utils::logging;
+use vbs::version::StaticVersionType;
 
 #[derive(Parser)]
 struct Args {
@@ -25,14 +25,16 @@ struct Args {
         default_value = "5"
     )]
     total_stake: u64,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let args = Args::parse();
+    args.logging.init();
+
     let threshold = one_honest_threshold(U256::from(args.total_stake));
 
     tracing::info!(
@@ -43,7 +45,7 @@ async fn main() {
         None,
         threshold,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
-        SEQUENCER_VERSION,
+        SequencerApiVersion::instance(),
     )
     .await
     .unwrap();
