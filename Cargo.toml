@@ -49,6 +49,7 @@ circular-buffer = "0.1.7"
 clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
 derive_more = "0.99.17"
+es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
 dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
@@ -80,30 +81,30 @@ cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = 
     "global-permits",
 ], tag = "0.4.5", package = "cdn-marshal" }
 
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "test-apis",
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", branch = "commonprefix-patch", features = [
+  "test-apis",
 ] }
 jf-crhf = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
+  "std",
 ] }
 jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
+  "std",
 ] }
 jf-pcs = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
+  "std",
+  "parallel",
 ] }
 jf-vid = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
+  "std",
+  "parallel",
 ] }
 jf-rescue = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
+  "std",
+  "parallel",
 ] }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
+  "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 libp2p = { version = "0.53", default-features = false }
