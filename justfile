@@ -47,9 +47,6 @@ test-all:
 clippy:
     cargo clippy --workspace --all-features --all-targets -- -D warnings
 
-clippy:
-    cargo clippy --workspace --all-features --all-targets -- -D warnings
-
 # Helpful shortcuts for local development
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
@@ -138,4 +135,3 @@ download-srs:
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
- 
