@@ -129,10 +129,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
     }
 
     async fn cancel_subtasks(&mut self) {}
-
-    fn get_task_name(&self) -> &'static str {
-        std::any::type_name::<ViewSyncTaskState<TYPES, I, V>>()
-    }
 }
 
 /// State of a view sync replica task
@@ -184,10 +180,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
     }
 
     async fn cancel_subtasks(&mut self) {}
-
-    fn get_task_name(&self) -> &'static str {
-        std::any::type_name::<ViewSyncReplicaTaskState<TYPES, I, V>>()
-    }
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskState<TYPES, I, V> {

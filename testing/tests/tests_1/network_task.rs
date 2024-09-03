@@ -11,7 +11,7 @@ use async_compatibility_layer::art::async_timeout;
 use async_lock::RwLock;
 use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
-use hotshot_task::task::{ConsensusTaskRegistry, Task, TaskState};
+use hotshot_task::task::{ConsensusTaskRegistry, Task};
 use hotshot_task_impls::{
     events::HotShotEvent,
     network::{self, NetworkEventTaskState},
@@ -74,8 +74,7 @@ async fn test_network_task() {
     let (tx, rx) = async_broadcast::broadcast(10);
     let mut task_reg = ConsensusTaskRegistry::new();
 
-    let task_name = network_state.get_task_name();
-    let task = Task::new(network_state, tx.clone(), rx, task_name.to_string());
+    let task = Task::new(network_state, tx.clone(), rx);
     task_reg.run_task(task);
 
     let mut generator = TestViewGenerator::generate(membership.clone(), membership);
@@ -151,12 +150,7 @@ async fn test_network_storage_fail() {
     let (tx, rx) = async_broadcast::broadcast(10);
     let mut task_reg = ConsensusTaskRegistry::new();
 
-    let task = Task::new(
-        network_state,
-        tx.clone(),
-        rx,
-        "NetworkEventTaskState_0".to_string(),
-    );
+    let task = Task::new(network_state, tx.clone(), rx);
     task_reg.run_task(task);
 
     let mut generator = TestViewGenerator::generate(membership.clone(), membership);

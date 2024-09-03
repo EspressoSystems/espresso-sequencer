@@ -18,15 +18,14 @@ use futures::{
     future::{BoxFuture, FutureExt},
     stream, StreamExt,
 };
-use hotshot_task::task::{NetworkHandle, Task};
+use hotshot_task::task::Task;
 #[cfg(feature = "rewind")]
 use hotshot_task_impls::rewind::RewindTaskState;
 use hotshot_task_impls::{
     da::DaTaskState,
     events::HotShotEvent,
-    health_check::HealthCheckTaskState,
-    helpers::broadcast_event,
-    network::{self, NetworkEventTaskState, NetworkMessageTaskState},
+    network,
+    network::{NetworkEventTaskState, NetworkMessageTaskState},
     request::NetworkRequestState,
     response::{run_response_task, NetworkResponseState},
     transactions::TransactionTaskState,
@@ -69,7 +68,14 @@ pub async fn add_request_network_task<
 >(
     handle: &mut SystemContextHandle<TYPES, I, V>,
 ) {
-    handle.add_task(NetworkRequestState::<TYPES, I>::create_from(handle).await);
+    let state = NetworkRequestState::<TYPES, I>::create_from(handle).await;
+
+    let task = Task::new(
+        state,
+        handle.internal_event_stream.0.clone(),
+        handle.internal_event_stream.1.activate_cloned(),
+    );
+    handle.consensus_registry.run_task(task);
 }
 
 /// Add a task which responds to requests on the network.
@@ -85,12 +91,9 @@ pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
         handle.private_key().clone(),
         handle.hotshot.id,
     );
-    let task_name = state.get_task_name();
     handle.network_registry.register(run_response_task::<TYPES>(
         state,
-        handle.internal_event_stream.0.clone(),
         handle.internal_event_stream.1.activate_cloned(),
-        handle.generate_task_id(task_name),
     ));
 }
 
@@ -114,10 +117,9 @@ pub fn add_network_message_task<
     let network = Arc::clone(channel);
     let mut state = network_state.clone();
     let shutdown_signal = create_shutdown_event_monitor(handle).fuse();
-    let stream = handle.internal_event_stream.0.clone();
-    let task_id = handle.generate_task_id(network_state.get_task_name());
-    let handle_task_id = task_id.clone();
     let task_handle = async_spawn(async move {
+        futures::pin_mut!(shutdown_signal);
+
         let recv_stream = stream::unfold((), |()| async {
             let msgs = match network.recv_msgs().await {
                 Ok(msgs) => {
@@ -142,10 +144,9 @@ pub fn add_network_message_task<
             Some((msgs, ()))
         });
 
-        let heartbeat_interval =
-            Task::<HealthCheckTaskState<TYPES>>::get_periodic_interval_in_secs();
         let fused_recv_stream = recv_stream.boxed().fuse();
-        futures::pin_mut!(fused_recv_stream, heartbeat_interval, shutdown_signal);
+        futures::pin_mut!(fused_recv_stream);
+
         loop {
             futures::select! {
                 () = shutdown_signal => {
@@ -167,16 +168,10 @@ pub fn add_network_message_task<
                         return;
                     }
                 }
-                _ = Task::<HealthCheckTaskState<TYPES>>::handle_periodic_delay(&mut heartbeat_interval) => {
-                    broadcast_event(Arc::new(HotShotEvent::HeartBeat(handle_task_id.clone())), &stream).await;
-                }
             }
         }
     });
-    handle.network_registry.register(NetworkHandle {
-        handle: task_handle,
-        task_id,
-    });
+    handle.network_registry.register(task_handle);
 }
 
 /// Add the network task to handle events and send messages.
@@ -199,7 +194,12 @@ pub fn add_network_event_task<
         storage: Arc::clone(&handle.storage()),
         upgrade_lock: handle.hotshot.upgrade_lock.clone(),
     };
-    handle.add_task(network_state);
+    let task = Task::new(
+        network_state,
+        handle.internal_event_stream.0.clone(),
+        handle.internal_event_stream.1.activate_cloned(),
+    );
+    handle.consensus_registry.run_task(task);
 }
 
 /// Adds consensus-related tasks to a `SystemContextHandle`.
@@ -331,7 +331,6 @@ where
 
         add_consensus_tasks::<TYPES, I, V>(&mut handle).await;
         self.add_network_tasks(&mut handle).await;
-        add_health_check_task(&mut handle).await;
 
         handle
     }
@@ -339,7 +338,6 @@ where
     /// Add byzantine network tasks with the trait
     #[allow(clippy::too_many_lines)]
     async fn add_network_tasks(&'static mut self, handle: &mut SystemContextHandle<TYPES, I, V>) {
-        let task_id = self.get_task_name();
         let state_in = Arc::new(RwLock::new(self));
         let state_out = Arc::clone(&state_in);
         // channels between the task spawned in this function and the network tasks.
@@ -378,6 +376,8 @@ where
         // and broadcast the transformed events to the replacement event stream we just created.
         let shutdown_signal = create_shutdown_event_monitor(handle).fuse();
         let send_handle = async_spawn(async move {
+            futures::pin_mut!(shutdown_signal);
+
             let recv_stream = stream::unfold(original_receiver, |mut recv| async move {
                 match recv.recv().await {
                     Ok(event) => Some((Ok(event), recv)),
@@ -388,7 +388,7 @@ where
             .boxed();
 
             let fused_recv_stream = recv_stream.fuse();
-            futures::pin_mut!(fused_recv_stream, shutdown_signal);
+            futures::pin_mut!(fused_recv_stream);
 
             loop {
                 futures::select! {
@@ -424,6 +424,8 @@ where
         // and broadcast the transformed events to the original internal event stream
         let shutdown_signal = create_shutdown_event_monitor(handle).fuse();
         let recv_handle = async_spawn(async move {
+            futures::pin_mut!(shutdown_signal);
+
             let network_recv_stream =
                 stream::unfold(receiver_from_network, |mut recv| async move {
                     match recv.recv().await {
@@ -434,7 +436,7 @@ where
                 });
 
             let fused_network_recv_stream = network_recv_stream.boxed().fuse();
-            futures::pin_mut!(fused_network_recv_stream, shutdown_signal);
+            futures::pin_mut!(fused_network_recv_stream);
 
             loop {
                 futures::select! {
@@ -465,19 +467,8 @@ where
             }
         });
 
-        handle.network_registry.register(NetworkHandle {
-            handle: send_handle,
-            task_id: handle.generate_task_id(task_id),
-        });
-        handle.network_registry.register(NetworkHandle {
-            handle: recv_handle,
-            task_id: handle.generate_task_id(task_id),
-        });
-    }
-
-    /// Gets the name of the current task
-    fn get_task_name(&self) -> &'static str {
-        std::any::type_name::<dyn EventTransformerState<TYPES, I, V>>()
+        handle.network_registry.register(send_handle);
+        handle.network_registry.register(recv_handle);
     }
 }
 
@@ -706,11 +697,4 @@ pub async fn add_network_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
         vid_membership,
         network::vid_filter,
     );
-}
-
-/// Add the health check task
-pub async fn add_health_check_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
-    handle: &mut SystemContextHandle<TYPES, I, V>,
-) {
-    handle.add_task(HealthCheckTaskState::<TYPES>::create_from(handle).await);
 }

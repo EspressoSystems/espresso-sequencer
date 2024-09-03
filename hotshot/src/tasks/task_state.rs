@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use hotshot_task_impls::{
     builder::BuilderClient, consensus::ConsensusTaskState, consensus2::Consensus2TaskState,
-    da::DaTaskState, health_check::HealthCheckTaskState, quorum_proposal::QuorumProposalTaskState,
+    da::DaTaskState, quorum_proposal::QuorumProposalTaskState,
     quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
     request::NetworkRequestState, rewind::RewindTaskState, transactions::TransactionTaskState,
     upgrade::UpgradeTaskState, vid::VidTaskState, view_sync::ViewSyncTaskState,
@@ -383,19 +383,5 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             events: Vec::new(),
             id: handle.hotshot.id,
         }
-    }
-}
-
-#[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState<TYPES, I, V>
-    for HealthCheckTaskState<TYPES>
-{
-    async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
-        let heartbeat_timeout_duration_in_secs = 30;
-        HealthCheckTaskState::new(
-            handle.hotshot.id,
-            handle.get_task_ids(),
-            heartbeat_timeout_duration_in_secs,
-        )
     }
 }

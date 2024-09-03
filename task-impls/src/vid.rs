@@ -171,8 +171,4 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for VidTaskState<T
     }
 
     async fn cancel_subtasks(&mut self) {}
-
-    fn get_task_name(&self) -> &'static str {
-        std::any::type_name::<VidTaskState<TYPES, I>>()
-    }
 }

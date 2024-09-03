@@ -40,10 +40,6 @@ impl<TYPES: NodeType> TaskEvent for HotShotEvent<TYPES> {
     fn shutdown_event() -> Self {
         HotShotEvent::Shutdown
     }
-
-    fn heartbeat_event(task_id: String) -> Self {
-        HotShotEvent::HeartBeat(task_id)
-    }
 }
 
 /// Wrapper type for the event to notify tasks that a proposal for a view is missing
@@ -226,9 +222,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// 2. The proposal has been correctly signed by the leader of the current view
     /// 3. The justify QC is valid
     QuorumProposalPreliminarilyValidated(Proposal<TYPES, QuorumProposal<TYPES>>),
-
-    /// Periodic heart beat event for health checking
-    HeartBeat(String),
 }
 
 impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
@@ -483,9 +476,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     "QuorumProposalPreliminarilyValidated(view_number={:?}",
                     proposal.data.view_number()
                 )
-            }
-            HotShotEvent::HeartBeat(task_id) => {
-                write!(f, "HeartBeat(task_id={task_id:?}")
             }
         }
     }
