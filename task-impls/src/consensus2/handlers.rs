@@ -24,9 +24,9 @@ use tracing::{debug, error, instrument};
 use super::Consensus2TaskState;
 use crate::{
     consensus2::Versions,
-    events::{HotShotEvent, HotShotTaskCompleted},
+    events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
-    vote_collection::{create_vote_accumulator, AccumulatorInfo, HandleVoteEvent},
+    vote_collection::handle_vote,
 };
 
 /// Handle a `QuorumVoteRecv` event.
@@ -49,28 +49,18 @@ pub(crate) async fn handle_quorum_vote_recv<
         )
     );
 
-    let mut collector = task_state.vote_collector.write().await;
+    handle_vote(
+        &mut task_state.vote_collectors,
+        vote,
+        task_state.public_key.clone(),
+        &task_state.quorum_membership,
+        task_state.id,
+        &event,
+        sender,
+        &task_state.upgrade_lock,
+    )
+    .await;
 
-    if collector.is_none() || vote.view_number() > collector.as_ref().unwrap().view {
-        let info = AccumulatorInfo {
-            public_key: task_state.public_key.clone(),
-            membership: Arc::clone(&task_state.quorum_membership),
-            view: vote.view_number(),
-            id: task_state.id,
-        };
-        *collector =
-            create_vote_accumulator(&info, event, sender, task_state.upgrade_lock.clone()).await;
-    } else {
-        let result = collector
-            .as_mut()
-            .unwrap()
-            .handle_vote_event(Arc::clone(&event), sender)
-            .await;
-
-        if result == Some(HotShotTaskCompleted) {
-            *collector = None;
-        }
-    }
     Ok(())
 }
 
@@ -94,28 +84,18 @@ pub(crate) async fn handle_timeout_vote_recv<
         )
     );
 
-    let mut collector = task_state.timeout_vote_collector.write().await;
+    handle_vote(
+        &mut task_state.timeout_vote_collectors,
+        vote,
+        task_state.public_key.clone(),
+        &task_state.quorum_membership,
+        task_state.id,
+        &event,
+        sender,
+        &task_state.upgrade_lock,
+    )
+    .await;
 
-    if collector.is_none() || vote.view_number() > collector.as_ref().unwrap().view {
-        let info = AccumulatorInfo {
-            public_key: task_state.public_key.clone(),
-            membership: Arc::clone(&task_state.quorum_membership),
-            view: vote.view_number(),
-            id: task_state.id,
-        };
-        *collector =
-            create_vote_accumulator(&info, event, sender, task_state.upgrade_lock.clone()).await;
-    } else {
-        let result = collector
-            .as_mut()
-            .unwrap()
-            .handle_vote_event(Arc::clone(&event), sender)
-            .await;
-
-        if result == Some(HotShotTaskCompleted) {
-            *collector = None;
-        }
-    }
     Ok(())
 }
 

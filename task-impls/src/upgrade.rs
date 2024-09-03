@@ -8,7 +8,6 @@ use std::{marker::PhantomData, sync::Arc, time::SystemTime};
 
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
-use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_task::task::TaskState;
@@ -35,14 +34,8 @@ use vbs::version::StaticVersionType;
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,
-    vote_collection::{
-        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
-    },
+    vote_collection::{handle_vote, VoteCollectorsMap},
 };
-
-/// Alias for Optional type for Vote Collectors
-type VoteCollectorOption<TYPES, VOTE, CERT, V> =
-    Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
 
 /// Tracks state of a DA task
 pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
@@ -57,9 +50,8 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ve
     /// The underlying network
     pub network: Arc<I::Network>,
 
-    /// The current vote collection task, if there is one.
-    pub vote_collector:
-        RwLock<VoteCollectorOption<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>, V>>,
+    /// A map of `UpgradeVote` collector tasks
+    pub vote_collectors: VoteCollectorsMap<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>, V>,
 
     /// This Nodes public key
     pub public_key: TYPES::SignatureKey,
@@ -237,31 +229,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     }
                 }
 
-                let mut collector = self.vote_collector.write().await;
-
-                if collector.is_none() || vote.view_number() > collector.as_ref().unwrap().view {
-                    debug!("Starting vote handle for view {:?}", vote.view_number());
-                    let info = AccumulatorInfo {
-                        public_key: self.public_key.clone(),
-                        membership: Arc::clone(&self.quorum_membership),
-                        view: vote.view_number(),
-                        id: self.id,
-                    };
-                    *collector =
-                        create_vote_accumulator(&info, event, &tx, self.upgrade_lock.clone()).await;
-                } else {
-                    let result = collector
-                        .as_mut()
-                        .unwrap()
-                        .handle_vote_event(Arc::clone(&event), &tx)
-                        .await;
-
-                    if result == Some(HotShotTaskCompleted) {
-                        *collector = None;
-                        // The protocol has finished
-                        return None;
-                    }
-                }
+                handle_vote(
+                    &mut self.vote_collectors,
+                    vote,
+                    self.public_key.clone(),
+                    &self.quorum_membership,
+                    self.id,
+                    &event,
+                    &tx,
+                    &self.upgrade_lock,
+                )
+                .await;
             }
             HotShotEvent::ViewChange(new_view) => {
                 if self.cur_view >= *new_view {

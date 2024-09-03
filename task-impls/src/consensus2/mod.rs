@@ -31,11 +31,7 @@ use tracing::instrument;
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
 };
-use crate::{events::HotShotEvent, vote_collection::VoteCollectionTaskState};
-
-/// Alias for Optional type for Vote Collectors
-type VoteCollectorOption<TYPES, VOTE, CERT, V> =
-    Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
+use crate::{events::HotShotEvent, vote_collection::VoteCollectorsMap};
 
 /// Event handlers for use in the `handle` method.
 mod handlers;
@@ -63,13 +59,12 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     /// Membership for DA committee Votes/certs
     pub committee_membership: Arc<TYPES::Membership>,
 
-    /// Current Vote collection task, with it's view.
-    pub vote_collector:
-        RwLock<VoteCollectorOption<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>, V>>,
+    /// A map of `QuorumVote` collector tasks.
+    pub vote_collectors: VoteCollectorsMap<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>, V>,
 
-    /// Current timeout vote collection task with its view
-    pub timeout_vote_collector:
-        RwLock<VoteCollectorOption<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>, V>>,
+    /// A map of `TimeoutVote` collector tasks.
+    pub timeout_vote_collectors:
+        VoteCollectorsMap<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>, V>,
 
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,

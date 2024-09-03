@@ -40,14 +40,8 @@ use tracing::{debug, error, instrument, warn};
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,
-    vote_collection::{
-        create_vote_accumulator, AccumulatorInfo, HandleVoteEvent, VoteCollectionTaskState,
-    },
+    vote_collection::{handle_vote, VoteCollectorsMap},
 };
-
-/// Alias for Optional type for Vote Collectors
-type VoteCollectorOption<TYPES, VOTE, CERT, V> =
-    Option<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
 
 /// Tracks state of a DA task
 pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
@@ -71,8 +65,8 @@ pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Version
     /// The underlying network
     pub network: Arc<I::Network>,
 
-    /// The current vote collection task, if there is one.
-    pub vote_collector: RwLock<VoteCollectorOption<TYPES, DaVote<TYPES>, DaCertificate<TYPES>, V>>,
+    /// A map of `DaVote` collector tasks.
+    pub vote_collectors: VoteCollectorsMap<TYPES, DaVote<TYPES>, DaCertificate<TYPES>, V>,
 
     /// This Nodes public key
     pub public_key: TYPES::SignatureKey,
@@ -267,36 +261,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     error!("We are not the DA committee leader for view {} are we leader for next view? {}", *view, self.da_membership.leader(view + 1) == self.public_key);
                     return None;
                 }
-                let mut collector = self.vote_collector.write().await;
 
-                if collector.is_none() || vote.view_number() > collector.as_ref().unwrap().view {
-                    debug!("Starting vote handle for view {:?}", vote.view_number());
-                    let info = AccumulatorInfo {
-                        public_key: self.public_key.clone(),
-                        membership: Arc::clone(&self.da_membership),
-                        view: vote.view_number(),
-                        id: self.id,
-                    };
-                    *collector = create_vote_accumulator(
-                        &info,
-                        event,
-                        &event_stream,
-                        self.upgrade_lock.clone(),
-                    )
-                    .await;
-                } else {
-                    let result = collector
-                        .as_mut()
-                        .unwrap()
-                        .handle_vote_event(Arc::clone(&event), &event_stream)
-                        .await;
-
-                    if result == Some(HotShotTaskCompleted) {
-                        *collector = None;
-                        // The protocol has finished
-                        return None;
-                    }
-                }
+                handle_vote(
+                    &mut self.vote_collectors,
+                    vote,
+                    self.public_key.clone(),
+                    &self.da_membership,
+                    self.id,
+                    &event,
+                    &event_stream,
+                    &self.upgrade_lock,
+                )
+                .await;
             }
             HotShotEvent::ViewChange(view) => {
                 let view = *view;

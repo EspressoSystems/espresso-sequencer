@@ -268,7 +268,6 @@ impl<
     /// Handle the given event.
     ///
     /// Returns the completion status.
-    #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
     #[instrument(skip_all, fields(view = *self.view), name = "Network Task", level = "error")]
     pub async fn handle(
         &mut self,
@@ -276,237 +275,11 @@ impl<
         membership: &TYPES::Membership,
     ) {
         let mut maybe_action = None;
-        let (sender, message_kind, transmit): (_, _, TransmitType<TYPES>) =
-            match event.as_ref().clone() {
-                HotShotEvent::QuorumProposalSend(proposal, sender) => {
-                    maybe_action = Some(HotShotAction::Propose);
-                    (
-                        sender,
-                        MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                            GeneralConsensusMessage::Proposal(proposal),
-                        )),
-                        TransmitType::Broadcast,
-                    )
-                }
-
-                // ED Each network task is subscribed to all these message types.  Need filters per network task
-                HotShotEvent::QuorumVoteSend(vote) => {
-                    maybe_action = Some(HotShotAction::Vote);
-                    (
-                        vote.signing_key(),
-                        MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                            GeneralConsensusMessage::Vote(vote.clone()),
-                        )),
-                        TransmitType::Direct(membership.leader(vote.view_number() + 1)),
-                    )
-                }
-                HotShotEvent::QuorumProposalRequestSend(req, signature) => (
-                    req.key.clone(),
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ProposalRequested(req.clone(), signature),
-                    )),
-                    TransmitType::DaCommitteeAndLeaderBroadcast(membership.leader(req.view_number)),
-                ),
-                HotShotEvent::QuorumProposalResponseSend(sender_key, proposal) => (
-                    sender_key.clone(),
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::LeaderProposalAvailable(proposal),
-                    )),
-                    TransmitType::Direct(sender_key),
-                ),
-                HotShotEvent::VidDisperseSend(proposal, sender) => {
-                    self.handle_vid_disperse_proposal(proposal, &sender).await;
-                    return;
-                }
-                HotShotEvent::DaProposalSend(proposal, sender) => {
-                    maybe_action = Some(HotShotAction::DaPropose);
-                    (
-                        sender,
-                        MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
-                            DaConsensusMessage::DaProposal(proposal),
-                        )),
-                        TransmitType::DaCommitteeBroadcast,
-                    )
-                }
-                HotShotEvent::DaVoteSend(vote) => {
-                    maybe_action = Some(HotShotAction::DaVote);
-                    (
-                        vote.signing_key(),
-                        MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
-                            DaConsensusMessage::DaVote(vote.clone()),
-                        )),
-                        TransmitType::Direct(membership.leader(vote.view_number())),
-                    )
-                }
-                // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
-                HotShotEvent::DacSend(certificate, sender) => {
-                    maybe_action = Some(HotShotAction::DaCert);
-                    (
-                        sender,
-                        MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
-                            DaConsensusMessage::DaCertificate(certificate),
-                        )),
-                        TransmitType::Broadcast,
-                    )
-                }
-                HotShotEvent::ViewSyncPreCommitVoteSend(vote) => (
-                    vote.signing_key(),
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
-                    )),
-                    TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
-                ),
-                HotShotEvent::ViewSyncCommitVoteSend(vote) => (
-                    vote.signing_key(),
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
-                    )),
-                    TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
-                ),
-                HotShotEvent::ViewSyncFinalizeVoteSend(vote) => (
-                    vote.signing_key(),
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
-                    )),
-                    TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
-                ),
-                HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => (
-                    sender,
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ViewSyncPreCommitCertificate(certificate),
-                    )),
-                    TransmitType::Broadcast,
-                ),
-                HotShotEvent::ViewSyncCommitCertificate2Send(certificate, sender) => (
-                    sender,
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ViewSyncCommitCertificate(certificate),
-                    )),
-                    TransmitType::Broadcast,
-                ),
-                HotShotEvent::ViewSyncFinalizeCertificate2Send(certificate, sender) => (
-                    sender,
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::ViewSyncFinalizeCertificate(certificate),
-                    )),
-                    TransmitType::Broadcast,
-                ),
-                HotShotEvent::TimeoutVoteSend(vote) => (
-                    vote.signing_key(),
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::TimeoutVote(vote.clone()),
-                    )),
-                    TransmitType::Direct(membership.leader(vote.view_number() + 1)),
-                ),
-                HotShotEvent::UpgradeProposalSend(proposal, sender) => (
-                    sender,
-                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                        GeneralConsensusMessage::UpgradeProposal(proposal),
-                    )),
-                    TransmitType::Broadcast,
-                ),
-                HotShotEvent::UpgradeVoteSend(vote) => {
-                    error!("Sending upgrade vote!");
-                    (
-                        vote.signing_key(),
-                        MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                            GeneralConsensusMessage::UpgradeVote(vote.clone()),
-                        )),
-                        TransmitType::Direct(membership.leader(vote.view_number())),
-                    )
-                }
-                HotShotEvent::ViewChange(view) => {
-                    self.view = view;
-                    self.channel
-                        .update_view::<TYPES>(self.view.u64(), membership)
-                        .await;
-                    return;
-                }
-                _ => {
-                    return;
-                }
-            };
-        let broadcast_delay = match &message_kind {
-            MessageKind::Consensus(
-                SequencingMessage::General(GeneralConsensusMessage::Vote(_))
-                | SequencingMessage::Da(_),
-            ) => BroadcastDelay::View(*message_kind.view_number()),
-            _ => BroadcastDelay::None,
+        if let Some((sender, message_kind, transmit)) =
+            self.parse_event(event, &mut maybe_action, membership).await
+        {
+            self.spawn_transmit_task(message_kind, membership, maybe_action, transmit, sender);
         };
-        let message = Message {
-            sender,
-            kind: message_kind,
-        };
-        let view = message.kind.view_number();
-        let committee = membership.whole_committee(view);
-        let committee_topic = membership.committee_topic();
-        let net = Arc::clone(&self.channel);
-        let storage = Arc::clone(&self.storage);
-        let upgrade_lock = self.upgrade_lock.clone();
-        async_spawn(async move {
-            if NetworkEventTaskState::<TYPES, V, COMMCHANNEL, S>::maybe_record_action(
-                maybe_action,
-                Arc::clone(&storage),
-                view,
-            )
-            .await
-            .is_err()
-            {
-                return;
-            }
-
-            if let MessageKind::Consensus(SequencingMessage::General(
-                GeneralConsensusMessage::Proposal(prop),
-            )) = &message.kind
-            {
-                if storage.write().await.append_proposal(prop).await.is_err() {
-                    return;
-                }
-            }
-
-            let serialized_message = match upgrade_lock.serialize(&message).await {
-                Ok(serialized) => serialized,
-                Err(e) => {
-                    error!("Failed to serialize message: {}", e);
-                    return;
-                }
-            };
-
-            let transmit_result = match transmit {
-                TransmitType::Direct(recipient) => {
-                    net.direct_message(serialized_message, recipient).await
-                }
-                TransmitType::Broadcast => {
-                    net.broadcast_message(serialized_message, committee_topic, broadcast_delay)
-                        .await
-                }
-                TransmitType::DaCommitteeBroadcast => {
-                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
-                        .await
-                }
-                TransmitType::DaCommitteeAndLeaderBroadcast(recipient) => {
-                    // Short-circuit exit from this call if we get an error during the direct leader broadcast.
-                    // NOTE: An improvement to this is to check if the leader is in the DA committee but it's
-                    // just a single extra message to the leader, so it's not an optimization that we need now.
-                    if let Err(e) = net
-                        .direct_message(serialized_message.clone(), recipient)
-                        .await
-                    {
-                        error!("Failed to send message from network task: {e:?}");
-                        return;
-                    }
-
-                    // Otherwise, send the next message.
-                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
-                        .await
-                }
-            };
-
-            match transmit_result {
-                Ok(()) => {}
-                Err(e) => error!("Failed to send message from network task: {:?}", e),
-            }
-        });
     }
 
     /// handle `VidDisperseSend`
@@ -581,6 +354,373 @@ impl<
             }
         } else {
             Ok(())
+        }
+    }
+
+    /// Parses a `HotShotEvent` and returns a tuple of: (sender's public key, `MessageKind`, `TransmitType`)
+    /// which will be used to create a message and transmit on the wire.
+    /// Returns `None` if the parsing result should not be sent on the wire.
+    /// Handles the `VidDisperseSend` event separately using a helper method.
+    #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
+    async fn parse_event(
+        &mut self,
+        event: Arc<HotShotEvent<TYPES>>,
+        maybe_action: &mut Option<HotShotAction>,
+        membership: &TYPES::Membership,
+    ) -> Option<(
+        <TYPES as NodeType>::SignatureKey,
+        MessageKind<TYPES>,
+        TransmitType<TYPES>,
+    )> {
+        match event.as_ref().clone() {
+            HotShotEvent::QuorumProposalSend(proposal, sender) => {
+                *maybe_action = Some(HotShotAction::Propose);
+                Some((
+                    sender,
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::Proposal(proposal),
+                    )),
+                    TransmitType::Broadcast,
+                ))
+            }
+
+            // ED Each network task is subscribed to all these message types.  Need filters per network task
+            HotShotEvent::QuorumVoteSend(vote) => {
+                *maybe_action = Some(HotShotAction::Vote);
+                Some((
+                    vote.signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::Vote(vote.clone()),
+                    )),
+                    TransmitType::Direct(membership.leader(vote.view_number() + 1)),
+                ))
+            }
+            HotShotEvent::QuorumProposalRequestSend(req, signature) => Some((
+                req.key.clone(),
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::ProposalRequested(req.clone(), signature),
+                )),
+                TransmitType::DaCommitteeAndLeaderBroadcast(membership.leader(req.view_number)),
+            )),
+            HotShotEvent::QuorumProposalResponseSend(sender_key, proposal) => Some((
+                sender_key.clone(),
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::LeaderProposalAvailable(proposal),
+                )),
+                TransmitType::Direct(sender_key),
+            )),
+            HotShotEvent::VidDisperseSend(proposal, sender) => {
+                self.handle_vid_disperse_proposal(proposal, &sender).await;
+                None
+            }
+            HotShotEvent::DaProposalSend(proposal, sender) => {
+                *maybe_action = Some(HotShotAction::DaPropose);
+                Some((
+                    sender,
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
+                        DaConsensusMessage::DaProposal(proposal),
+                    )),
+                    TransmitType::DaCommitteeBroadcast,
+                ))
+            }
+            HotShotEvent::DaVoteSend(vote) => {
+                *maybe_action = Some(HotShotAction::DaVote);
+                Some((
+                    vote.signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
+                        DaConsensusMessage::DaVote(vote.clone()),
+                    )),
+                    TransmitType::Direct(membership.leader(vote.view_number())),
+                ))
+            }
+            // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
+            HotShotEvent::DacSend(certificate, sender) => {
+                *maybe_action = Some(HotShotAction::DaCert);
+                Some((
+                    sender,
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
+                        DaConsensusMessage::DaCertificate(certificate),
+                    )),
+                    TransmitType::Broadcast,
+                ))
+            }
+            HotShotEvent::ViewSyncPreCommitVoteSend(vote) => Some((
+                vote.signing_key(),
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
+                )),
+                TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
+            )),
+            HotShotEvent::ViewSyncCommitVoteSend(vote) => Some((
+                vote.signing_key(),
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
+                )),
+                TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
+            )),
+            HotShotEvent::ViewSyncFinalizeVoteSend(vote) => Some((
+                vote.signing_key(),
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
+                )),
+                TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
+            )),
+            HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => Some((
+                sender,
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::ViewSyncPreCommitCertificate(certificate),
+                )),
+                TransmitType::Broadcast,
+            )),
+            HotShotEvent::ViewSyncCommitCertificate2Send(certificate, sender) => Some((
+                sender,
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::ViewSyncCommitCertificate(certificate),
+                )),
+                TransmitType::Broadcast,
+            )),
+            HotShotEvent::ViewSyncFinalizeCertificate2Send(certificate, sender) => Some((
+                sender,
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::ViewSyncFinalizeCertificate(certificate),
+                )),
+                TransmitType::Broadcast,
+            )),
+            HotShotEvent::TimeoutVoteSend(vote) => Some((
+                vote.signing_key(),
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::TimeoutVote(vote.clone()),
+                )),
+                TransmitType::Direct(membership.leader(vote.view_number() + 1)),
+            )),
+            HotShotEvent::UpgradeProposalSend(proposal, sender) => Some((
+                sender,
+                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                    GeneralConsensusMessage::UpgradeProposal(proposal),
+                )),
+                TransmitType::Broadcast,
+            )),
+            HotShotEvent::UpgradeVoteSend(vote) => {
+                error!("Sending upgrade vote!");
+                Some((
+                    vote.signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::UpgradeVote(vote.clone()),
+                    )),
+                    TransmitType::Direct(membership.leader(vote.view_number())),
+                ))
+            }
+            HotShotEvent::ViewChange(view) => {
+                self.view = view;
+                self.channel
+                    .update_view::<TYPES>(self.view.u64(), membership)
+                    .await;
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Creates a network message and spawns a task that transmits it on the wire.
+    fn spawn_transmit_task(
+        &self,
+        message_kind: MessageKind<TYPES>,
+        membership: &TYPES::Membership,
+        maybe_action: Option<HotShotAction>,
+        transmit: TransmitType<TYPES>,
+        sender: TYPES::SignatureKey,
+    ) {
+        let broadcast_delay = match &message_kind {
+            MessageKind::Consensus(
+                SequencingMessage::General(GeneralConsensusMessage::Vote(_))
+                | SequencingMessage::Da(_),
+            ) => BroadcastDelay::View(*message_kind.view_number()),
+            _ => BroadcastDelay::None,
+        };
+        let message = Message {
+            sender,
+            kind: message_kind,
+        };
+        let view = message.kind.view_number();
+        let committee = membership.whole_committee(view);
+        let committee_topic = membership.committee_topic();
+        let net = Arc::clone(&self.channel);
+        let storage = Arc::clone(&self.storage);
+        let upgrade_lock = self.upgrade_lock.clone();
+        async_spawn(async move {
+            if NetworkEventTaskState::<TYPES, V, COMMCHANNEL, S>::maybe_record_action(
+                maybe_action,
+                Arc::clone(&storage),
+                view,
+            )
+            .await
+            .is_err()
+            {
+                return;
+            }
+            if let MessageKind::Consensus(SequencingMessage::General(
+                GeneralConsensusMessage::Proposal(prop),
+            )) = &message.kind
+            {
+                if storage.write().await.append_proposal(prop).await.is_err() {
+                    return;
+                }
+            }
+
+            let serialized_message = match upgrade_lock.serialize(&message).await {
+                Ok(serialized) => serialized,
+                Err(e) => {
+                    error!("Failed to serialize message: {}", e);
+                    return;
+                }
+            };
+
+            let transmit_result = match transmit {
+                TransmitType::Direct(recipient) => {
+                    net.direct_message(serialized_message, recipient).await
+                }
+                TransmitType::Broadcast => {
+                    net.broadcast_message(serialized_message, committee_topic, broadcast_delay)
+                        .await
+                }
+                TransmitType::DaCommitteeBroadcast => {
+                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
+                        .await
+                }
+                TransmitType::DaCommitteeAndLeaderBroadcast(recipient) => {
+                    // Short-circuit exit from this call if we get an error during the direct leader broadcast.
+                    // NOTE: An improvement to this is to check if the leader is in the DA committee but it's
+                    // just a single extra message to the leader, so it's not an optimization that we need now.
+                    if let Err(e) = net
+                        .direct_message(serialized_message.clone(), recipient)
+                        .await
+                    {
+                        error!("Failed to send message from network task: {e:?}");
+                        return;
+                    }
+
+                    // Otherwise, send the next message.
+                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
+                        .await
+                }
+            };
+
+            match transmit_result {
+                Ok(()) => {}
+                Err(e) => error!("Failed to send message from network task: {:?}", e),
+            }
+        });
+    }
+}
+
+/// A module with test helpers
+pub mod test {
+    use super::{
+        Arc, ConnectedNetwork, HotShotEvent, MessageKind, NetworkEventTaskState, NodeType,
+        Receiver, Result, Sender, Storage, TaskState, TransmitType, Versions,
+    };
+    use async_trait::async_trait;
+    use std::ops::{Deref, DerefMut};
+
+    /// A dynamic type alias for a function that takes the result of `NetworkEventTaskState::parse_event`
+    /// and changes it before transmitting on the network.
+    pub type ModifierClosure<TYPES> = dyn Fn(
+            &mut <TYPES as NodeType>::SignatureKey,
+            &mut MessageKind<TYPES>,
+            &mut TransmitType<TYPES>,
+            &<TYPES as NodeType>::Membership,
+        ) + Send
+        + Sync;
+
+    /// A helper wrapper around `NetworkEventTaskState` that can modify its behaviour for tests
+    pub struct NetworkEventTaskStateModifier<
+        TYPES: NodeType,
+        V: Versions,
+        COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+        S: Storage<TYPES>,
+    > {
+        /// The real `NetworkEventTaskState`
+        pub network_event_task_state: NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>,
+        /// A function that takes the result of `NetworkEventTaskState::parse_event` and
+        /// changes it before transmitting on the network.
+        pub modifier: Arc<ModifierClosure<TYPES>>,
+    }
+
+    impl<
+            TYPES: NodeType,
+            V: Versions,
+            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            S: Storage<TYPES> + 'static,
+        > NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+    {
+        /// Handles the received event modifying it before sending on the network.
+        pub async fn handle(
+            &mut self,
+            event: Arc<HotShotEvent<TYPES>>,
+            membership: &TYPES::Membership,
+        ) {
+            let mut maybe_action = None;
+            if let Some((mut sender, mut message_kind, mut transmit)) =
+                self.parse_event(event, &mut maybe_action, membership).await
+            {
+                // Modify the values acquired by parsing the event.
+                (self.modifier)(&mut sender, &mut message_kind, &mut transmit, membership);
+                self.spawn_transmit_task(message_kind, membership, maybe_action, transmit, sender);
+            }
+        }
+    }
+
+    #[async_trait]
+    impl<
+            TYPES: NodeType,
+            V: Versions,
+            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            S: Storage<TYPES> + 'static,
+        > TaskState for NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+    {
+        type Event = HotShotEvent<TYPES>;
+
+        async fn handle_event(
+            &mut self,
+            event: Arc<Self::Event>,
+            _sender: &Sender<Arc<Self::Event>>,
+            _receiver: &Receiver<Arc<Self::Event>>,
+        ) -> Result<()> {
+            let membership = self.network_event_task_state.membership.clone();
+
+            if !(self.network_event_task_state.filter)(&event) {
+                self.handle(event, &membership).await;
+            }
+
+            Ok(())
+        }
+
+        async fn cancel_subtasks(&mut self) {}
+    }
+
+    impl<
+            TYPES: NodeType,
+            V: Versions,
+            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            S: Storage<TYPES>,
+        > Deref for NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+    {
+        type Target = NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.network_event_task_state
+        }
+    }
+
+    impl<
+            TYPES: NodeType,
+            V: Versions,
+            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            S: Storage<TYPES>,
+        > DerefMut for NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+    {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.network_event_task_state
         }
     }
 }

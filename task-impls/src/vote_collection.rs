@@ -4,7 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
+use std::{
+    collections::{btree_map::Entry, BTreeMap, HashMap},
+    fmt::Debug,
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use async_broadcast::Sender;
 use async_trait::async_trait;
@@ -31,6 +36,10 @@ use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,
 };
+
+/// Alias for a map of Vote Collectors
+pub type VoteCollectorsMap<TYPES, VOTE, CERT, V> =
+    BTreeMap<<TYPES as NodeType>::Time, VoteCollectionTaskState<TYPES, VOTE, CERT, V>>;
 
 /// Task state for collecting votes of one type and emitting a certificate
 pub struct VoteCollectionTaskState<
@@ -194,6 +203,61 @@ where
     }
 
     Some(state)
+}
+
+/// A helper function that handles a vote regardless whether it's the first vote in the view or not.
+#[allow(clippy::too_many_arguments)]
+pub async fn handle_vote<
+    TYPES: NodeType,
+    VOTE: Vote<TYPES> + AggregatableVote<TYPES, VOTE, CERT> + Send + Sync + 'static,
+    CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Debug + Send + Sync + 'static,
+    V: Versions,
+>(
+    collectors: &mut VoteCollectorsMap<TYPES, VOTE, CERT, V>,
+    vote: &VOTE,
+    public_key: TYPES::SignatureKey,
+    membership: &Arc<TYPES::Membership>,
+    id: u64,
+    event: &Arc<HotShotEvent<TYPES>>,
+    event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
+    upgrade_lock: &UpgradeLock<TYPES, V>,
+) where
+    VoteCollectionTaskState<TYPES, VOTE, CERT, V>: HandleVoteEvent<TYPES, VOTE, CERT>,
+{
+    match collectors.entry(vote.view_number()) {
+        Entry::Vacant(entry) => {
+            debug!("Starting vote handle for view {:?}", vote.view_number());
+            let info = AccumulatorInfo {
+                public_key,
+                membership: Arc::clone(membership),
+                view: vote.view_number(),
+                id,
+            };
+            if let Some(collector) = create_vote_accumulator(
+                &info,
+                Arc::clone(event),
+                event_stream,
+                upgrade_lock.clone(),
+            )
+            .await
+            {
+                entry.insert(collector);
+            };
+        }
+        Entry::Occupied(mut entry) => {
+            let result = entry
+                .get_mut()
+                .handle_vote_event(Arc::clone(event), event_stream)
+                .await;
+
+            if result == Some(HotShotTaskCompleted) {
+                // garbage collect vote collectors for old views (including the one just finished)
+                entry.remove();
+                *collectors = collectors.split_off(&vote.view_number());
+                // The protocol has finished
+            }
+        }
+    }
 }
 
 /// Alias for Quorum vote accumulator

@@ -372,7 +372,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// A lock for an upgrade certificate decided by HotShot, which doubles as `PhantomData` for an instance of the `Versions` trait.
 pub struct UpgradeLock<TYPES: NodeType, V: Versions> {
     /// a shared lock to an upgrade certificate decided by consensus
