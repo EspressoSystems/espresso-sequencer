@@ -1,6 +1,6 @@
 use anyhow::{ensure, Context};
 use async_std::sync::Arc;
-use clap::{builder::OsStr, Parser};
+use clap::{builder::OsStr, Parser, ValueEnum};
 use contract_bindings::{
     erc1967_proxy::ERC1967Proxy,
     fee_contract::FeeContract,
@@ -10,12 +10,12 @@ use contract_bindings::{
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
     plonk_verifier_2::PlonkVerifier2,
-    shared_types::LightClientState,
 };
 use derive_more::Display;
 use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedLightClientState};
+use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
 
 /// Set of predeployed contracts.

@@ -119,8 +119,6 @@ pub struct SigningError(#[from] WalletError);
 
 pub type BuilderSignature = Signature;
 
-pub type BuilderSignature = Signature;
-
 impl BuilderSignatureKey for FeeAccount {
     type BuilderPrivateKey = EthKeyPair;
     type BuilderSignature = BuilderSignature;

@@ -14,7 +14,7 @@ use ethers::{
 };
 use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientState};
 use hotshot_state_prover::mock_ledger::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
 };
 use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
