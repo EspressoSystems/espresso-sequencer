@@ -50,9 +50,9 @@ impl Drop for MockSolver {
 impl MockSolver {
     pub async fn init() -> Self {
         let (tmp_db, database) = setup_mock_database().await;
-        let (url, event_api_handle, generate_events_handle) = run_mock_event_service();
+        let (events_url, event_api_handle, generate_events_handle) = run_mock_event_service();
 
-        let client = EventsServiceClient::new(url.clone()).await;
+        let client = EventsServiceClient::new(events_url.clone()).await;
         let startup_info = client.get_startup_info().await.unwrap();
         let stream = client.get_event_stream().await.unwrap();
 
@@ -101,7 +101,7 @@ impl MockSolver {
         ];
 
         MockSolver {
-            events_url: url,
+            events_url,
             solver_url,
             state,
             database,
