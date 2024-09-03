@@ -101,7 +101,6 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
         transactions.retain(|txn| self.namespaces.contains(&txn.namespace()));
-        println!("here filtered transactions {:?}", transactions);
         transactions
     }
 
@@ -163,9 +162,7 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
         self: &Arc<Self>,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
-        println!("here process_transactions");
         let namespaces_to_skip = self.namespaces_to_skip.read().await;
-        println!("here namespaces_to_skip {:?}", namespaces_to_skip);
 
         match namespaces_to_skip.as_ref() {
             Some(namespaces_to_skip) => {
@@ -176,7 +173,6 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
             }
         }
 
-        println!("here transactions {:?}", transactions);
         transactions
     }
 
