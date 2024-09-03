@@ -7,15 +7,12 @@ use espresso_types::{
     NamespaceId, SequencerVersions, V0_1,
 };
 use hotshot::traits::ValidatedState;
-use hotshot_types::{
-    data::ViewNumber,
-    traits::node_implementation::{ConsensusTime, Versions},
-};
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
 };
-use sequencer::{Genesis, L1Params};
+use sequencer::{match_and_run, Genesis, L1Params};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -130,23 +127,6 @@ async fn main() -> anyhow::Result<()> {
     let base = genesis.base_version;
     let upgrade = genesis.upgrade_version;
 
-    match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
-        }
-        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-            run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
-        }
-        _ => panic!(
-            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
-        ),
-    }
-}
-
-async fn run<V: Versions>(
-    genesis: Genesis,
-    opt: NonPermissionedBuilderOptions,
-) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
@@ -167,8 +147,12 @@ async fn run<V: Versions>(
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state =
-        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
+    let instance_state = match_and_run!(
+        base,
+        upgrade,
+        build_instance_state(genesis.chain_config, l1_params, opt.state_peers)
+    )
+    .unwrap();
 
     let base_fee = genesis.max_base_fee();
 
