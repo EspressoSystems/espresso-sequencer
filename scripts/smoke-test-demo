@@ -161,7 +161,7 @@ echo $block_height
 # get version
 version_minor=`curl -sL $SEQUENCER_API/availability/block/summary/$block_height | jq .header.version.Version.minor`
 
-if [[ $version_minor -lt $1 ]]; then
+if [[ $version_minor -lt 2 ]]; then
     echo "Upgrade failed!"
     exit 1
 fi
