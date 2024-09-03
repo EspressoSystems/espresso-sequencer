@@ -19,7 +19,7 @@ async-trait = { workspace = true }
 blake3 = { workspace = true }
 bincode = { workspace = true }
 custom_debug = { workspace = true }
-delegate = "0.12"
+delegate = "0.13"
 derive_builder = "0.20"
 either = { workspace = true }
 futures = { workspace = true }
