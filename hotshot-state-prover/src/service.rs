@@ -24,7 +24,6 @@ use futures::FutureExt;
 use hotshot_contract_adapter::{
     jellyfish::{u256_to_field, ParsedPlonkProof},
     light_client::ParsedLightClientState,
-    light_client::ParsedStakeState,
 };
 use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
 use hotshot_types::{
@@ -569,12 +568,12 @@ mod test {
         let ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS as usize);
 
         let genesis = ledger.get_state();
-        let stake_genesis: ParsedStakeState = (
-            genesis.threshold,
-            genesis.bls_key_comm.encode_hex(),
-            genesis.schnorr_key_comm.encode_hex(),
-            genesis.amount_comm.encode_hex(),
-        );
+        let stake_genesis: ParsedStakeState = ParsedStakeState {
+            threshold: genesis.threshold,
+            bls_key_comm: genesis.bls_key_comm,
+            schnorr_key_comm: genesis.schnorr_key_comm,
+            amount_comm: genesis.amount_comm,
+        };
         let qc_keys = ledger.qc_keys;
         let state_keys = ledger.state_keys;
         let st = ledger.st;
@@ -669,7 +668,7 @@ mod test {
 
         let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
             light_client_state: genesis,
-            stake_state: stake_state,
+            stake_state: stake_genesis,
             max_history_seconds: MAX_HISTORY_SECONDS,
         };
 

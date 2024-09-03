@@ -486,7 +486,6 @@ fn main() {
             let mut ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
-            let mut new_stake_states: Vec<ParsedStakeState> = vec![];
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
             for i in 1..block_per_epoch + 2 {
                 // only update stake table at the last block, as it would only take effect in next epoch anyway.
