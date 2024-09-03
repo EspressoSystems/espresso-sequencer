@@ -52,3 +52,4 @@ jobs:
           set -o pipefail
           scripts/demo-native --tui=false &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
+          scripts/test-upgrade 2

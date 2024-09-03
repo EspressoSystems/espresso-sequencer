@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -eE
+
+
+SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
+
+#get block height
+block_height=$(curl -sL $SEQUENCER_API/node/block-height)
+echo $block_height
+# get version
+version_minor=`curl -sL $SEQUENCER_API/node/header/window/from/$block_height/$block_height | jq .prev.version.Version.minor`
+
+if [[ $version_minor -lt $1 ]]; then
+    echo "Upgrade failed!"
+    exit 1
+fi
+

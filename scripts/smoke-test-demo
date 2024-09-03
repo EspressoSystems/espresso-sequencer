@@ -110,14 +110,6 @@ while true; do
         echo "  light_client_updated: $new_light_client_updated"
         echo "Block height, transaction count, and light client updates are increasing. Great!"
 
-	# get block
-	version_minor=`curl -sL $SEQUENCER_API/node/header/window/from/$new_block_height/$new_block_height | jq .prev.version.Version.minor`
-
-        if ! [[ $version_minor -lt 2 ]]; then
-            echo "Upgrade failed!"
-            exit 1
-        fi
-
         if ! [[ $new_recipient_balance -gt $recipient_balance ]]; then
             echo "Fee recipient balance is not increasing!"
             exit 1
