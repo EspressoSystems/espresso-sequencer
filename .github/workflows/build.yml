@@ -105,7 +105,8 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --locked --release --workspace
+          # Limit to 2 processes, the runner only has 6GB RAM
+          cargo build -j 2 --locked --release --workspace
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
