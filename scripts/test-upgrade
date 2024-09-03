@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -eE
 
-
 SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
 
 #get block height
