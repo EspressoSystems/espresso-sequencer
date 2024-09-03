@@ -224,6 +224,86 @@ pub enum HotShotEvent<TYPES: NodeType> {
     QuorumProposalPreliminarilyValidated(Proposal<TYPES, QuorumProposal<TYPES>>),
 }
 
+impl<TYPES: NodeType> HotShotEvent<TYPES> {
+    #[allow(clippy::too_many_lines)]
+    /// Return the view number for a hotshot event if present
+    pub fn view_number(&self) -> Option<TYPES::Time> {
+        match self {
+            HotShotEvent::QuorumVoteRecv(v) => Some(v.view_number()),
+            HotShotEvent::TimeoutVoteRecv(v) | HotShotEvent::TimeoutVoteSend(v) => {
+                Some(v.view_number())
+            }
+            HotShotEvent::QuorumProposalRecv(proposal, _)
+            | HotShotEvent::QuorumProposalSend(proposal, _) => Some(proposal.data.view_number()),
+            HotShotEvent::QuorumVoteSend(vote) => Some(vote.view_number()),
+            HotShotEvent::QuorumProposalValidated(proposal, _) => Some(proposal.view_number()),
+            HotShotEvent::DaProposalRecv(proposal, _)
+            | HotShotEvent::DaProposalValidated(proposal, _)
+            | HotShotEvent::DaProposalSend(proposal, _) => Some(proposal.data.view_number()),
+            HotShotEvent::DaVoteRecv(vote) | HotShotEvent::DaVoteSend(vote) => {
+                Some(vote.view_number())
+            }
+            HotShotEvent::QcFormed(cert) => match cert {
+                either::Left(qc) => Some(qc.view_number()),
+                either::Right(tc) => Some(tc.view_number()),
+            },
+            HotShotEvent::ViewSyncCommitVoteSend(vote)
+            | HotShotEvent::ViewSyncCommitVoteRecv(vote) => Some(vote.view_number()),
+            HotShotEvent::ViewSyncPreCommitVoteRecv(vote)
+            | HotShotEvent::ViewSyncPreCommitVoteSend(vote) => Some(vote.view_number()),
+            HotShotEvent::ViewSyncFinalizeVoteRecv(vote)
+            | HotShotEvent::ViewSyncFinalizeVoteSend(vote) => Some(vote.view_number()),
+            HotShotEvent::ViewSyncPreCommitCertificate2Recv(cert)
+            | HotShotEvent::ViewSyncPreCommitCertificate2Send(cert, _) => Some(cert.view_number()),
+            HotShotEvent::ViewSyncCommitCertificate2Recv(cert)
+            | HotShotEvent::ViewSyncCommitCertificate2Send(cert, _) => Some(cert.view_number()),
+            HotShotEvent::ViewSyncFinalizeCertificate2Recv(cert)
+            | HotShotEvent::ViewSyncFinalizeCertificate2Send(cert, _) => Some(cert.view_number()),
+            HotShotEvent::SendPayloadCommitmentAndMetadata(_, _, _, view_number, _, _) => {
+                Some(*view_number)
+            }
+            HotShotEvent::BlockRecv(packed_bundle) => Some(packed_bundle.view_number),
+            HotShotEvent::Shutdown
+            | HotShotEvent::TransactionSend(_, _)
+            | HotShotEvent::LeafDecided(_)
+            | HotShotEvent::TransactionsRecv(_) => None,
+            HotShotEvent::VidDisperseSend(proposal, _) => Some(proposal.data.view_number()),
+            HotShotEvent::VidShareRecv(proposal) | HotShotEvent::VidShareValidated(proposal) => {
+                Some(proposal.data.view_number())
+            }
+            HotShotEvent::UpgradeProposalRecv(proposal, _)
+            | HotShotEvent::UpgradeProposalSend(proposal, _) => Some(proposal.data.view_number()),
+            HotShotEvent::UpgradeVoteRecv(vote) | HotShotEvent::UpgradeVoteSend(vote) => {
+                Some(vote.view_number())
+            }
+            HotShotEvent::QuorumProposalRequestSend(req, _)
+            | HotShotEvent::QuorumProposalRequestRecv(req, _) => Some(req.view_number),
+            HotShotEvent::QuorumProposalResponseSend(_, proposal)
+            | HotShotEvent::QuorumProposalResponseRecv(proposal)
+            | HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
+                Some(proposal.data.view_number())
+            }
+            HotShotEvent::QuorumVoteDependenciesValidated(view_number)
+            | HotShotEvent::ViewChange(view_number)
+            | HotShotEvent::ViewSyncTimeout(view_number, _, _)
+            | HotShotEvent::ViewSyncTrigger(view_number)
+            | HotShotEvent::Timeout(view_number)
+            | HotShotEvent::BlockReady(_, view_number)
+            | HotShotEvent::LockedViewUpdated(view_number)
+            | HotShotEvent::LastDecidedViewUpdated(view_number)
+            | HotShotEvent::ValidatedStateUpdated(view_number, _) => Some(*view_number),
+            HotShotEvent::DaCertificateRecv(cert) | HotShotEvent::DacSend(cert, _) => {
+                Some(cert.view_number())
+            }
+            HotShotEvent::UpdateHighQc(cert) | HotShotEvent::HighQcUpdated(cert) => {
+                Some(cert.view_number())
+            }
+            HotShotEvent::DaCertificateValidated(cert) => Some(cert.view_number),
+            HotShotEvent::UpgradeCertificateFormed(cert) => Some(cert.view_number()),
+        }
+    }
+}
+
 impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -306,32 +386,32 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             }
             HotShotEvent::ViewSyncPreCommitVoteRecv(vote) => write!(
                 f,
-                "ViewSyncPreCommitVoteRecv(view_nuber={:?})",
+                "ViewSyncPreCommitVoteRecv(view_number={:?})",
                 vote.view_number()
             ),
             HotShotEvent::ViewSyncCommitVoteRecv(vote) => write!(
                 f,
-                "ViewSyncCommitVoteRecv(view_nuber={:?})",
+                "ViewSyncCommitVoteRecv(view_number={:?})",
                 vote.view_number()
             ),
             HotShotEvent::ViewSyncFinalizeVoteRecv(vote) => write!(
                 f,
-                "ViewSyncFinalizeVoteRecv(view_nuber={:?})",
+                "ViewSyncFinalizeVoteRecv(view_number={:?})",
                 vote.view_number()
             ),
             HotShotEvent::ViewSyncPreCommitVoteSend(vote) => write!(
                 f,
-                "ViewSyncPreCommitVoteSend(view_nuber={:?})",
+                "ViewSyncPreCommitVoteSend(view_number={:?})",
                 vote.view_number()
             ),
             HotShotEvent::ViewSyncCommitVoteSend(vote) => write!(
                 f,
-                "ViewSyncCommitVoteSend(view_nuber={:?})",
+                "ViewSyncCommitVoteSend(view_number={:?})",
                 vote.view_number()
             ),
             HotShotEvent::ViewSyncFinalizeVoteSend(vote) => write!(
                 f,
-                "ViewSyncFinalizeVoteSend(view_nuber={:?})",
+                "ViewSyncFinalizeVoteSend(view_number={:?})",
                 vote.view_number()
             ),
             HotShotEvent::ViewSyncPreCommitCertificate2Recv(cert) => {

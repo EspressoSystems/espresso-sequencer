@@ -56,3 +56,6 @@ pub mod script;
 
 /// view generator for tests
 pub mod view_generator;
+
+/// byzantine framework for tests
+pub mod byzantine;
