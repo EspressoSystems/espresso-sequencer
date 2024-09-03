@@ -14,13 +14,12 @@ use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignKey,
     signature_key::BLSPrivKey,
-    traits::{
-        metrics::NoMetrics,
-        node_implementation::{ConsensusTime, Versions},
-    },
+    traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
 };
 use libp2p::Multiaddr;
-use sequencer::{persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams};
+use sequencer::{
+    match_and_run, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
+};
 use sequencer_utils::logging;
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -221,11 +220,17 @@ impl PermissionedBuilderOptions {
     }
 }
 
-async fn run<V: Versions>(
-    genesis: Genesis,
-    opt: PermissionedBuilderOptions,
-    versions: V,
-) -> anyhow::Result<()> {
+#[async_std::main]
+async fn main() -> anyhow::Result<()> {
+    let opt = PermissionedBuilderOptions::parse();
+    opt.logging.init();
+
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
+
     let (private_staking_key, private_state_key) = opt.private_keys()?;
 
     let l1_params = L1Params {
@@ -277,56 +282,24 @@ async fn run<V: Versions>(
     let buffer_view_num_count = opt.buffer_view_num_count;
 
     // it will internally spawn the builder web server
-    let ctx = init_node(
-        genesis,
-        network_params,
-        &NoMetrics,
-        l1_params,
-        builder_server_url.clone(),
-        builder_key_pair,
-        bootstrapped_view,
-        opt.tx_channel_capacity,
-        opt.event_channel_capacity,
-        versions,
-        NoStorage,
-        max_api_response_timeout_duration,
-        buffer_view_num_count,
-        opt.is_da,
-        txn_timeout_duration,
+    match_and_run!(
+        base,
+        upgrade,
+        init_node(
+            genesis,
+            network_params,
+            &NoMetrics,
+            l1_params,
+            builder_server_url.clone(),
+            builder_key_pair,
+            bootstrapped_view,
+            opt.tx_channel_capacity,
+            opt.event_channel_capacity,
+            NoStorage,
+            max_api_response_timeout_duration,
+            buffer_view_num_count,
+            opt.is_da,
+            txn_timeout_duration
+        )
     )
-    .await?;
-
-    // Start doing consensus.
-    ctx.start_consensus().await;
-
-    Ok(())
-}
-
-#[async_std::main]
-async fn main() -> anyhow::Result<()> {
-    let opt = PermissionedBuilderOptions::parse();
-    opt.logging.init();
-
-    let genesis = Genesis::from_file(&opt.genesis_file)?;
-    tracing::info!(?genesis, "genesis");
-
-    let base = genesis.base_version;
-    let upgrade = genesis.upgrade_version;
-
-    match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run(genesis, opt, SequencerVersions::<V0_1, FeeVersion>::new()).await
-        }
-        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-            run(
-                genesis,
-                opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
-        }
-        _ => panic!(
-            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
-        ),
-    }
 }

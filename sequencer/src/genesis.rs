@@ -1,13 +1,12 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::Path,
-};
-
 use anyhow::Context;
 use espresso_types::{
     v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
 };
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+};
 use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
@@ -67,6 +66,35 @@ impl Genesis {
 
         base_fee
     }
+}
+
+#[macro_export]
+macro_rules! match_and_run {
+    ($base:expr, $upgrade:expr, $run_call:ident($($args:expr),*)) => {
+        match ($base, $upgrade) {
+            (V0_1::VERSION, FeeVersion::VERSION) => {
+                $run_call($($args,)* SequencerVersions::<V0_1, FeeVersion>::new()).await
+            },
+            (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+                $run_call($($args,)* SequencerVersions::<FeeVersion, MarketplaceVersion>::new()).await
+            },
+            (V0_1::VERSION, _) => {
+                $run_call($($args,)* SequencerVersions::<V0_1,   espresso_types::V0_0>::new()).await
+            },
+            (FeeVersion::VERSION, _) => {
+                $run_call($($args,)* SequencerVersions::<FeeVersion, espresso_types::V0_0>::new()).await
+            },
+            (MarketplaceVersion::VERSION, _) => {
+                $run_call($($args,)* SequencerVersions::<MarketplaceVersion, espresso_types::V0_0>::new()).await
+            },
+            _ => {
+                panic!(
+                    "Invalid base ({}) and upgrade ({}) versions specified in the toml file.",
+                    $base, $upgrade
+                );
+            },
+        }
+    };
 }
 
 mod version_ser {

@@ -141,13 +141,13 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     bootstrapped_view: ViewNumber,
     tx_channel_capacity: NonZeroUsize,
     event_channel_capacity: NonZeroUsize,
-    bind_version: V,
     persistence: P,
     max_api_timeout_duration: Duration,
     buffered_view_num_count: usize,
     is_da: bool,
     maximize_txns_count_timeout_duration: Duration,
-) -> anyhow::Result<BuilderContext<network::Production, P, V>> {
+    versions: V,
+) -> anyhow::Result<()> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -236,7 +236,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
 
     // Combine the communication channels
     #[cfg(feature = "libp2p")]
-    let network = Arc::new(CombinedNetworks::new(
+    let network = Arc::new(CombinedNetworks::<SeqTypes>::new(
         cdn_network,
         p2p_network,
         Some(Duration::from_secs(1)),
@@ -291,7 +291,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         node_index,
         Some(network_params.state_relay_server_url),
         stake_table_commit,
-        bind_version,
+        versions,
         persistence,
     )
     .await;
@@ -314,7 +314,10 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     )
     .await?;
 
-    Ok(ctx)
+    // Start doing consensus.
+    ctx.start_consensus().await;
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

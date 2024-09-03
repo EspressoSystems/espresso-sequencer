@@ -9,10 +9,11 @@ use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
-    init_node,
+    init_node, match_and_run,
     options::{Modules, Options},
     persistence, Genesis, L1Params, NetworkParams,
 };
+
 use vbs::version::StaticVersionType;
 
 #[async_std::main]
@@ -20,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     opt.logging.init();
 
-    let modules = opt.modules();
+    let mut modules = opt.modules();
     tracing::warn!(?modules, "sequencer starting up");
 
     let genesis = Genesis::from_file(&opt.genesis_file)?;
@@ -29,54 +30,25 @@ async fn main() -> anyhow::Result<()> {
     let base = genesis.base_version;
     let upgrade = genesis.upgrade_version;
 
-    match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<V0_1, FeeVersion>::new(),
-            )
-            .await
-        }
-        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
-        }
-        _ => panic!(
-            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
-        ),
-    }
-}
-
-async fn run<V>(
-    genesis: Genesis,
-    mut modules: Modules,
-    opt: Options,
-    versions: V,
-) -> anyhow::Result<()>
-where
-    V: Versions,
-{
     if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(genesis, modules, opt, storage, versions).await
+        match_and_run!(
+            base,
+            upgrade,
+            init_with_storage(genesis, modules, opt, storage)
+        )
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(genesis, modules, opt, storage, versions).await
+        match_and_run!(
+            base,
+            upgrade,
+            init_with_storage(genesis, modules, opt, storage)
+        )
     } else {
         // Persistence is required. If none is provided, just use the local file system.
-        init_with_storage(
-            genesis,
-            modules,
-            opt,
-            persistence::fs::Options::default(),
-            versions,
+        match_and_run!(
+            base,
+            upgrade,
+            init_with_storage(genesis, modules, opt, persistence::fs::Options::default())
         )
-        .await
     }
 }
 

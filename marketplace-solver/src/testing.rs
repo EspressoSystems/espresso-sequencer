@@ -231,7 +231,6 @@ mod test {
         // Test the update rollup endpoint
         // We will use the existing rollup registration with namespace id = 1
         // and update it by setting the `active`` status to false
-
         let update_body = RollupUpdatebody {
             namespace_id: 1_u64.into(),
             reserve_url: Skip,
@@ -267,7 +266,6 @@ mod test {
         assert_eq!(reg_ns_1, result);
 
         // Test `rollup_registrations` endpoint to get all the registered rollups
-
         // The result should contain the updated rollup registration data
         let result: Vec<RollupRegistration> =
             client.get("rollup_registrations").send().await.unwrap();
