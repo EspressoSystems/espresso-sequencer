@@ -72,13 +72,11 @@ jobs:
             target/release/cli
             target/release/commitment-task
             target/release/submit-transactions
-            target/release/reset-storage
+            target/release/utils
             target/release/deploy
-            target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/espresso-dev-node
-            target/release/pub-key
             target/release/espresso-bridge
             target/release/marketplace-solver
             target/release/marketplace-builder
@@ -127,13 +125,11 @@ jobs:
             target/release/cli
             target/release/commitment-task
             target/release/submit-transactions
-            target/release/reset-storage
+            target/release/utils
             target/release/deploy
-            target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/espresso-dev-node
-            target/release/pub-key
             target/release/espresso-bridge
             target/release/marketplace-solver
             target/release/marketplace-builder
