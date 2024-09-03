@@ -69,23 +69,23 @@ impl Genesis {
 }
 
 #[macro_export]
-macro_rules! match_and_run {
-    ($base:expr, $upgrade:expr, $run_call:ident($($args:expr),*)) => {
+macro_rules! match_versions_and_run {
+    ($base:expr, $upgrade:expr, $fn:ident($($args:expr),*)) => {
         match ($base, $upgrade) {
             (V0_1::VERSION, FeeVersion::VERSION) => {
-                $run_call($($args,)* SequencerVersions::<V0_1, FeeVersion>::new()).await
+                $fn($($args,)* SequencerVersions::<V0_1, FeeVersion>::new()).await
             },
             (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-                $run_call($($args,)* SequencerVersions::<FeeVersion, MarketplaceVersion>::new()).await
+                $fn($($args,)* SequencerVersions::<FeeVersion, MarketplaceVersion>::new()).await
             },
             (V0_1::VERSION, _) => {
-                $run_call($($args,)* SequencerVersions::<V0_1,   espresso_types::V0_0>::new()).await
+                $fn($($args,)* SequencerVersions::<V0_1,   espresso_types::V0_0>::new()).await
             },
             (FeeVersion::VERSION, _) => {
-                $run_call($($args,)* SequencerVersions::<FeeVersion, espresso_types::V0_0>::new()).await
+                $fn($($args,)* SequencerVersions::<FeeVersion, espresso_types::V0_0>::new()).await
             },
             (MarketplaceVersion::VERSION, _) => {
-                $run_call($($args,)* SequencerVersions::<MarketplaceVersion, espresso_types::V0_0>::new()).await
+                $fn($($args,)* SequencerVersions::<MarketplaceVersion, espresso_types::V0_0>::new()).await
             },
             _ => {
                 panic!(

@@ -9,7 +9,7 @@ use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
-    init_node, match_and_run,
+    init_node, match_versions_and_run,
     options::{Modules, Options},
     persistence, Genesis, L1Params, NetworkParams,
 };
@@ -31,20 +31,20 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     if let Some(storage) = modules.storage_fs.take() {
-        match_and_run!(
+        match_versions_and_run!(
             base,
             upgrade,
             init_with_storage(genesis, modules, opt, storage)
         )
     } else if let Some(storage) = modules.storage_sql.take() {
-        match_and_run!(
+        match_versions_and_run!(
             base,
             upgrade,
             init_with_storage(genesis, modules, opt, storage)
         )
     } else {
         // Persistence is required. If none is provided, just use the local file system.
-        match_and_run!(
+        match_versions_and_run!(
             base,
             upgrade,
             init_with_storage(genesis, modules, opt, persistence::fs::Options::default())

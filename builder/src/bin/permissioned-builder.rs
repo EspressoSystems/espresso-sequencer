@@ -18,7 +18,7 @@ use hotshot_types::{
 };
 use libp2p::Multiaddr;
 use sequencer::{
-    match_and_run, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
+    match_versions_and_run, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
 };
 use sequencer_utils::logging;
 use url::Url;
@@ -282,7 +282,7 @@ async fn main() -> anyhow::Result<()> {
     let buffer_view_num_count = opt.buffer_view_num_count;
 
     // it will internally spawn the builder web server
-    match_and_run!(
+    match_versions_and_run!(
         base,
         upgrade,
         init_node(

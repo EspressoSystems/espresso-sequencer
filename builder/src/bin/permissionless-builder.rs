@@ -8,7 +8,7 @@ use espresso_types::{
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use sequencer::{match_and_run, Genesis, L1Params};
+use sequencer::{match_versions_and_run, Genesis, L1Params};
 use sequencer_utils::logging;
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -110,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state = match_and_run!(
+    let instance_state = match_versions_and_run!(
         base,
         upgrade,
         build_instance_state(genesis.chain_config, l1_params, opt.state_peers)
