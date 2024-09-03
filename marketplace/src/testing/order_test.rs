@@ -321,7 +321,7 @@ async fn test_builder_order_chain_fork() {
 
         let req_msg = get_req_msg(round as u64, builder_state_id).await;
         // give builder state time to fork
-        async_sleep(Duration::from_millis(100)).await;
+        async_sleep(Duration::from_secs(1)).await;
 
         // get the builder state for parent view we've just simulated
         global_state
@@ -349,7 +349,7 @@ async fn test_builder_order_chain_fork() {
         if fork {
             let req_msg_2 = get_req_msg(round as u64, builder_state_id_2).await;
             // give builder state time to fork
-            async_sleep(Duration::from_millis(100)).await;
+            async_sleep(Duration::from_secs(1)).await;
 
             // get the builder state for parent view we've just simulated
             global_state
