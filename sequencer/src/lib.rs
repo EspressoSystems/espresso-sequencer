@@ -42,8 +42,8 @@ pub use genesis::Genesis;
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 use hotshot::{
     traits::implementations::{
-        derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
-        WrappedSignatureKey,
+        derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, GossipConfig, KeyPair, MemoryNetwork,
+        PushCdnNetwork, WrappedSignatureKey,
     },
     types::SignatureKey,
     MarketplaceConfig,
@@ -321,11 +321,15 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     )
     .with_context(|| "Failed to create CDN network")?;
 
+    // Use the default `GossipSub` configuration
+    let gossip_config = GossipConfig::default();
+
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
+            gossip_config,
             network_params.libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair

@@ -8,18 +8,18 @@ edition = "2021"
 resolver = "2"
 
 members = [
-    "builder",
-    "contract-bindings",
-    "contracts/rust/adapter",
-    "contracts/rust/diff-test",
-    "contracts/rust/gen-vk-contract",
-    "hotshot-state-prover",
-    "marketplace-builder",
-    "marketplace-solver",
-    "node-metrics",
-    "sequencer",
-    "types",
-    "utils",
+  "builder",
+  "contract-bindings",
+  "contracts/rust/adapter",
+  "contracts/rust/diff-test",
+  "contracts/rust/gen-vk-contract",
+  "hotshot-state-prover",
+  "marketplace-builder",
+  "marketplace-solver",
+  "node-metrics",
+  "sequencer",
+  "types",
+  "utils",
 ]
 
 [workspace.dependencies]
@@ -35,7 +35,7 @@ ark-serialize = "0.4"
 ark-srs = "0.3.1"
 async-broadcast = "0.7.0"
 async-compatibility-layer = { version = "1.2.1", default-features = false, features = [
-    "logging-utils",
+  "logging-utils",
 ] }
 async-once-cell = "0.5"
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
@@ -72,45 +72,45 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", ta
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
-    "runtime-async-std",
-    "global-permits",
+  "runtime-async-std",
+  "global-permits",
 ], tag = "0.4.5", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
-    "runtime-async-std",
-    "global-permits",
+  "runtime-async-std",
+  "global-permits",
 ], tag = "0.4.5", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "test-apis",
+  "test-apis",
 ] }
 jf-crhf = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
+  "std",
 ] }
 jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
+  "std",
 ] }
 jf-pcs = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
+  "std",
+  "parallel",
 ] }
 jf-vid = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
+  "std",
+  "parallel",
 ] }
 jf-rescue = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
-    "parallel",
+  "std",
+  "parallel",
 ] }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-    "std",
+  "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 libp2p = { version = "0.53", default-features = false }
 log-panics = { version = "2.0", features = ["with-backtrace"] }
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
-sqlx = { version = "^0.8", features = [ "postgres", "macros" ] }
+sqlx = { version = "^0.8", features = ["postgres", "macros"] }
 tagged-base64 = "0.4"
 tide-disco = "0.9"
 thiserror = "1.0.61"
@@ -140,12 +140,12 @@ time = "0.3"
 trait-set = "0.3.0"
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "li/revert-hb-off-0-5-72" }
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-task = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-task-impls = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-testing = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }

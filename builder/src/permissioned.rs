@@ -43,8 +43,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, KeyPair,
-            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, GossipConfig,
+            KeyPair, Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -224,6 +224,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     #[cfg(feature = "libp2p")]
     let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
         config.clone(),
+        GossipConfig::default(),
         network_params.libp2p_bind_address,
         &my_config.public_key,
         // We need the private key so we can derive our Libp2p keypair
