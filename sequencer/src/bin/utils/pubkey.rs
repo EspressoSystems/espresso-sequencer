@@ -3,11 +3,10 @@ use std::str::FromStr;
 use anyhow::bail;
 use clap::Parser;
 use espresso_types::{PrivKey, PubKey};
-use hotshot::{traits::implementations::derive_libp2p_peer_id, types::BLSPubKey};
-use hotshot_types::{
-    light_client::{StateKeyPair, StateSignKey},
-    traits::signature_key::SignatureKey,
-};
+use hotshot::traits::implementations::derive_libp2p_peer_id;
+use hotshot::types::SignatureKey;
+use hotshot_types::light_client::StateSignKey;
+use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 
 #[derive(Clone, Debug)]
 enum PrivateKey {
@@ -31,7 +30,7 @@ impl FromStr for PrivateKey {
 
 /// Get the public key corresponding to a private key.
 #[derive(Clone, Debug, Parser)]
-struct Options {
+pub struct Options {
     /// The private key to get the public key for.
     key: PrivateKey,
 
@@ -40,9 +39,7 @@ struct Options {
     libp2p: bool,
 }
 
-fn main() {
-    let opt = Options::parse();
-
+pub fn run(opt: Options) {
     match (opt.libp2p, opt.key) {
         // Non-libp2p
         (false, PrivateKey::Bls(key)) => println!("{}", PubKey::from_private(&key)),
