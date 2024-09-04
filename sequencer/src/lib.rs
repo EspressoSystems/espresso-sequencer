@@ -24,6 +24,7 @@ use futures::FutureExt;
 use genesis::L1Finalized;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
+use libp2p_networking::network::GossipConfig;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -326,6 +327,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
+            GossipConfig::default(),
             network_params.libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair

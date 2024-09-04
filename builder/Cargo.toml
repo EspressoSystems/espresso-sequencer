@@ -34,6 +34,7 @@ hotshot-types = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true, features = ["bls"] }
 libp2p = { workspace = true }
+libp2p-networking = { workspace = true }
 portpicker = { workspace = true }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
