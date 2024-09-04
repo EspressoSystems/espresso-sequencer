@@ -56,7 +56,7 @@ case $KERNEL in
   CARGO_TARGET_DIR=target/docker
   CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 
-  # Pull our latest devops-rust image. Using an older image may cause a failung
+  # Pull our latest devops-rust image. Using an older image may cause a failing
   # rustup channels sync.
   docker pull ghcr.io/espressosystems/devops-rust:stable
 
