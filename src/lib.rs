@@ -587,7 +587,7 @@ mod test {
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
+    use hotshot_types::simple_certificate::QuorumCertificate;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
     use std::time::Duration;
@@ -736,14 +736,13 @@ mod test {
             .unwrap();
 
         // Mock up some data and add a block to the store.
-        let leaf = Leaf::<MockTypes>::genesis(
-            &TestValidatedState::default(),
-            &TestInstanceState::default(),
-        )
-        .await;
-        let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
+        let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::default()).await;
+        let qc = QuorumCertificate::genesis(&Default::default(), &Default::default()).await;
+        let leaf = LeafQueryData::new(leaf, qc).unwrap();
+        let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());
         let mut tx = hotshot_qs.write().await.unwrap();
-        tx.insert_block(block.clone()).await.unwrap();
+        tx.insert_leaf(leaf).await.unwrap();
+        tx.insert_block(block).await.unwrap();
         tx.commit().await.unwrap();
 
         let module_state =
