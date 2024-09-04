@@ -4,10 +4,6 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-hotshot = { workspace = true }
-hotshot-builder-api = { workspace = true }
-hotshot-events-service = { workspace = true }
-hotshot-types = { workspace = true }
 
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
@@ -21,6 +17,10 @@ committable = { workspace = true }
 derivative = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
+hotshot = { workspace = true }
+hotshot-builder-api = { workspace = true }
+hotshot-events-service = { workspace = true }
+hotshot-types = { workspace = true }
 lru = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sha2 = { workspace = true }
