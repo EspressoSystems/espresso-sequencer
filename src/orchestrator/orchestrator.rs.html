@@ -154,19 +154,6 @@
 <a href="#154" id="154">154</a>
 <a href="#155" id="155">155</a>
 <a href="#156" id="156">156</a>
-<a href="#157" id="157">157</a>
-<a href="#158" id="158">158</a>
-<a href="#159" id="159">159</a>
-<a href="#160" id="160">160</a>
-<a href="#161" id="161">161</a>
-<a href="#162" id="162">162</a>
-<a href="#163" id="163">163</a>
-<a href="#164" id="164">164</a>
-<a href="#165" id="165">165</a>
-<a href="#166" id="166">166</a>
-<a href="#167" id="167">167</a>
-<a href="#168" id="168">168</a>
-<a href="#169" id="169">169</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>clap::Parser;
@@ -292,26 +279,13 @@
         start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,
         indexed_da: <span class="bool-val">false</span>,
+        enable_registration_verification: <span class="bool-val">false</span>,
         ..Default::default()
     };
 
     <span class="comment">// The Libp2p configuration
     </span><span class="kw">let </span>libp2p_config = Libp2pConfig {
         bootstrap_nodes: Vec::new(),
-        node_index: <span class="number">0</span>,
-        bootstrap_mesh_n_high: args.libp2p_mesh_n,
-        bootstrap_mesh_n_low: args.libp2p_mesh_n,
-        bootstrap_mesh_outbound_min: args.libp2p_mesh_n / <span class="number">2</span>,
-        bootstrap_mesh_n: args.libp2p_mesh_n,
-        mesh_n_high: args.libp2p_mesh_n,
-        mesh_n_low: args.libp2p_mesh_n,
-        mesh_outbound_min: args.libp2p_mesh_n / <span class="number">2</span>,
-        mesh_n: args.libp2p_mesh_n,
-        next_view_timeout: config.next_view_timeout,
-        online_time: <span class="number">10</span>,
-        num_txn_per_round: <span class="number">0</span>,
-        server_mode: <span class="bool-val">false</span>,
-        builder_timeout: args.builder_timeout,
     };
 
     config.config.num_nodes_with_stake = args.num_nodes;

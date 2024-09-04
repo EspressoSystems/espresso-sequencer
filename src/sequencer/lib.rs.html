@@ -1084,6 +1084,8 @@
 <a href="#1084" id="1084">1084</a>
 <a href="#1085" id="1085">1085</a>
 <a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1110,6 +1112,7 @@
 <span class="kw">use </span>genesis::L1Finalized;
 <span class="comment">// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 </span><span class="kw">use </span>libp2p::Multiaddr;
+<span class="kw">use </span>libp2p_networking::network::GossipConfig;
 <span class="kw">use </span>network::libp2p::split_off_peer_id;
 <span class="kw">use </span>options::Identity;
 <span class="kw">use </span>state_signature::static_stake_table_commitment;
@@ -1412,6 +1415,7 @@
     </span><span class="kw">let </span>network = {
         <span class="kw">let </span>p2p_network = Libp2pNetwork::from_config::&lt;SeqTypes&gt;(
             config.clone(),
+            GossipConfig::default(),
             network_params.libp2p_bind_address,
             <span class="kw-2">&amp;</span>my_config.public_key,
             <span class="comment">// We need the private key so we can derive our Libp2p keypair

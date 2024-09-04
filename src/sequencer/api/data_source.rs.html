@@ -449,7 +449,9 @@
 <a href="#449" id="449">449</a>
 <a href="#450" id="450">450</a>
 <a href="#451" id="451">451</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_trait::async_trait;
@@ -883,6 +885,8 @@
             commit_sha: <span class="self">self</span>.commit_sha,
             builder: <span class="self">self</span>.builder,
             random_builder: <span class="self">self</span>.random_builder,
+            public_keys: HashSet::new(),
+            enable_registration_verification: <span class="bool-val">false</span>,
         })
     }
 }

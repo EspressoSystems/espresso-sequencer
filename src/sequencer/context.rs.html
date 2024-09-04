@@ -403,6 +403,10 @@
 <a href="#403" id="403">403</a>
 <a href="#404" id="404">404</a>
 <a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Display;
 
 <span class="kw">use </span>anyhow::Context;
@@ -436,6 +440,7 @@
         network::{ConnectedNetwork, Topic},
         node_implementation::Versions,
     },
+    PeerConfig,
 };
 <span class="kw">use </span>url::Url;
 
@@ -676,8 +681,11 @@
     </span><span class="kw">pub async fn </span>start_consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(orchestrator_client) = <span class="kw-2">&amp;</span><span class="self">self</span>.wait_for_orchestrator {
             <span class="macro">tracing::warn!</span>(<span class="string">"waiting for orchestrated start"</span>);
+            <span class="kw">let </span>peer_config =
+                PeerConfig::to_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>.config.config.my_own_validator_config.public_config())
+                    .clone();
             orchestrator_client
-                .wait_for_all_nodes_ready(<span class="self">self</span>.node_state.node_id)
+                .wait_for_all_nodes_ready(peer_config)
                 .<span class="kw">await</span>;
         } <span class="kw">else </span>{
             <span class="macro">tracing::error!</span>(<span class="string">"Cannot get info from orchestrator client"</span>);
