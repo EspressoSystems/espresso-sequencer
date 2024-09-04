@@ -13,6 +13,7 @@ use ethers::utils::hex;
 use hotshot::types::SignatureKey;
 use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 use rand::{RngCore, SeedableRng};
+use sequencer_utils::logging;
 use tracing::info_span;
 
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
@@ -69,7 +70,7 @@ impl Scheme {
 /// Generated secret keys are written to a file in .env format, which can directly be used to
 /// configure a sequencer node. Public information about the generated keys is printed to stdout.
 #[derive(Clone, Debug, Parser)]
-pub struct Options {
+struct Options {
     /// Seed for generating keys.
     ///
     /// If not provided, a random seed will be generated using system entropy.
@@ -99,6 +100,9 @@ pub struct Options {
     /// called .seed.
     #[clap(short, long, name = "OUT")]
     out: PathBuf,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 fn parse_seed(s: &str) -> Result<[u8; 32], anyhow::Error> {
@@ -116,7 +120,10 @@ fn gen_default_seed() -> [u8; 32] {
     seed
 }
 
-pub fn run(opts: Options) -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    let opts = Options::parse();
+    opts.logging.init();
+
     tracing::debug!(
         "Generating {} keypairs with scheme {}",
         opts.num,

@@ -25,7 +25,6 @@ impl PostgresClient {
             acquire_timeout,
             require_ssl,
             migrations,
-            reset,
         } = opts;
 
         let mut options = PgPoolOptions::new();
@@ -73,17 +72,6 @@ impl PostgresClient {
 
         let connection = options.connect(postgres_url.as_str()).await?;
 
-        if reset {
-            sqlx::query("DROP SCHEMA public CASCADE;")
-                .execute(&connection)
-                .await
-                .unwrap();
-            sqlx::query("CREATE SCHEMA public;")
-                .execute(&connection)
-                .await
-                .unwrap();
-        }
-
         if migrations {
             sqlx::migrate!("./migrations").run(&connection).await?;
         }
@@ -129,7 +117,6 @@ pub mod mock {
             acquire_timeout: None,
             require_ssl: false,
             migrations: true,
-            reset: false,
         };
 
         // TmpDb will be dropped, which will cause the Docker container to be killed.

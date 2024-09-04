@@ -61,22 +61,10 @@ pub struct DatabaseOptions {
         default_value_t = true
     )]
     pub migrations: bool,
-
-    #[clap(
-        long,
-        env = "MARKETPLACE_SOLVER_DATABASE_RESET",
-        default_value_t = false
-    )]
-    pub reset: bool,
 }
 
 impl DatabaseOptions {
     pub async fn connect(self) -> anyhow::Result<PostgresClient> {
         PostgresClient::connect(self).await
-    }
-
-    pub fn reset(mut self) -> Self {
-        self.reset = true;
-        self
     }
 }
