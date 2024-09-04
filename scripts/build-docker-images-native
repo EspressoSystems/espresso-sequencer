@@ -55,6 +55,10 @@ case $KERNEL in
   # native builds.
   CARGO_TARGET_DIR=target/docker
 
+  # Pull our latest devops-rust image. Using an older image may cause a failung
+  # rustup channels sync.
+  docker pull ghcr.io/espressosystems/devops-rust:stable
+
   # Build in docker container:
   #   - RUSTFLAGS is needed for compilation.
   #   - CARGO_TARGET_DIR is set to point to the location where the hosts

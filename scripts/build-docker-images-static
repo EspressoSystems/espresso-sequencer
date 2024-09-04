@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "This script only works on Linux."
+  echo "On macOS, use scripts/build-docker-images-native instead."
+  exit 1
+fi
+
 set -euxo pipefail
 
 nix develop .#crossShell --ignore-environment --command cargo build --release
