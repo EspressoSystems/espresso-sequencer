@@ -333,13 +333,15 @@ where
     }
 }
 
-/// [`Transaction`] implements [`AvailabilityStorage`], not the richer [`AvailabilityDataSource`].
+/// [`Transaction`] implements [`AvailabilityStorage`], not the richer
+/// [`AvailabilityDataSource`](crate::availability::AvailabilityDataSource).
 ///
-/// Privding the full [`AvailabilityDataSource`] interface through a transaction would be ill
-/// advised, because read operations through this interface trigger side effects (fetches) that may
-/// not be rolled back if the transaction is rolled back, and may also compete for resources being
-/// used by the transaction itself. Thus, we only provide [`AvailabilityStorage`], which returns
-/// errors if data is not available instead of fetching.
+/// Privding the full [`AvailabilityDataSource`](crate::availability::AvailabilityDataSource)
+/// interface through a transaction would be ill advised, because read operations through this
+/// interface trigger side effects (fetches) that may not be rolled back if the transaction is
+/// rolled back, and may also compete for resources being used by the transaction itself. Thus, we
+/// only provide [`AvailabilityStorage`], which returns errors if data is not available instead of
+/// fetching.
 #[async_trait]
 impl<'a, Types, T> AvailabilityStorage<Types> for Transaction<'a, Types, T>
 where

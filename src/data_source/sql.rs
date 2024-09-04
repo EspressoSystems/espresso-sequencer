@@ -215,13 +215,10 @@ impl Config {
 /// If the new application-specific state should live in the SQL database itself, the implementation
 /// is more involved, but still possible. Follow the steps for [custom
 /// migrations](#custom-migrations) to modify the database schema to account for the new data you
-/// want to store. You can then access this data through the [`SqlDataSource`] using [`Query`] to
-/// run a custom read-only SQL query or [`transaction`](super::VersionedDataSource::transaction) to
-/// execute a custom atomic mutation of the database.
-///
-/// You will typically use the [`Query`] interface to read custom data in API endpoint handlers and
-/// [`transaction`](super::VersionedDataSource::transaction) to populate custom data in your web
-/// server's update loop.
+/// want to store. You can then access this data through the [`SqlDataSource`] using
+/// [`read`](super::VersionedDataSource::read) to run a custom read-only SQL query or
+/// [`write`](super::VersionedDataSource::write) to execute a custom atomic mutation of the
+/// database.
 ///
 /// ## Composition
 ///
@@ -236,8 +233,8 @@ impl Config {
 /// database directly to make updates.
 ///
 /// In the following example, we compose HotShot query service modules with other application-
-/// specific modules, synchronizing updates using
-/// [`transaction`](super::VersionedDataSource::transaction).
+/// specific modules, synchronizing updates using SQL transactions via
+/// [`write`](super::VersionedDataSource::write).
 ///
 /// ```
 /// # use async_std::{sync::Arc, task::spawn};
@@ -265,7 +262,7 @@ impl Config {
 /// ) -> anyhow::Result<App<Arc<AppState>, Error>> {
 ///     let mut hotshot_qs = config.connect(NoFetching).await?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
-///     let tx = hotshot_qs.transaction().await?;
+///     let tx = hotshot_qs.write().await?;
 ///     // ...
 ///     tx.commit().await?;
 ///
@@ -279,7 +276,7 @@ impl Config {
 ///     spawn(async move {
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
-///             let mut tx = state.hotshot_qs.transaction().await.unwrap();
+///             let mut tx = state.hotshot_qs.write().await.unwrap();
 ///             UpdateDataSource::<AppTypes>::update(&mut tx, &event)
 ///                 .await
 ///                 .unwrap();

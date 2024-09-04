@@ -62,8 +62,8 @@
 //! let node_api = node::define_api(&Default::default(),  MockBase::instance())?;
 //! let status_api = status::define_api(&Default::default(),  MockBase::instance())?;
 //!
-//! // Create app. We wrap `data_source` into an `Arc` so we can share it with the web server.
-//! let data_source = ApiState::from(Arc::new(data_source));
+//! // Create app.
+//! let data_source = ApiState::from(data_source);
 //! let mut app = App::<_, Error>::with_state(data_source.clone());
 //! app
 //!     .register_module("availability", availability_api)?
@@ -76,7 +76,7 @@
 //! // Update query data using HotShot events.
 //! let mut events = hotshot.event_stream();
 //! while let Some(event) = events.next().await {
-//!     let mut tx = data_source.transaction().await?;
+//!     let mut tx = data_source.write().await?;
 //!
 //!     // Update the query data based on this event.
 //!     tx.update(&event).await?;
