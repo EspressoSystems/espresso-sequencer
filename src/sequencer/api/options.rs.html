@@ -1101,7 +1101,7 @@
 </span><span class="attr">#[derive(Parser, Clone, Debug, Default)]
 </span><span class="kw">pub struct </span>Query {
     <span class="doccomment">/// Peers for fetching missing data for the query service.
-    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_API_PEERS"</span>)]
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_API_PEERS"</span>, value_delimiter = <span class="string">','</span>)]
     </span><span class="kw">pub </span>peers: Vec&lt;Url&gt;,
 }
 
