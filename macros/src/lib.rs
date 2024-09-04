@@ -275,7 +275,7 @@ fn cross_tests_internal(test_spec: CrossTestData) -> TokenStream {
 /// - `Types: []` - a list types that implement `NodeImplementation` over the types in `Impls`
 /// - `TestName: example_test` - the name of the test
 /// - `Ignore`: whether or not this set of tests are ignored
-/// Example usage: see tests in this module
+///   Example usage: see tests in this module
 #[proc_macro]
 pub fn cross_tests(input: TokenStream) -> TokenStream {
     let test_spec = parse_macro_input!(input as CrossTestData);
