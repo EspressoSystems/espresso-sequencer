@@ -148,6 +148,19 @@
 <a href="#148" id="148">148</a>
 <a href="#149" id="149">149</a>
 <a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>sqlx::{
     pool::PoolConnection,
@@ -175,6 +188,7 @@
             acquire_timeout,
             require_ssl,
             migrations,
+            reset,
         } = opts;
 
         <span class="kw">let </span><span class="kw-2">mut </span>options = PgPoolOptions::new();
@@ -222,6 +236,17 @@
 
         <span class="kw">let </span>connection = options.connect(postgres_url.as_str()).<span class="kw">await</span><span class="question-mark">?</span>;
 
+        <span class="kw">if </span>reset {
+            sqlx::query(<span class="string">"DROP SCHEMA public CASCADE;"</span>)
+                .execute(<span class="kw-2">&amp;</span>connection)
+                .<span class="kw">await
+                </span>.unwrap();
+            sqlx::query(<span class="string">"CREATE SCHEMA public;"</span>)
+                .execute(<span class="kw-2">&amp;</span>connection)
+                .<span class="kw">await
+                </span>.unwrap();
+        }
+
         <span class="kw">if </span>migrations {
             <span class="macro">sqlx::migrate!</span>(<span class="string">"./migrations"</span>).run(<span class="kw-2">&amp;</span>connection).<span class="kw">await</span><span class="question-mark">?</span>;
         }
@@ -267,6 +292,7 @@
             acquire_timeout: <span class="prelude-val">None</span>,
             require_ssl: <span class="bool-val">false</span>,
             migrations: <span class="bool-val">true</span>,
+            reset: <span class="bool-val">false</span>,
         };
 
         <span class="comment">// TmpDb will be dropped, which will cause the Docker container to be killed.

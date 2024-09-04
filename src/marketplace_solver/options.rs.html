@@ -68,6 +68,18 @@
 <a href="#68" id="68">68</a>
 <a href="#69" id="69">69</a>
 <a href="#70" id="70">70</a>
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use </span>clap::Parser;
@@ -131,11 +143,23 @@
         default_value_t = <span class="bool-val">true
     </span>)]
     </span><span class="kw">pub </span>migrations: bool,
+
+    <span class="attr">#[clap(
+        long,
+        env = <span class="string">"MARKETPLACE_SOLVER_DATABASE_RESET"</span>,
+        default_value_t = <span class="bool-val">false
+    </span>)]
+    </span><span class="kw">pub </span>reset: bool,
 }
 
 <span class="kw">impl </span>DatabaseOptions {
     <span class="kw">pub async fn </span>connect(<span class="self">self</span>) -&gt; anyhow::Result&lt;PostgresClient&gt; {
         PostgresClient::connect(<span class="self">self</span>).<span class="kw">await
+    </span>}
+
+    <span class="kw">pub fn </span>reset(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.reset = <span class="bool-val">true</span>;
+        <span class="self">self
     </span>}
 }
 </code></pre></div></section></main></body></html>

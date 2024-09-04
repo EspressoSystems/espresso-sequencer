@@ -350,6 +350,7 @@
 <a href="#350" id="350">350</a>
 <a href="#351" id="351">351</a>
 <a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -678,6 +679,7 @@
             acquire_timeout: <span class="prelude-val">None</span>,
             require_ssl: <span class="bool-val">false</span>,
             migrations: <span class="bool-val">true</span>,
+            reset: <span class="bool-val">false</span>,
         };
 
         <span class="kw">let </span>client = PostgresClient::connect(opts)
