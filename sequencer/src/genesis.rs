@@ -70,7 +70,7 @@ impl Genesis {
 
 #[macro_export]
 macro_rules! match_versions_and_run {
-    ($base:expr, $upgrade:expr, $fn:ident($($args:expr),*)) => {
+    ($base:ident, $upgrade:ident, $fn:ident($($args:expr),*)) => {
         match ($base, $upgrade) {
             (V0_1::VERSION, FeeVersion::VERSION) => {
                 $fn($($args,)* SequencerVersions::<V0_1, FeeVersion>::new()).await
