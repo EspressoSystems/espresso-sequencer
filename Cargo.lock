@@ -3065,7 +3065,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3112,7 +3112,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "async-trait",
  "clap",
@@ -3131,7 +3131,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3164,7 +3164,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
@@ -3183,7 +3183,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -3194,7 +3194,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3283,7 +3283,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3298,7 +3298,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3335,7 +3335,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3381,7 +3381,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4444,7 +4444,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#fb6d064d1386741db7a519b9f09c0b7769ee79c3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#1fdfb8dcb233af0712d1f00ca91078dd7bf3b3e0"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -7065,9 +7065,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcfa89bea9500db4a0d038513d7a060566bfc51d46d1c014847049a45cce85e8"
+checksum = "93334716a037193fac19df402f8571269c84a00852f6a7066b5d2616dcd64d3e"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -7078,9 +7078,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-core"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d06e2f2bd861719b1f3f0c7dbe1d80c30bf59e76cf019f07d9014ed7eefb8e08"
+checksum = "d4d8060b456358185f7d50c55d9b5066ad956956fddec42ee2e8567134a8936e"
 dependencies = [
  "atoi",
  "byteorder",
@@ -7118,9 +7118,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f998a9defdbd48ed005a89362bd40dd2117502f15294f61c8d47034107dbbdc"
+checksum = "cac0692bcc9de3b073e8d747391827297e075c7710ff6276d9f7a1f3d58c6657"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7131,9 +7131,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-macros-core"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d100558134176a2629d46cec0c8891ba0be8910f7896abfdb75ef4ab6f4e7ce"
+checksum = "1804e8a7c7865599c9c79be146dc8a9fd8cc86935fa641d3ea58e5f0688abaa5"
 dependencies = [
  "dotenvy",
  "either",
@@ -7157,9 +7157,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-mysql"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "936cac0ab331b14cb3921c62156d913e4c15b74fb6ec0f3146bd4ef6e4fb3c12"
+checksum = "64bb4714269afa44aef2755150a0fc19d756fb580a67db8885608cf02f47d06a"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -7200,9 +7200,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-postgres"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9734dbce698c67ecf67c442f768a5e90a49b2a4d61a9f1d59f73874bd4cf0710"
+checksum = "6fa91a732d854c5d7726349bb4bb879bb9478993ceb764247660aee25f67c2f8"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -7239,9 +7239,9 @@ dependencies = [
 
 [[package]]
 name = "sqlx-sqlite"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a75b419c3c1b1697833dd927bdc4c6545a620bc1bbafabd44e1efbe9afcd337e"
+checksum = "d5b2cf34a45953bfd3daaf3db0f7a7878ab9b7a6b91b422d24a7a9e4c857b680"
 dependencies = [
  "atoi",
  "flume",
