@@ -63,10 +63,6 @@ contract LightClientV2 is LightClient {
         }
         // format validity check
         BN254.validateScalarField(newState.blockCommRoot);
-        BN254.validateScalarField(newState.feeLedgerComm);
-        BN254.validateScalarField(newState.stakeTableBlsKeyComm);
-        BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
-        BN254.validateScalarField(newState.stakeTableAmountComm);
 
         // check plonk proof
         verifyProof(newState, proof);
@@ -79,14 +75,6 @@ contract LightClientV2 is LightClient {
         // different data handling mechanisms
         // and this each field needs to be assigned individually
         finalizedState = newState;
-        // states[finalizedState].viewNum = newState.viewNum;
-        // states[finalizedState].blockHeight = newState.blockHeight;
-        // states[finalizedState].blockCommRoot = newState.blockCommRoot;
-        // states[finalizedState].feeLedgerComm = newState.feeLedgerComm;
-        // states[finalizedState].stakeTableBlsKeyComm = newState.stakeTableBlsKeyComm;
-        // states[finalizedState].stakeTableSchnorrKeyComm = newState.stakeTableSchnorrKeyComm;
-        // states[finalizedState].stakeTableAmountComm = newState.stakeTableAmountComm;
-        // states[finalizedState].threshold = newState.threshold;
 
         extendedFinalzedState.extraField = 2;
 

@@ -105,7 +105,7 @@ pub struct HotShotCommitment {
     pub block_height: u64,
     pub block_comm_root: ::ethers::core::types::U256,
 }
-///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256)`
+///`LightClientState(uint64,uint64,uint256)`
 #[derive(
     Clone,
     ::ethers::contract::EthAbiType,
@@ -122,11 +122,6 @@ pub struct LightClientState {
     pub view_num: u64,
     pub block_height: u64,
     pub block_comm_root: ::ethers::core::types::U256,
-    pub fee_ledger_comm: ::ethers::core::types::U256,
-    pub stake_table_bls_key_comm: ::ethers::core::types::U256,
-    pub stake_table_schnorr_key_comm: ::ethers::core::types::U256,
-    pub stake_table_amount_comm: ::ethers::core::types::U256,
-    pub threshold: ::ethers::core::types::U256,
 }
 ///`StakeState(uint256,uint256,uint256,uint256)`
 #[derive(

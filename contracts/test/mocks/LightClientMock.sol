@@ -40,10 +40,6 @@ contract LightClientMock is LC {
         publicInput[1] = uint256(state.viewNum);
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(finalizedState.stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(finalizedState.stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(finalizedState.stakeTableAmountComm);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();

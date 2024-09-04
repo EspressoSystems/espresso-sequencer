@@ -9,7 +9,12 @@ import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy
 contract DeployLightClientContractScript is Script {
     function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod)
         external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+        returns (
+            address payable proxyAddress,
+            address admin,
+            LC.LightClientState memory,
+            LC.StakeState memory
+        )
     {
         // TODO for a production deployment provide the right genesis state and value
 
@@ -19,37 +24,30 @@ contract DeployLightClientContractScript is Script {
         cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
-
-        LC.StakeState memory stakeState = LC.StakeState(
-            state.threshold,
-            state.stakeTableBlsKeyComm,
-            state.stakeTableSchnorrKeyComm,
-            state.stakeTableAmountComm
-        );
+        (LC.LightClientState memory state,,, LC.StakeState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeState));
 
         return deployContract(state, stakeState, stateHistoryRetentionPeriod);
     }
 
-    function runDemo(uint32 stateHistoryRetentionPeriod)
-        external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
-        string[] memory cmds = new string[](1);
-        cmds[0] = "gen-demo-genesis";
+    // function runDemo(uint32 stateHistoryRetentionPeriod)
+    //     external
+    //     returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+    // {
+    //     string[] memory cmds = new string[](1);
+    //     cmds[0] = "gen-demo-genesis";
 
-        bytes memory result = vm.ffi(cmds);
-        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
-        LC.StakeState memory stakeState = LC.StakeState(
-            state.threshold,
-            state.stakeTableBlsKeyComm,
-            state.stakeTableSchnorrKeyComm,
-            state.stakeTableAmountComm
-        );
+    //     bytes memory result = vm.ffi(cmds);
+    //     LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+    //     LC.StakeState memory stakeState = LC.StakeState(
+    //         state.threshold,
+    //         state.stakeTableBlsKeyComm,
+    //         state.stakeTableSchnorrKeyComm,
+    //         state.stakeTableAmountComm
+    //     );
 
-        return deployContract(state, stakeState, stateHistoryRetentionPeriod);
-    }
+    //     return deployContract(state, stakeState, stateHistoryRetentionPeriod);
+    // }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
@@ -59,7 +57,15 @@ contract DeployLightClientContractScript is Script {
         LC.LightClientState memory state,
         LC.StakeState memory stakeState,
         uint32 stateHistoryRetentionPeriod
-    ) private returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
+    )
+        private
+        returns (
+            address payable proxyAddress,
+            address admin,
+            LC.LightClientState memory,
+            LC.StakeState memory
+        )
+    {
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(admin);
@@ -81,6 +87,6 @@ contract DeployLightClientContractScript is Script {
 
         proxyAddress = payable(address(proxy));
 
-        return (proxyAddress, admin, state);
+        return (proxyAddress, admin, state, stakeState);
     }
 }

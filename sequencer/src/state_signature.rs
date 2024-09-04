@@ -164,8 +164,6 @@ fn form_light_client_state(
         view_number: leaf.view_number().u64() as usize,
         block_height: leaf.height() as usize,
         block_comm_root: hash_bytes_to_field(&block_comm_root_bytes)?,
-        fee_ledger_comm: hash_bytes_to_field(&fee_ledger_comm_bytes)?,
-        stake_table_comm: *stake_table_comm,
     })
 }
 

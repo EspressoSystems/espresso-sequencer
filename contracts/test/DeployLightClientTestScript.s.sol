@@ -20,15 +20,8 @@ contract DeployLightClientTestScript is Script {
         cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
-
-        LC.StakeState memory stakeState = LC.StakeState(
-            state.threshold,
-            state.stakeTableBlsKeyComm,
-            state.stakeTableSchnorrKeyComm,
-            state.stakeTableAmountComm
-        );
+        (LC.LightClientState memory state,,, LC.StakeState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeState));
 
         return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
     }
@@ -51,24 +44,24 @@ contract DeployLightClientTestScript is Script {
         return (lcTestProxy, admin, state);
     }
 
-    function runDemo(uint32 stateHistoryRetentionPeriod, address owner)
-        external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
-        string[] memory cmds = new string[](1);
-        cmds[0] = "gen-demo-genesis";
+    // function runDemo(uint32 stateHistoryRetentionPeriod, address owner)
+    //     external
+    //     returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+    // {
+    //     string[] memory cmds = new string[](1);
+    //     cmds[0] = "gen-demo-genesis";
 
-        bytes memory result = vm.ffi(cmds);
-        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
-        LC.StakeState memory stakeState = LC.StakeState(
-            state.threshold,
-            state.stakeTableBlsKeyComm,
-            state.stakeTableSchnorrKeyComm,
-            state.stakeTableAmountComm
-        );
+    //     bytes memory result = vm.ffi(cmds);
+    //     LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+    //     LC.StakeState memory stakeState = LC.StakeState(
+    //         state.threshold,
+    //         state.stakeTableBlsKeyComm,
+    //         state.stakeTableSchnorrKeyComm,
+    //         state.stakeTableAmountComm
+    //     );
 
-        return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
-    }
+    //     return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
+    // }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy

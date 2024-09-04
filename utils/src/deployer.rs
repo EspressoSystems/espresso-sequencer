@@ -311,6 +311,7 @@ pub async fn deploy(
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<ParsedLightClientState>>,
+    genesis_stake: BoxFuture<'_, anyhow::Result<ParsedStakeState>>,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;
@@ -358,10 +359,10 @@ pub async fn deploy(
         let light_client = LightClient::new(lc_address, l1.clone());
 
         let genesis = genesis.await?.clone();
-        let parsed_stake_state: ParsedStakeState = genesis.clone().into();
+        let genesis_stake = genesis_stake.await?.clone();
 
         let data = light_client
-            .initialize(genesis.into(), parsed_stake_state.into(), 864000, owner)
+            .initialize(genesis.into(), genesis_stake.into(), 864000, owner)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts

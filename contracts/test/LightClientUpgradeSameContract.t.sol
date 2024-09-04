@@ -16,6 +16,7 @@ contract LightClientUpgradeSameContractTest is Test {
     UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
 
     LCV1.LightClientState public stateV1;
+    LCV1.StakeState public stakeStateV1;
 
     address public admin;
     address public proxy;
@@ -24,7 +25,7 @@ contract LightClientUpgradeSameContractTest is Test {
 
     // deploy the first implementation with its proxy
     function setUp() public {
-        (proxy, admin, stateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
+        (proxy, admin, stateV1, stakeStateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
         lcV1Proxy = LCV1(proxy);
     }
 
@@ -33,11 +34,11 @@ contract LightClientUpgradeSameContractTest is Test {
 
         assertEq(abi.encode(lcV1Proxy.getFinalizedState()), abi.encode(stateV1));
 
-        bytes32 stakeTableComm = lcV1Proxy.computeStakeTableComm(stateV1);
+        bytes32 stakeTableComm = lcV1Proxy.computeStakeTableComm(stakeStateV1);
         assertEq(lcV1Proxy.votingStakeTableCommitment(), stakeTableComm);
         assertEq(lcV1Proxy.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.votingThreshold(), stateV1.threshold);
-        assertEq(lcV1Proxy.frozenThreshold(), stateV1.threshold);
+        assertEq(lcV1Proxy.votingThreshold(), stakeStateV1.threshold);
+        assertEq(lcV1Proxy.frozenThreshold(), stakeStateV1.threshold);
     }
 
     // that the data remains the same after upgrading the implementation
@@ -47,16 +48,8 @@ contract LightClientUpgradeSameContractTest is Test {
         // of the upgraded contract is set to 0
         lcV2Proxy = LCV2(upgrader.run(0, proxy));
 
-        LCV2.LightClientState memory expectedLightClientState = LCV2.LightClientState(
-            stateV1.viewNum,
-            stateV1.blockHeight,
-            stateV1.blockCommRoot,
-            stateV1.feeLedgerComm,
-            stateV1.stakeTableBlsKeyComm,
-            stateV1.stakeTableSchnorrKeyComm,
-            stateV1.stakeTableAmountComm,
-            stateV1.threshold
-        );
+        LCV2.LightClientState memory expectedLightClientState =
+            LCV2.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
 
         assertEq(abi.encode(lcV2Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
     }

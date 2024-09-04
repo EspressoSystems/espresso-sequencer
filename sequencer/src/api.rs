@@ -628,6 +628,11 @@ pub mod test_helpers {
             light_client_genesis_from_stake_table(st).unwrap()
         }
 
+        pub fn light_client_genesis_stake(&self) -> ParsedStakeState {
+            let st = self.cfg.stake_table();
+            light_client_genesis_stake_from_stake_table(st).unwrap()
+        }
+
         pub async fn stop_consensus(&mut self) {
             self.server.shutdown_consensus().await;
 

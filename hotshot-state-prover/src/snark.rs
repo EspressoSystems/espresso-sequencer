@@ -215,10 +215,10 @@ mod tests {
             view_number: 100,
             block_height: 73,
             block_comm_root,
-            fee_ledger_comm,
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
+            // fee_ledger_comm,
+            // stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg: [CircuitField; 7] = lightclient_state.clone().into();
+        let state_msg: [CircuitField; 3] = lightclient_state.clone().into();
 
         let sigs = schnorr_keys
             .iter()

@@ -94,20 +94,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param viewNum The latest view number of the finalized HotShot chain
     /// @param blockHeight The block height of the latest finalized block
     /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
-    /// @param feeLedgerComm The commitment to the fee ledger state (type: BN254::ScalarField)
-    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake table
-    /// @param stakeTableSchnorrKeyComm The commitment to the SchnorrVerKey column of the table
-    /// @param stakeTableAmountComm The commitment to the stake amount column of the stake table
-    /// @param threshold The (stake-weighted) quorum threshold for a QC to be considered as valid
     struct LightClientState {
         uint64 viewNum;
         uint64 blockHeight;
         BN254.ScalarField blockCommRoot;
-        BN254.ScalarField feeLedgerComm;
-        BN254.ScalarField stakeTableBlsKeyComm;
-        BN254.ScalarField stakeTableSchnorrKeyComm;
-        BN254.ScalarField stakeTableAmountComm;
-        uint256 threshold;
     }
 
     /// @notice The finalized HotShot Stake state (as the digest of the entire HotShot state)
@@ -227,10 +217,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // feeLedgerComm can be zero, if we optionally support fee ledger yet.
         if (
             _genesis.viewNum != 0 || _genesis.blockHeight != 0
-                || BN254.ScalarField.unwrap(_genesis.stakeTableBlsKeyComm) == 0
-                || BN254.ScalarField.unwrap(_genesis.stakeTableSchnorrKeyComm) == 0
-                || BN254.ScalarField.unwrap(_genesis.stakeTableAmountComm) == 0
-                || _genesis.threshold == 0
+                || BN254.ScalarField.unwrap(_genesisStakeState.stakeTableBlsKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesisStakeState.stakeTableSchnorrKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesisStakeState.stakeTableAmountComm) == 0
+                || _genesisStakeState.threshold == 0
         ) {
             revert InvalidArgs();
         }
@@ -240,11 +230,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
 
-        bytes32 initStakeTableComm = computeStakeTableComm(_genesis);
+        bytes32 initStakeTableComm = computeStakeTableComm(_genesisStakeState);
         votingStakeTableCommitment = initStakeTableComm;
-        votingThreshold = _genesis.threshold;
+        votingThreshold = _genesisStakeState.threshold;
         frozenStakeTableCommitment = initStakeTableComm;
-        frozenThreshold = _genesis.threshold;
+        frozenThreshold = _genesisStakeState.threshold;
 
         updateStateHistory(uint64(block.number), uint64(block.timestamp), _genesis);
     }
@@ -281,10 +271,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
         // format validity check
         BN254.validateScalarField(newState.blockCommRoot);
-        BN254.validateScalarField(newState.feeLedgerComm);
-        BN254.validateScalarField(newState.stakeTableBlsKeyComm);
-        BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
-        BN254.validateScalarField(newState.stakeTableAmountComm);
 
         // check plonk proof
         verifyProof(newState, proof);
@@ -326,10 +312,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[1] = uint256(state.viewNum);
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(finalizedState.stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(finalizedState.stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(finalizedState.stakeTableAmountComm);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
@@ -337,12 +319,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice Given the light client state, compute the short commitment of the stake table
-    function computeStakeTableComm(LightClientState memory state)
-        public
-        pure
-        virtual
-        returns (bytes32)
-    {
+    function computeStakeTableComm(StakeState memory state) public pure virtual returns (bytes32) {
         return keccak256(
             abi.encodePacked(
                 state.stakeTableBlsKeyComm,

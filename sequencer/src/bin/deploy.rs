@@ -3,7 +3,7 @@ use std::{fs::File, io::stdout, path::PathBuf};
 use clap::Parser;
 use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_state_prover::service::light_client_genesis;
+use hotshot_state_prover::service::{light_client_genesis, light_client_genesis_stake};
 use sequencer_utils::{
     deployer::{deploy, ContractGroup, Contracts, DeployedContracts},
     logging,
@@ -101,6 +101,8 @@ async fn main() -> anyhow::Result<()> {
     let sequencer_url = opt.sequencer_url.clone();
 
     let genesis = light_client_genesis(&sequencer_url, opt.stake_table_capacity).boxed();
+    let genesis_stake =
+        light_client_genesis_stake(&sequencer_url, opt.stake_table_capacity).boxed();
 
     let contracts = deploy(
         opt.rpc_url,
@@ -109,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
         opt.use_mock_contract,
         opt.only,
         genesis,
+        genesis_stake,
         contracts,
     )
     .await?;

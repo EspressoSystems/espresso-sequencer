@@ -22,8 +22,8 @@ use ethers::{
 };
 use futures::FutureExt;
 use hotshot_contract_adapter::{
-    jellyfish::{u256_to_field, ParsedPlonkProof},
-    light_client::ParsedLightClientState,
+    jellyfish::{field_to_u256, u256_to_field, ParsedPlonkProof},
+    light_client::{ParsedLightClientState, ParsedStakeState},
 };
 use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
 use hotshot_types::{
@@ -200,6 +200,35 @@ pub fn light_client_genesis_from_stake_table(
     Ok(pi.into())
 }
 
+pub async fn light_client_genesis_stake(
+    sequencer_url: &Url,
+    stake_table_capacity: usize,
+) -> anyhow::Result<ParsedStakeState> {
+    let st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
+        .await
+        .with_context(|| "Failed to initialize stake table")?;
+    light_client_genesis_stake_from_stake_table(st)
+}
+
+#[inline]
+pub fn light_client_genesis_stake_from_stake_table(
+    st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
+) -> anyhow::Result<ParsedStakeState> {
+    let (bls_comm, schnorr_comm, stake_comm) = st
+        .commitment(SnapshotVersion::LastEpochStart)
+        .expect("Commitment computation shouldn't fail.");
+    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+
+    let stt = ParsedStakeState {
+        threshold: threshold,
+        bls_key_comm: field_to_u256(bls_comm),
+        schnorr_key_comm: field_to_u256(schnorr_comm),
+        amount_comm: field_to_u256(stake_comm),
+    };
+
+    Ok(stt)
+}
+
 pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     let srs = {
         let num_gates = crate::circuit::build_for_preprocessing::<
@@ -352,7 +381,7 @@ pub async fn sync_state<ApiVer: StaticVersionType>(
     entries.iter().enumerate().for_each(|(i, (key, stake))| {
         if let Some(sig) = bundle.signatures.get(key) {
             // Check if the signature is valid
-            let state_msg: [FieldType; 7] = (&bundle.state).into();
+            let state_msg: [FieldType; 3] = (&bundle.state).into();
             if key.verify(&state_msg, sig, CS_ID_SCHNORR).is_ok() {
                 signer_bit_vec[i] = true;
                 signatures[i] = sig.clone();
@@ -584,14 +613,7 @@ mod test {
              schnorr_key_comm: {:x?},\
              amount_comm: {:x?},\
              threshold: {}",
-            genesis.view_num,
-            genesis.block_height,
-            genesis.block_comm_root,
-            genesis.fee_ledger_comm,
-            genesis.bls_key_comm.encode_hex(),
-            genesis.schnorr_key_comm.encode_hex(),
-            genesis.amount_comm.encode_hex(),
-            genesis.threshold,
+            genesis.view_num, genesis.block_height, genesis.block_comm_root,
         );
         (genesis, stake_genesis, qc_keys, state_keys, st)
     }
@@ -605,7 +627,7 @@ mod test {
     ) -> (PublicInput, Proof) {
         let mut rng = test_rng();
 
-        let new_state_msg: [CircuitField; 7] = {
+        let new_state_msg: [CircuitField; 3] = {
             // sorry for the complicated .into() conversion chain, might improve in the future
             let pi_msg: LightClientState = new_state.clone().into();
             pi_msg.into()
