@@ -830,7 +830,16 @@ mod test {
             1
         );
         let sync_status: SyncStatus = client.get("node/sync-status").send().await.unwrap();
-        assert!(sync_status.is_fully_synced(), "{sync_status:?}");
+        assert_eq!(
+            sync_status,
+            SyncStatus {
+                missing_blocks: 0,
+                missing_leaves: 0,
+                missing_vid_common: 1,
+                missing_vid_shares: 1,
+                pruned_height: None
+            }
+        );
         assert_eq!(
             client
                 .get::<MockHeader>("availability/header/0")

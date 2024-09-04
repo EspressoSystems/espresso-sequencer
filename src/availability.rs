@@ -464,8 +464,7 @@ mod test {
     use async_std::sync::RwLock;
     use committable::Committable;
     use futures::future::FutureExt;
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_types::data::Leaf;
+    use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -863,15 +862,13 @@ mod test {
         );
 
         // mock up some consensus data.
-        let leaf = Leaf::<MockTypes>::genesis(
-            &TestValidatedState::default(),
-            &TestInstanceState::default(),
-        )
-        .await;
-
-        let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
+        let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::default()).await;
+        let qc = QuorumCertificate::genesis(&Default::default(), &Default::default()).await;
+        let leaf = LeafQueryData::new(leaf, qc).unwrap();
+        let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());
 
         let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(leaf).await.unwrap();
         tx.insert_block(block.clone()).await.unwrap();
         tx.commit().await.unwrap();
 

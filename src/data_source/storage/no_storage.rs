@@ -23,40 +23,62 @@ use crate::{
         update, VersionedDataSource,
     },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
+use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::ops::RangeBounds;
+use std::{cmp::max, ops::RangeBounds};
 
 /// Mock storage implementation which doesn't actually store anything.
 ///
 /// This is useful for adversarial testing, as it can be used to test the behavior of the query
 /// service where data is never available locally and must always be fetched on demand from a peer
 /// query service.
-#[derive(Clone, Debug, Default, Copy)]
-pub struct NoStorage;
+#[derive(Clone, Debug, Default)]
+pub struct NoStorage {
+    // A storage implementation must at a minimum keep track of the block height. All other
+    // functionality, such as fetching of missing data, stems from that.
+    height: Arc<RwLock<u64>>,
+}
+
+pub struct Transaction<'a> {
+    storage: &'a NoStorage,
+    height: u64,
+}
 
 impl VersionedDataSource for NoStorage {
-    type Transaction<'a> = Self
+    type Transaction<'a> = Transaction<'a>
     where
         Self: 'a;
-    type ReadOnly<'a> = Self
+    type ReadOnly<'a> = Transaction<'a>
     where
         Self: 'a;
 
     async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
-        Ok(*self)
+        Ok(Transaction::new(self).await)
     }
 
     async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
-        Ok(*self)
+        Ok(Transaction::new(self).await)
     }
 }
 
-impl update::Transaction for NoStorage {
+impl<'a> Transaction<'a> {
+    async fn new(storage: &'a NoStorage) -> Self {
+        Self {
+            height: *storage.height.read().await,
+            storage,
+        }
+    }
+}
+
+impl<'a> update::Transaction for Transaction<'a> {
     async fn commit(self) -> anyhow::Result<()> {
+        let mut height = self.storage.height.write().await;
+        *height = max(*height, self.height);
         Ok(())
     }
 
@@ -69,10 +91,10 @@ impl PrunerConfig for NoStorage {}
 impl PruneStorage for NoStorage {
     type Pruner = ();
 }
-impl PrunedHeightStorage for NoStorage {}
+impl<'a> PrunedHeightStorage for Transaction<'a> {}
 
 #[async_trait]
-impl<Types: NodeType> AvailabilityStorage<Types> for NoStorage
+impl<'a, Types: NodeType> AvailabilityStorage<Types> for Transaction<'a>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
@@ -145,34 +167,37 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType> UpdateAvailabilityData<Types> for NoStorage
+impl<'a, Types: NodeType> UpdateAvailabilityData<Types> for Transaction<'a>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
+        self.height = max(self.height, leaf.height() + 1);
         Ok(())
     }
 
-    async fn insert_block(&mut self, _block: BlockQueryData<Types>) -> anyhow::Result<()> {
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
+        self.height = max(self.height, block.height() + 1);
         Ok(())
     }
 
     async fn insert_vid(
         &mut self,
-        _common: VidCommonQueryData<Types>,
+        common: VidCommonQueryData<Types>,
         _share: Option<VidShare>,
     ) -> anyhow::Result<()> {
+        self.height = max(self.height, common.height() + 1);
         Ok(())
     }
 }
 
 #[async_trait]
-impl<Types: NodeType> NodeDataSource<Types> for NoStorage
+impl<'a, Types: NodeType> NodeDataSource<Types> for Transaction<'a>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
     async fn block_height(&self) -> QueryResult<usize> {
-        Ok(0)
+        Ok(self.height as usize)
     }
 
     async fn count_transactions(&self) -> QueryResult<usize> {
@@ -288,24 +313,27 @@ pub mod testing {
                         MockBase::instance(),
                     );
                     Self::NoStorage(
-                        FetchingDataSource::<MockTypes, NoStorage, _>::builder(NoStorage, provider)
-                            // The default minor scan interval is suitable for real scenarios, where
-                            // missing blocks are quite rare. But in these tests, we rely entirely
-                            // on proactive scanning to recover some objects, so we want to do this
-                            // quite frequently.
-                            .with_minor_scan_interval(Duration::from_millis(100))
-                            // Similarly, we even need to do major scans frequently (every 2 minor
-                            // scans, or 0.2s), since we are constantly losing old objects (since we
-                            // don't have storage) and the test frequently goes back and looks up
-                            // old objects.
-                            .with_major_scan_interval(2)
-                            // add minor delay for active fetch
-                            .with_active_fetch_delay(Duration::from_millis(1))
-                            // add minor delay between chunks during proactive scan
-                            .with_chunk_fetch_delay(Duration::from_millis(1))
-                            .build()
-                            .await
-                            .unwrap(),
+                        FetchingDataSource::<MockTypes, NoStorage, _>::builder(
+                            NoStorage::default(),
+                            provider,
+                        )
+                        // The default minor scan interval is suitable for real scenarios, where
+                        // missing blocks are quite rare. But in these tests, we rely entirely
+                        // on proactive scanning to recover some objects, so we want to do this
+                        // quite frequently.
+                        .with_minor_scan_interval(Duration::from_millis(100))
+                        // Similarly, we even need to do major scans frequently (every 2 minor
+                        // scans, or 0.2s), since we are constantly losing old objects (since we
+                        // don't have storage) and the test frequently goes back and looks up
+                        // old objects.
+                        .with_major_scan_interval(2)
+                        // add minor delay for active fetch
+                        .with_active_fetch_delay(Duration::from_millis(1))
+                        // add minor delay between chunks during proactive scan
+                        .with_chunk_fetch_delay(Duration::from_millis(1))
+                        .build()
+                        .await
+                        .unwrap(),
                     )
                 }
             }
@@ -352,7 +380,7 @@ pub mod testing {
 
     pub enum Transaction<'a, T> {
         Sql(fetching::Transaction<'a, MockTypes, T>),
-        NoStorage(fetching::Transaction<'a, MockTypes, NoStorage>),
+        NoStorage(fetching::Transaction<'a, MockTypes, super::Transaction<'a>>),
     }
 
     // Now a lot of boilerplate to implement all teh traits for [`DataSource`], by dispatching each
