@@ -1,7 +1,7 @@
 [package]
 name = "hotshot-builder-core"
-version.workspace = true
-edition.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
 
 [dependencies]
 hotshot = { workspace = true }
