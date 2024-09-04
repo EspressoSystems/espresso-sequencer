@@ -10,7 +10,6 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::ResultExt;
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
@@ -31,16 +30,14 @@ use crate::{
         UpdateStateData,
     },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-    types::HeightIndexed,
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
-use async_std::sync::RwLock;
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
-use std::{cmp::max, ops::RangeBounds};
+use std::ops::RangeBounds;
 
 #[derive(Debug)]
 pub(super) struct NotifyStorage<Types, S>
@@ -49,25 +46,6 @@ where
 {
     storage: S,
     notifiers: Notifiers<Types>,
-
-    /// In-memory cache for commonly read fields.
-    ///
-    /// This cache keeps fields which are read frequently and which can be kept up-to-date by dead
-    /// reckoning on each update. Thus, we avoid ever reading these fields from the database after
-    /// startup, and we don't have to write back when the cache is modified either.
-    ///
-    /// Currently the cached fields include latest height and pruned height.
-    ///
-    /// The concurrency semantics are inherited from the underlying database. That is, any read from
-    /// the cache is *always* guaranteed to be consistent with the results we would have gotten had
-    /// we read from the database at that instant, and thus it is as if there is no cache at all --
-    /// except performance. This is accomplished by exclusively locking the cache during any
-    /// critical section where it might be out of sync with the database, for example just before
-    /// committing a database transaction, until the cache is updated with the results of that
-    /// transaction. While the cache is locked (hopefully only briefly) readers can bypass it and
-    /// read directly from the database, getting consistent data to the extent that the databse
-    /// itself maintains consistency. Thus, a reader should never block on cache updates.
-    cache: RwLock<Heights>,
 }
 
 impl<Types, S> AsRef<S> for NotifyStorage<Types, S>
@@ -82,23 +60,12 @@ where
 impl<Types, S> NotifyStorage<Types, S>
 where
     Types: NodeType,
-    S: VersionedDataSource + Sync,
-    for<'a> S::ReadOnly<'a>: NodeDataSource<Types> + PrunedHeightStorage,
 {
-    pub(super) async fn new(storage: S) -> anyhow::Result<Self> {
-        let tx = storage.read().await?;
-        let height = tx.block_height().await? as u64;
-        let pruned_height = tx.load_pruned_height().await?;
-        drop(tx);
-
-        Ok(Self {
-            cache: RwLock::new(Heights {
-                height,
-                pruned_height,
-            }),
+    pub(super) fn new(storage: S) -> Self {
+        Self {
             storage,
             notifiers: Default::default(),
-        })
+        }
     }
 }
 
@@ -114,7 +81,6 @@ where
             match self.storage.prune(&mut pruner).await {
                 Ok(Some(height)) => {
                     tracing::warn!("Pruned to height {height}");
-                    self.cache.write().await.pruned_height = Some(height);
                 }
                 Ok(None) => {
                     tracing::warn!("pruner run complete.");
@@ -162,11 +128,17 @@ where
         Self: 'a;
 
     async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
-        Transaction::new(self, S::read).await
+        Ok(Transaction {
+            inner: self.storage.read().await?,
+            notifiers: &self.notifiers,
+        })
     }
 
     async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
-        Transaction::new(self, S::write).await
+        Ok(Transaction {
+            inner: self.storage.write().await?,
+            notifiers: &self.notifiers,
+        })
     }
 }
 
@@ -176,64 +148,7 @@ where
     Types: NodeType,
 {
     inner: T,
-    cache: &'a RwLock<Heights>,
     notifiers: &'a Notifiers<Types>,
-
-    // Cached values up-to-date with this transaction thus far.
-    //
-    // These values are initialized from the in-memory cache at the time when the transaction
-    // starts. Thereafter, they are updated by mutations made within this transaction, but will not
-    // reflect mutations made to the cache by other transactions until this transaction is
-    // committed, thus preserving transaction isolation.
-    //
-    // When this transaction is committed, these will be applied (atomically) to the in-memory
-    // cache, in a manner that is consistent with other transactions that may have committed in the
-    // meantime. Essentially, since both of these heights grow monotonically, whichever height is
-    // greater between the updated one and the one in the committed cache will be written to the
-    // cache when this transaction is committed.
-    //
-    // Note that either of these values may be `None`, indicating an unknown value, if the cache was
-    // locked when this transaction was started and the value has not been written since. This
-    // preserves the property that read operations never block on the availability of the cache, and
-    // thus never block on concurrent writers.
-    height: Option<u64>,
-    pruned_height: Option<Option<u64>>,
-}
-
-impl<'a, Types, T> Transaction<'a, Types, T>
-where
-    Types: NodeType,
-{
-    async fn new<S, Fut>(
-        storage: &'a NotifyStorage<Types, S>,
-        begin: impl FnOnce(&'a S) -> Fut,
-    ) -> anyhow::Result<Self>
-    where
-        Fut: Future<Output = anyhow::Result<T>>,
-        T: 'a,
-    {
-        // Snapshot cached values if possible. If we are able to acquire a lock on the cache, we
-        // hold it while we initialize the transaction, so that the snapshot we get is consistent
-        // with the snapshot our transaction has of the underlying database.
-        let (cache_lock, height, pruned_height) = if let Some(cache_lock) = storage.cache.try_read()
-        {
-            let height = Some(cache_lock.height);
-            let pruned_height = Some(cache_lock.pruned_height);
-            (Some(cache_lock), height, pruned_height)
-        } else {
-            (None, None, None)
-        };
-        let inner = begin(&storage.storage).await?;
-        drop(cache_lock);
-
-        Ok(Self {
-            inner,
-            cache: &storage.cache,
-            notifiers: &storage.notifiers,
-            height,
-            pruned_height,
-        })
-    }
 }
 
 impl<'a, Types, T> AsRef<T> for Transaction<'a, Types, T>
@@ -260,24 +175,7 @@ where
     T: update::Transaction,
 {
     async fn commit(self) -> anyhow::Result<()> {
-        // Lock the in-memory cache. Even though we will not write to the cache until the storage
-        // update completes successfully, we must hold an exclusive lock on the cache throughout,
-        // because for a brief moment between committing the storage transaction and updating the
-        // cache, the cache may be out of sync with storage.
-        let mut cache = self.cache.write().await;
-
-        // Commit to storage.
-        self.inner.commit().await?;
-
-        // Update cache.
-        if let Some(updated_height) = self.height {
-            cache.height = max(cache.height, updated_height);
-        }
-        if let Some(updated_pruned_height) = self.pruned_height {
-            cache.pruned_height = max(cache.pruned_height, updated_pruned_height);
-        }
-
-        Ok(())
+        self.inner.commit().await
     }
 
     fn revert(self) -> impl Future + Send {
@@ -285,18 +183,13 @@ where
     }
 }
 
-impl<'a, Types, T> Transaction<'a, Types, T>
+#[async_trait]
+impl<'a, Types, T> PrunedHeightStorage for Transaction<'a, Types, T>
 where
     Types: NodeType,
     T: PrunedHeightStorage + Sync,
 {
-    pub(super) async fn pruned_height(&self) -> anyhow::Result<Option<u64>> {
-        // Read from cache if available.
-        if let Some(h) = self.pruned_height {
-            return Ok(h);
-        }
-
-        // Try reading from storage if the cache is locked.
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
         self.inner.load_pruned_height().await
     }
 }
@@ -306,18 +199,13 @@ where
     Types: NodeType,
     T: PrunedHeightStorage + NodeDataSource<Types> + Sync,
 {
-    pub(super) async fn heights(&self) -> Option<Heights> {
-        let height = self
-            .block_height()
-            .await
-            .context("unable to load block height")
-            .ok_or_trace()? as u64;
+    pub(super) async fn heights(&self) -> anyhow::Result<Heights> {
+        let height = self.block_height().await.context("loading block height")? as u64;
         let pruned_height = self
-            .pruned_height()
+            .load_pruned_height()
             .await
-            .context("unable to load pruned height")
-            .ok_or_trace()?;
-        Some(Heights {
+            .context("loading pruned height")?;
+        Ok(Heights {
             height,
             pruned_height,
         })
@@ -388,12 +276,6 @@ where
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
         // Send a notification about the newly received leaf.
         self.notifiers.leaf.notify(&leaf).await;
-
-        // Record the latest height we have received in this transaction, so we can insert it in the
-        // in-memory cache on commit. The known height of the chain is one more than the height of
-        // its heighest object.
-        self.height = max(self.height, Some(leaf.height() + 1));
-
         // Store the new leaf.
         self.inner.insert_leaf(leaf).await
     }
@@ -401,12 +283,6 @@ where
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
         // Send a notification about the newly received block.
         self.notifiers.block.notify(&block).await;
-
-        // Record the latest height we have received in this transaction, so we can insert it in the
-        // in-memory cache on commit. The known height of the chain is one more than the height of
-        // its heighest object.
-        self.height = max(self.height, Some(block.height() + 1));
-
         // Store the new block.
         self.inner.insert_block(block).await
     }
@@ -418,12 +294,6 @@ where
     ) -> anyhow::Result<()> {
         // Send a notification about the newly received data.
         self.notifiers.vid_common.notify(&common).await;
-
-        // Record the latest height we have received in this transaction, so we can insert it in the
-        // in-memory cache on commit. The known height of the chain is one more than the height of
-        // its heighest object.
-        self.height = max(self.height, Some(common.height() + 1));
-
         // Store the new data.
         self.inner.insert_vid(common, share).await
     }
@@ -518,12 +388,6 @@ where
     T: NodeDataSource<Types> + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
-        // Read from cache if available.
-        if let Some(h) = self.height {
-            return Ok(h as usize);
-        }
-
-        // Try reading from storage if the cache is locked.
         self.inner.block_height().await
     }
 

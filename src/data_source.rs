@@ -400,14 +400,22 @@ pub mod availability_tests {
         }
 
         if range.end_bound() == Bound::Unbounded {
-            // If the range is unbounded, the stream should continue, yielding pending futures for
-            // the objects which are not currently available.
-            let fetch_leaf = leaves.next().await.unwrap();
-            let fetch_block = blocks.next().await.unwrap();
-            let fetch_common = vid_common.next().await.unwrap();
-            fetch_leaf.try_resolve().unwrap_err();
-            fetch_block.try_resolve().unwrap_err();
-            fetch_common.try_resolve().unwrap_err();
+            // If the range is unbounded, the stream should continue, eventually reaching a point at
+            // which further objects are not yet available, and yielding pending futures from there.
+            loop {
+                let fetch_leaf = leaves.next().await.unwrap();
+                let fetch_block = blocks.next().await.unwrap();
+                let fetch_common = vid_common.next().await.unwrap();
+
+                if fetch_leaf.try_resolve().is_ok()
+                    && fetch_block.try_resolve().is_ok()
+                    && fetch_common.try_resolve().is_ok()
+                {
+                    tracing::info!("searching for end of available objects");
+                } else {
+                    break;
+                }
+            }
         } else {
             // If the range is bounded, it should end where expected.
             assert!(leaves.next().await.is_none());

@@ -636,7 +636,7 @@ where
         }
 
         Ok(Self {
-            storage: NotifyStorage::new(builder.storage).await?,
+            storage: NotifyStorage::new(builder.storage),
             provider: Arc::new(builder.provider),
             payload_fetcher: Arc::new(payload_fetcher),
             leaf_fetcher: Arc::new(leaf_fetcher),
@@ -658,15 +658,6 @@ where
         AvailabilityStorage<Types> + PrunedHeightStorage + NodeDataSource<Types>,
     P: AvailabilityProvider<Types>,
 {
-    async fn heights(&self) -> Option<Heights> {
-        let tx = self
-            .read()
-            .await
-            .context("starting transaction to read heights")
-            .ok_or_trace()?;
-        tx.heights().await
-    }
-
     async fn get<T, R>(self: &Arc<Self>, req: R) -> Fetch<T>
     where
         T: Fetchable<Types>,
@@ -688,16 +679,8 @@ where
             }
         };
 
-        // Fall back to fetching early and quietly if it is impossible for the object to exist.
-        if let Some(heights) = tx.heights().await {
-            if !req.might_exist(heights) {
-                tracing::debug!("not loading object {req:?} that cannot exist at {heights:?}",);
-                return self.fetch(Some(&tx), passive, req).await;
-            }
-        }
-
-        let res = T::load(&tx, req).await;
-        self.ok_or_fetch(Some(&tx), passive, req, res).await
+        self.ok_or_fetch(Some(&tx), passive, req, T::load(&tx, req).await)
+            .await
     }
 
     /// Get a range of objects from local storage or a provider.
@@ -782,32 +765,11 @@ where
 
         let (tx, ts) = match self.read().await {
             Ok(tx) => {
-                // We can avoid touching storage if it is not possible for any entry in the entire
-                // range to exist given the current block height. In this case, we know storage
-                // would return an empty range.
-                let heights = tx.heights().await;
-                let empty_range = if let Some(heights) = heights {
-                    !chunk
-                        .clone()
-                        .any(|i| T::Request::from(i).might_exist(heights))
-                } else {
-                    // If for some reason we weren't able to load the heights, we can't say for sure
-                    // that the range doesn't exist.
-                    false
-                };
-
-                let ts = if empty_range {
-                    tracing::debug!(
-                        "not loading chunk {chunk:?} which cannot exist at {heights:?}",
-                    );
-                    vec![]
-                } else {
-                    T::load_range(&tx, chunk.clone())
-                        .await
-                        .context(format!("when fetching items in range {chunk:?}"))
-                        .ok_or_trace()
-                        .unwrap_or_default()
-                };
+                let ts = T::load_range(&tx, chunk.clone())
+                    .await
+                    .context(format!("when fetching items in range {chunk:?}"))
+                    .ok_or_trace()
+                    .unwrap_or_default();
                 (Some(tx), ts)
             }
             Err(err) => {
@@ -941,7 +903,7 @@ where
 
         // Trigger an active fetch from a remote provider if possible.
         if let Some(tx) = tx {
-            if let Some(heights) = tx.heights().await {
+            if let Some(heights) = tx.heights().await.ok_or_trace() {
                 if req.might_exist(heights) {
                     T::active_fetch(tx, self.clone(), req).await;
                 } else {
@@ -976,12 +938,23 @@ where
             let major = i % major_interval == major_offset % major_interval;
             let span = tracing::warn_span!("proactive scan", i, major, prev_height);
             async {
+                let Some(tx) = self
+                    .read()
+                    .await
+                    .context("starting transaction for scan")
+                    .ok_or_trace()
+                else {
+                    tracing::error!("unable to start transaction, scan will be skipped");
+                    return;
+                };
+
                 // Read block height at the beginning of the scan, so we don't end up scanning more
                 // than necessary.
-                let Some(heights) = self.heights().await else {
+                let Some(heights) = tx.heights().await.ok_or_trace() else {
                     tracing::error!("unable to load heights, scan will be skipped");
                     return;
                 };
+                drop(tx);
 
                 // Get the pruned height or default to 0 if it is not set. We will start looking for
                 // missing blocks from the pruned height.
