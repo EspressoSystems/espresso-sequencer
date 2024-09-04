@@ -401,10 +401,7 @@
 <a href="#401" id="401">401</a>
 <a href="#402" id="402">402</a>
 <a href="#403" id="403">403</a>
-<a href="#404" id="404">404</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref};
-
-<span class="kw">use </span>anyhow::{ensure, Context};
+</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>clap::{builder::OsStr, Parser, ValueEnum};
 <span class="kw">use </span>contract_bindings::{
@@ -415,12 +412,13 @@
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
-    plonk_verifier::PlonkVerifier,
+    plonk_verifier_2::PlonkVerifier2,
 };
 <span class="kw">use </span>derive_more::Display;
 <span class="kw">use </span>ethers::{prelude::<span class="kw-2">*</span>, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 <span class="kw">use </span>futures::future::{BoxFuture, FutureExt};
 <span class="kw">use </span>hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedLightClientState};
+<span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref};
 <span class="kw">use </span>url::Url;
 
 <span class="doccomment">/// Set of predeployed contracts.
@@ -591,7 +589,7 @@
     </span><span class="kw">let </span>plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier::deploy(l1.clone(), ())<span class="question-mark">?</span>,
+            PlonkVerifier2::deploy(l1.clone(), ())<span class="question-mark">?</span>,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">let </span>vk = contracts
@@ -654,7 +652,7 @@
     </span><span class="kw">let </span>plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier::deploy(l1.clone(), ())<span class="question-mark">?</span>,
+            PlonkVerifier2::deploy(l1.clone(), ())<span class="question-mark">?</span>,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">let </span>vk = contracts

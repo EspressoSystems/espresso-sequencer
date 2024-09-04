@@ -542,99 +542,16 @@
 <a href="#542" id="542">542</a>
 <a href="#543" id="543">543</a>
 <a href="#544" id="544">544</a>
-<a href="#545" id="545">545</a>
-<a href="#546" id="546">546</a>
-<a href="#547" id="547">547</a>
-<a href="#548" id="548">548</a>
-<a href="#549" id="549">549</a>
-<a href="#550" id="550">550</a>
-<a href="#551" id="551">551</a>
-<a href="#552" id="552">552</a>
-<a href="#553" id="553">553</a>
-<a href="#554" id="554">554</a>
-<a href="#555" id="555">555</a>
-<a href="#556" id="556">556</a>
-<a href="#557" id="557">557</a>
-<a href="#558" id="558">558</a>
-<a href="#559" id="559">559</a>
-<a href="#560" id="560">560</a>
-<a href="#561" id="561">561</a>
-<a href="#562" id="562">562</a>
-<a href="#563" id="563">563</a>
-<a href="#564" id="564">564</a>
-<a href="#565" id="565">565</a>
-<a href="#566" id="566">566</a>
-<a href="#567" id="567">567</a>
-<a href="#568" id="568">568</a>
-<a href="#569" id="569">569</a>
-<a href="#570" id="570">570</a>
-<a href="#571" id="571">571</a>
-<a href="#572" id="572">572</a>
-<a href="#573" id="573">573</a>
-<a href="#574" id="574">574</a>
-<a href="#575" id="575">575</a>
-<a href="#576" id="576">576</a>
-<a href="#577" id="577">577</a>
-<a href="#578" id="578">578</a>
-<a href="#579" id="579">579</a>
-<a href="#580" id="580">580</a>
-<a href="#581" id="581">581</a>
-<a href="#582" id="582">582</a>
-<a href="#583" id="583">583</a>
-<a href="#584" id="584">584</a>
-<a href="#585" id="585">585</a>
-<a href="#586" id="586">586</a>
-<a href="#587" id="587">587</a>
-<a href="#588" id="588">588</a>
-<a href="#589" id="589">589</a>
-<a href="#590" id="590">590</a>
-<a href="#591" id="591">591</a>
-<a href="#592" id="592">592</a>
-<a href="#593" id="593">593</a>
-<a href="#594" id="594">594</a>
-<a href="#595" id="595">595</a>
-<a href="#596" id="596">596</a>
-<a href="#597" id="597">597</a>
-<a href="#598" id="598">598</a>
-<a href="#599" id="599">599</a>
-<a href="#600" id="600">600</a>
-<a href="#601" id="601">601</a>
-<a href="#602" id="602">602</a>
-<a href="#603" id="603">603</a>
-<a href="#604" id="604">604</a>
-<a href="#605" id="605">605</a>
-<a href="#606" id="606">606</a>
-<a href="#607" id="607">607</a>
-<a href="#608" id="608">608</a>
-<a href="#609" id="609">609</a>
-<a href="#610" id="610">610</a>
-<a href="#611" id="611">611</a>
-<a href="#612" id="612">612</a>
-<a href="#613" id="613">613</a>
-<a href="#614" id="614">614</a>
-<a href="#615" id="615">615</a>
-<a href="#616" id="616">616</a>
-<a href="#617" id="617">617</a>
-<a href="#618" id="618">618</a>
-<a href="#619" id="619">619</a>
-<a href="#620" id="620">620</a>
-<a href="#621" id="621">621</a>
-<a href="#622" id="622">622</a>
-<a href="#623" id="623">623</a>
-<a href="#624" id="624">624</a>
-<a href="#625" id="625">625</a>
-<a href="#626" id="626">626</a>
-<a href="#627" id="627">627</a>
-<a href="#628" id="628">628</a>
-<a href="#629" id="629">629</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 <span class="kw">use </span>ark_ec::{AffineRepr, CurveGroup};
 <span class="kw">use </span>ark_ed_on_bn254::{EdwardsConfig <span class="kw">as </span>EdOnBn254Config, Fq <span class="kw">as </span>FqEd254};
 <span class="kw">use </span>ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-<span class="kw">use </span>ark_poly::{domain::radix2::Radix2EvaluationDomain, EvaluationDomain};
+<span class="kw">use </span>ark_poly::domain::radix2::Radix2EvaluationDomain;
+<span class="kw">use </span>ark_poly::EvaluationDomain;
 <span class="kw">use </span>ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
 <span class="kw">use </span>clap::{Parser, ValueEnum};
 <span class="kw">use </span>diff_test_bn254::ParsedG2Point;
+
 <span class="kw">use </span>ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
@@ -643,21 +560,16 @@
 <span class="kw">use </span>hotshot_state_prover::mock_ledger::{
     gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
 };
-<span class="kw">use </span>itertools::multiunzip;
 <span class="kw">use </span>jf_pcs::prelude::Commitment;
+<span class="kw">use </span>jf_plonk::proof_system::structs::{Proof, VerifyingKey};
+<span class="kw">use </span>jf_plonk::proof_system::PlonkKzgSnark;
 <span class="kw">use </span>jf_plonk::{
-    proof_system::{
-        structs::{Proof, VerifyingKey},
-        PlonkKzgSnark,
-    },
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-<span class="kw">use </span>jf_signature::{
-    bls_over_bn254::{hash_to_curve, KeyPair <span class="kw">as </span>BLSKeyPair, Signature},
-    constants::CS_ID_BLS_BN254,
-    schnorr::KeyPair <span class="kw">as </span>SchnorrKeyPair,
-};
+<span class="kw">use </span>jf_signature::bls_over_bn254::{hash_to_curve, KeyPair <span class="kw">as </span>BLSKeyPair, Signature};
+<span class="kw">use </span>jf_signature::constants::CS_ID_BLS_BN254;
+<span class="kw">use </span>jf_signature::schnorr::KeyPair <span class="kw">as </span>SchnorrKeyPair;
 <span class="kw">use </span>sha3::Keccak256;
 
 <span class="attr">#[derive(Parser)]
@@ -695,12 +607,8 @@
     </span>PlonkConstants,
     <span class="doccomment">/// Get jf_plonk::Verifier::compute_challenges()
     </span>PlonkComputeChal,
-    <span class="doccomment">/// Get jf_plonk::Verifier::aggregate_evaluations()
-    </span>PlonkPrepareEval,
-    <span class="doccomment">/// Get jf_plonk::Verifier::prepare_pcs_info()
-    </span>PlonkPreparePcsInfo,
     <span class="doccomment">/// Get jf_plonk::Verifier::batch_verify()
-    </span>PlonkBatchVerify,
+    </span>PlonkVerify,
     <span class="doccomment">/// Get a random, dummy proof with correct format
     </span>DummyProof,
     <span class="doccomment">/// Test only logic
@@ -740,7 +648,6 @@
             <span class="kw">let </span>res = (
                 field_to_u256(domain.size_inv),
                 field_to_u256(domain.group_gen),
-                field_to_u256(domain.group_gen_inv),
             );
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
         }
@@ -766,7 +673,7 @@
 
             <span class="kw">let </span>log_size = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
             <span class="kw">let </span>zeta = u256_to_field::&lt;Fr&gt;(cli.args[<span class="number">1</span>].parse::&lt;U256&gt;().unwrap());
-            <span class="kw">let </span>pi_u256: Vec&lt;U256&gt; = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">2</span>]).unwrap();
+            <span class="kw">let </span>pi_u256: [U256; <span class="number">8</span>] = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">2</span>]).unwrap();
             <span class="kw">let </span>pi: Vec&lt;Fr&gt; = pi_u256.into_iter().map(u256_to_field).collect();
 
             <span class="kw">let </span>verifier = Verifier::&lt;Bn254&gt;::new(<span class="number">2u32</span>.pow(log_size) <span class="kw">as </span>usize).unwrap();
@@ -803,7 +710,7 @@
             <span class="kw">let </span>field = u256_to_field::&lt;Fr&gt;(cli.args[<span class="number">1</span>].parse::&lt;U256&gt;().unwrap());
 
             <span class="kw">let </span><span class="kw-2">mut </span>t: SolidityTranscript = t_parsed.into();
-            t.append_challenge::&lt;Bn254&gt;(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>field).unwrap();
+            t.append_field_elem::&lt;Bn254&gt;(<span class="kw-2">&amp;</span>[], <span class="kw-2">&amp;</span>field).unwrap();
             <span class="kw">let </span>res: ParsedTranscript = t.into();
             <span class="macro">println!</span>(<span class="string">"{}"</span>, (res,).encode_hex());
         }
@@ -829,7 +736,7 @@
             <span class="kw">let </span>t_parsed = cli.args[<span class="number">0</span>].parse::&lt;ParsedTranscript&gt;().unwrap();
 
             <span class="kw">let </span><span class="kw-2">mut </span>t: SolidityTranscript = t_parsed.into();
-            <span class="kw">let </span>chal = t.get_and_append_challenge::&lt;Bn254&gt;(<span class="kw-2">&amp;</span>[]).unwrap();
+            <span class="kw">let </span>chal = t.get_challenge::&lt;Bn254&gt;(<span class="kw-2">&amp;</span>[]).unwrap();
 
             <span class="kw">let </span>updated_t: ParsedTranscript = t.into();
             <span class="kw">let </span>res = (updated_t, field_to_u256(chal));
@@ -864,7 +771,7 @@
             <span class="kw">let </span>proof: Proof&lt;Bn254&gt; = proof_parsed.clone().into();
 
             <span class="kw">let </span><span class="kw-2">mut </span>t: SolidityTranscript = t_parsed.into();
-            &lt;SolidityTranscript <span class="kw">as </span>PlonkTranscript&lt;Fr&gt;&gt;::append_proof_evaluations::&lt;Bn254&gt;(
+            &lt;SolidityTranscript <span class="kw">as </span>PlonkTranscript&lt;Fq&gt;&gt;::append_proof_evaluations::&lt;Bn254&gt;(
                 <span class="kw-2">&amp;mut </span>t,
                 <span class="kw-2">&amp;</span>proof.poly_evals,
             )
@@ -898,7 +805,7 @@
             }
 
             <span class="kw">let </span>vk = cli.args[<span class="number">0</span>].parse::&lt;ParsedVerifyingKey&gt;().unwrap().into();
-            <span class="kw">let </span>pi_u256: Vec&lt;U256&gt; = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">1</span>]).unwrap();
+            <span class="kw">let </span>pi_u256: [U256; <span class="number">8</span>] = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">1</span>]).unwrap();
             <span class="kw">let </span>pi: Vec&lt;Fr&gt; = pi_u256.into_iter().map(u256_to_field).collect();
             <span class="kw">let </span>proof: Proof&lt;Bn254&gt; = cli.args[<span class="number">2</span>].parse::&lt;ParsedPlonkProof&gt;().unwrap().into();
             <span class="kw">let </span>msg = {
@@ -917,110 +824,33 @@
                 .into();
             <span class="macro">println!</span>(<span class="string">"{}"</span>, (chal,).encode_hex());
         }
-        Action::PlonkPrepareEval =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">3 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=proof, arg2=linPolyConstant, arg3=commScalars"</span>);
-            }
-
-            <span class="kw">let </span>proof: Proof&lt;Bn254&gt; = cli.args[<span class="number">0</span>].parse::&lt;ParsedPlonkProof&gt;().unwrap().into();
-            <span class="kw">let </span>lin_poly_constant = u256_to_field::&lt;Fr&gt;(cli.args[<span class="number">1</span>].parse::&lt;U256&gt;().unwrap());
-            <span class="kw">let </span>comm_scalars_u256: Vec&lt;U256&gt; = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">2</span>]).unwrap();
-            <span class="comment">// NOTE: only take the last 10 scalars, the first 20 are linearization scalars
-            </span><span class="kw">let </span>comm_scalars: Vec&lt;Fr&gt; = comm_scalars_u256
-                .into_iter()
-                .skip(<span class="number">20</span>)
-                .map(u256_to_field)
-                .collect();
-
-            <span class="kw">let </span>eval = Verifier::&lt;Bn254&gt;::aggregate_evaluations(
-                <span class="kw-2">&amp;</span>lin_poly_constant,
-                <span class="kw-2">&amp;</span>[proof.poly_evals],
-                <span class="kw-2">&amp;</span>[<span class="prelude-val">None</span>],
-                <span class="kw-2">&amp;</span>comm_scalars,
-            )
-            .unwrap();
-            <span class="kw">let </span>res = field_to_u256(eval);
-            <span class="macro">println!</span>(<span class="string">"{}"</span>, (res,).encode_hex());
-        }
-        Action::PlonkPreparePcsInfo =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">3 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof"</span>);
-            }
-
-            <span class="kw">let </span>vk: VerifyingKey&lt;Bn254&gt; = cli.args[<span class="number">0</span>].parse::&lt;ParsedVerifyingKey&gt;().unwrap().into();
-            <span class="kw">let </span>pi_u256: Vec&lt;U256&gt; = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">1</span>]).unwrap();
-            <span class="kw">let </span>pi: Vec&lt;Fr&gt; = pi_u256.into_iter().map(u256_to_field).collect();
-            <span class="kw">let </span>proof: Proof&lt;Bn254&gt; = cli.args[<span class="number">2</span>].parse::&lt;ParsedPlonkProof&gt;().unwrap().into();
-
-            <span class="kw">let </span>verifier = Verifier::&lt;Bn254&gt;::new(vk.domain_size).unwrap();
-            <span class="kw">let </span>pcs_info = verifier
-                .prepare_pcs_info::&lt;SolidityTranscript&gt;(
-                    <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>vk],
-                    <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>pi],
-                    <span class="kw-2">&amp;</span>proof.into(),
-                    <span class="kw-2">&amp;</span><span class="prelude-val">Some</span>(<span class="macro">vec!</span>[]),
-                )
-                .unwrap();
-
-            <span class="kw">let </span>scalars_and_bases_prod: ParsedG1Point = pcs_info
-                .comm_scalars_and_bases
-                .multi_scalar_mul()
-                .into_affine()
-                .into();
-            <span class="kw">let </span>opening_proof: ParsedG1Point = pcs_info.opening_proof.<span class="number">0</span>.into();
-            <span class="kw">let </span>shifted_opening_proof: ParsedG1Point = pcs_info.shifted_opening_proof.<span class="number">0</span>.into();
-            <span class="kw">let </span>res = (
-                field_to_u256(pcs_info.u),
-                field_to_u256(pcs_info.eval_point),
-                field_to_u256(pcs_info.next_eval_point),
-                field_to_u256(pcs_info.eval),
-                scalars_and_bases_prod,
-                opening_proof,
-                shifted_opening_proof,
-            );
-            <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
-        }
-        Action::PlonkBatchVerify =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">1 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numProof"</span>);
-            }
-
-            <span class="kw">let </span>num_proof = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
-            <span class="kw">let </span>(proofs, vks, public_inputs, extra_msgs, <span class="kw">_</span>): (
-                Vec&lt;Proof&lt;Bn254&gt;&gt;,
-                Vec&lt;VerifyingKey&lt;Bn254&gt;&gt;,
-                Vec&lt;Vec&lt;Fr&gt;&gt;,
-                Vec&lt;<span class="prelude-ty">Option</span>&lt;Vec&lt;u8&gt;&gt;&gt;,
-                Vec&lt;usize&gt;,
-            ) = multiunzip(gen_plonk_proof_for_test(num_proof <span class="kw">as </span>usize));
+        Action::PlonkVerify =&gt; {
+            <span class="kw">let </span>(proof, vk, public_input, <span class="kw">_</span>, <span class="kw">_</span>): (
+                Proof&lt;Bn254&gt;,
+                VerifyingKey&lt;Bn254&gt;,
+                Vec&lt;Fr&gt;,
+                <span class="prelude-ty">Option</span>&lt;Vec&lt;u8&gt;&gt;, <span class="comment">// won't use extraTranscriptMsg
+                </span>usize,           <span class="comment">// won't use circuit size
+            </span>) = gen_plonk_proof_for_test(<span class="number">1</span>)[<span class="number">0</span>].clone();
 
             <span class="comment">// ensure they are correct params
-            </span><span class="kw">let </span>proofs_refs: Vec&lt;<span class="kw-2">&amp;</span>Proof&lt;Bn254&gt;&gt; = proofs.iter().collect();
-            <span class="kw">let </span>vks_refs: Vec&lt;<span class="kw-2">&amp;</span>VerifyingKey&lt;Bn254&gt;&gt; = vks.iter().collect();
-            <span class="kw">let </span>pi_refs: Vec&lt;<span class="kw-2">&amp;</span>[Fr]&gt; = public_inputs
-                .iter()
-                .map(|pub_input| <span class="kw-2">&amp;</span>pub_input[..])
-                .collect();
-            <span class="macro">assert!</span>(PlonkKzgSnark::batch_verify::&lt;SolidityTranscript&gt;(
-                <span class="kw-2">&amp;</span>vks_refs,
-                <span class="kw-2">&amp;</span>pi_refs,
-                <span class="kw-2">&amp;</span>proofs_refs,
-                <span class="kw-2">&amp;</span>extra_msgs
+            </span><span class="macro">assert!</span>(PlonkKzgSnark::batch_verify::&lt;SolidityTranscript&gt;(
+                <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>vk],
+                <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>public_input],
+                <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>proof],
+                <span class="kw-2">&amp;</span>[<span class="prelude-val">None</span>]
             )
             .is_ok());
 
-            <span class="kw">let </span>vks_parsed: Vec&lt;ParsedVerifyingKey&gt; = vks.into_iter().map(Into::into).collect();
-            <span class="kw">let </span>pis_parsed: Vec&lt;Vec&lt;U256&gt;&gt; = public_inputs
-                .into_iter()
-                .map(|pi| pi.into_iter().map(field_to_u256).collect())
-                .collect();
-            <span class="kw">let </span>proofs_parsed: Vec&lt;ParsedPlonkProof&gt; = proofs.into_iter().map(Into::into).collect();
-            <span class="kw">let </span>msgs_parsed: Vec&lt;Bytes&gt; = extra_msgs
-                .into_iter()
-                .map(|msg| msg.unwrap().into())
-                .collect();
+            <span class="kw">let </span>vk_parsed: ParsedVerifyingKey = vk.into();
+            <span class="kw">let </span><span class="kw-2">mut </span>pi_parsed = [U256::default(); <span class="number">8</span>];
+            <span class="macro">assert_eq!</span>(public_input.len(), <span class="number">8</span>);
+            <span class="kw">for </span>(i, pi) <span class="kw">in </span>public_input.into_iter().enumerate() {
+                pi_parsed[i] = field_to_u256(pi);
+            }
+            <span class="kw">let </span>proof_parsed: ParsedPlonkProof = proof.into();
 
-            <span class="kw">let </span>res = (vks_parsed, pis_parsed, proofs_parsed, msgs_parsed);
+            <span class="kw">let </span>res = (vk_parsed, pi_parsed, proof_parsed);
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
         }
         Action::DummyProof =&gt; {

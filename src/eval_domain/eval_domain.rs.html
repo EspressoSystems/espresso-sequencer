@@ -24,6 +24,19 @@
 <a href="#24" id="24">24</a>
 <a href="#25" id="25">25</a>
 <a href="#26" id="26">26</a>
+<a href="#27" id="27">27</a>
+<a href="#28" id="28">28</a>
+<a href="#29" id="29">29</a>
+<a href="#30" id="30">30</a>
+<a href="#31" id="31">31</a>
+<a href="#32" id="32">32</a>
+<a href="#33" id="33">33</a>
+<a href="#34" id="34">34</a>
+<a href="#35" id="35">35</a>
+<a href="#36" id="36">36</a>
+<a href="#37" id="37">37</a>
+<a href="#38" id="38">38</a>
+<a href="#39" id="39">39</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Binary to generate hardcoded parameters for EvaluationDomain supported in `PolynomialEval.sol`
 
 </span><span class="kw">use </span>ark_bn254::Fr;
@@ -31,7 +44,7 @@
 <span class="kw">use </span>ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 
 <span class="kw">fn </span>main() {
-    <span class="kw">let </span>domain = Radix2EvaluationDomain::&lt;Fr&gt;::new(<span class="number">2u32</span>.pow(<span class="number">20</span>) <span class="kw">as </span>usize).unwrap();
+    <span class="kw">let </span>domain = Radix2EvaluationDomain::&lt;Fr&gt;::new(<span class="number">2u32</span>.pow(<span class="number">5</span>) <span class="kw">as </span>usize).unwrap();
 
     <span class="kw">let </span>size_inv = &lt;&lt;Fr <span class="kw">as </span>Field&gt;::BasePrimeField <span class="kw">as </span>PrimeField&gt;::into_bigint(domain.size_inv);
     <span class="kw">let </span>size_inv_str = <span class="macro">format!</span>(<span class="string">"0x{:X}"</span>, size_inv).to_lowercase();
@@ -49,5 +62,18 @@
         <span class="string">"groupGen: {}, groupGenInv: {}"</span>,
         group_gen_str, group_gen_inv_str,
     );
+
+    <span class="kw">let </span><span class="kw-2">mut </span>domain_elements_str = <span class="string">""</span>.to_owned();
+
+    <span class="comment">// Generates the domain elements for 8 inputs: 1, g, g^2,...,g^7
+    </span><span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">8 </span>{
+        <span class="kw">let </span><span class="kw-2">mut </span>element_fr = domain.group_gen;
+        element_fr = element_fr.pow([i]);
+
+        <span class="kw">let </span>element_bigint = element_fr.into_bigint();
+        <span class="kw">let </span>new_element_str = <span class="macro">format!</span>(<span class="string">"0x{:X} "</span>, element_bigint.clone()).to_lowercase();
+        domain_elements_str = domain_elements_str.to_owned() + <span class="kw-2">&amp;</span>new_element_str;
+    }
+    <span class="macro">println!</span>(<span class="string">"domain elements: {}"</span>, <span class="kw-2">&amp;</span>domain_elements_str);
 }
 </code></pre></div></section></main></body></html>

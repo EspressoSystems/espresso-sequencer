@@ -299,20 +299,6 @@
 <a href="#299" id="299">299</a>
 <a href="#300" id="300">300</a>
 <a href="#301" id="301">301</a>
-<a href="#302" id="302">302</a>
-<a href="#303" id="303">303</a>
-<a href="#304" id="304">304</a>
-<a href="#305" id="305">305</a>
-<a href="#306" id="306">306</a>
-<a href="#307" id="307">307</a>
-<a href="#308" id="308">308</a>
-<a href="#309" id="309">309</a>
-<a href="#310" id="310">310</a>
-<a href="#311" id="311">311</a>
-<a href="#312" id="312">312</a>
-<a href="#313" id="313">313</a>
-<a href="#314" id="314">314</a>
-<a href="#315" id="315">315</a>
 </pre></div><pre class="rust"><code><span class="kw">pub use </span>i_plonk_verifier::<span class="kw-2">*</span>;
 <span class="doccomment">/// This module was auto-generated with ethers-rs Abigen.
 /// More information at: &lt;https://github.com/gakonst/ethers-rs&gt;
@@ -412,6 +398,8 @@
                                     ::ethers::core::abi::ethabi::ParamType::Uint(<span class="number">256usize</span>),
                                     ::ethers::core::abi::ethabi::ParamType::Uint(<span class="number">256usize</span>),
                                 ],),
+                                ::ethers::core::abi::ethabi::ParamType::FixedBytes(<span class="number">32usize</span>),
+                                ::ethers::core::abi::ethabi::ParamType::FixedBytes(<span class="number">32usize</span>),
                             ],),
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned(
@@ -421,13 +409,14 @@
                         },
                         ::ethers::core::abi::ethabi::Param {
                             name: ::std::borrow::ToOwned::to_owned(<span class="string">"publicInput"</span>),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedArray(
                                 ::std::boxed::Box::new(
                                     ::ethers::core::abi::ethabi::ParamType::Uint(<span class="number">256usize</span>),
                                 ),
+                                <span class="number">8usize</span>,
                             ),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned(<span class="string">"uint256[]"</span>),
+                                ::std::borrow::ToOwned::to_owned(<span class="string">"uint256[8]"</span>),
                             ),
                         },
                         ::ethers::core::abi::ethabi::Param {
@@ -502,13 +491,6 @@
                                 ),
                             ),
                         },
-                        ::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned(<span class="string">"extraTranscriptInitMsg"</span>,),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned(<span class="string">"bytes"</span>),
-                            ),
-                        },
                     ],
                     outputs: <span class="macro">::std::vec!</span>[::ethers::core::abi::ethabi::Param {
                         name: ::std::string::String::new(),
@@ -567,24 +549,15 @@
                 client,
             ))
         }
-        <span class="doccomment">///Calls the contract's `verify` (0x202a4b1b) function
+        <span class="doccomment">///Calls the contract's `verify` (0x64e4c59e) function
         </span><span class="kw">pub fn </span>verify(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
             verifying_key: VerifyingKey,
-            public_input: ::std::vec::Vec&lt;::ethers::core::types::U256&gt;,
+            public_input: [::ethers::core::types::U256; <span class="number">8</span>],
             proof: PlonkProof,
-            extra_transcript_init_msg: ::ethers::core::types::Bytes,
         ) -&gt; ::ethers::contract::builders::ContractCall&lt;M, bool&gt; {
             <span class="self">self</span>.<span class="number">0
-                </span>.method_hash(
-                    [<span class="number">32</span>, <span class="number">42</span>, <span class="number">75</span>, <span class="number">27</span>],
-                    (
-                        verifying_key,
-                        public_input,
-                        proof,
-                        extra_transcript_init_msg,
-                    ),
-                )
+                </span>.method_hash([<span class="number">100</span>, <span class="number">228</span>, <span class="number">197</span>, <span class="number">158</span>], (verifying_key, public_input, proof))
                 .expect(<span class="string">"method not found (this should never happen)"</span>)
         }
     }
@@ -595,7 +568,7 @@
             <span class="self">Self</span>::new(contract.address(), contract.client())
         }
     }
-    <span class="doccomment">///Container type for all input parameters for the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256)),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x202a4b1b`
+    <span class="doccomment">///Container type for all input parameters for the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[8],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x64e4c59e`
     </span><span class="attr">#[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -605,15 +578,14 @@
     )]
     #[ethcall(
         name = <span class="string">"verify"</span>,
-        abi = <span class="string">"verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256)),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)"
+        abi = <span class="string">"verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[8],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))"
     </span>)]
     </span><span class="kw">pub struct </span>VerifyCall {
         <span class="kw">pub </span>verifying_key: VerifyingKey,
-        <span class="kw">pub </span>public_input: ::std::vec::Vec&lt;::ethers::core::types::U256&gt;,
+        <span class="kw">pub </span>public_input: [::ethers::core::types::U256; <span class="number">8</span>],
         <span class="kw">pub </span>proof: PlonkProof,
-        <span class="kw">pub </span>extra_transcript_init_msg: ::ethers::core::types::Bytes,
     }
-    <span class="doccomment">///Container type for all return fields from the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256)),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x202a4b1b`
+    <span class="doccomment">///Container type for all return fields from the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[8],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x64e4c59e`
     </span><span class="attr">#[derive(
         Clone,
         ::ethers::contract::EthAbiType,

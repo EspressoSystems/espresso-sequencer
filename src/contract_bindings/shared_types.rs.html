@@ -128,6 +128,8 @@
 <a href="#128" id="128">128</a>
 <a href="#129" id="129">129</a>
 <a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
 </pre></div><pre class="rust"><code><span class="doccomment">///`G1Point(uint256,uint256)`
 </span><span class="attr">#[derive(
     Clone,
@@ -183,7 +185,7 @@
     <span class="kw">pub </span>sigma_eval_3: ::ethers::core::types::U256,
     <span class="kw">pub </span>prod_perm_zeta_omega_eval: ::ethers::core::types::U256,
 }
-<span class="doccomment">///`VerifyingKey(uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256))`
+<span class="doccomment">///`VerifyingKey(uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32)`
 </span><span class="attr">#[derive(
     Clone,
     ::ethers::contract::EthAbiType,
@@ -217,6 +219,8 @@
     <span class="kw">pub </span>q_h3: G1Point,
     <span class="kw">pub </span>q_h4: G1Point,
     <span class="kw">pub </span>q_ecc: G1Point,
+    <span class="kw">pub </span>g_2lsb: [u8; <span class="number">32</span>],
+    <span class="kw">pub </span>g_2msb: [u8; <span class="number">32</span>],
 }
 <span class="doccomment">///`HotShotCommitment(uint64,uint256)`
 </span><span class="attr">#[derive(

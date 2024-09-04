@@ -4,7 +4,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["cdn_marshal",["",[],["cdn-marshal.rs"]]],\
 ["cdn_whitelist",["",[],["cdn-whitelist.rs"]]],\
 ["commitment_task",["",[],["commitment-task.rs"]]],\
-["contract_bindings",["",[],["erc1967_proxy.rs","fee_contract.rs","hot_shot.rs","i_plonk_verifier.rs","lib.rs","light_client.rs","light_client_mock.rs","light_client_state_update_vk.rs","light_client_state_update_vk_mock.rs","plonk_verifier.rs","shared_types.rs"]]],\
+["contract_bindings",["",[],["erc1967_proxy.rs","fee_contract.rs","hot_shot.rs","i_plonk_verifier.rs","lib.rs","light_client.rs","light_client_mock.rs","light_client_state_update_vk.rs","light_client_state_update_vk_mock.rs","plonk_verifier.rs","plonk_verifier_2.rs","shared_types.rs"]]],\
 ["deploy",["",[],["deploy.rs"]]],\
 ["dev_cdn",["",[],["dev-cdn.rs"]]],\
 ["dev_rollup",["",[],["dev-rollup.rs"]]],\
