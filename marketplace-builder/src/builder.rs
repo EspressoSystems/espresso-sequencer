@@ -342,15 +342,23 @@ mod test {
     const UNREGISTERED_NAMESPACE: u64 = 20;
 
     /// Ports for the query and event APIs, respectively.
-    type QueryAndEventPorts = (u16, u16);
+    struct Ports {
+        query: u16,
+        event: u16,
+    }
 
     /// URLs for the query, event, and builder APIs, respectively.
-    type QueryEventAndBuilderUrls = (Url, Url, Url);
+    #[derive(Clone)]
+    struct Urls {
+        query: Url,
+        event: Url,
+        builder: Url,
+    }
 
     /// Pick unused ports for URLs, then set up and start the network.
     ///
     /// Returns ports and URLs that will be used later.
-    async fn pick_urls_and_start_network() -> (QueryAndEventPorts, QueryEventAndBuilderUrls) {
+    async fn pick_urls_and_start_network() -> (Ports, Urls) {
         let query_port = pick_unused_port().expect("No ports free");
         let query_api_url: Url = format!("http://localhost:{query_port}").parse().unwrap();
 
@@ -361,8 +369,15 @@ mod test {
         let builder_api_url: Url = format!("http://localhost:{builder_port}").parse().unwrap();
 
         (
-            (query_port, event_port),
-            (query_api_url, event_service_url, builder_api_url),
+            Ports {
+                query: query_port,
+                event: event_port,
+            },
+            Urls {
+                query: query_api_url,
+                event: event_service_url,
+                builder: builder_api_url,
+            },
         )
     }
 
@@ -376,20 +391,19 @@ mod test {
 
         // Create a list of signature keys for rollup registration data
         let mut signature_keys = Vec::new();
-
         for _ in 0..10 {
             let private_key =
                 <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
             signature_keys.push(BLSPubKey::from_private(&private_key))
         }
 
+        // Add an extra key which will be used to sign the registration.
         let private_key =
             <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
         let signature_key = BLSPubKey::from_private(&private_key);
-
         signature_keys.push(signature_key);
 
-        // Initialize a rollup registration with namespace id = 10
+        // Initialize a rollup registration with namespace id = `REGISTERED_NAMESPACE`.
         let reg_ns_1_body = RollupRegistrationBody {
             namespace_id: REGISTERED_NAMESPACE.into(),
             reserve_url: Some(Url::from_str("http://localhost").unwrap()),
@@ -408,7 +422,7 @@ mod test {
         .expect("failed to sign");
 
         let reg_ns_1 = RollupRegistration {
-            body: reg_ns_1_body.clone(),
+            body: reg_ns_1_body,
             signature: reg_signature,
         };
 
@@ -428,11 +442,9 @@ mod test {
     }
 
     /// Connect to the builder.
-    async fn connect_to_builder(
-        urls: QueryEventAndBuilderUrls,
-    ) -> Client<ServerError, MarketplaceVersion> {
+    async fn connect_to_builder(urls: Urls) -> Client<ServerError, MarketplaceVersion> {
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, SequencerApiVersion> = Client::new(urls.0);
+        let sequencer_client: Client<ServerError, SequencerApiVersion> = Client::new(urls.query);
         sequencer_client.connect(None).await;
         sequencer_client
             .socket("availability/stream/leaves/0")
@@ -445,7 +457,8 @@ mod test {
             .unwrap();
 
         //  Connect to builder
-        let builder_client: Client<ServerError, MarketplaceVersion> = Client::new(urls.2.clone());
+        let builder_client: Client<ServerError, MarketplaceVersion> =
+            Client::new(urls.builder.clone());
         builder_client.connect(None).await;
 
         builder_client
@@ -456,7 +469,7 @@ mod test {
     /// Returns the subscribed events.
     async fn submit_transactions(
         transactions: Vec<Transaction>,
-        urls: QueryEventAndBuilderUrls,
+        urls: Urls,
     ) -> Connection<
         Event<SeqTypes>,
         Unsupported,
@@ -464,7 +477,7 @@ mod test {
         SequencerApiVersion,
     > {
         let txn_submission_client: Client<ServerError, SequencerApiVersion> =
-            Client::new(urls.2.clone());
+            Client::new(urls.builder.clone());
         txn_submission_client.connect(None).await;
 
         // Test submitting transactions
@@ -479,7 +492,7 @@ mod test {
         let events_service_client = Client::<
             hotshot_events_service::events::Error,
             SequencerApiVersion,
-        >::new(urls.1.clone());
+        >::new(urls.event.clone());
         events_service_client.connect(None).await;
 
         events_service_client
@@ -502,14 +515,14 @@ mod test {
         let tmpdir = TempDir::new().unwrap();
         let config = TestNetworkConfigBuilder::default()
             .api_config(
-                Options::with_port(ports.0)
+                Options::with_port(ports.query)
                     .submit(Default::default())
                     .query_fs(
                         Default::default(),
                         persistence::fs::Options::new(tmpdir.path().to_owned()),
                     )
                     .hotshot_events(HotshotEvents {
-                        events_service_port: ports.1,
+                        events_service_port: ports.event,
                     }),
             )
             .network_config(network_config)
@@ -529,8 +542,8 @@ mod test {
             NonZeroUsize::new(1024).unwrap(),
             NodeState::default(),
             ValidatedState::default(),
-            urls.1.clone(),
-            urls.2.clone(),
+            urls.event.clone(),
+            urls.builder.clone(),
             Duration::from_secs(2),
             5,
             Duration::from_secs(2),
@@ -595,14 +608,14 @@ mod test {
         let tmpdir = TempDir::new().unwrap();
         let config = TestNetworkConfigBuilder::default()
             .api_config(
-                Options::with_port(ports.0)
+                Options::with_port(ports.query)
                     .submit(Default::default())
                     .query_fs(
                         Default::default(),
                         persistence::fs::Options::new(tmpdir.path().to_owned()),
                     )
                     .hotshot_events(HotshotEvents {
-                        events_service_port: ports.1,
+                        events_service_port: ports.event,
                     }),
             )
             .network_config(network_config)
@@ -622,8 +635,8 @@ mod test {
             NonZeroUsize::new(1024).unwrap(),
             NodeState::default(),
             ValidatedState::default(),
-            urls.1.clone(),
-            urls.2.clone(),
+            urls.event.clone(),
+            urls.builder.clone(),
             Duration::from_secs(2),
             5,
             Duration::from_secs(2),
