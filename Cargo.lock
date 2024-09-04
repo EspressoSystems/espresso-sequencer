@@ -1243,9 +1243,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.15"
+version = "1.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57b6a275aa2903740dc87da01c62040406b8812552e97129a63ea8850a17c6e6"
+checksum = "e9d013ecb737093c0e86b151a7b837993cf9ec6c502946cfb44bedc392421e0b"
 dependencies = [
  "shlex",
 ]
@@ -2211,9 +2211,9 @@ dependencies = [
 
 [[package]]
 name = "edit-distance"
-version = "2.1.2"
+version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "853fc7035888bd1c9320f3a05bfe7f344f49b8766a4bb4209b1ac5f0503d9577"
+checksum = "e3f497e87b038c09a155dfd169faa5ec940d0644635555ef6bd464ac20e97397"
 
 [[package]]
 name = "either"
@@ -2974,7 +2974,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3021,7 +3021,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "async-trait",
  "clap",
@@ -3039,7 +3039,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.39"
+version = "0.1.40"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3068,7 +3068,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3101,7 +3101,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3131,7 +3131,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3146,7 +3146,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3183,7 +3183,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3389,9 +3389,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
-version = "0.27.2"
+version = "0.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
+checksum = "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
 dependencies = [
  "futures-util",
  "http 1.1.0",
@@ -4236,7 +4236,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/HotShot.git?branch=bump/rc-0.5.73#381088ca08ebb343a28ace30101d532f19d8e2b6"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
