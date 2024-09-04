@@ -306,15 +306,12 @@ pub mod availability_tests {
         // underlying storage.
         {
             tracing::info!("checking persisted storage");
-
-            // Lock the original data source to prevent concurrent updates.
-            let tx = ds.read().await.unwrap();
             let storage = D::connect(network.storage()).await;
 
             // Ensure we have the same data in both data sources (if data was missing from the
             // original it is of course allowed to be missing from persistent storage and thus from
             // the latter).
-            let block_height = tx.block_height().await.unwrap();
+            let block_height = NodeDataSource::block_height(&ds).await.unwrap();
             assert_eq!(
                 ds.get_block_range(..block_height)
                     .await
@@ -910,9 +907,8 @@ pub mod node_tests {
         }
 
         {
-            let tx = ds.read().await.unwrap();
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(tx.vid_share(0).await.unwrap(), disperse.shares[0]);
+            assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
         }
 
         // Re-insert the common data, without a share. This should not overwrite the share we
@@ -923,9 +919,8 @@ pub mod node_tests {
             tx.commit().await.unwrap();
         }
         {
-            let tx = ds.read().await.unwrap();
             assert_eq!(ds.get_vid_common(0).await.await, common);
-            assert_eq!(tx.vid_share(0).await.unwrap(), disperse.shares[0]);
+            assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
         }
     }
 
@@ -982,7 +977,7 @@ pub mod node_tests {
             assert_eq!(leaf.height(), height as u64);
             assert_eq!(leaf.payload_hash(), commit);
 
-            let share = { ds.read().await.unwrap().vid_share(height).await.unwrap() };
+            let share = ds.vid_share(height).await.unwrap();
             vid.verify_share(&share, common, &commit).unwrap().unwrap();
             share
         }))
@@ -1063,9 +1058,6 @@ pub mod node_tests {
             let ds = ds.clone();
             async move {
                 let window = ds
-                    .read()
-                    .await
-                    .unwrap()
                     .get_header_window(WindowStart::Time(start), end)
                     .await
                     .unwrap();

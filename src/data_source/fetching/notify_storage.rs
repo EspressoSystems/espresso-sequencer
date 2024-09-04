@@ -128,17 +128,11 @@ where
         Self: 'a;
 
     async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
-        Ok(Transaction {
-            inner: self.storage.read().await?,
-            notifiers: &self.notifiers,
-        })
+        Ok(Transaction::new(self, self.storage.read().await?))
     }
 
     async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
-        Ok(Transaction {
-            inner: self.storage.write().await?,
-            notifiers: &self.notifiers,
-        })
+        Ok(Transaction::new(self, self.storage.write().await?))
     }
 }
 
@@ -149,6 +143,29 @@ where
 {
     inner: T,
     notifiers: &'a Notifiers<Types>,
+
+    // Pending notifications generated during this transaction. These notifications will be sent out
+    // after the transaction is committed to storage, which guarantees that anyone who subscribes to
+    // notifications and then sees that the desired object is _not_ present in storage will
+    // subsequently get a notification after the object is added to storage.
+    inserted_leaves: Vec<LeafQueryData<Types>>,
+    inserted_blocks: Vec<BlockQueryData<Types>>,
+    inserted_vid: Vec<VidCommonQueryData<Types>>,
+}
+
+impl<'a, Types, T> Transaction<'a, Types, T>
+where
+    Types: NodeType,
+{
+    fn new<S>(storage: &'a NotifyStorage<Types, S>, inner: T) -> Self {
+        Self {
+            inner,
+            notifiers: &storage.notifiers,
+            inserted_leaves: Default::default(),
+            inserted_blocks: Default::default(),
+            inserted_vid: Default::default(),
+        }
+    }
 }
 
 impl<'a, Types, T> AsRef<T> for Transaction<'a, Types, T>
@@ -175,7 +192,21 @@ where
     T: update::Transaction,
 {
     async fn commit(self) -> anyhow::Result<()> {
-        self.inner.commit().await
+        self.inner.commit().await?;
+
+        // Now that any inserted objects have been added to storage, alert any clients who were
+        // waiting on these objects.
+        for leaf in self.inserted_leaves {
+            self.notifiers.leaf.notify(&leaf).await;
+        }
+        for block in self.inserted_blocks {
+            self.notifiers.block.notify(&block).await;
+        }
+        for vid in self.inserted_vid {
+            self.notifiers.vid_common.notify(&vid).await;
+        }
+
+        Ok(())
     }
 
     fn revert(self) -> impl Future + Send {
@@ -274,17 +305,19 @@ where
     T: UpdateAvailabilityData<Types> + Send + Sync,
 {
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
-        // Send a notification about the newly received leaf.
-        self.notifiers.leaf.notify(&leaf).await;
         // Store the new leaf.
-        self.inner.insert_leaf(leaf).await
+        self.inner.insert_leaf(leaf.clone()).await?;
+        // Queue a notification about the newly received leaf.
+        self.inserted_leaves.push(leaf);
+        Ok(())
     }
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
-        // Send a notification about the newly received block.
-        self.notifiers.block.notify(&block).await;
         // Store the new block.
-        self.inner.insert_block(block).await
+        self.inner.insert_block(block.clone()).await?;
+        // Queue a notification about the newly received block.
+        self.inserted_blocks.push(block);
+        Ok(())
     }
 
     async fn insert_vid(
@@ -292,10 +325,11 @@ where
         common: VidCommonQueryData<Types>,
         share: Option<VidShare>,
     ) -> anyhow::Result<()> {
-        // Send a notification about the newly received data.
-        self.notifiers.vid_common.notify(&common).await;
-        // Store the new data.
-        self.inner.insert_vid(common, share).await
+        // Store the new VID.
+        self.inner.insert_vid(common.clone(), share).await?;
+        // Queue a notification about the newly received VID.
+        self.inserted_vid.push(common);
+        Ok(())
     }
 }
 
