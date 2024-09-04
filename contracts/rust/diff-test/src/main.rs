@@ -496,6 +496,7 @@ fn main() {
             let mut new_states: Vec<ParsedLightClientState> = vec![];
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
             let mut stake_stakes: Vec<ParsedStakeState> = vec![];
+            
             for i in 1..block_per_epoch + 2 {
                 // only update stake table at the last block, as it would only take effect in next epoch anyway.
                 if i == block_per_epoch {
@@ -525,7 +526,7 @@ fn main() {
                 stake_stakes.push(parsed_stake_state.into());
             }
 
-            let res = (new_states, proofs);
+            let res = (new_states, proofs, stake_stakes);
             println!("{}", res.encode_hex());
         }
         Action::MockSkipBlocks => {
@@ -593,7 +594,7 @@ fn main() {
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             ledger.elapse_with_block();
-            let (pi, proof) = ledger.gen_state_proof_with_fake_stakers();
+            let (pi, proof, stt) = ledger.gen_state_proof_with_fake_stakers();
 
             let new_state: ParsedLightClientState = pi.into();
             let proof: ParsedPlonkProof = proof.into();

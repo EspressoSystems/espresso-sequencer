@@ -2,9 +2,10 @@
 
 use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
+use ark_bn254::Fr; 
 use ark_std::borrow::Borrow;
 use ethers::types::U256;
-use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput};
+use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput, GenericStakeState, StakeState};
 use jf_plonk::PlonkError;
 use jf_relation::{BoolVar, Circuit, CircuitError, PlonkCircuit, Variable};
 use jf_rescue::{gadgets::RescueNativeGadget, RescueParameter};
@@ -249,10 +250,13 @@ where
     let view_number_f = F::from(lightclient_state.view_number as u64);
     let block_height_f = F::from(lightclient_state.block_height as u64);
     let public_inputs = vec![
-        threshold,
         view_number_f,
         block_height_f,
         lightclient_state.block_comm_root,
+    ];
+
+    let stake_state = vec![
+        threshold
     ];
 
     // Checking whether the accumulated weight exceeds the quorum threshold
@@ -352,6 +356,14 @@ where
         block_height: 0,
         block_comm_root: F::default(),
     };
+
+    let stake_state = GenericStakeState {
+        threshold: F::default(),
+        stake_table_bls_key_comm: F::default(),
+        stake_table_schnorr_key_comm: F::default(),
+        stake_table_amount_comm: F::default(),
+    };
+
     build::<F, P, _, _, _>(
         &[],
         &[],
@@ -365,8 +377,9 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ed_on_bn254::EdwardsConfig as Config;
-    use ethers::types::U256;
-    use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
+    use ethers::{core::k256::schnorr, types::U256};
+    use hotshot_contract_adapter::jellyfish::u256_to_field;
+    use hotshot_types::{light_client::GenericStakeState, traits::stake_table::{SnapshotVersion, StakeTableScheme}};
     use jf_crhf::CRHF;
     use jf_relation::Circuit;
     use jf_rescue::crhf::VariableLengthRescueCRHF;
@@ -407,6 +420,13 @@ mod tests {
             block_comm_root,
         };
         let state_msg: [F; 3] = lightclient_state.clone().into();
+        let (bls_comm, schnorr_comm, amount_comm) = st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+        let stake_state = GenericStakeState{
+            threshold: 0,
+            stake_table_bls_key_comm: bls_comm,
+            stake_table_schnorr_key_comm: schnorr_comm,
+            stake_table_amount_comm: amount_comm
+        };
 
         let sigs = state_keys
             .iter()
