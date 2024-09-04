@@ -4,6 +4,7 @@
 
 use std::{fs::OpenOptions, io::Write, path::PathBuf, process::Command};
 
+use ethers::core::abi::AbiEncode;
 use hotshot_contract_adapter::jellyfish::ParsedVerifyingKey;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use jf_pcs::prelude::UnivariateUniversalParams;
@@ -127,6 +128,10 @@ fn main() {
                  // qEcc
                 mstore(mload(add(vk, 0x260)), {})
                 mstore(add(mload(add(vk, 0x260)), 0x20), {})
+                 // g2LSB
+                mstore(add(vk, 0x280), {})
+                 // g2MSB
+                mstore(add(vk, 0x2A0), {})
             }}
         }}
     }}",
@@ -169,6 +174,8 @@ fn main() {
                 vk.q_h_4.y,
                 vk.q_ecc.x,
                 vk.q_ecc.y,
+                vk.g2_lsb.encode_hex(),
+                vk.g2_msb.encode_hex(),
             )
             .into_bytes();
 
