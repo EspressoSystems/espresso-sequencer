@@ -82,18 +82,21 @@ interface IPlonkVerifier {
         BN254.G1Point qH4; // 0x240
         // elliptic curve selector
         BN254.G1Point qEcc; // 0x260
+        // serialized G2 point in SRS (compressed, little-endian, 64 bytes)
+        // we store the 64 bytes as 2 * bytes32 (first 32 bytes as `g2LSB`)
+        // (G1 points in SRS are implicited committed via poly commitments)
+        bytes32 g2LSB; // 0x280
+        bytes32 g2MSB; // 0x2A0
     }
 
     /// @dev Verify a single TurboPlonk proofs.
     /// @param verifyingKey The Plonk verification key
     /// @param publicInput The public input fields
     /// @param proof The TurboPlonk proof
-    /// @param extraTranscriptInitMsg Optional bytes for transcript init message
     /// @return _ A boolean indicating successful verification, false otherwise
     function verify(
         VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
-        PlonkProof memory proof,
-        bytes memory extraTranscriptInitMsg
+        uint256[8] memory publicInput,
+        PlonkProof memory proof
     ) external view returns (bool);
 }

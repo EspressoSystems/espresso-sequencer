@@ -96,6 +96,7 @@ use hotshot_types::{
 };
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
+use libp2p_networking::network::GossipConfig;
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -224,6 +225,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     #[cfg(feature = "libp2p")]
     let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
         config.clone(),
+        GossipConfig::default(),
         network_params.libp2p_bind_address,
         &my_config.public_key,
         // We need the private key so we can derive our Libp2p keypair
@@ -534,8 +536,17 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> BuilderC
     pub async fn start_consensus(&self) {
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::info!("waiting for orchestrated start");
+            let peer_config = PeerConfig::to_bytes(
+                &self
+                    .hotshot_handle
+                    .hotshot
+                    .config
+                    .my_own_validator_config
+                    .public_config(),
+            )
+            .clone();
             orchestrator_client
-                .wait_for_all_nodes_ready(self.node_index)
+                .wait_for_all_nodes_ready(peer_config)
                 .await;
         }
         self.hotshot_handle.hotshot.start_consensus().await;
