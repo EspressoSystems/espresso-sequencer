@@ -25,7 +25,7 @@
 //! trait](crate::availability::UpdateAvailabilityData).
 
 use super::query_data::{BlockHash, BlockId, SyncStatus, TimeWindowQueryData};
-use crate::{Header, QueryResult, VidShare};
+use crate::{data_source::ReadOnly, Header, QueryResult, VidShare};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
@@ -63,4 +63,42 @@ pub trait NodeDataSource<Types: NodeType> {
 
     /// Search the database for missing objects and generate a report.
     async fn sync_status(&self) -> QueryResult<SyncStatus>;
+}
+
+#[async_trait]
+impl<Types, T> NodeDataSource<Types> for ReadOnly<T>
+where
+    Types: NodeType,
+    T: NodeDataSource<Types> + Sync,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        (**self).block_height().await
+    }
+
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        (**self).count_transactions().await
+    }
+
+    async fn payload_size(&self) -> QueryResult<usize> {
+        (**self).payload_size().await
+    }
+
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        (**self).vid_share(id).await
+    }
+
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        (**self).sync_status().await
+    }
+
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        (**self).get_header_window(start, end).await
+    }
 }

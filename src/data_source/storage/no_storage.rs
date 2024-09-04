@@ -42,8 +42,15 @@ impl VersionedDataSource for NoStorage {
     type Transaction<'a> = Self
     where
         Self: 'a;
+    type ReadOnly<'a> = Self
+    where
+        Self: 'a;
 
-    async fn transaction(&self) -> anyhow::Result<Self::Transaction<'_>> {
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        Ok(*self)
+    }
+
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
         Ok(*self)
     }
 }
@@ -203,8 +210,10 @@ pub mod testing {
     use crate::{
         availability::{define_api, AvailabilityDataSource, Fetch},
         data_source::{
-            storage::sql::testing::TmpDb, update::Transaction as _, FetchingDataSource,
-            SqlDataSource, UpdateDataSource,
+            fetching,
+            storage::sql::{testing::TmpDb, SqlStorage},
+            update::Transaction as _,
+            FetchingDataSource, SqlDataSource, UpdateDataSource,
         },
         fetching::provider::{NoFetching, QueryServiceProvider},
         metrics::PrometheusMetrics,
@@ -214,7 +223,7 @@ pub mod testing {
             consensus::{DataSourceLifeCycle, MockNetwork},
             mocks::{MockBase, MockTypes},
         },
-        Error,
+        ApiState, Error,
     };
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
@@ -237,6 +246,7 @@ pub mod testing {
         NoStorage { fetch_from_port: u16 },
     }
 
+    #[derive(Clone, Debug)]
     pub enum DataSource {
         Sql(SqlDataSource<MockTypes, NoFetching>),
         NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<MockBase>>),
@@ -321,7 +331,7 @@ pub mod testing {
             };
             tracing::info!("spawning server for missing data on port {fetch_from_port}");
             let api_data_source = network.data_source_index(1);
-            let mut app = App::<_, Error>::with_state(api_data_source);
+            let mut app = App::<_, Error>::with_state(ApiState::from(api_data_source));
             app.register_module(
                 "availability",
                 define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -333,36 +343,51 @@ pub mod testing {
             );
         }
 
-        async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            let mut tx = self.transaction().await.unwrap();
+        async fn handle_event(&self, event: &Event<MockTypes>) {
+            let mut tx = self.write().await.unwrap();
             tx.update(event).await.unwrap();
             tx.commit().await.unwrap();
         }
     }
 
-    pub enum Transaction<'a> {
-        Sql(<SqlDataSource<MockTypes, NoFetching> as VersionedDataSource>::Transaction<'a>),
-        NoStorage(<FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<MockBase>> as VersionedDataSource>::Transaction<'a>),
+    pub enum Transaction<'a, T> {
+        Sql(fetching::Transaction<'a, MockTypes, T>),
+        NoStorage(fetching::Transaction<'a, MockTypes, NoStorage>),
     }
 
     // Now a lot of boilerplate to implement all teh traits for [`DataSource`], by dispatching each
     // method to either variant.
     impl VersionedDataSource for DataSource {
-        type Transaction<'a> = Transaction<'a>
+        type Transaction<'a> = Transaction<'a, <SqlStorage as VersionedDataSource>::Transaction<'a>>
+        where
+            Self: 'a;
+        type ReadOnly<'a> = Transaction<'a, <SqlStorage as VersionedDataSource>::ReadOnly<'a>>
         where
             Self: 'a;
 
-        async fn transaction(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
             match self {
-                Self::Sql(data_source) => Ok(Transaction::Sql(data_source.transaction().await?)),
+                Self::Sql(data_source) => Ok(Transaction::Sql(data_source.read().await?)),
                 Self::NoStorage(data_source) => {
-                    Ok(Transaction::NoStorage(data_source.transaction().await?))
+                    Ok(Transaction::NoStorage(data_source.read().await?))
+                }
+            }
+        }
+
+        async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+            match self {
+                Self::Sql(data_source) => Ok(Transaction::Sql(data_source.write().await?)),
+                Self::NoStorage(data_source) => {
+                    Ok(Transaction::NoStorage(data_source.write().await?))
                 }
             }
         }
     }
 
-    impl<'a> update::Transaction for Transaction<'a> {
+    impl<'a, T> update::Transaction for Transaction<'a, T>
+    where
+        T: update::Transaction,
+    {
         async fn commit(self) -> anyhow::Result<()> {
             match self {
                 Self::Sql(tx) => tx.commit().await,
@@ -385,7 +410,10 @@ pub mod testing {
     }
 
     #[async_trait]
-    impl<'a> UpdateAvailabilityData<MockTypes> for Transaction<'a> {
+    impl<'a, T> UpdateAvailabilityData<MockTypes> for Transaction<'a, T>
+    where
+        T: UpdateAvailabilityData<MockTypes> + Send + Sync,
+    {
         async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> anyhow::Result<()> {
             match self {
                 Self::Sql(tx) => tx.insert_leaf(leaf).await,
@@ -521,6 +549,78 @@ pub mod testing {
     }
 
     #[async_trait]
+    impl<'a, T> NodeDataSource<MockTypes> for Transaction<'a, T>
+    where
+        T: NodeDataSource<MockTypes> + Sync,
+    {
+        async fn block_height(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(tx) => NodeDataSource::block_height(tx).await,
+                Self::NoStorage(tx) => NodeDataSource::block_height(tx).await,
+            }
+        }
+
+        async fn count_transactions(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(tx) => tx.count_transactions().await,
+                Self::NoStorage(tx) => tx.count_transactions().await,
+            }
+        }
+
+        async fn payload_size(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(tx) => tx.payload_size().await,
+                Self::NoStorage(tx) => tx.payload_size().await,
+            }
+        }
+
+        async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(tx) => tx.vid_share(id).await,
+                Self::NoStorage(tx) => tx.vid_share(id).await,
+            }
+        }
+
+        async fn sync_status(&self) -> QueryResult<SyncStatus> {
+            match self {
+                Self::Sql(tx) => tx.sync_status().await,
+                Self::NoStorage(tx) => tx.sync_status().await,
+            }
+        }
+
+        async fn get_header_window(
+            &self,
+            start: impl Into<WindowStart<MockTypes>> + Send + Sync,
+            end: u64,
+        ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
+            match self {
+                Self::Sql(tx) => tx.get_header_window(start, end).await,
+                Self::NoStorage(tx) => tx.get_header_window(start, end).await,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl StatusDataSource for DataSource {
+        async fn block_height(&self) -> QueryResult<usize> {
+            match self {
+                Self::Sql(data_source) => StatusDataSource::block_height(data_source).await,
+                Self::NoStorage(data_source) => StatusDataSource::block_height(data_source).await,
+            }
+        }
+
+        fn metrics(&self) -> &PrometheusMetrics {
+            match self {
+                Self::Sql(data_source) => data_source.metrics(),
+                Self::NoStorage(data_source) => data_source.metrics(),
+            }
+        }
+    }
+
+    #[async_trait]
     impl NodeDataSource<MockTypes> for DataSource {
         async fn block_height(&self) -> QueryResult<usize> {
             match self {
@@ -568,23 +668,6 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.get_header_window(start, end).await,
                 Self::NoStorage(data_source) => data_source.get_header_window(start, end).await,
-            }
-        }
-    }
-
-    #[async_trait]
-    impl StatusDataSource for DataSource {
-        async fn block_height(&self) -> QueryResult<usize> {
-            match self {
-                Self::Sql(data_source) => StatusDataSource::block_height(data_source).await,
-                Self::NoStorage(data_source) => StatusDataSource::block_height(data_source).await,
-            }
-        }
-
-        fn metrics(&self) -> &PrometheusMetrics {
-            match self {
-                Self::Sql(data_source) => data_source.metrics(),
-                Self::NoStorage(data_source) => data_source.metrics(),
             }
         }
     }

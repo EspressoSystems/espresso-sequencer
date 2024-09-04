@@ -14,7 +14,7 @@
 
 use super::{
     bounds_to_where_clause, header_where_clause, parse_block, parse_leaf, parse_payload,
-    parse_vid_common, postgres::types::ToSql, Query, BLOCK_COLUMNS, PAYLOAD_COLUMNS,
+    parse_vid_common, postgres::types::ToSql, Transaction, BLOCK_COLUMNS, PAYLOAD_COLUMNS,
     VID_COMMON_COLUMNS,
 };
 use crate::{
@@ -33,12 +33,11 @@ use snafu::OptionExt;
 use std::ops::RangeBounds;
 
 #[async_trait]
-impl<T, Types> AvailabilityStorage<Types> for T
+impl<'a, Types> AvailabilityStorage<Types> for Transaction<'a>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    T: Query,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {

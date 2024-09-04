@@ -266,8 +266,8 @@ mod impl_testable_data_source {
                 .unwrap()
         }
 
-        async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            let mut tx = self.transaction().await.unwrap();
+        async fn handle_event(&self, event: &Event<MockTypes>) {
+            let mut tx = self.write().await.unwrap();
             tx.update(event).await.unwrap();
             tx.commit().await.unwrap();
         }

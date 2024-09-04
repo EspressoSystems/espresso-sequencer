@@ -19,22 +19,26 @@
 //! transaction.
 
 use super::{
-    postgres::{types::BorrowToSql, ToStatement},
+    postgres::{types::BorrowToSql, Client, Row, ToStatement},
     query::{
         sql_param,
         state::{HashTableRow, Node, ParseError},
     },
-    Client, Query,
 };
 use crate::{
     availability::{
         BlockQueryData, LeafQueryData, QueryableHeader, QueryablePayload, UpdateAvailabilityData,
         VidCommonQueryData,
     },
-    data_source::update,
+    data_source::{
+        storage::pruning::PrunedHeightStorage,
+        update::{self, ReadOnly},
+    },
     merklized_state::{MerklizedState, UpdateStateData},
     types::HeightIndexed,
-    Header, Payload, QueryError, VidShare,
+    Header, Payload,
+    QueryError::{self, NotFound},
+    QueryResult, VidShare,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::CanonicalSerialize;
@@ -46,7 +50,7 @@ use derivative::Derivative;
 use derive_more::From;
 use futures::{
     future::Future,
-    stream::{StreamExt, TryStreamExt},
+    stream::{BoxStream, StreamExt, TryStreamExt},
 };
 use hotshot_types::traits::{
     block_contents::BlockHeader, node_implementation::NodeType, EncodeBytes,
@@ -68,8 +72,21 @@ pub struct Transaction<'a> {
 }
 
 impl<'a> Transaction<'a> {
-    pub(super) async fn new(inner: MutexGuard<'a, Client>) -> anyhow::Result<Self> {
-        inner.batch_execute("BEGIN").await?;
+    pub(super) async fn read(inner: MutexGuard<'a, Client>) -> anyhow::Result<ReadOnly<Self>> {
+        inner
+            .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY DEFERRABLE")
+            .await?;
+        Ok(Self {
+            inner,
+            committed: false,
+        }
+        .into())
+    }
+
+    pub(super) async fn write(inner: MutexGuard<'a, Client>) -> anyhow::Result<Self> {
+        inner
+            .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
+            .await?;
         Ok(Self {
             inner,
             committed: false,
@@ -98,8 +115,78 @@ impl<'a> Drop for Transaction<'a> {
     }
 }
 
-/// Low-level, general database mutation.
+/// Low-level, general database queries and mutation.
 impl<'a> Transaction<'a> {
+    pub async fn query<T, P>(
+        &self,
+        query: &T,
+        params: P,
+    ) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
+    where
+        T: ?Sized + ToStatement + Sync,
+        P: IntoIterator + Send,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        Ok(self
+            .inner
+            .query_raw(query, params)
+            .await
+            .map_err(postgres_err)?
+            .map_err(postgres_err)
+            .boxed())
+    }
+
+    /// Query the underlying SQL database with no parameters.
+    pub async fn query_static<T>(
+        &self,
+        query: &T,
+    ) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
+    where
+        T: ?Sized + ToStatement + Sync,
+    {
+        self.query::<T, [i64; 0]>(query, []).await
+    }
+
+    /// Query the underlying SQL database, returning exactly one result or failing.
+    pub async fn query_one<T, P>(&self, query: &T, params: P) -> QueryResult<Row>
+    where
+        T: ?Sized + ToStatement + Sync,
+        P: IntoIterator + Send,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        self.query_opt(query, params).await?.ok_or(NotFound)
+    }
+
+    /// Query the underlying SQL database with no parameters, returning exactly one result or
+    /// failing.
+    pub async fn query_one_static<T>(&self, query: &T) -> QueryResult<Row>
+    where
+        T: ?Sized + ToStatement + Sync,
+    {
+        self.query_one::<T, [i64; 0]>(query, []).await
+    }
+
+    /// Query the underlying SQL database, returning zero or one results.
+    pub async fn query_opt<T, P>(&self, query: &T, params: P) -> QueryResult<Option<Row>>
+    where
+        T: ?Sized + ToStatement + Sync,
+        P: IntoIterator + Send,
+        P::IntoIter: ExactSizeIterator,
+        P::Item: BorrowToSql,
+    {
+        self.query(query, params).await?.try_next().await
+    }
+
+    /// Query the underlying SQL database with no parameters, returning zero or one results.
+    pub async fn query_opt_static<T>(&self, query: &T) -> QueryResult<Option<Row>>
+    where
+        T: ?Sized + ToStatement + Sync,
+    {
+        self.query_opt::<T, [i64; 0]>(query, []).await
+    }
+
     /// Execute a statement against the underlying database.
     ///
     /// The results of the statement will be reflected immediately in future statements made within
@@ -629,13 +716,19 @@ impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usiz
     }
 }
 
-/// Query the underlying SQL database.
-///
-/// The results will reflect the state after the statements thus far added to this transaction have
-/// been applied, even though those effects have not been committed to the database yet.
 #[async_trait]
-impl<'a> Query for Transaction<'a> {
-    async fn client(&self) -> &Client {
-        &*self.inner
+impl<'a> PrunedHeightStorage for Transaction<'a> {
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+        let row = self
+            .query_opt_static("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
+            .await?;
+        let height = row.map(|row| row.get::<_, i64>(0) as u64);
+        Ok(height)
+    }
+}
+
+fn postgres_err(err: tokio_postgres::Error) -> QueryError {
+    QueryError::Error {
+        message: format!("postgres error: {err:#}"),
     }
 }

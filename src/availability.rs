@@ -459,7 +459,7 @@ mod test {
             setup_test,
         },
         types::HeightIndexed,
-        Error, Header,
+        ApiState, Error, Header,
     };
     use async_std::sync::RwLock;
     use committable::Committable;
@@ -760,7 +760,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(
@@ -871,7 +871,7 @@ mod test {
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
 
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_block(block.clone()).await.unwrap();
         tx.commit().await.unwrap();
 

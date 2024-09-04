@@ -12,11 +12,10 @@
 
 #![cfg(feature = "sql-data-source")]
 
-use super::pruning::PrunedHeightStorage;
 use crate::{
     data_source::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
-        update::Transaction as _,
+        update::{ReadOnly, Transaction as _},
         VersionedDataSource,
     },
     BackgroundTask, QueryError, QueryResult,
@@ -32,7 +31,7 @@ use futures::{AsyncRead, AsyncWrite};
 use itertools::Itertools;
 use postgres_native_tls::TlsConnector;
 use std::{cmp::min, fmt::Debug, pin::Pin, str::FromStr};
-use tokio_postgres::{config::Host, tls::TlsConnect, NoTls};
+use tokio_postgres::{config::Host, tls::TlsConnect, Client, NoTls};
 
 mod query;
 mod transaction;
@@ -43,12 +42,9 @@ pub use anyhow::Error;
 // crate which doesn't have `include_dir` as a dependency.
 pub use crate::include_migrations;
 pub use include_dir::include_dir;
-pub use query::Query;
 pub use refinery::Migration;
 pub use tokio_postgres as postgres;
 pub use transaction::Transaction;
-
-pub(crate) use postgres::Client;
 
 /// Embed migrations from the given directory into the current binary.
 ///
@@ -329,7 +325,7 @@ impl Config {
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
 #[derive(Debug)]
 pub struct SqlStorage {
-    client: Client,
+    client: Mutex<Client>,
     _client_task: BackgroundTask,
     // We use a separate client for mutable access (database transactions). This allows runtime
     // serialization of mutable operations while immutable operations can proceed in parallel, which
@@ -427,7 +423,7 @@ impl SqlStorage {
             .await?;
 
         Ok(Self {
-            client,
+            client: Mutex::new(client),
             _client_task: client_task,
             tx_client: Mutex::new(tx_client),
             _tx_client_task: tx_client_task,
@@ -448,7 +444,10 @@ impl PrunerConfig for SqlStorage {
 
 impl SqlStorage {
     async fn get_minimum_height(&self) -> QueryResult<Option<u64>> {
-        let row = self
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        let row = tx
             .query_one_static("SELECT MIN(height) as height FROM header")
             .await?;
 
@@ -458,13 +457,17 @@ impl SqlStorage {
     }
 
     async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+
         // We order by timestamp and then height, even though logically this is no different than
         // just ordering by height, since timestamps are monotonic. The reason is that this order
         // allows the query planner to efficiently solve the where clause and presort the results
         // based on the timestamp index. The remaining sort on height, which guarantees a unique
         // block if multiple blocks have the same timestamp, is very efficient, because there are
         // never more than a handful of blocks with the same timestamp.
-        let row = self
+        let row = tx
             .query_opt(
                 "SELECT height FROM header
                   WHERE timestamp <= $1
@@ -481,22 +484,12 @@ impl SqlStorage {
 }
 
 #[async_trait]
-impl PrunedHeightStorage for SqlStorage {
-    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
-        let row = self
-            .query_opt_static("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
-            .await?;
-        let height = row.map(|row| row.get::<_, i64>(0) as u64);
-        Ok(height)
-    }
-}
-
-#[async_trait]
 impl PruneStorage for SqlStorage {
     type Pruner = Pruner;
 
     async fn get_disk_usage(&self) -> anyhow::Result<u64> {
-        let row = self
+        let tx = self.read().await?;
+        let row = tx
             .query_one_static("SELECT pg_database_size(current_database())")
             .await?;
         let size: i64 = row.get(0);
@@ -546,7 +539,7 @@ impl PruneStorage for SqlStorage {
         if let Some(target_height) = target_height {
             if height < target_height {
                 height = min(height + batch_size, target_height);
-                let mut tx = self.transaction().await?;
+                let mut tx = self.write().await?;
                 tx.delete_batch(height).await?;
                 tx.commit().await.map_err(|e| QueryError::Error {
                     message: format!("failed to commit {e}"),
@@ -585,7 +578,7 @@ impl PruneStorage for SqlStorage {
                         && height < min_retention_height
                     {
                         height = min(height + batch_size, min_retention_height);
-                        let mut tx = self.transaction().await?;
+                        let mut tx = self.write().await?;
                         tx.delete_batch(height).await?;
                         tx.commit().await.map_err(|e| QueryError::Error {
                             message: format!("failed to commit {e}"),
@@ -607,17 +600,18 @@ impl VersionedDataSource for SqlStorage {
     type Transaction<'a> = Transaction<'a>
     where
         Self: 'a;
+    type ReadOnly<'a> = ReadOnly<Transaction<'a>>
+    where
+        Self: 'a;
 
-    async fn transaction(&self) -> anyhow::Result<Transaction<'_>> {
+    async fn write(&self) -> anyhow::Result<Transaction<'_>> {
         let tx = self.tx_client.lock().await;
-        Transaction::new(tx).await
+        Transaction::write(tx).await
     }
-}
 
-#[async_trait]
-impl Query for SqlStorage {
-    async fn client(&self) -> &Client {
-        &self.client
+    async fn read(&self) -> anyhow::Result<ReadOnly<Transaction<'_>>> {
+        let tx = self.client.lock().await;
+        Transaction::read(tx).await
     }
 }
 
@@ -959,6 +953,7 @@ mod test {
     use super::{testing::TmpDb, *};
     use crate::{
         availability::{LeafQueryData, UpdateAvailabilityData},
+        data_source::storage::pruning::PrunedHeightStorage,
         testing::{mocks::MockTypes, setup_test},
     };
 
@@ -1060,7 +1055,7 @@ mod test {
         for i in 0..20 {
             leaf.leaf.block_header_mut().block_number = i;
             leaf.leaf.block_header_mut().timestamp = Utc::now().timestamp() as u64;
-            let mut tx = storage.transaction().await.unwrap();
+            let mut tx = storage.write().await.unwrap();
             tx.insert_leaf(leaf.clone()).await.unwrap();
             tx.commit().await.unwrap();
         }
@@ -1075,7 +1070,13 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.batch_execute("VACUUM").await.unwrap();
+        storage
+            .client
+            .lock()
+            .await
+            .batch_execute("VACUUM")
+            .await
+            .unwrap();
         // Pruned height should be none
         assert!(pruned_height.is_none());
 
@@ -1096,7 +1097,13 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.batch_execute("VACUUM").await.unwrap();
+        storage
+            .client
+            .lock()
+            .await
+            .batch_execute("VACUUM")
+            .await
+            .unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
@@ -1104,6 +1111,9 @@ mod test {
         // All the tables should be empty
         // counting rows in header table
         let header_rows = storage
+            .read()
+            .await
+            .unwrap()
             .query_one_static("select count(*) as count from header")
             .await
             .unwrap()
@@ -1115,6 +1125,9 @@ mod test {
         // Deleting rows from header table would delete rows in all the tables
         // as each of table implement "ON DELETE CASCADE" fk constraint with the header table.
         let leaf_rows = storage
+            .read()
+            .await
+            .unwrap()
             .query_one_static("select count(*) as count from leaf")
             .await
             .unwrap()
@@ -1144,7 +1157,7 @@ mod test {
         for i in 0..20 {
             leaf.leaf.block_header_mut().block_number = i;
             leaf.leaf.block_header_mut().timestamp = Utc::now().timestamp() as u64;
-            let mut tx = storage.transaction().await.unwrap();
+            let mut tx = storage.write().await.unwrap();
             tx.insert_leaf(leaf.clone()).await.unwrap();
             tx.commit().await.unwrap();
         }
@@ -1163,7 +1176,13 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.batch_execute("VACUUM").await.unwrap();
+        storage
+            .client
+            .lock()
+            .await
+            .batch_execute("VACUUM")
+            .await
+            .unwrap();
 
         // Pruned height should be none
         assert!(pruned_height.is_none());
@@ -1187,13 +1206,22 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.batch_execute("VACUUM").await.unwrap();
+        storage
+            .client
+            .lock()
+            .await
+            .batch_execute("VACUUM")
+            .await
+            .unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
         // All the tables should be empty
         // counting rows in header table
         let header_rows = storage
+            .read()
+            .await
+            .unwrap()
             .query_one_static("select count(*) as count from header")
             .await
             .unwrap()
@@ -1217,12 +1245,28 @@ mod test {
             .port(port);
 
         let storage = SqlStorage::connect(cfg).await.unwrap();
-        assert!(storage.load_pruned_height().await.unwrap().is_none());
+        assert!(storage
+            .read()
+            .await
+            .unwrap()
+            .load_pruned_height()
+            .await
+            .unwrap()
+            .is_none());
         for height in [10, 20, 30] {
-            let mut tx = storage.transaction().await.unwrap();
+            let mut tx = storage.write().await.unwrap();
             tx.save_pruned_height(height).await.unwrap();
             tx.commit().await.unwrap();
-            assert_eq!(storage.load_pruned_height().await.unwrap(), Some(height));
+            assert_eq!(
+                storage
+                    .read()
+                    .await
+                    .unwrap()
+                    .load_pruned_height()
+                    .await
+                    .unwrap(),
+                Some(height)
+            );
         }
     }
 }

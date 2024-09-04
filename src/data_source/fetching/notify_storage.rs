@@ -10,29 +10,36 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use super::ResultExt;
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
+        QueryablePayload, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
+        VidCommonQueryData,
     },
     data_source::{
         notifier::Notifier,
         storage::{
-            pruning::{PruneStorage, PrunerCfg},
-            AvailabilityStorage,
+            pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg},
+            AvailabilityStorage, ExplorerStorage,
         },
         update::{self, VersionedDataSource},
     },
-    merklized_state::{MerklizedState, UpdateStateData},
+    explorer,
+    merklized_state::{
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
+        UpdateStateData,
+    },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
     Header, Payload, QueryResult, VidShare,
 };
+use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use futures::future::{BoxFuture, Future, FutureExt};
+use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_merkle_tree::prelude::MerkleProof;
+use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
 use std::{cmp::max, ops::RangeBounds};
 
 #[derive(Debug)]
@@ -60,7 +67,7 @@ where
     /// transaction. While the cache is locked (hopefully only briefly) readers can bypass it and
     /// read directly from the database, getting consistent data to the extent that the databse
     /// itself maintains consistency. Thus, a reader should never block on cache updates.
-    cache: RwLock<Cache>,
+    cache: RwLock<Heights>,
 }
 
 impl<Types, S> AsRef<S> for NotifyStorage<Types, S>
@@ -75,14 +82,17 @@ where
 impl<Types, S> NotifyStorage<Types, S>
 where
     Types: NodeType,
-    S: NodeDataSource<Types> + PruneStorage + Sync,
+    S: VersionedDataSource + Sync,
+    for<'a> S::ReadOnly<'a>: NodeDataSource<Types> + PrunedHeightStorage,
 {
     pub(super) async fn new(storage: S) -> anyhow::Result<Self> {
-        let height = storage.block_height().await? as u64;
-        let pruned_height = storage.load_pruned_height().await?;
+        let tx = storage.read().await?;
+        let height = tx.block_height().await? as u64;
+        let pruned_height = tx.load_pruned_height().await?;
+        drop(tx);
 
         Ok(Self {
-            cache: RwLock::new(Cache {
+            cache: RwLock::new(Heights {
                 height,
                 pruned_height,
             }),
@@ -95,73 +105,8 @@ where
 impl<Types, S> NotifyStorage<Types, S>
 where
     Types: NodeType,
-{
-    pub(super) fn notifiers(&self) -> &Notifiers<Types> {
-        &self.notifiers
-    }
-
-    /// Read a value which may be accessible from the cache.
-    ///
-    /// In most cases, this simply extracts a value from memory. However, if the in-memory cache is
-    /// locked (for example, a transaction is in the process of being committed) the value can also
-    /// be fetched from storage. In this way, this function will never have to wait for a writer to
-    /// complete in order to return a value, allowing readers to proceed concurrently with writers
-    /// and preventing locking queues from forming behind writers.
-    async fn read_cached<T>(
-        &self,
-        from_cache: impl Fn(&Cache) -> T,
-        from_storage: impl FnOnce(&S) -> BoxFuture<anyhow::Result<T>>,
-    ) -> T {
-        // Read from cache if unlocked.
-        if let Some(cache) = self.cache.try_read() {
-            return from_cache(&cache);
-        }
-
-        // Try reading from storage if the cache is locked.
-        match from_storage(&self.storage).await {
-            Ok(t) => return t,
-            Err(err) => {
-                tracing::warn!("unable to read cached value from storage; waiting for cache to unlock: {err:#}");
-            }
-        }
-
-        // If we failed to read from storage for some reason, fall back to waiting on the cache.
-        let cache = self.cache.read().await;
-        from_cache(&cache)
-    }
-}
-
-impl<Types, S> NotifyStorage<Types, S>
-where
-    Types: NodeType,
-    S: NodeDataSource<Types> + Sync,
-{
-    pub(super) async fn height(&self) -> u64 {
-        self.read_cached(
-            |cache| cache.height,
-            |storage| async move { Ok(storage.block_height().await? as u64) }.boxed(),
-        )
-        .await
-    }
-}
-
-impl<Types, S> NotifyStorage<Types, S>
-where
-    Types: NodeType,
     S: PruneStorage + Sync,
 {
-    pub(super) fn get_pruning_config(&self) -> Option<PrunerCfg> {
-        self.storage.get_pruning_config()
-    }
-
-    pub(super) async fn pruned_height(&self) -> Option<u64> {
-        self.read_cached(
-            |cache| cache.pruned_height,
-            |storage| storage.load_pruned_height().boxed(),
-        )
-        .await
-    }
-
     pub(super) async fn prune(&self) {
         // We loop until the whole run pruner run is complete
         let mut pruner = S::Pruner::default();
@@ -187,33 +132,108 @@ where
 impl<Types, S> NotifyStorage<Types, S>
 where
     Types: NodeType,
-    S: VersionedDataSource,
 {
-    pub(super) async fn transaction(
-        &self,
-    ) -> anyhow::Result<Transaction<'_, Types, S::Transaction<'_>>> {
-        Ok(Transaction {
-            inner: self.storage.transaction().await?,
-            cache: &self.cache,
-            notifiers: &self.notifiers,
-            updated_height: None,
-            updated_pruned_height: None,
-        })
+    pub(super) fn notifiers(&self) -> &Notifiers<Types> {
+        &self.notifiers
     }
 }
 
+impl<Types, S> NotifyStorage<Types, S>
+where
+    Types: NodeType,
+    S: PruneStorage + Sync,
+{
+    pub(super) fn get_pruning_config(&self) -> Option<PrunerCfg> {
+        self.storage.get_pruning_config()
+    }
+}
+
+impl<Types, S> VersionedDataSource for NotifyStorage<Types, S>
+where
+    Types: NodeType,
+    S: VersionedDataSource,
+{
+    type ReadOnly<'a> = Transaction<'a, Types, S::ReadOnly<'a>>
+    where
+        Self: 'a;
+
+    type Transaction<'a> = Transaction<'a, Types, S::Transaction<'a>>
+    where
+        Self: 'a;
+
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
+        Transaction::new(self, S::read).await
+    }
+
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        Transaction::new(self, S::write).await
+    }
+}
+
+#[derive(Debug)]
 pub struct Transaction<'a, Types, T>
 where
     Types: NodeType,
 {
     inner: T,
-    cache: &'a RwLock<Cache>,
+    cache: &'a RwLock<Heights>,
     notifiers: &'a Notifiers<Types>,
 
-    // Modifications to the in-memory cache. If applicable, these will be applied (atomically) to
-    // the in-memory cache upon commit.
-    updated_height: Option<u64>,
-    updated_pruned_height: Option<Option<u64>>,
+    // Cached values up-to-date with this transaction thus far.
+    //
+    // These values are initialized from the in-memory cache at the time when the transaction
+    // starts. Thereafter, they are updated by mutations made within this transaction, but will not
+    // reflect mutations made to the cache by other transactions until this transaction is
+    // committed, thus preserving transaction isolation.
+    //
+    // When this transaction is committed, these will be applied (atomically) to the in-memory
+    // cache, in a manner that is consistent with other transactions that may have committed in the
+    // meantime. Essentially, since both of these heights grow monotonically, whichever height is
+    // greater between the updated one and the one in the committed cache will be written to the
+    // cache when this transaction is committed.
+    //
+    // Note that either of these values may be `None`, indicating an unknown value, if the cache was
+    // locked when this transaction was started and the value has not been written since. This
+    // preserves the property that read operations never block on the availability of the cache, and
+    // thus never block on concurrent writers.
+    height: Option<u64>,
+    pruned_height: Option<Option<u64>>,
+}
+
+impl<'a, Types, T> Transaction<'a, Types, T>
+where
+    Types: NodeType,
+{
+    async fn new<S, Fut>(
+        storage: &'a NotifyStorage<Types, S>,
+        begin: impl FnOnce(&'a S) -> Fut,
+    ) -> anyhow::Result<Self>
+    where
+        Fut: Future<Output = anyhow::Result<T>>,
+        T: 'a,
+    {
+        // Snapshot cached values if possible. If we are able to acquire a lock on the cache, we
+        // hold it while we initialize the transaction, so that the snapshot we get is consistent
+        // with the snapshot our transaction has of the underlying database.
+        let (cache_lock, height, pruned_height) = if let Some(cache_lock) = storage.cache.try_read()
+        {
+            let height = Some(cache_lock.height);
+            let pruned_height = Some(cache_lock.pruned_height);
+            (Some(cache_lock), height, pruned_height)
+        } else {
+            (None, None, None)
+        };
+        let inner = begin(&storage.storage).await?;
+        drop(cache_lock);
+
+        Ok(Self {
+            inner,
+            cache: &storage.cache,
+            notifiers: &storage.notifiers,
+            height,
+            pruned_height,
+        })
+    }
 }
 
 impl<'a, Types, T> AsRef<T> for Transaction<'a, Types, T>
@@ -250,10 +270,10 @@ where
         self.inner.commit().await?;
 
         // Update cache.
-        if let Some(updated_height) = self.updated_height {
+        if let Some(updated_height) = self.height {
             cache.height = max(cache.height, updated_height);
         }
-        if let Some(updated_pruned_height) = self.updated_pruned_height {
+        if let Some(updated_pruned_height) = self.pruned_height {
             cache.pruned_height = max(cache.pruned_height, updated_pruned_height);
         }
 
@@ -262,6 +282,75 @@ where
 
     fn revert(self) -> impl Future + Send {
         self.inner.revert()
+    }
+}
+
+impl<'a, Types, T> Transaction<'a, Types, T>
+where
+    Types: NodeType,
+    T: PrunedHeightStorage + Sync,
+{
+    pub(super) async fn pruned_height(&self) -> anyhow::Result<Option<u64>> {
+        // Read from cache if available.
+        if let Some(h) = self.pruned_height {
+            return Ok(h);
+        }
+
+        // Try reading from storage if the cache is locked.
+        self.inner.load_pruned_height().await
+    }
+}
+
+impl<'a, Types, T> Transaction<'a, Types, T>
+where
+    Types: NodeType,
+    T: PrunedHeightStorage + NodeDataSource<Types> + Sync,
+{
+    pub(super) async fn heights(&self) -> Option<Heights> {
+        let height = self
+            .block_height()
+            .await
+            .context("unable to load block height")
+            .ok_or_trace()? as u64;
+        let pruned_height = self
+            .pruned_height()
+            .await
+            .context("unable to load pruned height")
+            .ok_or_trace()?;
+        Some(Heights {
+            height,
+            pruned_height,
+        })
+    }
+}
+
+#[async_trait]
+impl<'a, Types, T, State, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
+    for Transaction<'a, Types, T>
+where
+    Types: NodeType,
+    T: MerklizedStateDataSource<Types, State, ARITY> + Send + Sync,
+    State: MerklizedState<Types, ARITY> + 'static,
+    <State as MerkleTreeScheme>::Commitment: Send,
+{
+    async fn get_path(
+        &self,
+        snapshot: Snapshot<Types, State, ARITY>,
+        key: State::Key,
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
+        self.as_ref().get_path(snapshot, key).await
+    }
+}
+
+#[async_trait]
+impl<'a, Types, T> MerklizedStateHeightPersistence for Transaction<'a, Types, T>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    T: MerklizedStateHeightPersistence + Send + Sync,
+{
+    async fn get_last_state_height(&self) -> QueryResult<usize> {
+        self.as_ref().get_last_state_height().await
     }
 }
 
@@ -303,7 +392,7 @@ where
         // Record the latest height we have received in this transaction, so we can insert it in the
         // in-memory cache on commit. The known height of the chain is one more than the height of
         // its heighest object.
-        self.updated_height = max(self.updated_height, Some(leaf.height() + 1));
+        self.height = max(self.height, Some(leaf.height() + 1));
 
         // Store the new leaf.
         self.inner.insert_leaf(leaf).await
@@ -316,7 +405,7 @@ where
         // Record the latest height we have received in this transaction, so we can insert it in the
         // in-memory cache on commit. The known height of the chain is one more than the height of
         // its heighest object.
-        self.updated_height = max(self.updated_height, Some(block.height() + 1));
+        self.height = max(self.height, Some(block.height() + 1));
 
         // Store the new block.
         self.inner.insert_block(block).await
@@ -333,7 +422,7 @@ where
         // Record the latest height we have received in this transaction, so we can insert it in the
         // in-memory cache on commit. The known height of the chain is one more than the height of
         // its heighest object.
-        self.updated_height = max(self.updated_height, Some(common.height() + 1));
+        self.height = max(self.height, Some(common.height() + 1));
 
         // Store the new data.
         self.inner.insert_vid(common, share).await
@@ -429,13 +518,9 @@ where
     T: NodeDataSource<Types> + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
-        if let Some(height) = self.updated_height {
-            return Ok(height as usize);
-        }
-
-        // Read from cache if unlocked.
-        if let Some(cache) = self.cache.try_read() {
-            return Ok(cache.height as usize);
+        // Read from cache if available.
+        if let Some(h) = self.height {
+            return Ok(h as usize);
         }
 
         // Try reading from storage if the cache is locked.
@@ -470,6 +555,73 @@ where
     }
 }
 
+#[async_trait]
+impl<'a, Types, T> ExplorerStorage<Types> for Transaction<'a, Types, T>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
+    crate::Transaction<Types>: explorer::traits::ExplorerTransaction,
+    T: ExplorerStorage<Types> + Send + Sync,
+{
+    async fn get_block_summaries(
+        &self,
+        request: explorer::query_data::GetBlockSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::query_data::BlockSummary<Types>>,
+        explorer::query_data::GetBlockSummariesError,
+    > {
+        self.as_ref().get_block_summaries(request).await
+    }
+
+    async fn get_block_detail(
+        &self,
+        request: explorer::query_data::BlockIdentifier<Types>,
+    ) -> Result<explorer::query_data::BlockDetail<Types>, explorer::query_data::GetBlockDetailError>
+    {
+        self.as_ref().get_block_detail(request).await
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        request: explorer::query_data::GetTransactionSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::query_data::TransactionSummary<Types>>,
+        explorer::query_data::GetTransactionSummariesError,
+    > {
+        self.as_ref().get_transaction_summaries(request).await
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        request: explorer::query_data::TransactionIdentifier<Types>,
+    ) -> Result<
+        explorer::query_data::TransactionDetailResponse<Types>,
+        explorer::query_data::GetTransactionDetailError,
+    > {
+        self.as_ref().get_transaction_detail(request).await
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<
+        explorer::query_data::ExplorerSummary<Types>,
+        explorer::query_data::GetExplorerSummaryError,
+    > {
+        self.as_ref().get_explorer_summary().await
+    }
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<
+        explorer::query_data::SearchResult<Types>,
+        explorer::query_data::GetSearchResultsError,
+    > {
+        self.as_ref().get_search_results(query).await
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct Notifiers<Types>
 where
@@ -493,8 +645,14 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
-struct Cache {
-    height: u64,
-    pruned_height: Option<u64>,
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Heights {
+    pub(super) height: u64,
+    pub(super) pruned_height: Option<u64>,
+}
+
+impl Heights {
+    pub(super) fn might_exist(self, h: u64) -> bool {
+        h < self.height && self.pruned_height.map_or(true, |ph| h > ph)
+    }
 }

@@ -18,6 +18,7 @@ use crate::{
     Leaf, Payload,
 };
 use async_trait::async_trait;
+use derive_more::{Deref, From};
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
 use hotshot_types::event::LeafInfo;
@@ -171,12 +172,31 @@ async fn store_genesis_vid<Types: NodeType>(
 /// Only when a [`Transaction`] is committed are changes written back to storage, synchronized with
 /// any concurrent changes, and made visible to other connections to the same data source.
 pub trait VersionedDataSource: Send + Sync {
+    /// A transaction which can read and modify the data source.
     type Transaction<'a>: Transaction
     where
         Self: 'a;
 
+    type ReadOnly<'a>: Transaction
+    where
+        Self: 'a;
+
     /// Start an atomic transaction on the data source.
-    fn transaction(&self) -> impl Future<Output = anyhow::Result<Self::Transaction<'_>>> + Send;
+    fn write(&self) -> impl Future<Output = anyhow::Result<Self::Transaction<'_>>> + Send;
+
+    /// Start a read-only transaction on the data source.
+    ///
+    /// A read-only transaction allows the owner to string together multiple queries of the data
+    /// source, which otherwise would not be atomic with respect to concurrent writes, in an atomic
+    /// fashion. Upon returning, [`read`](Self::read) locks in a fully consistent snapshot of the
+    /// data source, and any read operations performed upon the transaction thereafter read from the
+    /// same consistent snapshot. Concurrent modifications to the data source may occur (for
+    /// example, from concurrent [`write`](Self::write) transactions being committed), but their
+    /// results will not be reflected in a successful read-only transaction which was opened before
+    /// the write was committed.
+    ///
+    /// Read-only transactions do not need to be committed, and reverting has no effect.
+    fn read(&self) -> impl Future<Output = anyhow::Result<Self::ReadOnly<'_>>> + Send;
 }
 
 /// A unit of atomicity for updating a shared data sourec.
@@ -189,4 +209,21 @@ pub trait VersionedDataSource: Send + Sync {
 pub trait Transaction: Send + Sync {
     fn commit(self) -> impl Future<Output = anyhow::Result<()>> + Send;
     fn revert(self) -> impl Future + Send;
+}
+
+/// A wrapper around a [`Transaction`] that permits immutable operations only.
+#[derive(Debug, Deref, From)]
+pub struct ReadOnly<T>(T);
+
+impl<T> Transaction for ReadOnly<T>
+where
+    T: Transaction,
+{
+    async fn commit(self) -> anyhow::Result<()> {
+        self.0.commit().await
+    }
+
+    fn revert(self) -> impl Future + Send {
+        self.0.revert()
+    }
 }

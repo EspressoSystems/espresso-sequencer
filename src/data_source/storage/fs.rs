@@ -44,7 +44,7 @@ use std::collections::{
     BTreeMap,
 };
 use std::hash::Hash;
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound, Deref, RangeBounds};
 use std::path::Path;
 
 const CACHED_LEAVES_COUNT: usize = 100;
@@ -52,7 +52,7 @@ const CACHED_BLOCKS_COUNT: usize = 100;
 const CACHED_VID_COMMON_COUNT: usize = 100;
 
 #[derive(custom_debug::Debug)]
-struct FileSystemStorageInner<Types>
+pub struct FileSystemStorageInner<Types>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -118,10 +118,6 @@ where
 }
 
 impl<Types: NodeType> PrunerConfig for FileSystemStorage<Types> where
-    Payload<Types>: QueryablePayload<Types>
-{
-}
-impl<Types: NodeType> PrunedHeightStorage for FileSystemStorage<Types> where
     Payload<Types>: QueryablePayload<Types>
 {
 }
@@ -274,72 +270,13 @@ where
     }
 }
 
-trait FileSystemGuard<Types>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-{
-    fn inner(&self) -> &FileSystemStorageInner<Types>;
-}
-
-impl<'a, Types> FileSystemGuard<Types> for RwLockReadGuard<'a, FileSystemStorageInner<Types>>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-{
-    fn inner(&self) -> &FileSystemStorageInner<Types> {
-        self
-    }
-}
-
-impl<'a, Types> FileSystemGuard<Types> for &RwLockWriteGuard<'a, FileSystemStorageInner<Types>>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-{
-    fn inner(&self) -> &FileSystemStorageInner<Types> {
-        self
-    }
-}
-
-trait ReadFileSystem<Types>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-{
-    async fn read(&self) -> impl FileSystemGuard<Types>;
-}
-
-impl<Types> ReadFileSystem<Types> for FileSystemStorage<Types>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-{
-    async fn read(&self) -> impl FileSystemGuard<Types> {
-        self.inner.read().await
-    }
-}
-
 #[derive(Debug)]
-pub struct Transaction<'a, Types>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-{
-    inner: RwLockWriteGuard<'a, FileSystemStorageInner<Types>>,
+pub struct Transaction<T> {
+    inner: T,
 }
 
-impl<'a, Types> ReadFileSystem<Types> for Transaction<'a, Types>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-{
-    async fn read(&self) -> impl FileSystemGuard<Types> {
-        &self.inner
-    }
-}
-
-impl<'a, Types> update::Transaction for Transaction<'a, Types>
+impl<'a, Types> update::Transaction
+    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -363,17 +300,43 @@ where
     }
 }
 
+impl<'a, Types> update::Transaction
+    for Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    async fn commit(self) -> anyhow::Result<()> {
+        // Nothing to commit for a read-only transaction.
+        Ok(())
+    }
+
+    fn revert(self) -> impl Future + Send {
+        // Nothing to revert for a read-only transaction.
+        async {}
+    }
+}
+
 impl<Types: NodeType> VersionedDataSource for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    type Transaction<'a> = Transaction<'a, Types>
+    type Transaction<'a> = Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
+    where
+        Self: 'a;
+    type ReadOnly<'a> = Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
     where
         Self: 'a;
 
-    async fn transaction(&self) -> anyhow::Result<Self::Transaction<'_>> {
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
         Ok(Transaction {
             inner: self.inner.write().await,
+        })
+    }
+
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
+        Ok(Transaction {
+            inner: self.inner.read().await,
         })
     }
 }
@@ -419,138 +382,119 @@ where
     })
 }
 
-macro_rules! impl_availability_storage {
-    ($($a:lifetime,)? $t:ident) => {
-        #[async_trait]
-        impl<$($a,)? Types> AvailabilityStorage<Types> for $t<$($a,)? Types>
-        where
-            Types: NodeType,
-            Payload<Types>: QueryablePayload<Types>,
-            Header<Types>: QueryableHeader<Types>,
-        {
-            async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                let n = match id {
-                    LeafId::Number(n) => n,
-                    LeafId::Hash(h) => {
-                        *inner.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize
-                    }
-                };
-                inner
-                    .leaf_storage
-                    .iter()
-                    .nth(n)
-                    .context(NotFoundSnafu)?
-                    .context(MissingSnafu)
-            }
+#[async_trait]
+impl<Types, T> AvailabilityStorage<Types> for Transaction<T>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    Header<Types>: QueryableHeader<Types>,
+    T: Deref<Target = FileSystemStorageInner<Types>> + Send + Sync,
+{
+    async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
+        let n = match id {
+            LeafId::Number(n) => n,
+            LeafId::Hash(h) => *self
+                .inner
+                .index_by_leaf_hash
+                .get(&h)
+                .context(NotFoundSnafu)? as usize,
+        };
+        self.inner
+            .leaf_storage
+            .iter()
+            .nth(n)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)
+    }
 
-            async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                inner.get_block(id)
-            }
+    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+        self.inner.get_block(id)
+    }
 
-            async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                inner.get_header(id)
-            }
+    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+        self.inner.get_header(id)
+    }
 
-            async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
-                self.get_block(id).await.map(PayloadQueryData::from)
-            }
+    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+        self.get_block(id).await.map(PayloadQueryData::from)
+    }
 
-            async fn get_vid_common(
-                &self,
-                id: BlockId<Types>,
-            ) -> QueryResult<VidCommonQueryData<Types>> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                Ok(inner
-                    .vid_storage
-                    .iter()
-                    .nth(inner.get_block_index(id)?)
-                    .context(NotFoundSnafu)?
-                    .context(MissingSnafu)?
-                    .0)
-            }
+    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+        Ok(self
+            .inner
+            .vid_storage
+            .iter()
+            .nth(self.inner.get_block_index(id)?)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)?
+            .0)
+    }
 
-            async fn get_leaf_range<R>(
-                &self,
-                range: R,
-            ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
-            where
-                R: RangeBounds<usize> + Send,
-            {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                Ok(range_iter(inner.leaf_storage.iter(), range).collect())
-            }
+    async fn get_leaf_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_iter(self.inner.leaf_storage.iter(), range).collect())
+    }
 
-            async fn get_block_range<R>(
-                &self,
-                range: R,
-            ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
-            where
-                R: RangeBounds<usize> + Send,
-            {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                inner.get_block_range(range)
-            }
+    async fn get_block_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        self.inner.get_block_range(range)
+    }
 
-            async fn get_payload_range<R>(
-                &self,
-                range: R,
-            ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
-            where
-                R: RangeBounds<usize> + Send,
-            {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                Ok(range_iter(inner.block_storage.iter(), range)
-                    .map(|res| res.map(PayloadQueryData::from))
-                    .collect())
-            }
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_iter(self.inner.block_storage.iter(), range)
+            .map(|res| res.map(PayloadQueryData::from))
+            .collect())
+    }
 
-            async fn get_vid_common_range<R>(
-                &self,
-                range: R,
-            ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
-            where
-                R: RangeBounds<usize> + Send,
-            {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                Ok(range_iter(inner.vid_storage.iter(), range)
-                    .map(|res| res.map(|(common, _)| common))
-                    .collect())
-            }
+    async fn get_vid_common_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_iter(self.inner.vid_storage.iter(), range)
+            .map(|res| res.map(|(common, _)| common))
+            .collect())
+    }
 
-            async fn get_transaction(
-                &self,
-                hash: TransactionHash<Types>,
-            ) -> QueryResult<TransactionQueryData<Types>> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                let height = inner.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
-                let block = inner.get_block((*height as usize).into())?;
-                TransactionQueryData::with_hash(&block, hash).context(ErrorSnafu {
-                    message: format!(
-                        "transaction index inconsistent: block {height} contains no transaction {hash}"
-                    ),
-                })
-            }
-        }
-    };
+    async fn get_transaction(
+        &self,
+        hash: TransactionHash<Types>,
+    ) -> QueryResult<TransactionQueryData<Types>> {
+        let height = self
+            .inner
+            .index_by_txn_hash
+            .get(&hash)
+            .context(NotFoundSnafu)?;
+        let block = self.inner.get_block((*height as usize).into())?;
+        TransactionQueryData::with_hash(&block, hash).context(ErrorSnafu {
+            message: format!(
+                "transaction index inconsistent: block {height} contains no transaction {hash}"
+            ),
+        })
+    }
 }
 
-impl_availability_storage!(FileSystemStorage);
-impl_availability_storage!('a, Transaction);
-
 #[async_trait]
-impl<'a, Types: NodeType> UpdateAvailabilityData<Types> for Transaction<'a, Types>
+impl<'a, Types: NodeType> UpdateAvailabilityData<Types>
+    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
 where
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
@@ -631,123 +575,109 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
     }
 }
 
-macro_rules! impl_node_data_source {
-    ($($a:lifetime,)? $t:ident) => {
-        #[async_trait]
-        impl<$($a,)? Types> NodeDataSource<Types> for $t<$($a,)? Types>
-        where
-            Types: NodeType,
-            Payload<Types>: QueryablePayload<Types>,
-            Header<Types>: QueryableHeader<Types>,
-        {
-            async fn block_height(&self) -> QueryResult<usize> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                Ok(inner.leaf_storage.iter().len())
-            }
+#[async_trait]
+impl<Types, T> NodeDataSource<Types> for Transaction<T>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    Header<Types>: QueryableHeader<Types>,
+    T: Deref<Target = FileSystemStorageInner<Types>> + Sync,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        Ok(self.inner.leaf_storage.iter().len())
+    }
 
-            async fn count_transactions(&self) -> QueryResult<usize> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                Ok(inner.num_transactions)
-            }
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        Ok(self.inner.num_transactions)
+    }
 
-            async fn payload_size(&self) -> QueryResult<usize> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                Ok(inner.payload_size)
-            }
+    async fn payload_size(&self) -> QueryResult<usize> {
+        Ok(self.inner.payload_size)
+    }
 
-            async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
-            where
-                ID: Into<BlockId<Types>> + Send + Sync,
-            {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                inner
-                    .vid_storage
-                    .iter()
-                    .nth(inner.get_block_index(id.into())?)
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.inner
+            .vid_storage
+            .iter()
+            .nth(self.inner.get_block_index(id.into())?)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)?
+            .1
+            .context(MissingSnafu)
+    }
+
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        let height = self.inner.leaf_storage.iter().len();
+
+        // The number of missing VID common is just the number of completely missing VID
+        // entries, since every entry we have is guaranteed to have the common data.
+        let missing_vid = self.inner.vid_storage.missing(height);
+        // Missing shares includes the completely missing VID entries, plus any entry which
+        // is _not_ messing but which has a null share.
+        let null_vid_shares: usize = self
+            .inner
+            .vid_storage
+            .iter()
+            .map(|res| if matches!(res, Some((_, None))) { 1 } else { 0 })
+            .sum();
+        Ok(SyncStatus {
+            missing_blocks: self.inner.block_storage.missing(height),
+            missing_leaves: self.inner.leaf_storage.missing(height),
+            missing_vid_common: missing_vid,
+            missing_vid_shares: missing_vid + null_vid_shares,
+            pruned_height: None,
+        })
+    }
+
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        let first_block = match start.into() {
+            WindowStart::Height(h) => h,
+            WindowStart::Hash(h) => self.inner.get_header(h.into())?.block_number(),
+            WindowStart::Time(t) => {
+                // Find the minimum timestamp which is at least `t`, and all the blocks with
+                // that timestamp.
+                let blocks = self
+                    .inner
+                    .index_by_time
+                    .range(t..)
+                    .next()
                     .context(NotFoundSnafu)?
-                    .context(MissingSnafu)?
-                    .1
-                    .context(MissingSnafu)
+                    .1;
+                // Multiple blocks can have the same timestamp (when truncated to seconds);
+                // we want the first one. It is an invariant that any timestamp which has an
+                // entry in `index_by_time` has a non-empty list associated with it, so this
+                // indexing is safe.
+                blocks[0]
             }
+        } as usize;
 
-            async fn sync_status(&self) -> QueryResult<SyncStatus> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                let height = inner.leaf_storage.iter().len();
+        let mut res = TimeWindowQueryData::default();
 
-                // The number of missing VID common is just the number of completely missing VID
-                // entries, since every entry we have is guaranteed to have the common data.
-                let missing_vid = inner.vid_storage.missing(height);
-                // Missing shares includes the completely missing VID entries, plus any entry which
-                // is _not_ messing but which has a null share.
-                let null_vid_shares: usize = inner
-                    .vid_storage
-                    .iter()
-                    .map(|res| if matches!(res, Some((_, None))) { 1 } else { 0 })
-                    .sum();
-                Ok(SyncStatus {
-                    missing_blocks: inner.block_storage.missing(height),
-                    missing_leaves: inner.leaf_storage.missing(height),
-                    missing_vid_common: missing_vid,
-                    missing_vid_shares: missing_vid + null_vid_shares,
-                    pruned_height: None,
-                })
-            }
-
-            async fn get_header_window(
-                &self,
-                start: impl Into<WindowStart<Types>> + Send + Sync,
-                end: u64,
-            ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
-                let guard = self.read().await;
-                let inner = guard.inner();
-                let first_block = match start.into() {
-                    WindowStart::Height(h) => h,
-                    WindowStart::Hash(h) => inner.get_header(h.into())?.block_number(),
-                    WindowStart::Time(t) => {
-                        // Find the minimum timestamp which is at least `t`, and all the blocks with
-                        // that timestamp.
-                        let blocks = inner
-                            .index_by_time
-                            .range(t..)
-                            .next()
-                            .context(NotFoundSnafu)?
-                            .1;
-                        // Multiple blocks can have the same timestamp (when truncated to seconds);
-                        // we want the first one. It is an invariant that any timestamp which has an
-                        // entry in `index_by_time` has a non-empty list associated with it, so this
-                        // indexing is safe.
-                        blocks[0]
-                    }
-                } as usize;
-
-                let mut res = TimeWindowQueryData::default();
-
-                // Include the block just before the start of the window, if there is one.
-                if first_block > 0 {
-                    res.prev = Some(inner.get_header((first_block - 1).into())?);
-                }
-
-                // Add blocks to the window, starting from `first_block`, until we reach the end of
-                // the requested time window.
-                for block in inner.get_block_range(first_block..)? {
-                    let header = block?.header().clone();
-                    if header.timestamp() >= end {
-                        res.next = Some(header);
-                        break;
-                    }
-                    res.window.push(header);
-                }
-
-                Ok(res)
-            }
+        // Include the block just before the start of the window, if there is one.
+        if first_block > 0 {
+            res.prev = Some(self.inner.get_header((first_block - 1).into())?);
         }
-    };
+
+        // Add blocks to the window, starting from `first_block`, until we reach the end of
+        // the requested time window.
+        for block in self.inner.get_block_range(first_block..)? {
+            let header = block?.header().clone();
+            if header.timestamp() >= end {
+                res.next = Some(header);
+                break;
+            }
+            res.window.push(header);
+        }
+
+        Ok(res)
+    }
 }
 
-impl_node_data_source!(FileSystemStorage);
-impl_node_data_source!('a, Transaction);
+impl<T> PrunedHeightStorage for Transaction<T> {}

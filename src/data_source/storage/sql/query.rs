@@ -11,20 +11,10 @@
 // see <https://www.gnu.org/licenses/>.
 
 //! Immutable query functionality of a SQL database.
-//!
-//! This module provides a generic [`Query`] interface which can be implemented for different types
-//! that allow querying the database (e.g. a database wrapper that provides one-off queries, or a
-//! specific connection or transaction).
-//!
-//! Any type that implements this generic interface can be used with query service specific queries.
 
 use super::{
-    postgres::{
-        self,
-        types::{BorrowToSql, ToSql},
-        Row, ToStatement,
-    },
-    Client,
+    postgres::{self, types::ToSql, Row},
+    Transaction,
 };
 use crate::{
     availability::{
@@ -32,11 +22,9 @@ use crate::{
         VidCommonQueryData,
     },
     Header, Leaf, Payload,
-    QueryError::{self, Missing, NotFound},
+    QueryError::{self, Missing},
     QueryResult,
 };
-use async_trait::async_trait;
-use futures::stream::{BoxStream, StreamExt, TryStreamExt};
 use hotshot_types::{
     simple_certificate::QuorumCertificate,
     traits::{
@@ -51,84 +39,7 @@ pub(super) mod explorer;
 pub(super) mod node;
 pub(super) mod state;
 
-/// Generic low-level query interface.
-///
-/// This interface can be implemented for different types that allow querying the database (e.g. a
-/// database wrapper that provides one-off queries, or a specific connection or transaction). Any
-/// type that implements this generic interface can be used with query service specific queries.
-#[async_trait]
-pub trait Query: Send + Sync {
-    async fn client(&self) -> &Client;
-
-    // Query the underlying SQL database.
-    async fn query<T, P>(
-        &self,
-        query: &T,
-        params: P,
-    ) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
-    where
-        T: ?Sized + ToStatement + Sync,
-        P: IntoIterator + Send,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        Ok(self
-            .client()
-            .await
-            .query_raw(query, params)
-            .await
-            .map_err(postgres_err)?
-            .map_err(postgres_err)
-            .boxed())
-    }
-
-    /// Query the underlying SQL database with no parameters.
-    async fn query_static<T>(&self, query: &T) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
-    where
-        T: ?Sized + ToStatement + Sync,
-    {
-        self.query::<T, [i64; 0]>(query, []).await
-    }
-
-    /// Query the underlying SQL database, returning exactly one result or failing.
-    async fn query_one<T, P>(&self, query: &T, params: P) -> QueryResult<Row>
-    where
-        T: ?Sized + ToStatement + Sync,
-        P: IntoIterator + Send,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        self.query_opt(query, params).await?.ok_or(NotFound)
-    }
-
-    /// Query the underlying SQL database with no parameters, returning exactly one result or
-    /// failing.
-    async fn query_one_static<T>(&self, query: &T) -> QueryResult<Row>
-    where
-        T: ?Sized + ToStatement + Sync,
-    {
-        self.query_one::<T, [i64; 0]>(query, []).await
-    }
-
-    /// Query the underlying SQL database, returning zero or one results.
-    async fn query_opt<T, P>(&self, query: &T, params: P) -> QueryResult<Option<Row>>
-    where
-        T: ?Sized + ToStatement + Sync,
-        P: IntoIterator + Send,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        self.query(query, params).await?.try_next().await
-    }
-
-    /// Query the underlying SQL database with no parameters, returning zero or one results.
-    async fn query_opt_static<T>(&self, query: &T) -> QueryResult<Option<Row>>
-    where
-        T: ?Sized + ToStatement + Sync,
-    {
-        self.query_opt::<T, [i64; 0]>(query, []).await
-    }
-
+impl<'a> Transaction<'a> {
     /// Load a header from storage.
     ///
     /// This function is similar to `AvailabilityStorage::get_header`, but
@@ -155,13 +66,6 @@ pub trait Query: Send + Sync {
         );
         let row = self.query_one(&query, [param]).await?;
         parse_header::<Types>(row)
-    }
-}
-
-#[async_trait]
-impl Query for Client {
-    async fn client(&self) -> &Client {
-        self
     }
 }
 
@@ -361,10 +265,4 @@ where
 
 pub(super) fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
-}
-
-fn postgres_err(err: tokio_postgres::Error) -> QueryError {
-    QueryError::Error {
-        message: format!("postgres error: {err:#}"),
-    }
 }

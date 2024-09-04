@@ -497,6 +497,12 @@ impl<D: 'static + Send + Sync> ReadState for ApiState<D> {
     }
 }
 
+impl<D> From<D> for ApiState<D> {
+    fn from(d: D) -> Self {
+        Self::from(Arc::new(d))
+    }
+}
+
 /// Run an instance of the HotShot Query service with no customization.
 pub async fn run_standalone_service<
     Types: NodeType,
@@ -551,7 +557,7 @@ where
     // Update query data using HotShot events.
     while let Some(event) = events.next().await {
         // Update the query data based on this event.
-        let mut tx = data_source.transaction().await.map_err(Error::internal)?;
+        let mut tx = data_source.write().await.map_err(Error::internal)?;
         tx.update(&event).await.map_err(Error::internal)?;
         tx.commit().await.map_err(Error::internal)?;
     }
@@ -736,7 +742,7 @@ mod test {
         )
         .await;
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
-        let mut tx = hotshot_qs.transaction().await.unwrap();
+        let mut tx = hotshot_qs.write().await.unwrap();
         tx.insert_block(block.clone()).await.unwrap();
         tx.commit().await.unwrap();
 

@@ -12,7 +12,7 @@
 
 //! Node storage implementation for a database query engine.
 
-use super::{header_where_clause, parse_header, Query, HEADER_COLUMNS};
+use super::{header_where_clause, parse_header, Transaction, HEADER_COLUMNS};
 use crate::{
     node::{BlockId, NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, VidShare,
@@ -23,10 +23,9 @@ use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::No
 use snafu::OptionExt;
 
 #[async_trait]
-impl<Types, T> NodeDataSource<Types> for T
+impl<'a, Types> NodeDataSource<Types> for Transaction<'a>
 where
     Types: NodeType,
-    T: Query + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
         let query = "SELECT max(height) FROM header";
@@ -164,7 +163,7 @@ where
                 // use a different method to find the window, as detecting whether we have
                 // sufficient data to answer the query is not as simple as just trying `load_header`
                 // for a specific block ID.
-                return time_window::<Types, T>(self, t, end).await;
+                return self.time_window::<Types>(t, end).await;
             }
             WindowStart::Height(h) => h,
             WindowStart::Hash(h) => self.load_header::<Types>(h).await?.block_number(),
@@ -222,75 +221,78 @@ where
     }
 }
 
-async fn time_window<Types: NodeType, T: Query + Sync>(
-    db: &T,
-    start: u64,
-    end: u64,
-) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
-    // Find all blocks whose timestamps fall within the window [start, end). Block timestamps are
-    // monotonically increasing, so this query is guaranteed to return a contiguous range of blocks
-    // ordered by increasing height.
-    //
-    // We order by timestamp _then_ height, because the timestamp order allows the query planner to
-    // use the index on timestamp to also efficiently solve the WHERE clause, but this process may
-    // turn up multiple results, due to the 1-second resolution of block timestamps. The final sort
-    // by height guarantees us a unique, deterministic result (the first block with a given
-    // timestamp). This sort may not be able to use an index, but it shouldn't be too expensive,
-    // since there will never be more than a handful of blocks with the same timestamp.
-    let query = format!(
-        "SELECT {HEADER_COLUMNS}
+impl<'a> Transaction<'a> {
+    async fn time_window<Types: NodeType>(
+        &self,
+        start: u64,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        // Find all blocks whose timestamps fall within the window [start, end). Block timestamps
+        // are monotonically increasing, so this query is guaranteed to return a contiguous range of
+        // blocks ordered by increasing height.
+        //
+        // We order by timestamp _then_ height, because the timestamp order allows the query planner
+        // to use the index on timestamp to also efficiently solve the WHERE clause, but this
+        // process may turn up multiple results, due to the 1-second resolution of block timestamps.
+        // The final sort by height guarantees us a unique, deterministic result (the first block
+        // with a given timestamp). This sort may not be able to use an index, but it shouldn't be
+        // too expensive, since there will never be more than a handful of blocks with the same
+        // timestamp.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1 AND h.timestamp < $2
               ORDER BY h.timestamp, h.height"
-    );
-    let rows = db.query(&query, [&(start as i64), &(end as i64)]).await?;
-    let window: Vec<_> = rows
-        .map(|row| {
-            parse_header::<Types>(row.map_err(|err| QueryError::Error {
-                message: err.to_string(),
-            })?)
-        })
-        .try_collect()
-        .await?;
+        );
+        let rows = self.query(&query, [&(start as i64), &(end as i64)]).await?;
+        let window: Vec<_> = rows
+            .map(|row| {
+                parse_header::<Types>(row.map_err(|err| QueryError::Error {
+                    message: err.to_string(),
+                })?)
+            })
+            .try_collect()
+            .await?;
 
-    // Find the block just after the window.
-    let query = format!(
-        "SELECT {HEADER_COLUMNS}
+        // Find the block just after the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
               ORDER BY h.timestamp, h.height
               LIMIT 1"
-    );
-    let next = db
-        .query_opt(&query, [&(end as i64)])
-        .await?
-        .map(parse_header::<Types>)
-        .transpose()?;
+        );
+        let next = self
+            .query_opt(&query, [&(end as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
 
-    // If the `next` block exists, _or_ if any block in the window exists, we know we have enough
-    // information to definitively say at least where the window starts (we may or may not have
-    // where it ends, depending on how many blocks have thus far been produced). However, if we have
-    // neither a block in the window nor a block after it, we cannot say whether the next block
-    // produced will have a timestamp before or after the window start. In this case, we don't know
-    // what the `prev` field of the response should be, so we return an error: the caller must try
-    // again after more blocks have been produced.
-    if window.is_empty() && next.is_none() {
-        return Err(QueryError::NotFound);
-    }
+        // If the `next` block exists, _or_ if any block in the window exists, we know we have
+        // enough information to definitively say at least where the window starts (we may or may
+        // not have where it ends, depending on how many blocks have thus far been produced).
+        // However, if we have neither a block in the window nor a block after it, we cannot say
+        // whether the next block produced will have a timestamp before or after the window start.
+        // In this case, we don't know what the `prev` field of the response should be, so we return
+        // an error: the caller must try again after more blocks have been produced.
+        if window.is_empty() && next.is_none() {
+            return Err(QueryError::NotFound);
+        }
 
-    // Find the block just before the window.
-    let query = format!(
-        "SELECT {HEADER_COLUMNS}
+        // Find the block just before the window.
+        let query = format!(
+            "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp < $1
               ORDER BY h.timestamp DESC, h.height DESC
               LIMIT 1"
-    );
-    let prev = db
-        .query_opt(&query, [&(start as i64)])
-        .await?
-        .map(parse_header::<Types>)
-        .transpose()?;
+        );
+        let prev = self
+            .query_opt(&query, [&(start as i64)])
+            .await?
+            .map(parse_header::<Types>)
+            .transpose()?;
 
-    Ok(TimeWindowQueryData { window, prev, next })
+        Ok(TimeWindowQueryData { window, prev, next })
+    }
 }

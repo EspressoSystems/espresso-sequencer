@@ -15,7 +15,7 @@
 use super::{
     parse_block,
     postgres::types::{Json, ToSql},
-    Query, BLOCK_COLUMNS,
+    Transaction, BLOCK_COLUMNS,
 };
 use crate::{
     availability::{QueryableHeader, QueryablePayload, TransactionIndex},
@@ -38,7 +38,7 @@ use itertools::Itertools;
 use std::num::NonZeroUsize;
 
 #[async_trait]
-impl<Types: NodeType, T: Query + Sync> ExplorerStorage<Types> for T
+impl<'a, Types: NodeType> ExplorerStorage<Types> for Transaction<'a>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,

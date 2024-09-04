@@ -14,7 +14,7 @@
 
 use super::{
     header::{fetch_header_and_then, HeaderCallback},
-    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers, NotifyStorage,
+    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, NotifyStorage,
     RangedFetchable,
 };
 use crate::{
@@ -48,8 +48,8 @@ impl<Types> FetchRequest for VidCommonRequest<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
-        self.0.might_exist(block_height, pruned_height)
+    fn might_exist(self, heights: Heights) -> bool {
+        self.0.might_exist(heights)
     }
 }
 
@@ -81,14 +81,17 @@ where
             .boxed()
     }
 
-    async fn active_fetch<S, P>(fetcher: Arc<Fetcher<Types, S, P>>, req: Self::Request)
-    where
-        S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    async fn active_fetch<S, P>(
+        tx: &impl AvailabilityStorage<Types>,
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        req: Self::Request,
+    ) where
+        S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
         fetch_header_and_then(
-            &fetcher.storage,
+            tx,
             req.0,
             HeaderCallback::VidCommon {
                 fetcher: fetcher.clone(),
@@ -97,11 +100,11 @@ where
         .await
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.as_ref().get_vid_common(req.0).await
+        storage.get_vid_common(req.0).await
     }
 }
 
@@ -113,15 +116,12 @@ where
 {
     type RangedRequest = VidCommonRequest<Types>;
 
-    async fn load_range<S, R>(
-        storage: &NotifyStorage<Types, S>,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.as_ref().get_vid_common_range(range).await
+        storage.get_vid_common_range(range).await
     }
 }
 
@@ -131,7 +131,7 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    S: VersionedDataSource + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
@@ -161,7 +161,7 @@ where
     S: VersionedDataSource,
     for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
 {
-    let mut tx = storage.transaction().await?;
+    let mut tx = storage.write().await?;
     tx.insert_vid(common, None).await?;
     tx.commit().await?;
     Ok(())

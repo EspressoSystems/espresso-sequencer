@@ -27,7 +27,7 @@ use hotshot_types::traits::node_implementation::NodeType;
 pub use refinery::Migration;
 pub use tokio_postgres as postgres;
 
-pub use sql::{Config, Query, Transaction};
+pub use sql::{Config, Transaction};
 
 pub type Builder<Types, Provider> = fetching::Builder<Types, SqlStorage, Provider>;
 
@@ -349,8 +349,8 @@ pub mod testing {
                 .unwrap()
         }
 
-        async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            let mut tx = self.transaction().await.unwrap();
+        async fn handle_event(&self, event: &Event<MockTypes>) {
+            let mut tx = self.write().await.unwrap();
             tx.update(event).await.unwrap();
             tx.commit().await.unwrap();
         }
@@ -407,21 +407,24 @@ mod test {
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
-        let mut tx = ds.transaction().await.unwrap();
+        let mut tx = ds.write().await.unwrap();
         tx.insert_leaf(leaf).await.unwrap();
         tx.insert_vid(common.clone(), None).await.unwrap();
         tx.commit().await.unwrap();
 
         assert_eq!(ds.get_vid_common(0).await.await, common);
-        ds.vid_share(0).await.unwrap_err();
+        ds.read().await.unwrap().vid_share(0).await.unwrap_err();
 
         // Re-insert the common data with the share.
-        let mut tx = ds.transaction().await.unwrap();
+        let mut tx = ds.write().await.unwrap();
         tx.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
             .await
             .unwrap();
         tx.commit().await.unwrap();
         assert_eq!(ds.get_vid_common(0).await.await, common);
-        assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
+        assert_eq!(
+            ds.read().await.unwrap().vid_share(0).await.unwrap(),
+            disperse.shares[0]
+        );
     }
 }

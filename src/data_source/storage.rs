@@ -29,6 +29,7 @@ use crate::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
         QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
+    data_source::ReadOnly,
     explorer::{
         query_data::{
             BlockDetail, BlockIdentifier, BlockSummary, ExplorerSummary, GetBlockDetailError,
@@ -115,6 +116,81 @@ where
     ) -> QueryResult<TransactionQueryData<Types>>;
 }
 
+#[async_trait]
+impl<Types, T> AvailabilityStorage<Types> for ReadOnly<T>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    T: AvailabilityStorage<Types>,
+{
+    async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
+        (**self).get_leaf(id).await
+    }
+
+    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+        (**self).get_block(id).await
+    }
+
+    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+        (**self).get_header(id).await
+    }
+
+    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+        (**self).get_payload(id).await
+    }
+
+    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+        (**self).get_vid_common(id).await
+    }
+
+    async fn get_leaf_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        (**self).get_leaf_range(range).await
+    }
+
+    async fn get_block_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        (**self).get_block_range(range).await
+    }
+
+    async fn get_payload_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        (**self).get_payload_range(range).await
+    }
+
+    async fn get_vid_common_range<R>(
+        &self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        (**self).get_vid_common_range(range).await
+    }
+
+    async fn get_transaction(
+        &self,
+        hash: TransactionHash<Types>,
+    ) -> QueryResult<TransactionQueryData<Types>> {
+        (**self).get_transaction(hash).await
+    }
+}
+
 /// An interface for querying Data and Statistics from the HotShot Blockchain.
 ///
 /// This interface provides methods that allows the enabling of querying data
@@ -177,4 +253,55 @@ where
         &self,
         query: String,
     ) -> Result<SearchResult<Types>, GetSearchResultsError>;
+}
+
+#[async_trait]
+impl<Types, T> ExplorerStorage<Types> for ReadOnly<T>
+where
+    Types: NodeType,
+    Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
+    Payload<Types>: QueryablePayload<Types>,
+    T: ExplorerStorage<Types> + Sync,
+{
+    async fn get_block_detail(
+        &self,
+        request: BlockIdentifier<Types>,
+    ) -> Result<BlockDetail<Types>, GetBlockDetailError> {
+        (**self).get_block_detail(request).await
+    }
+
+    async fn get_block_summaries(
+        &self,
+        request: GetBlockSummariesRequest<Types>,
+    ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError> {
+        (**self).get_block_summaries(request).await
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        request: TransactionIdentifier<Types>,
+    ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError> {
+        (**self).get_transaction_detail(request).await
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        request: GetTransactionSummariesRequest<Types>,
+    ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError> {
+        (**self).get_transaction_summaries(request).await
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<ExplorerSummary<Types>, GetExplorerSummaryError> {
+        (**self).get_explorer_summary().await
+    }
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<SearchResult<Types>, GetSearchResultsError> {
+        (**self).get_search_results(query).await
+    }
 }

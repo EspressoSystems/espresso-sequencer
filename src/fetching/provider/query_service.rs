@@ -177,7 +177,7 @@ mod test {
             setup_test, sleep,
         },
         types::HeightIndexed,
-        VidCommitment,
+        ApiState, VidCommitment,
     };
     use committable::Committable;
     use futures::{
@@ -225,7 +225,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -253,7 +253,7 @@ mod test {
         // * Block
         // * Payload
         // * VID common
-        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
         let test_block = &leaves[1];
@@ -331,7 +331,7 @@ mod test {
         // Now we will actually fetch the missing data. First, since our node is not really
         // connected to consensus, we need to give it a leaf after the range of interest so it
         // learns about the correct block height.
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
@@ -383,7 +383,6 @@ mod test {
         {
             // Verify the data.
             let truth = network.data_source();
-            let truth = truth.read().await;
             assert_eq!(
                 leaf,
                 truth.get_leaf(test_leaf.height() as usize).await.await
@@ -452,7 +451,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -476,12 +475,12 @@ mod test {
 
         // Wait until the block height reaches 3. This gives us the genesis block, one additional
         // block at the end, and then one block that we can use to test fetching.
-        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
 
         // Tell the node about a leaf after the one of interest so it learns about the block height.
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(leaves[1].clone()).await.unwrap();
         tx.commit().await.unwrap();
 
@@ -512,7 +511,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -536,12 +535,12 @@ mod test {
 
         // Wait until the block height reaches 4. This gives us the genesis block, one additional
         // block at the end, and then two blocks that we can use to test fetching.
-        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(4).collect::<Vec<_>>().await;
 
         // Tell the node about a leaf after the range of interest so it learns about the block
         // height.
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
@@ -575,7 +574,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -603,12 +602,12 @@ mod test {
         let common = data_source.subscribe_vid_common(0).await;
 
         // Wait for a few blocks to be finalized.
-        let finalized_leaves = { network.data_source().read().await.subscribe_leaves(0).await };
+        let finalized_leaves = network.data_source().subscribe_leaves(0).await;
         let finalized_leaves = finalized_leaves.take(5).collect::<Vec<_>>().await;
 
         // Tell the node about a leaf after the range of interest so it learns about the block
         // height.
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(finalized_leaves.last().cloned().unwrap())
             .await
             .unwrap();
@@ -635,7 +634,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -658,13 +657,13 @@ mod test {
         network.start().await;
 
         // Wait for a few blocks to be finalized.
-        let finalized_leaves = { network.data_source().read().await.subscribe_leaves(0).await };
+        let finalized_leaves = network.data_source().subscribe_leaves(0).await;
         let finalized_leaves = finalized_leaves.take(5).collect::<Vec<_>>().await;
 
         // Tell the node about a leaf after the range of interest (so it learns about the block
         // height) and one in the middle of the range, to test what happens when data is missing
         // from the beginning of the range but other data is available.
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(finalized_leaves[2].clone()).await.unwrap();
         tx.insert_leaf(finalized_leaves[4].clone()).await.unwrap();
         tx.commit().await.unwrap();
@@ -691,7 +690,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -708,8 +707,8 @@ mod test {
         let data_source = data_source(&db, &NoFetching).await;
 
         // Subscribe to blocks.
-        let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
-        let mut blocks = { network.data_source().read().await.subscribe_blocks(1).await };
+        let mut leaves = network.data_source().subscribe_leaves(1).await;
+        let mut blocks = network.data_source().subscribe_blocks(1).await;
 
         // Start consensus.
         network.start().await;
@@ -730,7 +729,7 @@ mod test {
             let block = blocks.next().await.unwrap();
 
             {
-                let mut tx = data_source.transaction().await.unwrap();
+                let mut tx = data_source.write().await.unwrap();
                 tx.insert_leaf(leaf).await.unwrap();
                 tx.insert_block(block.clone()).await.unwrap();
                 tx.commit().await.unwrap();
@@ -764,7 +763,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -793,13 +792,13 @@ mod test {
 
         // Wait until the block height reaches 3. This gives us the genesis block, one additional
         // block at the end, and one block to try fetching.
-        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
 
         // Give the node a leaf after the range of interest so it learns about the correct block
         // height.
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
@@ -912,7 +911,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -946,18 +945,25 @@ mod test {
         network.start().await;
 
         // Wait until a few blocks are produced.
-        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
 
         // The disconnected data source has no data yet, so it hasn't done any pruning.
-        let pruned_height = data_source.as_ref().load_pruned_height().await.unwrap();
+        let pruned_height = data_source
+            .read()
+            .await
+            .unwrap()
+            .as_ref()
+            .load_pruned_height()
+            .await
+            .unwrap();
         // Either None or 0 is acceptable, depending on whether or not the prover has run yet.
         assert!(matches!(pruned_height, None | Some(0)), "{pruned_height:?}");
 
         // Send the last leaf to the disconnected data source so it learns about the height and
         // fetches the missing data.
         let last_leaf = leaves.last().unwrap();
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(last_leaf.clone()).await.unwrap();
         tx.commit().await.unwrap();
 
@@ -972,7 +978,14 @@ mod test {
 
         // After a bit of time, the pruner has run and deleted all the missing data we just fetched.
         loop {
-            let pruned_height = data_source.as_ref().load_pruned_height().await.unwrap();
+            let pruned_height = data_source
+                .read()
+                .await
+                .unwrap()
+                .as_ref()
+                .load_pruned_height()
+                .await
+                .unwrap();
             if pruned_height == Some(last_leaf.height()) {
                 break;
             }
@@ -998,13 +1011,20 @@ mod test {
             .unwrap();
 
         // Pruned height should be reset.
-        let pruned_height = data_source.as_ref().load_pruned_height().await.unwrap();
+        let pruned_height = data_source
+            .read()
+            .await
+            .unwrap()
+            .as_ref()
+            .load_pruned_height()
+            .await
+            .unwrap();
         assert_eq!(pruned_height, None);
 
         // The node has pruned all of it's data including the latest block, so it's forgotten the
         // block height. We need to give it another leaf with some height so it will be willing to
         // fetch.
-        let mut tx = data_source.transaction().await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
         tx.insert_leaf(last_leaf.clone()).await.unwrap();
         tx.commit().await.unwrap();
 

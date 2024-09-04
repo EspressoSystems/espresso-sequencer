@@ -20,7 +20,7 @@ use crate::{
     task::BackgroundTask,
     SignatureKey,
 };
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use futures::{
     future::{join_all, Future},
@@ -51,7 +51,7 @@ use url::Url;
 
 struct MockNode<D: DataSourceLifeCycle> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl, MockVersions>,
-    data_source: Arc<RwLock<D>>,
+    data_source: D,
     storage: D::Storage,
 }
 
@@ -220,7 +220,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 
                         MockNode {
                             hotshot,
-                            data_source: Arc::new(RwLock::new(data_source)),
+                            data_source,
                             storage,
                         }
                     }
@@ -260,11 +260,11 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
         self.pub_keys[i]
     }
 
-    pub fn data_source_index(&self, i: usize) -> Arc<RwLock<D>> {
+    pub fn data_source_index(&self, i: usize) -> D {
         self.nodes[i].data_source.clone()
     }
 
-    pub fn data_source(&self) -> Arc<RwLock<D>> {
+    pub fn data_source(&self) -> D {
         self.data_source_index(0)
     }
 
@@ -299,7 +299,6 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
                     while let Some(event) = events.next().await {
                         tracing::info!(node = i, event = ?event.event, "EVENT");
                         {
-                            let mut ds = ds.write().await;
                             ds.handle_event(&event).await;
                         }
                         async_std::task::yield_now().await;
@@ -324,7 +323,7 @@ impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
 }
 
 #[async_trait]
-pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
+pub trait DataSourceLifeCycle: Clone + Send + Sync + Sized + 'static {
     /// Backing storage for the data source.
     ///
     /// This can be used to connect to data sources to the same underlying data. It must be kept
@@ -334,7 +333,7 @@ pub trait DataSourceLifeCycle: Send + Sync + Sized + 'static {
     async fn create(node_id: usize) -> Self::Storage;
     async fn connect(storage: &Self::Storage) -> Self;
     async fn reset(storage: &Self::Storage) -> Self;
-    async fn handle_event(&mut self, event: &Event<MockTypes>);
+    async fn handle_event(&self, event: &Event<MockTypes>);
 
     /// Setup runs after setting up the network but before starting a test.
     async fn setup(_network: &mut MockNetwork<Self>) {}

@@ -14,7 +14,7 @@
 
 use super::{
     block::fetch_block_with_header, leaf::fetch_leaf_with_callbacks,
-    vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher, NotifyStorage, ResultExt,
+    vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher, ResultExt,
 };
 use crate::{
     availability::{BlockId, QueryablePayload, UpdateAvailabilityData},
@@ -74,7 +74,7 @@ impl<Types, S, P> HeaderCallback<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    S: VersionedDataSource + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
@@ -106,13 +106,13 @@ where
 }
 
 pub(super) async fn fetch_header_and_then<Types, S, P>(
-    storage: &NotifyStorage<Types, S>,
+    tx: &impl AvailabilityStorage<Types>,
     req: BlockId<Types>,
     callback: HeaderCallback<Types, S, P>,
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    S: VersionedDataSource + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
@@ -124,8 +124,7 @@ pub(super) async fn fetch_header_and_then<Types, S, P>(
     //    be able to provide certain data. For example, the HotShot DA committee members may be able
     //    to provide paylaods, but not full blocks. Or, in the case where VID recovery is needed,
     //    the VID common data may be available but the full block may not exist anywhere.
-    if let Some(header) = storage
-        .as_ref()
+    if let Some(header) = tx
         .get_header(req)
         .await
         .context(format!("loading header for block {req}"))

@@ -14,7 +14,7 @@
 
 use super::{
     header::{fetch_header_and_then, HeaderCallback},
-    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers, NotifyStorage,
+    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, NotifyStorage,
     RangedFetchable,
 };
 use crate::{
@@ -44,9 +44,9 @@ impl<Types> FetchRequest for BlockId<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
+    fn might_exist(self, heights: Heights) -> bool {
         if let BlockId::Number(n) = self {
-            n < block_height && pruned_height.map_or(true, |ph| n > ph)
+            heights.might_exist(n as u64)
         } else {
             true
         }
@@ -81,14 +81,17 @@ where
             .boxed()
     }
 
-    async fn active_fetch<S, P>(fetcher: Arc<Fetcher<Types, S, P>>, req: Self::Request)
-    where
-        S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    async fn active_fetch<S, P>(
+        tx: &impl AvailabilityStorage<Types>,
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        req: Self::Request,
+    ) where
+        S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
         fetch_header_and_then(
-            &fetcher.storage,
+            tx,
             req,
             HeaderCallback::Payload {
                 fetcher: fetcher.clone(),
@@ -97,11 +100,11 @@ where
         .await
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.as_ref().get_block(req).await
+        storage.get_block(req).await
     }
 }
 
@@ -113,15 +116,12 @@ where
 {
     type RangedRequest = BlockId<Types>;
 
-    async fn load_range<S, R>(
-        storage: &NotifyStorage<Types, S>,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.as_ref().get_block_range(range).await
+        storage.get_block_range(range).await
     }
 }
 
@@ -161,7 +161,7 @@ where
     S: VersionedDataSource,
     for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
 {
-    let mut tx = storage.transaction().await?;
+    let mut tx = storage.write().await?;
     tx.insert_block(block).await?;
     tx.commit().await
 }
@@ -195,23 +195,26 @@ where
             .boxed()
     }
 
-    async fn active_fetch<S, P>(fetcher: Arc<Fetcher<Types, S, P>>, req: Self::Request)
-    where
-        S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    async fn active_fetch<S, P>(
+        tx: &impl AvailabilityStorage<Types>,
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        req: Self::Request,
+    ) where
+        S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
         // the payload, we just fetch the whole block (which may end up fetching only the payload,
         // if that's all that's needed to complete the block).
-        BlockQueryData::active_fetch(fetcher, req).await
+        BlockQueryData::active_fetch(tx, fetcher, req).await
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.as_ref().get_payload(req).await
+        storage.get_payload(req).await
     }
 }
 
@@ -223,15 +226,12 @@ where
 {
     type RangedRequest = BlockId<Types>;
 
-    async fn load_range<S, R>(
-        storage: &NotifyStorage<Types, S>,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.as_ref().get_payload_range(range).await
+        storage.get_payload_range(range).await
     }
 }
 

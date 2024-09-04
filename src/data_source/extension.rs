@@ -122,8 +122,16 @@ where
     where
         Self: 'a;
 
-    async fn transaction(&self) -> anyhow::Result<Self::Transaction<'_>> {
-        self.data_source.transaction().await
+    type ReadOnly<'a> = D::ReadOnly<'a>
+    where
+        Self: 'a;
+
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        self.data_source.write().await
+    }
+
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
+        self.data_source.read().await
     }
 }
 
@@ -416,7 +424,7 @@ mod impl_testable_data_source {
     where
         D: TestableDataSource,
         for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
-        U: Default + Send + Sync + 'static,
+        U: Clone + Default + Send + Sync + 'static,
     {
         type Storage = D::Storage;
 
@@ -432,8 +440,8 @@ mod impl_testable_data_source {
             Self::new(D::reset(storage).await, Default::default())
         }
 
-        async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            let mut tx = self.transaction().await.unwrap();
+        async fn handle_event(&self, event: &Event<MockTypes>) {
+            let mut tx = self.write().await.unwrap();
             tx.update(event).await.unwrap();
             tx.commit().await.unwrap();
         }

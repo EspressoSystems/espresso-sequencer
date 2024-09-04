@@ -12,7 +12,7 @@
 
 //! Transaction fetching.
 
-use super::{AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers, NotifyStorage};
+use super::{AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers};
 use crate::{
     availability::{
         QueryablePayload, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
@@ -61,9 +61,12 @@ where
         .boxed()
     }
 
-    async fn active_fetch<S, P>(_fetcher: Arc<Fetcher<Types, S, P>>, req: Self::Request)
-    where
-        S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    async fn active_fetch<S, P>(
+        _tx: &impl AvailabilityStorage<Types>,
+        _fetcher: Arc<Fetcher<Types, S, P>>,
+        req: Self::Request,
+    ) where
+        S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
@@ -73,10 +76,10 @@ where
         tracing::debug!("not fetching unknown transaction {req:?}");
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.as_ref().get_transaction(req.0).await
+        storage.get_transaction(req.0).await
     }
 }
