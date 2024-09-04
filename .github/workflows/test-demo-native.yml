@@ -49,6 +49,7 @@ jobs:
       - name: Test Demo
         run: |
           export PATH="$PWD/target/release:$PATH"
+          SMOKE_TEST_LOAD_GENERATOR_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
           set -o pipefail
           scripts/demo-native --tui=false &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
