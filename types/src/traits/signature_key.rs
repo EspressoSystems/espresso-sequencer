@@ -16,13 +16,17 @@ use std::{
 
 use ark_serialize::SerializationError;
 use bitvec::prelude::*;
+use committable::Committable;
 use ethereum_types::U256;
 use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tagged_base64::TaggedBase64;
 
 use super::EncodeBytes;
-use crate::{utils::BuilderCommitment, vid::VidSchemeType};
+use crate::{
+    bundle::Bundle, traits::node_implementation::NodeType, utils::BuilderCommitment,
+    vid::VidSchemeType,
+};
 
 /// Type representing stake table entries in a `StakeTable`
 pub trait StakeTableEntryType<K> {
@@ -227,6 +231,20 @@ pub trait BuilderSignatureKey:
         self.validate_builder_signature(signature, &fee_amount.to_be_bytes())
     }
 
+    /// validate the bundle's signature using the builder's public key
+    fn validate_bundle_signature<TYPES: NodeType<BuilderSignatureKey = Self>>(
+        &self,
+        bundle: Bundle<TYPES>,
+    ) -> bool where {
+        let commitments = bundle
+            .transactions
+            .iter()
+            .flat_map(|txn| <[u8; 32]>::from(txn.commit()))
+            .collect::<Vec<u8>>();
+
+        self.validate_builder_signature(&bundle.signature, &commitments)
+    }
+
     /// validate signature over block information with the builder's public key
     fn validate_block_info_signature(
         &self,
@@ -273,6 +291,21 @@ pub trait BuilderSignatureKey:
         fee_amount: u64,
     ) -> Result<Self::BuilderSignature, Self::SignError> {
         Self::sign_builder_message(private_key, &fee_amount.to_be_bytes())
+    }
+
+    /// sign transactions (marketplace version)
+    /// # Errors
+    /// If unable to sign the data with the key
+    fn sign_bundle<TYPES: NodeType>(
+        private_key: &Self::BuilderPrivateKey,
+        transactions: &[TYPES::Transaction],
+    ) -> Result<Self::BuilderSignature, Self::SignError> {
+        let commitments = transactions
+            .iter()
+            .flat_map(|txn| <[u8; 32]>::from(txn.commit()))
+            .collect::<Vec<u8>>();
+
+        Self::sign_builder_message(private_key, &commitments)
     }
 
     /// sign information about offered block

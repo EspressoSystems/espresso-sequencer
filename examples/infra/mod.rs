@@ -408,7 +408,7 @@ pub trait RunDa<
         let marketplace_config = MarketplaceConfig {
             auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
             // TODO: we need to pass a valid fallback builder url here somehow
-            fallback_builder_url: url::Url::parse("http://localhost").unwrap(),
+            fallback_builder_url: config.config.builder_urls.first().clone(),
         };
 
         SystemContext::init(

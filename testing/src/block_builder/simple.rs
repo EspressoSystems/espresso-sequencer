@@ -24,14 +24,20 @@ use hotshot::{
     traits::BlockPayload,
     types::{Event, EventType, SignatureKey},
 };
-use hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::{BuildError, Error, Options},
-    data_source::BuilderDataSource,
+use hotshot_builder_api::{
+    v0_1,
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        builder::{BuildError, Error, Options},
+    },
+    v0_3,
 };
 use hotshot_types::{
+    bundle::Bundle,
+    constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
     traits::{
-        block_contents::BlockHeader, node_implementation::NodeType,
+        block_contents::{BlockHeader, BuilderFee},
+        node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
     utils::BuilderCommitment,
@@ -126,7 +132,80 @@ impl<TYPES: NodeType> ReadState for SimpleBuilderSource<TYPES> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES>
+impl<TYPES: NodeType> v0_3::data_source::BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES>
+where
+    <TYPES as NodeType>::InstanceState: Default,
+{
+    /// To get the list of available blocks
+    async fn bundle(
+        &self,
+        _parent_view: u64,
+        _parent_hash: &VidCommitment,
+        _view_number: u64,
+    ) -> Result<Bundle<TYPES>, BuildError> {
+        let transactions = self
+            .transactions
+            .read(|txns| {
+                Box::pin(async {
+                    txns.values()
+                        .filter(|txn| {
+                            // We want transactions that are either unclaimed, or claimed long ago
+                            // and thus probably not included, or they would've been decided on
+                            // already and removed from the queue
+                            txn.claimed
+                                .map(|claim_time| claim_time.elapsed() > Duration::from_secs(30))
+                                .unwrap_or(true)
+                        })
+                        .cloned()
+                        .map(|txn| txn.transaction)
+                        .collect::<Vec<TYPES::Transaction>>()
+                })
+            })
+            .await;
+
+        let fee_amount = 1;
+        let sequencing_fee: BuilderFee<TYPES> = BuilderFee {
+            fee_amount,
+            fee_account: self.pub_key.clone(),
+            fee_signature: TYPES::BuilderSignatureKey::sign_sequencing_fee_marketplace(
+                &self.priv_key.clone(),
+                fee_amount,
+            )
+            .expect("Failed to sign fee!"),
+        };
+
+        let signature =
+            TYPES::BuilderSignatureKey::sign_bundle::<TYPES>(&self.priv_key, &transactions)
+                .unwrap();
+
+        {
+            // claim transactions
+            let mut transactions_lock = self.transactions.write().await;
+            let transaction_hashes = transactions.iter().map(|txn| txn.commit());
+            let time = Instant::now();
+
+            for hash in transaction_hashes {
+                if let Some(txn) = transactions_lock.get_mut(&hash) {
+                    txn.claimed = Some(time);
+                }
+            }
+        }
+
+        Ok(Bundle {
+            transactions,
+            signature,
+            sequencing_fee,
+        })
+    }
+
+    /// To get the builder's address
+    async fn builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError> {
+        Ok(self.pub_key.clone())
+    }
+}
+
+#[async_trait]
+impl<TYPES: NodeType> v0_1::data_source::BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES>
 where
     <TYPES as NodeType>::InstanceState: Default,
 {
@@ -243,14 +322,23 @@ impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
     where
         <TYPES as NodeType>::InstanceState: Default,
     {
-        let builder_api = hotshot_builder_api::v0_1::builder::define_api::<
+        let builder_api_0_1 = hotshot_builder_api::v0_1::builder::define_api::<
             SimpleBuilderSource<TYPES>,
             TYPES,
         >(&Options::default())
         .expect("Failed to construct the builder API");
+
+        let builder_api_0_3 = hotshot_builder_api::v0_3::builder::define_api::<
+            SimpleBuilderSource<TYPES>,
+            TYPES,
+        >(&Options::default())
+        .expect("Failed to construct the builder API");
+
         let mut app: App<SimpleBuilderSource<TYPES>, Error> = App::with_state(self);
-        app.register_module::<Error, _>("block_info", builder_api)
-            .expect("Failed to register the builder API");
+        app.register_module::<Error, _>(LEGACY_BUILDER_MODULE, builder_api_0_1)
+            .expect("Failed to register builder API 0.1")
+            .register_module::<Error, _>(MARKETPLACE_BUILDER_MODULE, builder_api_0_3)
+            .expect("Failed to register builder API 0.3");
 
         async_spawn(app.serve(url, hotshot_builder_api::v0_1::Version::instance()));
     }

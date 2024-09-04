@@ -59,3 +59,9 @@ pub const UPGRADE_FINISH_OFFSET: u64 = UPGRADE_BEGIN_OFFSET + 5;
 /// the `+2` is just an artifact from the jellyfish's Plonk proof system.
 #[allow(clippy::cast_possible_truncation)]
 pub const SRS_DEGREE: usize = 2u64.pow(20) as usize + 2;
+
+/// The `tide` module name for the legacy builder
+pub const LEGACY_BUILDER_MODULE: &str = "block_info";
+
+/// The `tide` module name for the marketplace builder
+pub const MARKETPLACE_BUILDER_MODULE: &str = "bundle_info";

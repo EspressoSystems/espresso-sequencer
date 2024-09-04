@@ -74,7 +74,6 @@ use libp2p_networking::{
     },
     reexport::{Multiaddr, ResponseChannel},
 };
-
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
 use tracing::{debug, error, info, instrument, trace, warn};

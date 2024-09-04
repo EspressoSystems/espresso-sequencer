@@ -11,15 +11,21 @@ use async_compatibility_layer::art::async_spawn;
 use async_trait::async_trait;
 use futures::Stream;
 use hotshot::{traits::BlockPayload, types::Event};
-use hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::{Error, Options},
-    data_source::BuilderDataSource,
+use hotshot_builder_api::{
+    v0_1,
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        builder::{Error, Options},
+    },
+    v0_3,
 };
-use hotshot_types::traits::{
-    block_contents::{precompute_vid_commitment, EncodeBytes},
-    node_implementation::NodeType,
-    signature_key::BuilderSignatureKey,
+use hotshot_types::{
+    constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
+    traits::{
+        block_contents::{precompute_vid_commitment, EncodeBytes},
+        node_implementation::NodeType,
+        signature_key::BuilderSignatureKey,
+    },
 };
 use tide_disco::{method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
@@ -62,7 +68,7 @@ struct BlockEntry<TYPES: NodeType> {
     header_input: Option<AvailableBlockHeaderInput<TYPES>>,
 }
 
-/// Construct a tide disco app that mocks the builder API.
+/// Construct a tide disco app that mocks the builder API 0.1 + 0.3.
 ///
 /// # Panics
 /// If constructing and launching the builder fails for any reason
@@ -74,7 +80,63 @@ pub fn run_builder_source<TYPES, Source>(
     TYPES: NodeType,
     <TYPES as NodeType>::InstanceState: Default,
     Source: Clone + Send + Sync + tide_disco::method::ReadState + 'static,
-    <Source as ReadState>::State: Sync + Send + BuilderDataSource<TYPES>,
+    <Source as ReadState>::State: Sync
+        + Send
+        + v0_1::data_source::BuilderDataSource<TYPES>
+        + v0_3::data_source::BuilderDataSource<TYPES>,
+{
+    async_spawn(async move {
+        let start_builder = |url: Url, source: Source| -> _ {
+            let builder_api_0_1 = hotshot_builder_api::v0_1::builder::define_api::<Source, TYPES>(
+                &Options::default(),
+            )
+            .expect("Failed to construct the builder API");
+            let builder_api_0_3 = hotshot_builder_api::v0_3::builder::define_api::<Source, TYPES>(
+                &Options::default(),
+            )
+            .expect("Failed to construct the builder API");
+            let mut app: App<Source, Error> = App::with_state(source);
+            app.register_module(LEGACY_BUILDER_MODULE, builder_api_0_1)
+                .expect("Failed to register the builder API 0.1")
+                .register_module(MARKETPLACE_BUILDER_MODULE, builder_api_0_3)
+                .expect("Failed to register the builder API 0.3");
+            async_spawn(app.serve(url, hotshot_builder_api::v0_1::Version::instance()))
+        };
+
+        let mut handle = Some(start_builder(url.clone(), source.clone()));
+
+        while let Ok(event) = change_receiver.recv().await {
+            match event {
+                BuilderChange::Up if handle.is_none() => {
+                    handle = Some(start_builder(url.clone(), source.clone()));
+                }
+                BuilderChange::Down => {
+                    if let Some(handle) = handle.take() {
+                        #[cfg(async_executor_impl = "tokio")]
+                        handle.abort();
+                        #[cfg(async_executor_impl = "async-std")]
+                        handle.cancel().await;
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+}
+
+/// Construct a tide disco app that mocks the builder API 0.1.
+///
+/// # Panics
+/// If constructing and launching the builder fails for any reason
+pub fn run_builder_source_0_1<TYPES, Source>(
+    url: Url,
+    mut change_receiver: Receiver<BuilderChange>,
+    source: Source,
+) where
+    TYPES: NodeType,
+    <TYPES as NodeType>::InstanceState: Default,
+    Source: Clone + Send + Sync + tide_disco::method::ReadState + 'static,
+    <Source as ReadState>::State: Sync + Send + v0_1::data_source::BuilderDataSource<TYPES>,
 {
     async_spawn(async move {
         let start_builder = |url: Url, source: Source| -> _ {
@@ -83,7 +145,7 @@ pub fn run_builder_source<TYPES, Source>(
             )
             .expect("Failed to construct the builder API");
             let mut app: App<Source, Error> = App::with_state(source);
-            app.register_module("block_info", builder_api)
+            app.register_module(LEGACY_BUILDER_MODULE, builder_api)
                 .expect("Failed to register the builder API");
             async_spawn(app.serve(url, hotshot_builder_api::v0_1::Version::instance()))
         };

@@ -37,7 +37,9 @@ use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 use tide_disco::{method::ReadState, Url};
 
-use super::{build_block, run_builder_source, BlockEntry, BuilderTask, TestBuilderImplementation};
+use super::{
+    build_block, run_builder_source_0_1, BlockEntry, BuilderTask, TestBuilderImplementation,
+};
 use crate::test_builder::BuilderChange;
 
 pub struct RandomBuilderImplementation;
@@ -90,7 +92,7 @@ where
         let (change_sender, change_receiver) = broadcast(128);
 
         let (task, source) = Self::create(num_storage_nodes, config, changes, change_sender).await;
-        run_builder_source(url, change_receiver, source);
+        run_builder_source_0_1(url, change_receiver, source);
         Box::new(task)
     }
 }
