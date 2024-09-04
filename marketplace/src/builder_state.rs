@@ -363,7 +363,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         Some(Status::ShouldContinue)
     }
 
-    // spawn a clone of the builder state
+    /// spawn a clone of the builder state
     #[tracing::instrument(skip_all, name = "spawn_clone",
                                     fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
     async fn spawn_clone(
@@ -402,8 +402,12 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.event_loop();
     }
 
-    // build a block
     // Sishan TODO: the function returns a vec of transactions
+    /// build a block from the BuilderStateId
+    /// This function collects available transactions not already in `included_txns` from near future 
+    /// then form them into a block and calculate the block's `builder_hash` `block_payload` and `metadata`
+    /// insert `builder_hash` to `builder_commitments`
+    /// and finally return a struct in `BuildBlockInfo`
     #[tracing::instrument(skip_all, name = "build block",
                                     fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
     async fn build_block(
