@@ -51,4 +51,4 @@ jobs:
           export PATH="$PWD/target/release:$PATH"
           set -o pipefail
           scripts/demo-native --tui=false &
-          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
+          timeout -v 600 scripts/smoke-test-demo > /dev/null
