@@ -152,7 +152,7 @@ impl BuilderConfig {
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
         bid_config: Option<BidConfig>,
-        solver_api_url: Url,
+        solver_base_url: Url,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -223,7 +223,7 @@ impl BuilderConfig {
             let bid_config = bid_config.expect("Missing bid config for the reserve builder.");
             let hooks = Arc::new(hooks::EspressoReserveHooks {
                 namespaces: bid_config.namespaces.into_iter().collect(),
-                solver_api_url,
+                solver_base_url,
                 builder_api_base_url: builder_api_url.clone(),
                 bid_key_pair: builder_key_pair.clone(),
                 bid_amount: bid_config.amount,
@@ -241,9 +241,9 @@ impl BuilderConfig {
         } else {
             // Fetch the namespaces upon initialization. It will be fetched every 20 views when
             // handling events.
-            let namespaces_to_skip = fetch_namespaces_to_skip(solver_api_url.clone()).await;
+            let namespaces_to_skip = fetch_namespaces_to_skip(solver_base_url.clone()).await;
             let hooks = Arc::new(hooks::EspressoFallbackHooks {
-                solver_api_url,
+                solver_base_url,
                 namespaces_to_skip: RwLock::new(namespaces_to_skip),
             });
             Self::start_service(
@@ -291,6 +291,7 @@ mod test {
         Transaction,
     };
     use ethers::utils::Anvil;
+    use hooks::connect_to_solver;
     use hotshot::rand;
     use hotshot::types::{BLSPrivKey, Event, EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
@@ -348,9 +349,8 @@ mod test {
 
     /// Pick unused ports for URLs, then set up and start the network.
     ///
-    /// Returs ports and URLs that will be used later.
-    async fn pick_urls_and_start_network() -> (QueryAndEventPorts, QueryEventAndBuilderUrls)
-    {
+    /// Returns ports and URLs that will be used later.
+    async fn pick_urls_and_start_network() -> (QueryAndEventPorts, QueryEventAndBuilderUrls) {
         let query_port = pick_unused_port().expect("No ports free");
         let query_api_url: Url = format!("http://localhost:{query_port}").parse().unwrap();
 
@@ -368,11 +368,11 @@ mod test {
 
     /// Initiate a mock solver and register a rollup.
     ///
-    /// Returns the solver API URL.
-    async fn init_mock_solver_and_register_rollup() -> Url {
+    /// Returns the solver and its base URL.
+    async fn init_mock_solver_and_register_rollup() -> (MockSolver, Url) {
         let mock_solver = MockSolver::init().await;
-        let solver_api = mock_solver.solver_api();
-        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api.clone());
+        let solver_base_url = mock_solver.solver_url.clone();
+        let client = connect_to_solver(solver_base_url.clone());
 
         // Create a list of signature keys for rollup registration data
         let mut signature_keys = Vec::new();
@@ -424,7 +424,7 @@ mod test {
             client.get("rollup_registrations").send().await.unwrap();
         assert_eq!(result, vec![reg_ns_1]);
 
-        solver_api
+        (mock_solver, solver_base_url)
     }
 
     /// Connect to the builder.
@@ -516,7 +516,9 @@ mod test {
             .build();
         let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
-        let solver_api = init_mock_solver_and_register_rollup().await;
+        // Register a rollup using the mock solver.
+        // Use `_mock_solver` here to avoid it being dropped.
+        let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
 
         // Start and connect to a reserve builder.
         let init = BuilderConfig::init(
@@ -537,7 +539,7 @@ mod test {
                 namespaces: vec![NamespaceId::from(REGISTERED_NAMESPACE)],
                 amount: FeeAmount::from(10),
             }),
-            solver_api,
+            solver_base_url,
         );
         let _ = init.await.unwrap();
         let builder_client = connect_to_builder(urls.clone()).await;
@@ -548,8 +550,8 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
         let transactions = vec![registered_transaction.clone(), unregistered_transaction];
-        task::sleep(std::time::Duration::from_millis(1000)).await;
         let mut subscribed_events = submit_transactions(transactions, urls).await;
+        task::sleep(std::time::Duration::from_millis(1000)).await;
 
         // Verify the bundle.
         let start = Instant::now();
@@ -607,7 +609,9 @@ mod test {
             .build();
         let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
-        let solver_api = init_mock_solver_and_register_rollup().await;
+        // Register a rollup using the mock solver.
+        // Use `_mock_solver` here to avoid it being dropped.
+        let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
 
         // Start and connect to a fallback builder.
         let init = BuilderConfig::init(
@@ -625,7 +629,7 @@ mod test {
             Duration::from_secs(2),
             FeeAmount::from(10),
             None,
-            solver_api,
+            solver_base_url,
         );
         let _ = init.await.unwrap();
         let builder_client = connect_to_builder(urls.clone()).await;
@@ -636,8 +640,8 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
         let transactions = vec![registered_transaction, unregistered_transaction.clone()];
-        task::sleep(std::time::Duration::from_millis(1000)).await;
         let mut subscribed_events = submit_transactions(transactions, urls).await;
+        task::sleep(std::time::Duration::from_millis(2000)).await;
 
         // Verify the bundle.
         let start = Instant::now();

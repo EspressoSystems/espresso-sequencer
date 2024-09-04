@@ -43,8 +43,8 @@ pub struct BidConfig {
     pub amount: FeeAmount,
 }
 
-pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, MarketplaceVersion> {
-    Client::<SolverError, MarketplaceVersion>::new(solver_api_url.join(SOLVER_API_PATH).unwrap())
+pub fn connect_to_solver(solver_base_url: Url) -> Client<SolverError, MarketplaceVersion> {
+    Client::<SolverError, MarketplaceVersion>::new(solver_base_url.join(SOLVER_API_PATH).unwrap())
 }
 
 /// Fetch registered namespaces from the solver and construct the list of namespaces to skip.
@@ -52,10 +52,8 @@ pub fn connect_to_solver(solver_api_url: Url) -> Client<SolverError, Marketplace
 /// # Returns
 /// - `Some` namespaces if the fetching succeeds, even if the list is empty.
 /// - `None` if the fetching fails.
-pub async fn fetch_namespaces_to_skip(solver_api_url: Url) -> Option<HashSet<NamespaceId>> {
-    // TODO: Make API path consistent between real and mock solvers.
-    // <https://github.com/EspressoSystems/espresso-sequencer/issues/1935>
-    let solver_client = connect_to_solver(solver_api_url);
+pub async fn fetch_namespaces_to_skip(solver_base_url: Url) -> Option<HashSet<NamespaceId>> {
+    let solver_client = connect_to_solver(solver_base_url);
     match solver_client
         .get::<Vec<RollupRegistration>>("rollup_registrations")
         .send()
@@ -84,7 +82,7 @@ pub(crate) struct EspressoReserveHooks {
     /// IDs of namespaces to filter and bid for
     pub(crate) namespaces: HashSet<NamespaceId>,
     /// Base API to contact the solver
-    pub(crate) solver_api_url: Url,
+    pub(crate) solver_base_url: Url,
     /// Builder API base to include in the bid
     pub(crate) builder_api_base_url: Url,
     /// Keys for bidding
@@ -129,7 +127,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
                 }
             };
 
-            let solver_client = connect_to_solver(self.solver_api_url.clone());
+            let solver_client = connect_to_solver(self.solver_base_url.clone());
             if let Err(e) = solver_client
                 .post::<()>("submit_bid")
                 .body_json(&bid_tx)
@@ -150,8 +148,8 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
 ///
 /// Provides transaction filtering on top of base builder functionality for unregistered rollups.
 pub(crate) struct EspressoFallbackHooks {
-    /// Base API to contact the solver
-    pub(crate) solver_api_url: Url,
+    /// Base URL to contact the solver.
+    pub(crate) solver_base_url: Url,
     pub(crate) namespaces_to_skip: RwLock<Option<HashSet<NamespaceId>>>,
 }
 
@@ -167,13 +165,14 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
         match namespaces_to_skip.as_ref() {
             Some(namespaces_to_skip) => {
                 transactions.retain(|txn| !namespaces_to_skip.contains(&txn.namespace()));
+                transactions
             }
+            // Solver connection has failed and we don't have up-to-date information on this
             None => {
-                error!("Not filtering transactions, possibly due to outdated information.");
+                error!("Not accepting transactions due to outdated information");
+                Vec::new()
             }
         }
-
-        transactions
     }
 
     #[inline(always)]
@@ -182,14 +181,14 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
             return;
         };
 
-        // Re-query the solver every 5 views
-        if view_number.rem_euclid(5) != 0 {
+        // Re-query the solver every 20 views
+        if view_number.rem_euclid(20) != 0 {
             return;
         }
 
         let self = Arc::clone(self);
         async_spawn(async move {
-            let namespaces_to_skip = fetch_namespaces_to_skip(self.solver_api_url.clone()).await;
+            let namespaces_to_skip = fetch_namespaces_to_skip(self.solver_base_url.clone()).await;
             *self.namespaces_to_skip.write().await = namespaces_to_skip;
         });
     }
