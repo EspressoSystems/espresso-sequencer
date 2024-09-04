@@ -36,7 +36,7 @@ use crate::{
     BuilderStateId,
 };
 use crate::{WaitAndKeep, WaitAndKeepGetError};
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{Sender as BroadcastSender, TrySendError};
 use async_compatibility_layer::{
@@ -48,14 +48,14 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use derivative::Derivative;
-use futures::future::BoxFuture;
 use futures::stream::StreamExt;
+use futures::{future::BoxFuture, Stream};
 use hotshot_events_service::{events::Error as EventStreamError, events_source::StartupInfo};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
+use std::{collections::HashMap, marker::PhantomData};
 use std::{fmt::Display, time::Instant};
 use tagged_base64::TaggedBase64;
 use tide_disco::{method::ReadState, Url};
@@ -1020,63 +1020,186 @@ impl<Types: NodeType> ReadState for ProxyGlobalState<Types> {
     }
 }
 
-async fn connect_to_events_service<Types: NodeType, V: Versions>(
-    hotshot_events_api_url: Url,
-) -> Option<(
-    surf_disco::socket::Connection<
+/// [HotShotEventsService] is a trait that defines the interface for the
+/// hotshot events service. The service is expected to provide a stream of
+/// events and a startup info.
+#[async_trait]
+trait HotShotEventsService<Types: NodeType> {
+    type EventsStream: Stream<Item = Result<Event<Types>, EventStreamError>>;
+    type EventsError;
+
+    type StartUpInfo;
+    type StartUpInfoError;
+
+    /// [check_connection] is a function that will check that the service is
+    /// connected, or can be connected to the hotshot events service.
+    /// It's use is optional, and it has been included strictly for current
+    /// logic compatibility.
+    async fn check_connection(&self, timeout: Option<Duration>) -> bool;
+
+    /// [events] is a function that will return a stream of events from the
+    /// hotshot events service. The stream itself is expected to contain
+    /// items that are a [Result] of [Event] or an [EventsError].
+    /// If [check_connection] has not been called before this function, the
+    /// connection should be established.
+    async fn events(&self) -> Result<Self::EventsStream, Self::EventsError>;
+
+    /// [startup_info] is a function that will return the startup info from
+    /// the hotshot events service. The response is expected to be a
+    /// [Result] of [StartupInfo] or a [StartupInfoError].
+    /// If [check_connection] has not been called before this function, the
+    /// connection should be established.
+    async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError>;
+}
+
+struct HotShotEventsServiceTideDiscoClient<Types: NodeType, V: Versions> {
+    client: surf_disco::Client<hotshot_events_service::events::Error, V::Base>,
+    _pd: PhantomData<Types>,
+}
+
+impl<Types: NodeType, V: Versions> HotShotEventsServiceTideDiscoClient<Types, V> {
+    fn new(client: surf_disco::Client<hotshot_events_service::events::Error, V::Base>) -> Self {
+        HotShotEventsServiceTideDiscoClient {
+            client,
+            _pd: Default::default(),
+        }
+    }
+
+    fn from_url(url: Url) -> Self {
+        let client = surf_disco::Client::<hotshot_events_service::events::Error, V::Base>::new(url);
+        Self::new(client)
+    }
+}
+
+#[async_trait]
+impl<Types: NodeType, V: Versions> HotShotEventsService<Types>
+    for HotShotEventsServiceTideDiscoClient<Types, V>
+{
+    type EventsStream = surf_disco::socket::Connection<
         Event<Types>,
         surf_disco::socket::Unsupported,
         EventStreamError,
         V::Base,
-    >,
-    GeneralStaticCommittee<Types, <Types as NodeType>::SignatureKey>,
-)> {
-    let client = surf_disco::Client::<hotshot_events_service::events::Error, V::Base>::new(
-        hotshot_events_api_url.clone(),
-    );
+    >;
+    type EventsError = hotshot_events_service::events::Error;
 
-    if !(client.connect(None).await) {
-        return None;
+    type StartUpInfo = StartupInfo<Types>;
+    type StartUpInfoError = hotshot_events_service::events::Error;
+
+    async fn check_connection(&self, timeout: Option<Duration>) -> bool {
+        self.client.connect(timeout).await
+    }
+
+    async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
+        self.client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<Types>>()
+            .await
+    }
+
+    async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
+        self.client
+            .get::<StartupInfo<Types>>("hotshot-events/startup_info")
+            .send()
+            .await
+    }
+}
+
+/// [ConnectToEventsServiceError] is an error enum that represents the class
+/// of possible errors that can be returned when calling
+/// `connect_to_events_service`.
+#[derive(Debug)]
+enum ConnectToEventsServiceError {
+    /// [Connection] is an error variant that represents a failure to
+    /// connect to the hotshot events service.
+    Connection,
+
+    /// [Subscription] is an error variant that represents a failure to
+    /// subscribe to the events stream.
+    Subscription(hotshot_events_service::events::Error),
+
+    /// [StartupInfo] is an error variant that represents a failure to
+    /// retrieve the startup info from the hotshot events service.
+    StartupInfo(hotshot_events_service::events::Error),
+}
+
+impl Display for ConnectToEventsServiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectToEventsServiceError::Connection => {
+                write!(f, "failed to connect to the hotshot events service")
+            }
+            ConnectToEventsServiceError::Subscription(e) => {
+                write!(f, "failed to subscribe to the events stream: {:?}", e)
+            }
+            ConnectToEventsServiceError::StartupInfo(e) => {
+                write!(f, "failed to retrieve the startup info: {:?}", e)
+            }
+        }
+    }
+}
+
+/// [connect_to_events_service] is a function that will attempt to connect to
+/// the hotshot events service, setup a subscription to the events stream,
+/// and retrieve the startup info.  If all is successful, it will return the
+/// stream, and membership information derived from the startup info.
+async fn connect_to_events_service<Types: NodeType, C, S>(
+    client: &C,
+) -> Result<
+    (
+        C::EventsStream,
+        GeneralStaticCommittee<Types, <Types as NodeType>::SignatureKey>,
+    ),
+    ConnectToEventsServiceError,
+>
+where
+    C: HotShotEventsService<
+        Types,
+        EventsStream = S,
+        EventsError = hotshot_events_service::events::Error,
+        StartUpInfo = StartupInfo<Types>,
+        StartUpInfoError = hotshot_events_service::events::Error,
+    >,
+    S: Stream<Item = Result<Event<Types>, EventStreamError>>,
+{
+    if !(client.check_connection(None).await) {
+        return Err(ConnectToEventsServiceError::Connection);
     }
 
     tracing::info!("Builder client connected to the hotshot events api");
 
-    // client subscrive to hotshot events
+    // client subscribe to hotshot events
     let subscribed_events = client
-        .socket("hotshot-events/events")
-        .subscribe::<Event<Types>>()
+        .events()
         .await
-        .ok()?;
+        .map_err(ConnectToEventsServiceError::Subscription)?;
 
     // handle the startup event at the start
-    let membership = if let Ok(response) = client
-        .get::<StartupInfo<Types>>("hotshot-events/startup_info")
-        .send()
+    let StartupInfo {
+        known_node_with_stake,
+        non_staked_node_count,
+    } = client
+        .startup_info()
         .await
-    {
-        let StartupInfo {
-            known_node_with_stake,
-            non_staked_node_count,
-        } = response;
-        let membership: GeneralStaticCommittee<Types, <Types as NodeType>::SignatureKey> =
-            GeneralStaticCommittee::<Types, <Types as NodeType>::SignatureKey>::create_election(
-                known_node_with_stake.clone(),
-                known_node_with_stake.clone(),
-                Topic::Global,
-                0,
-            );
+        .map_err(ConnectToEventsServiceError::StartupInfo)?;
 
-        tracing::info!(
-            "Startup info: Known nodes with stake: {:?}, Non-staked node count: {:?}",
-            known_node_with_stake,
-            non_staked_node_count
+    let membership: GeneralStaticCommittee<Types, <Types as NodeType>::SignatureKey> =
+        GeneralStaticCommittee::<Types, <Types as NodeType>::SignatureKey>::create_election(
+            known_node_with_stake.clone(),
+            known_node_with_stake.clone(),
+            Topic::Global,
+            0,
         );
-        Some(membership)
-    } else {
-        None
-    };
-    membership.map(|membership| (subscribed_events, membership))
+
+    tracing::info!(
+        "Startup info: Known nodes with stake: {:?}, Non-staked node count: {:?}",
+        known_node_with_stake,
+        non_staked_node_count
+    );
+
+    Ok((subscribed_events, membership))
 }
+
 /*
 Running Non-Permissioned Builder Service
 */
@@ -1097,14 +1220,18 @@ pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, V:
     global_state: Arc<RwLock<GlobalState<Types>>>,
 ) -> Result<(), anyhow::Error> {
     // connection to the events stream
-    let connected = connect_to_events_service::<_, V>(hotshot_events_api_url.clone()).await;
-    if connected.is_none() {
-        return Err(anyhow!(
-            "failed to connect to API at {hotshot_events_api_url}"
-        ));
-    }
-    let (mut subscribed_events, mut membership) =
-        connected.context("Failed to connect to events service")?;
+    let events_service_client =
+        HotShotEventsServiceTideDiscoClient::<Types, V>::from_url(hotshot_events_api_url.clone());
+
+    let connect_to_events_service_result = connect_to_events_service(&events_service_client).await;
+    let (mut subscribed_events, mut membership) = match connect_to_events_service_result {
+        Ok((subscribed_events, membership)) => (subscribed_events, membership),
+        Err(err) => {
+            return Err(anyhow!(
+                "failed to connect to API at {hotshot_events_api_url}: {err}"
+            ));
+        }
+    };
 
     let tx_sender = {
         // This closure is likely unnecessary, but we want to play it safe
@@ -1180,15 +1307,16 @@ pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, V:
             }
             None => {
                 tracing::error!("Event stream ended");
-                let connected =
-                    connect_to_events_service::<_, V>(hotshot_events_api_url.clone()).await;
-                if connected.is_none() {
-                    return Err(anyhow!(
-                        "failed to reconnect to API at {hotshot_events_api_url}"
-                    ));
-                }
-                (subscribed_events, membership) =
-                    connected.context("Failed to reconnect to events service")?;
+                let connected = connect_to_events_service(&events_service_client).await;
+
+                (subscribed_events, membership) = match connected {
+                    Ok((subscribed_events, membership)) => (subscribed_events, membership),
+                    Err(err) => {
+                        return Err(anyhow!(
+                            "failed to reconnect to API at {hotshot_events_api_url}: {err}"
+                        ));
+                    }
+                };
             }
         }
     }
@@ -1671,12 +1799,16 @@ mod test {
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
     use committable::Committable;
-    use futures::StreamExt;
+    use futures::{
+        channel::mpsc::{channel, Receiver},
+        StreamExt,
+    };
     use hotshot::{
         traits::BlockPayload,
-        types::{BLSPubKey, SignatureKey},
+        types::{BLSPubKey, Event, SignatureKey},
     };
     use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
+    use hotshot_events_service::events_source::StartupInfo;
     use hotshot_example_types::{
         block_types::{TestBlockPayload, TestMetadata, TestTransaction},
         node_types::TestTypes,
@@ -1694,20 +1826,24 @@ mod test {
         utils::BuilderCommitment,
     };
     use sha2::{Digest, Sha256};
+    use tide_disco::StatusCode;
 
     use crate::{
         builder_state::{
             BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TransactionSource,
             TriggerStatus,
         },
-        service::{HandleReceivedTxnsError, INITIAL_MAX_BLOCK_SIZE},
+        service::{
+            connect_to_events_service, ConnectToEventsServiceError, HandleReceivedTxnsError,
+            INITIAL_MAX_BLOCK_SIZE,
+        },
         BlockId, BuilderStateId,
     };
 
     use super::{
         handle_da_event_implementation, handle_qc_event_implementation, AvailableBlocksError,
         BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
-        HandleQcEventError, HandleReceivedTxns, ProxyGlobalState,
+        HandleQcEventError, HandleReceivedTxns, HotShotEventsService, ProxyGlobalState,
     };
 
     // GlobalState Tests
@@ -4615,6 +4751,215 @@ mod test {
                 _ => {
                     panic!("Expected a TransactionMessage, but got something else");
                 }
+            }
+        }
+    }
+
+    /// This test checks that the error [ConnectToEventsServiceError::Connection]
+    /// is returned when [connect_to_events_service] is invoked.
+    ///
+    /// This error may be difficult to control in all environments. In order
+    /// to control this specific case, the underlying client being passed to
+    /// [connect_to_events_service] is a mock that always returns false when
+    /// [check_connection] is invoked.
+    #[async_std::test]
+    async fn test_connect_to_events_service_mock_error_connection() {
+        struct ConnectionFailure;
+
+        #[async_trait::async_trait]
+        impl HotShotEventsService<TestTypes> for ConnectionFailure {
+            type EventsStream =
+                Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
+            type EventsError = hotshot_events_service::events::Error;
+            type StartUpInfo = StartupInfo<TestTypes>;
+            type StartUpInfoError = hotshot_events_service::events::Error;
+
+            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
+                false
+            }
+
+            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
+                todo!()
+            }
+
+            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
+                todo!()
+            }
+        }
+
+        let client = ConnectionFailure;
+
+        match connect_to_events_service(&client).await {
+            Err(ConnectToEventsServiceError::Connection) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks that the error [ConnectToEventsServiceError::Subscription]
+    /// is returned when [connect_to_events_service] is invoked.
+    ///
+    /// This error may be difficult to control in all environments. In order
+    /// to control this specific case, the underlying client being passed to
+    /// [connect_to_events_service] is a mock that always returns an error when
+    /// [events] is invoked.
+    #[async_std::test]
+    async fn test_connect_to_events_service_mock_error_events() {
+        struct EventsFailure;
+
+        #[async_trait::async_trait]
+        impl HotShotEventsService<TestTypes> for EventsFailure {
+            type EventsStream =
+                Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
+            type EventsError = hotshot_events_service::events::Error;
+            type StartUpInfo = StartupInfo<TestTypes>;
+            type StartUpInfoError = hotshot_events_service::events::Error;
+
+            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
+                true
+            }
+
+            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
+                Err(hotshot_events_service::events::Error::Custom {
+                    message: "This is a custom error".to_string(),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                })
+            }
+
+            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
+                todo!()
+            }
+        }
+
+        let client = EventsFailure;
+
+        match connect_to_events_service(&client).await {
+            Err(ConnectToEventsServiceError::Subscription(
+                hotshot_events_service::events::Error::Custom { .. },
+            )) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks that the error [ConnectToEventsServiceError::StartupInfo]
+    /// is returned when [connect_to_events_service] is invoked.
+    ///
+    /// This error may be difficult to control in all environments. In order
+    /// to control this specific case, the underlying client being passed to
+    /// [connect_to_events_service] is a mock that always returns an error when
+    /// [startup_info] is invoked.
+    #[async_std::test]
+    async fn test_connect_to_service_mock_error_startup_info() {
+        type EventsStream =
+            Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
+        struct StartupInfoFailure(Arc<RwLock<Option<EventsStream>>>);
+
+        #[async_trait::async_trait]
+        impl HotShotEventsService<TestTypes> for StartupInfoFailure {
+            type EventsStream = EventsStream;
+            type EventsError = hotshot_events_service::events::Error;
+            type StartUpInfo = StartupInfo<TestTypes>;
+            type StartUpInfoError = hotshot_events_service::events::Error;
+
+            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
+                true
+            }
+
+            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
+                let mut write_lock_guard = self.0.write_arc().await;
+
+                write_lock_guard
+                    .take()
+                    .ok_or(hotshot_events_service::events::Error::Custom {
+                        message: "This is a custom error".to_string(),
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                    })
+            }
+
+            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
+                Err(hotshot_events_service::events::Error::Custom {
+                    message: "This is a custom error".to_string(),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                })
+            }
+        }
+
+        let client = StartupInfoFailure(Arc::new(RwLock::new(Some(channel(10).1))));
+
+        match connect_to_events_service(&client).await {
+            Err(ConnectToEventsServiceError::StartupInfo(
+                hotshot_events_service::events::Error::Custom { .. },
+            )) => {
+                // This is expected.
+            }
+            Ok(_) => {
+                panic!("Expected an error, but got a result");
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
+            }
+        }
+    }
+
+    /// This test checks that [connect_to_events_service] completes
+    /// successfully.
+    #[async_std::test]
+    async fn test_connect_to_service_mock_success() {
+        type EventsStream =
+            Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
+        struct Success(Arc<RwLock<Option<EventsStream>>>);
+
+        #[async_trait::async_trait]
+        impl HotShotEventsService<TestTypes> for Success {
+            type EventsStream = EventsStream;
+            type EventsError = hotshot_events_service::events::Error;
+            type StartUpInfo = StartupInfo<TestTypes>;
+            type StartUpInfoError = hotshot_events_service::events::Error;
+
+            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
+                true
+            }
+
+            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
+                let mut write_lock_guard = self.0.write_arc().await;
+
+                write_lock_guard
+                    .take()
+                    .ok_or(hotshot_events_service::events::Error::Custom {
+                        message: "This is a custom error".to_string(),
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                    })
+            }
+
+            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
+                Ok(StartupInfo {
+                    known_node_with_stake: vec![],
+                    non_staked_node_count: 0,
+                })
+            }
+        }
+
+        let client = Success(Arc::new(RwLock::new(Some(channel(10).1))));
+
+        match connect_to_events_service(&client).await {
+            Ok(_) => {
+                // This is expected.
+            }
+            Err(err) => {
+                panic!("Unexpected error: {:?}", err);
             }
         }
     }
