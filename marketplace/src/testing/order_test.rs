@@ -360,7 +360,7 @@ async fn test_builder_order_chain_fork() {
             // get transactions submitted in previous rounds, [] for genesis
             // and simulate the block built from those
             let transactions = prev_proposed_transactions_branch_1
-                .take()
+                .clone()
                 .unwrap_or_default();
             let (quorum_proposal, quorum_proposal_msg, da_proposal_msg, builder_state_id) =
                 calc_proposal_msg(
@@ -397,7 +397,7 @@ async fn test_builder_order_chain_fork() {
             // get transactions submitted in previous rounds, [] for genesis
             // and simulate the block built from those
             let transactions = prev_proposed_transactions_branch_2
-                .take()
+                .clone()
                 .unwrap_or_default();
             let (quorum_proposal, quorum_proposal_msg, da_proposal_msg, builder_state_id) =
                 calc_proposal_msg(
@@ -412,7 +412,7 @@ async fn test_builder_order_chain_fork() {
 
             // send quorum and DA proposals for this round
             // we also need to send out the message for the fork-ed chain although it's not forked yet
-            // to prevent builders resend the transactions we've already committeed
+            // to prevent builders resend the transactions we've already committed
             senders
                 .da_proposal
                 .broadcast(da_proposal_msg)
@@ -457,16 +457,23 @@ async fn test_builder_order_chain_fork() {
             .await
             .unwrap();
 
+        if prev_proposed_transactions_branch_1 == prev_proposed_transactions_branch_2 {
+            assert_eq!(transactions_branch_1, transactions_branch_2, "if the previous proposed transactions are the same, then the new transactions should also be the same");
+        } else if prev_proposed_transactions_branch_2.map(|txs| txs.len()) == Some(0) {
+            assert_ne!(transactions_branch_1, transactions_branch_2, "if the previous proposed transactions differ and the previous proposed transactions is empty, then the new transactions should also differ");
+        } else {
+            assert_eq!(transactions_branch_1, transactions_branch_2, "if the previous proposed transactions differ, then the new transactions should be the same, as they should now have been repaired");
+        }
+
+        let transactions_branch_2 = fork_round_behavior.process_transactions(transactions_branch_2);
         if transactions_branch_2 != transactions_branch_1 {
             tracing::debug!("Fork Exist.")
         } else {
             tracing::debug!("No fork.");
         }
 
-        let transactions_branch_2 = fork_round_behavior.process_transactions(transactions_branch_2);
-
         prev_proposed_transactions_branch_1 = Some(transactions_branch_1.clone());
-        prev_proposed_transactions_branch_2 = Some(transaction_history_branch_2.clone());
+        prev_proposed_transactions_branch_2 = Some(transactions_branch_2.clone());
 
         // save transactions to history
         transaction_history_branch_1.extend(transactions_branch_1);
@@ -474,7 +481,10 @@ async fn test_builder_order_chain_fork() {
     }
 
     // This will fail if no fork has occurred
-    assert!(transaction_history_branch_1 != transaction_history_branch_2);
+    assert_eq!(
+        transaction_history_branch_1, transaction_history_branch_2,
+        "even with a fork, the transaction history branches should match"
+    );
     // the test will fail if any transaction is re-ordered
     assert!(order_check(
         transaction_history_branch_1,
