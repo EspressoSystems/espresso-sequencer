@@ -56,9 +56,10 @@ jobs:
       - name: Slow Tests
         env:
           CARGO_TERM_COLOR: always
+          NEXTEST_PROFILE: slow
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)'
+          cargo nextest run --locked --release --workspace --all-features --verbose
         timeout-minutes: 25
