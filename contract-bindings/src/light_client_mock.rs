@@ -817,44 +817,6 @@ pub mod light_client_mock {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("states"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("states"),
-                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned("index"),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint32"),
-                            ),
-                        },],
-                        outputs: ::std::vec![
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("viewNum"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint64"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockHeight"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("uint64"),
-                                ),
-                            },
-                            ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("blockCommRoot"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                                internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                                ),
-                            },
-                        ],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("transferOwnership"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("transferOwnership"),
@@ -1519,16 +1481,6 @@ pub mod light_client_mock {
         ) -> ::ethers::contract::builders::ContractCall<M, u32> {
             self.0
                 .method_hash([194, 59, 158, 158], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `states` (0x7f17baad) function
-        pub fn states(
-            &self,
-            index: u32,
-        ) -> ::ethers::contract::builders::ContractCall<M, (u64, u64, ::ethers::core::types::U256)>
-        {
-            self.0
-                .method_hash([127, 23, 186, 173], index)
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `transferOwnership` (0xf2fde38b) function
@@ -3124,23 +3076,6 @@ pub mod light_client_mock {
         abi = "stateHistoryRetentionPeriod()"
     )]
     pub struct StateHistoryRetentionPeriodCall;
-    ///Container type for all input parameters for the `states` function with signature `states(uint32)` and selector `0x7f17baad`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "states", abi = "states(uint32)")]
-    pub struct StatesCall {
-        pub index: u32,
-    }
     ///Container type for all input parameters for the `transferOwnership` function with signature `transferOwnership(address)` and selector `0xf2fde38b`
     #[derive(
         Clone,
@@ -3243,7 +3178,6 @@ pub mod light_client_mock {
         StateHistoryCommitments(StateHistoryCommitmentsCall),
         StateHistoryFirstIndex(StateHistoryFirstIndexCall),
         StateHistoryRetentionPeriod(StateHistoryRetentionPeriodCall),
-        States(StatesCall),
         TransferOwnership(TransferOwnershipCall),
         UpgradeToAndCall(UpgradeToAndCallCall),
         VotingStakeTableCommitment(VotingStakeTableCommitmentCall),
@@ -3400,9 +3334,6 @@ pub mod light_client_mock {
             {
                 return Ok(Self::StateHistoryRetentionPeriod(decoded));
             }
-            if let Ok(decoded) = <StatesCall as ::ethers::core::abi::AbiDecode>::decode(data) {
-                return Ok(Self::States(decoded));
-            }
             if let Ok(decoded) =
                 <TransferOwnershipCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -3492,7 +3423,6 @@ pub mod light_client_mock {
                 Self::StateHistoryRetentionPeriod(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::States(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::TransferOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::UpgradeToAndCall(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::VotingStakeTableCommitment(element) => {
@@ -3540,7 +3470,6 @@ pub mod light_client_mock {
                 Self::StateHistoryCommitments(element) => ::core::fmt::Display::fmt(element, f),
                 Self::StateHistoryFirstIndex(element) => ::core::fmt::Display::fmt(element, f),
                 Self::StateHistoryRetentionPeriod(element) => ::core::fmt::Display::fmt(element, f),
-                Self::States(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferOwnership(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeToAndCall(element) => ::core::fmt::Display::fmt(element, f),
                 Self::VotingStakeTableCommitment(element) => ::core::fmt::Display::fmt(element, f),
@@ -3701,11 +3630,6 @@ pub mod light_client_mock {
     impl ::core::convert::From<StateHistoryRetentionPeriodCall> for LightClientMockCalls {
         fn from(value: StateHistoryRetentionPeriodCall) -> Self {
             Self::StateHistoryRetentionPeriod(value)
-        }
-    }
-    impl ::core::convert::From<StatesCall> for LightClientMockCalls {
-        fn from(value: StatesCall) -> Self {
-            Self::States(value)
         }
     }
     impl ::core::convert::From<TransferOwnershipCall> for LightClientMockCalls {
@@ -4043,24 +3967,6 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct StateHistoryRetentionPeriodReturn(pub u32);
-    ///Container type for all return fields from the `states` function with signature `states(uint32)` and selector `0x7f17baad`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct StatesReturn {
-        pub view_num: u64,
-        pub block_height: u64,
-        pub block_comm_root: ::ethers::core::types::U256,
-    }
     ///Container type for all return fields from the `votingStakeTableCommitment` function with signature `votingStakeTableCommitment()` and selector `0x76b6b7cb`
     #[derive(
         Clone,

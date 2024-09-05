@@ -53,9 +53,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice The quorum threshold for the frozen stake table
     uint256 public frozenThreshold;
 
-    /// @notice mapping to store light client states in order to simplify upgrades
-    mapping(uint32 index => LightClientState value) public states;
-
     /// @notice genesis stake commitment
     StakeState public genesisStakeState;
 
