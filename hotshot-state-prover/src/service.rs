@@ -217,10 +217,10 @@ pub fn light_client_genesis_stake_from_stake_table(
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
-    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+    let honest_threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
 
     let stt = ParsedStakeState {
-        threshold: threshold,
+        threshold: honest_threshold,
         bls_key_comm: field_to_u256(bls_comm),
         schnorr_key_comm: field_to_u256(schnorr_comm),
         amount_comm: field_to_u256(stake_comm),
@@ -562,10 +562,7 @@ mod test {
 
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
-    use ethers::{
-        abi::AbiEncode,
-        utils::{Anvil, AnvilInstance},
-    };
+    use ethers::utils::{Anvil, AnvilInstance};
     use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedStakeState};
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
@@ -597,22 +594,14 @@ mod test {
         let ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS as usize);
 
         let genesis = ledger.get_state();
-        let stake_genesis: ParsedStakeState = ParsedStakeState {
-            threshold: genesis.threshold,
-            bls_key_comm: genesis.bls_key_comm,
-            schnorr_key_comm: genesis.schnorr_key_comm,
-            amount_comm: genesis.amount_comm,
-        };
+        let (_, _, stake_genesis) = ledger.get_stake_table_comms();
+
         let qc_keys = ledger.qc_keys;
         let state_keys = ledger.state_keys;
         let st = ledger.st;
 
         eprintln!(
-            "Genesis: view_num: {}, block_height: {}, block_comm_root: {}, fee_ledger_comm: {}\
-             bls_key_comm: {:x?},\
-             schnorr_key_comm: {:x?},\
-             amount_comm: {:x?},\
-             threshold: {}",
+            "Genesis: view_num: {}, block_height: {}, block_comm_root: {}",
             genesis.view_num, genesis.block_height, genesis.block_comm_root,
         );
         (genesis, stake_genesis, qc_keys, state_keys, st)
@@ -620,8 +609,8 @@ mod test {
 
     // everybody signs, then generate a proof
     fn gen_state_proof(
-        old_state: &ParsedLightClientState,
         new_state: ParsedLightClientState,
+        genesis_stake_state: &ParsedStakeState,
         state_keypairs: &[(StateSignKey, StateVerKey)],
         st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     ) -> (PublicInput, Proof) {
@@ -668,7 +657,7 @@ mod test {
             &bit_vec,
             &sigs,
             &new_state.into(),
-            &old_state.threshold,
+            &genesis_stake_state.threshold,
             STAKE_TABLE_CAPACITY_FOR_TEST,
         )
         .expect("Fail to generate state proof");
@@ -781,7 +770,7 @@ mod test {
         new_state.view_num = 5;
         new_state.block_height = 1;
 
-        let (pi, proof) = gen_state_proof(&genesis, new_state.clone(), &state_keys, &st);
+        let (pi, proof) = gen_state_proof(new_state.clone(), &stake_genesis, &state_keys, &st);
         tracing::info!("Successfully generated proof for new state.");
 
         super::submit_state_and_proof(

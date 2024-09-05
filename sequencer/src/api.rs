@@ -22,7 +22,9 @@ use hotshot_events_service::events_source::{
 };
 use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_state_prover::service::light_client_genesis_from_stake_table;
+use hotshot_state_prover::service::{
+    light_client_genesis_from_stake_table, light_client_genesis_stake_from_stake_table,
+};
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
@@ -382,7 +384,7 @@ pub mod test_helpers {
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-    use hotshot_contract_adapter::light_client::ParsedLightClientState;
+    use hotshot_contract_adapter::light_client::{ParsedLightClientState, ParsedStakeState};
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},

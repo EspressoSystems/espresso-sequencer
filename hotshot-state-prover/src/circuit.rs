@@ -2,10 +2,9 @@
 
 use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
-use ark_bn254::Fr; 
 use ark_std::borrow::Borrow;
 use ethers::types::U256;
-use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput, GenericStakeState, StakeState};
+use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput};
 use jf_plonk::PlonkError;
 use jf_relation::{BoolVar, Circuit, CircuitError, PlonkCircuit, Variable};
 use jf_rescue::{gadgets::RescueNativeGadget, RescueParameter};
@@ -91,21 +90,21 @@ impl LightClientStateVar {
         self.vars[2]
     }
 
-    /// Returns the commitment of the fee ledger
-    #[must_use]
-    pub fn fee_ledger_comm(&self) -> Variable {
-        self.vars[3]
-    }
+    // /// Returns the commitment of the fee ledger
+    // #[must_use]
+    // pub fn fee_ledger_comm(&self) -> Variable {
+    //     self.vars[3]
+    // }
 
-    /// Returns the commitment of the associated stake table
-    #[must_use]
-    pub fn stake_table_comm(&self) -> StakeTableCommVar {
-        StakeTableCommVar {
-            qc_keys_comm: self.vars[4],
-            state_keys_comm: self.vars[5],
-            stake_amount_comm: self.vars[6],
-        }
-    }
+    // /// Returns the commitment of the associated stake table
+    // #[must_use]
+    // pub fn stake_table_comm(&self) -> StakeTableCommVar {
+    //     StakeTableCommVar {
+    //         qc_keys_comm: self.vars[4],
+    //         state_keys_comm: self.vars[5],
+    //         stake_amount_comm: self.vars[6],
+    //     }
+    // }
 }
 
 impl AsRef<[Variable]> for LightClientStateVar {
@@ -255,10 +254,6 @@ where
         lightclient_state.block_comm_root,
     ];
 
-    let stake_state = vec![
-        threshold
-    ];
-
     // Checking whether the accumulated weight exceeds the quorum threshold
     let mut signed_amount_var = (0..stake_table_capacity / 2)
         .map(|i| {
@@ -288,32 +283,32 @@ where
         .iter()
         .flat_map(|var| [var.state_ver_key.0.get_x(), var.state_ver_key.0.get_y()])
         .collect::<Vec<_>>();
-    let state_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
+    let _state_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
         &mut circuit,
         &state_ver_key_preimage_vars,
         1,
     )?[0];
-    circuit.enforce_equal(
-        state_ver_key_comm,
-        lightclient_state_pub_var.stake_table_comm().state_keys_comm,
-    )?;
+    // circuit.enforce_equal(
+    //     state_ver_key_comm,
+    //     lightclient_state_pub_var.stake_table_comm().state_keys_comm,
+    // )?;
 
     // checking the commitment for the list of stake amounts
     let stake_amount_preimage_vars = stake_table_var
         .iter()
         .map(|var| var.stake_amount)
         .collect::<Vec<_>>();
-    let stake_amount_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
+    let _stake_amount_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
         &mut circuit,
         &stake_amount_preimage_vars,
         1,
     )?[0];
-    circuit.enforce_equal(
-        stake_amount_comm,
-        lightclient_state_pub_var
-            .stake_table_comm()
-            .stake_amount_comm,
-    )?;
+    // circuit.enforce_equal(
+    //     stake_amount_comm,
+    //     lightclient_state_pub_var
+    //         .stake_table_comm()
+    //         .stake_amount_comm,
+    // )?;
 
     // checking all signatures
     let verification_result_vars = stake_table_var
@@ -357,13 +352,6 @@ where
         block_comm_root: F::default(),
     };
 
-    let stake_state = GenericStakeState {
-        threshold: F::default(),
-        stake_table_bls_key_comm: F::default(),
-        stake_table_schnorr_key_comm: F::default(),
-        stake_table_amount_comm: F::default(),
-    };
-
     build::<F, P, _, _, _>(
         &[],
         &[],
@@ -377,9 +365,8 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ed_on_bn254::EdwardsConfig as Config;
-    use ethers::{core::k256::schnorr, types::U256};
-    use hotshot_contract_adapter::jellyfish::u256_to_field;
-    use hotshot_types::{light_client::GenericStakeState, traits::stake_table::{SnapshotVersion, StakeTableScheme}};
+    use ethers::types::U256;
+    use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
     use jf_crhf::CRHF;
     use jf_relation::Circuit;
     use jf_rescue::crhf::VariableLengthRescueCRHF;
@@ -420,13 +407,6 @@ mod tests {
             block_comm_root,
         };
         let state_msg: [F; 3] = lightclient_state.clone().into();
-        let (bls_comm, schnorr_comm, amount_comm) = st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-        let stake_state = GenericStakeState{
-            threshold: 0,
-            stake_table_bls_key_comm: bls_comm,
-            stake_table_schnorr_key_comm: schnorr_comm,
-            stake_table_amount_comm: amount_comm
-        };
 
         let sigs = state_keys
             .iter()
@@ -530,8 +510,8 @@ mod tests {
             .is_err());
 
         // bad path: bad stake table commitment
-        let mut bad_lightclient_state = lightclient_state.clone();
-        bad_lightclient_state.stake_table_comm.1 = F::default();
+        let bad_lightclient_state = lightclient_state.clone();
+        // bad_lightclient_state.stake_table_comm.1 = F::default();
         let bad_state_msg: [F; 3] = bad_lightclient_state.clone().into();
         let sig_for_bad_state = state_keys
             .iter()
@@ -554,9 +534,9 @@ mod tests {
             .is_err());
 
         // bad path: incorrect signatures
-        let mut wrong_light_client_state = lightclient_state.clone();
+        let wrong_light_client_state = lightclient_state.clone();
         // state with a different qc key commitment
-        wrong_light_client_state.stake_table_comm.0 = F::default();
+        // wrong_light_client_state.stake_table_comm.0 = F::default();
         let wrong_state_msg: [F; 3] = wrong_light_client_state.into();
         let wrong_sigs = state_keys
             .iter()

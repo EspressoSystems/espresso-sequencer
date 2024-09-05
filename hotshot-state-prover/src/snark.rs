@@ -84,6 +84,7 @@ where
             CircuitField::from(0u64)
         }
     });
+
     let (circuit, public_inputs) = crate::circuit::build(
         stake_table_entries,
         signer_bit_vec,
@@ -205,7 +206,7 @@ mod tests {
             CircuitField::from(2u32),
         ])
         .unwrap()[0];
-        let fee_ledger_comm = VariableLengthRescueCRHF::<CircuitField, 1>::evaluate(vec![
+        let _fee_ledger_comm = VariableLengthRescueCRHF::<CircuitField, 1>::evaluate(vec![
             CircuitField::from(3u32),
             CircuitField::from(5u32),
         ])

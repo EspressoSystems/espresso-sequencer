@@ -111,7 +111,7 @@ impl<ApiVer: StaticVersionType> StateSigner<ApiVer> {
 
     /// Sign the light client state at given height and store it.
     async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
-        let msg: [CircuitField; 7] = state.into();
+        let msg: [CircuitField; 3] = state.into();
         let signature = StateSignatureScheme::sign(
             &(),
             self.key_pair.sign_key_ref(),
@@ -148,7 +148,7 @@ fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, RescueError> {
 
 fn form_light_client_state(
     leaf: &Leaf,
-    stake_table_comm: &StakeTableCommitmentType,
+    _stake_table_comm: &StakeTableCommitmentType,
 ) -> anyhow::Result<LightClientState> {
     let header = leaf.block_header();
     let mut block_comm_root_bytes = vec![];

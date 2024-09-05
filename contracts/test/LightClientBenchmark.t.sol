@@ -29,7 +29,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(3));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, ) =
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
         vm.prank(permissionedProver);
         vm.resumeGasMetering();

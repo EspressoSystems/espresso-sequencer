@@ -304,6 +304,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     Ok(contract.address())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn deploy(
     l1url: Url,
     mnemonic: String,

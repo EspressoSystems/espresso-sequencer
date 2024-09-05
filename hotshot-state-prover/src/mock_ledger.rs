@@ -23,7 +23,8 @@ use hotshot_types::{
     light_client::{
         GenericLightClientState, GenericPublicInput, GenericStakeState, LightClientState,
         StakeState,
-    }, stake_table, traits::stake_table::{SnapshotVersion, StakeTableScheme}
+    },
+    traits::stake_table::{SnapshotVersion, StakeTableScheme},
 };
 use itertools::izip;
 use jf_pcs::prelude::UnivariateUniversalParams;
@@ -78,7 +79,7 @@ pub struct MockLedger {
     pub rng: StdRng,
     epoch: u64,
     state: GenericLightClientState<F>,
-    stake_state: GenericStakeState<F>,
+    // stake_state: GenericStakeState<F>,
     pub(crate) st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
     threshold: U256, // quorum threshold for SnapShot::LastEpochStart
     pub(crate) qc_keys: Vec<BLSVerKey>,
@@ -97,18 +98,18 @@ impl MockLedger {
             key_archive.insert(qc_keys[i], state_keys[i].0.clone());
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
-        let (bls_key_comm, schnorr_key_comm, amount_comm) = 
-            st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+        // let (bls_key_comm, schnorr_key_comm, amount_comm) =
+        //     st.commitment(SnapshotVersion::LastEpochStart).unwrap();
 
         let threshold =
             one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
 
-        let stake_table = StakeState {
-            threshold: u256_to_field(threshold),
-            stake_table_bls_key_comm: bls_key_comm,
-            stake_table_schnorr_key_comm: schnorr_key_comm,
-            stake_table_amount_comm: amount_comm,
-        };
+        // let stake_state = StakeState {
+        //     threshold: u256_to_field(threshold),
+        //     stake_table_bls_key_comm: bls_key_comm,
+        //     stake_table_schnorr_key_comm: schnorr_key_comm,
+        //     stake_table_amount_comm: amount_comm,
+        // };
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
@@ -127,7 +128,7 @@ impl MockLedger {
             rng,
             epoch: 0,
             state: genesis,
-            stake_state: stake_table,
+            // stake_state,
             st,
             threshold,
             qc_keys,
@@ -304,19 +305,19 @@ impl MockLedger {
             .unwrap();
         let stt = StakeState {
             threshold: u256_to_field(self.threshold),
-            stake_table_bls_key_comm: stake_table_comm.clone().0,
-            stake_table_schnorr_key_comm: stake_table_comm.clone().1,
-            stake_table_amount_comm: stake_table_comm.clone().2,
+            stake_table_bls_key_comm: stake_table_comm.0,
+            stake_table_schnorr_key_comm: stake_table_comm.1,
+            stake_table_amount_comm: stake_table_comm.2,
         };
-        println!("{:?}", pi);
-        panic!("here");
         (pi, proof, stt)
     }
 
     /// a malicious attack, generating a fake stake table full of adversarial stakers
     /// adv-controlled stakers signed the state and replace the stake table commitment with that of the fake one
     /// in an attempt to hijack the correct stake table.
-    pub fn gen_state_proof_with_fake_stakers(&mut self) -> (GenericPublicInput<F>, Proof, GenericStakeState<F>) {
+    pub fn gen_state_proof_with_fake_stakers(
+        &mut self,
+    ) -> (GenericPublicInput<F>, Proof, GenericStakeState<F>) {
         let new_state = self.state.clone();
 
         let (adv_qc_keys, adv_state_keys) =
@@ -368,15 +369,15 @@ impl MockLedger {
             STAKE_TABLE_CAPACITY,
         )
         .expect("Fail to generate state proof");
-        
-        let (bls_key_comm, schnorr_key_comm, amount_comm) = adv_st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+
+        let (bls_key_comm, schnorr_key_comm, amount_comm) =
+            adv_st.commitment(SnapshotVersion::LastEpochStart).unwrap();
         let stake_table = StakeState {
             threshold: u256_to_field(self.threshold),
             stake_table_bls_key_comm: bls_key_comm,
             stake_table_schnorr_key_comm: schnorr_key_comm,
             stake_table_amount_comm: amount_comm,
         };
-
 
         (pi, proof, stake_table)
     }
@@ -423,11 +424,7 @@ impl MockLedger {
             amount_comm: field_to_u256(amount_comm),
         };
 
-        (
-            voting_st_comm.into(),
-            frozen_st_comm.into(),
-            stake_table.into(),
-        )
+        (voting_st_comm.into(), frozen_st_comm.into(), stake_table)
     }
 
     // return a dummy commitment value

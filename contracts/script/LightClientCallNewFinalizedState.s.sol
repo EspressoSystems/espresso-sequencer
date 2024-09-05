@@ -24,7 +24,7 @@ contract CallNewFinalizedState is Script {
         cmds[4] = vm.toString(numExits);
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, ) =
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         address admin;

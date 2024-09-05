@@ -163,8 +163,11 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, LC.StakeState[] memory stakeStates) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+        (
+            LC.LightClientState[] memory states,
+            V.PlonkProof[] memory proofs,
+            LC.StakeState[] memory stakeStates
+        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         newState = states[0];
         newProof = proofs[0];
@@ -311,7 +314,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(3));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, ) =
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         vm.expectEmit(true, true, true, true);
@@ -358,8 +361,11 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         cmds[4] = vm.toString(numExits);
 
         result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, LC.StakeState[] memory stakeStates) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+        (
+            LC.LightClientState[] memory states,
+            V.PlonkProof[] memory proofs,
+            LC.StakeState[] memory stakeStates
+        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         uint256 statesLen = states.length;
 
@@ -580,8 +586,11 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertGe(lc.stateHistoryRetentionPeriod(), 1 days);
 
         bytes memory result = vm.ffi(cmds);
-       (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, LC.StakeState[] memory stakeStates) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+        (
+            LC.LightClientState[] memory states,
+            V.PlonkProof[] memory proofs,
+            LC.StakeState[] memory stakeStates
+        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         newState = states[1];
         newProof = proofs[1];
@@ -638,7 +647,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertInitialStateHistoryConditions();
 
         bytes memory result = vm.ffi(cmds);
-       (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, ) =
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         // Add one numDays worth of a new state
@@ -708,7 +717,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint32 numDays = 2;
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs, ) =
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         assertInitialStateHistoryConditions();
@@ -1159,8 +1168,7 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
-        assertEq(result, '0xddaf');
-        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs, ) =
+        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs,) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         newState = _states[1];
@@ -1198,7 +1206,7 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs, ) =
+        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs,) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         uint256 statesCount = _states.length - 1;

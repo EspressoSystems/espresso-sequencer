@@ -496,7 +496,7 @@ fn main() {
             let mut new_states: Vec<ParsedLightClientState> = vec![];
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
             let mut stake_stakes: Vec<ParsedStakeState> = vec![];
-            
+
             for i in 1..block_per_epoch + 2 {
                 // only update stake table at the last block, as it would only take effect in next epoch anyway.
                 if i == block_per_epoch {
@@ -523,7 +523,7 @@ fn main() {
                     schnorr_key_comm: field_to_u256(stt.stake_table_schnorr_key_comm),
                     amount_comm: field_to_u256(stt.stake_table_amount_comm),
                 };
-                stake_stakes.push(parsed_stake_state.into());
+                stake_stakes.push(parsed_stake_state);
             }
 
             let res = (new_states, proofs, stake_stakes);
@@ -551,7 +551,7 @@ fn main() {
             }
 
             let res = if require_valid_proof {
-                let (pi, proof, stt) = ledger.gen_state_proof();
+                let (pi, proof, _) = ledger.gen_state_proof();
                 let pi_parsed: ParsedLightClientState = pi.into();
                 let proof_parsed: ParsedPlonkProof = proof.into();
                 (pi_parsed, proof_parsed)
@@ -573,7 +573,7 @@ fn main() {
 
             ledger.elapse_with_block();
             // first block in epoch 1
-            let (pi, proof, stt) = ledger.gen_state_proof();
+            let (pi, proof, _) = ledger.gen_state_proof();
             new_states.push(pi.into());
             proofs.push(proof.into());
 
@@ -594,7 +594,7 @@ fn main() {
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             ledger.elapse_with_block();
-            let (pi, proof, stt) = ledger.gen_state_proof_with_fake_stakers();
+            let (pi, proof, _) = ledger.gen_state_proof_with_fake_stakers();
 
             let new_state: ParsedLightClientState = pi.into();
             let proof: ParsedPlonkProof = proof.into();
