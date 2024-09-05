@@ -203,7 +203,7 @@ pub fn light_client_genesis_from_stake_table(
 pub async fn light_client_genesis_stake(
     sequencer_url: &Url,
     stake_table_capacity: usize,
-) -> anyhow::Result<ParsedStakeState> {
+) -> anyhow::Result<ParsedStakeTableState> {
     let st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
         .await
         .with_context(|| "Failed to initialize stake table")?;
@@ -213,13 +213,13 @@ pub async fn light_client_genesis_stake(
 #[inline]
 pub fn light_client_genesis_stake_from_stake_table(
     st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-) -> anyhow::Result<ParsedStakeState> {
+) -> anyhow::Result<ParsedStakeTableState> {
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
     let honest_threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
 
-    let stt = ParsedStakeState {
+    let stt = ParsedStakeTableState {
         threshold: honest_threshold,
         bls_key_comm: field_to_u256(bls_comm),
         schnorr_key_comm: field_to_u256(schnorr_comm),
@@ -563,7 +563,7 @@ mod test {
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
     use ethers::utils::{Anvil, AnvilInstance};
-    use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedStakeState};
+    use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedStakeTableState};
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
@@ -585,7 +585,7 @@ mod test {
     #[allow(clippy::type_complexity)]
     fn init_ledger_for_test() -> (
         ParsedLightClientState,
-        ParsedStakeState,
+        ParsedStakeTableState,
         Vec<BLSPubKey>,
         Vec<(StateSignKey, StateVerKey)>,
         StakeTable<BLSPubKey, StateVerKey, CircuitField>,
@@ -610,7 +610,7 @@ mod test {
     // everybody signs, then generate a proof
     fn gen_state_proof(
         new_state: ParsedLightClientState,
-        genesis_stake_state: &ParsedStakeState,
+        genesis_stake_state: &ParsedStakeTableState,
         state_keypairs: &[(StateSignKey, StateVerKey)],
         st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     ) -> (PublicInput, Proof) {
@@ -670,7 +670,7 @@ mod test {
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
         genesis: ParsedLightClientState,
-        stake_genesis: ParsedStakeState,
+        stake_genesis: ParsedStakeTableState,
     ) -> Result<(Arc<SignerWallet>, LightClient<SignerWallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
         let signer = Wallet::from(anvil.keys()[0].clone())
@@ -679,7 +679,7 @@ mod test {
 
         let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
             light_client_state: genesis,
-            stake_state: stake_genesis,
+            stake_table_state: stake_genesis,
             max_history_seconds: MAX_HISTORY_SECONDS,
         };
 
@@ -726,7 +726,7 @@ mod test {
         setup_test();
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
-        let dummy_stake_genesis = ParsedStakeState::dummy_genesis();
+        let dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
         let (_wallet, contract) =
             deploy_contract_for_test(&anvil, dummy_genesis.clone(), dummy_stake_genesis.clone())
                 .await?;
@@ -735,7 +735,7 @@ mod test {
         let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
         assert_eq!(genesis, dummy_genesis);
 
-        let stake_genesis: ParsedStakeState = contract.genesis_stake_state().await?.into();
+        let stake_genesis: ParsedStakeTableState = contract.genesis_stake_table_state().await?.into();
         assert_eq!(stake_genesis, dummy_stake_genesis);
 
         let mut config = StateProverConfig::default();

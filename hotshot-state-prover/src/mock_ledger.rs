@@ -219,7 +219,7 @@ impl MockLedger {
     }
 
     /// Return the light client state and proof of consensus on this finalized state
-    pub fn gen_state_proof(&mut self) -> (GenericPublicInput<F>, Proof, GenericStakeState<F>) {
+    pub fn gen_state_proof(&mut self) -> (GenericPublicInput<F>, Proof, GenericStakeTableState<F>) {
         let state_msg: [F; 3] = self.state.clone().into();
 
         let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
@@ -299,7 +299,7 @@ impl MockLedger {
             .clone()
             .commitment(SnapshotVersion::LastEpochStart)
             .unwrap();
-        let stt = StakeState {
+        let stt = StakeTableState {
             threshold: u256_to_field(self.threshold),
             stake_table_bls_key_comm: stake_table_comm.0,
             stake_table_schnorr_key_comm: stake_table_comm.1,
@@ -313,7 +313,7 @@ impl MockLedger {
     /// in an attempt to hijack the correct stake table.
     pub fn gen_state_proof_with_fake_stakers(
         &mut self,
-    ) -> (GenericPublicInput<F>, Proof, GenericStakeState<F>) {
+    ) -> (GenericPublicInput<F>, Proof, GenericStakeTableState<F>) {
         let new_state = self.state.clone();
 
         let (adv_qc_keys, adv_state_keys) =
@@ -368,7 +368,7 @@ impl MockLedger {
 
         let (bls_key_comm, schnorr_key_comm, amount_comm) =
             adv_st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-        let stake_table = StakeState {
+        let stake_table = StakeTableState {
             threshold: u256_to_field(self.threshold),
             stake_table_bls_key_comm: bls_key_comm,
             stake_table_schnorr_key_comm: schnorr_key_comm,
@@ -413,7 +413,7 @@ impl MockLedger {
             .unwrap(),
         );
 
-        let stake_table: ParsedStakeState = ParsedStakeState {
+        let stake_table: ParsedStakeTableState = ParsedStakeTableState {
             threshold: self.threshold,
             bls_key_comm: field_to_u256(bls_key_comm),
             schnorr_key_comm: field_to_u256(schnorr_key_comm),

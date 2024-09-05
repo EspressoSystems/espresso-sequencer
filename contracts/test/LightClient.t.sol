@@ -61,18 +61,26 @@ contract LightClientCommonTest is Test {
         (
             LC.LightClientState memory state,
             bytes32 votingSTComm,
-            bytes32 frozenSTComm,
+            ,
             LC.StakeTableState memory stakeState
         ) = abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
         genesis = state;
         genesisStakeTableState = stakeState;
 
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) =
+            deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
 
-        bytes32 expectedStakeTableComm = lc.computeStakeTableComm(genesisStakeTableState);
-        assertEq(votingSTComm, expectedStakeTableComm);
-        assertEq(frozenSTComm, expectedStakeTableComm);
-        // assertEq(genesisStakeTableState, lc.genesisStakeTableState());
+        (
+            ,
+            BN254.ScalarField stakeTableBlsKeyComm,
+            BN254.ScalarField stakeTableSchnorrKeyComm,
+            BN254.ScalarField stakeTableAmountComm
+        ) = lc.genesisStakeTableState();
+
+        assertEq(
+            abi.encodePacked(votingSTComm),
+            abi.encodePacked(stakeTableBlsKeyComm, stakeTableSchnorrKeyComm, stakeTableAmountComm)
+        );
     }
 
     function assertEq(BN254.ScalarField a, BN254.ScalarField b) public pure {
@@ -92,12 +100,6 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         assertEq(viewNum, genesis.viewNum);
         assertEq(blockHeight, genesis.blockHeight);
         assertEq(abi.encode(blockCommRoot), abi.encode(genesis.blockCommRoot));
-
-        bytes32 stakeTableComm = lc.computeStakeTableComm(genesisStakeTableState);
-        assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
-        assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lc.votingThreshold(), genesisStakeTableState.threshold);
-        assertEq(lc.frozenThreshold(), genesisStakeTableState.threshold);
     }
 
     // @dev helper function to be able to initialize the contract and capture the revert error
@@ -134,8 +136,8 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         badGenesisStakeTableState.schnorrKeyComm = BN254.ScalarField.wrap(0);
         initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
 
-        badGenesisStakeTableState.schnorrKeyComm =
-            badGenesisStakeTableState.schnorrKeyComm; // revert to correct
+        badGenesisStakeTableState.schnorrKeyComm = badGenesisStakeTableState.schnorrKeyComm; // revert
+            // to correct
         badGenesisStakeTableState.amountComm = BN254.ScalarField.wrap(0);
 
         initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
@@ -145,7 +147,8 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         // zero-valued threshold would revert
         badGenesisStakeTableState.threshold = 0;
         initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
-        badGenesisStakeTableState.threshold = badGenesisStakeTableState.threshold; // revert to correct
+        badGenesisStakeTableState.threshold = badGenesisStakeTableState.threshold; // revert to
+            // correct
     }
 }
 
@@ -350,7 +353,8 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (LC.LightClientState memory state,,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
         genesis = state;
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) =
+            deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
 
         genesis = state;
 
@@ -384,11 +388,19 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             assertEq(blockHeight, states[i].blockHeight);
             assertEq(abi.encode(blockCommRoot), abi.encode(states[i].blockCommRoot));
 
-            bytes32 stakeTableComm = lc.computeStakeTableComm(stakeStates[i]);
-            assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
-            assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
-            assertEq(lc.votingThreshold(), stakeStates[i].threshold);
-            assertEq(lc.frozenThreshold(), stakeStates[i].threshold);
+            (
+                uint256 threshold,
+                BN254.ScalarField stakeTableBlsKeyComm,
+                BN254.ScalarField stakeTableSchnorrKeyComm,
+                BN254.ScalarField stakeTableAmountComm
+            ) = lc.genesisStakeTableState();
+
+            assertEq(
+                abi.encode(stakeStates[i]),
+                abi.encode(
+                    threshold, stakeTableBlsKeyComm, stakeTableSchnorrKeyComm, stakeTableAmountComm
+                )
+            );
         }
     }
 
@@ -415,12 +427,6 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         emit LC.NewState(state.viewNum, state.blockHeight, state.blockCommRoot);
         vm.prank(permissionedProver);
         lc.newFinalizedState(state, proof);
-
-        bytes32 stakeTableComm = lc.computeStakeTableComm(genesisStakeTableState);
-        assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
-        assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lc.votingThreshold(), genesisStakeTableState.threshold);
-        assertEq(lc.frozenThreshold(), genesisStakeTableState.threshold);
     }
 
     /// @dev Test unhappy path when a valid but oudated finalized state is submitted

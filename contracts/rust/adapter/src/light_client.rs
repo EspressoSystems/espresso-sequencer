@@ -1,7 +1,7 @@
 //! Helpers and test mocks for Light Client logic
 
 use ark_std::str::FromStr;
-use diff_test_bn254::{field_to_u256, u256_to_field};
+use diff_test_bn254::u256_to_field;
 use ethers::{
     abi::AbiDecode,
     abi::Token,
@@ -9,7 +9,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput, StakeTableState};
+use hotshot_types::light_client::{LightClientState, StakeTableState};
 
 /// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
