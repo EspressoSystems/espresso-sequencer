@@ -1,7 +1,7 @@
 @startuml
 
 
-[Espresso Derivatoin] as ED
+[Espresso Derivation] as ED
 [AND] as AND
 
 [zkVM] as ZK
