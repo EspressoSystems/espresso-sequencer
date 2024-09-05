@@ -11,6 +11,10 @@ demo-native:
     cargo build --release
     scripts/demo-native
 
+demo-native-mp:
+    cargo build --release
+    scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml
+
 demo-native-benchmark:
     cargo build --release --features benchmarking
     scripts/demo-native
