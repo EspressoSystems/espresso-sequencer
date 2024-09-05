@@ -35,7 +35,7 @@ contract LightClientMock is LC {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
-        uint256[8] memory publicInput;
+        uint256[4] memory publicInput;
         publicInput[0] = votingThreshold;
         publicInput[1] = uint256(state.viewNum);
         publicInput[2] = uint256(state.blockHeight);
