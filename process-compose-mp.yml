@@ -16,7 +16,7 @@ processes:
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=2
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
-      - ESPRESSO_BUILDER_GENESIS_FILE
+      - ESPRESSO_BUILDER_GENESIS_FILE=data/genesis/demo-marketplace.toml
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -41,7 +41,7 @@ processes:
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=4
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
-      - ESPRESSO_BUILDER_GENESIS_FILE
+      - ESPRESSO_BUILDER_GENESIS_FILE=data/genesis/demo-marketplace.toml
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -58,6 +58,7 @@ processes:
   permissionless-builder:
     environment:
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10
+      - ESPRESSO_BUILDER_GENESIS_FILE=data/genesis/demo-marketplace.toml
 
   submit-transactions-public:
     command: submit-transactions
