@@ -368,7 +368,7 @@ processes:
       failure_threshold: 100
 
 
-  # We use KeyDB (a Redis variant) to maintain consistency between 
+  # We use KeyDB (a Redis variant) to maintain consistency between
   # different parts of the CDN
   # Cheating a bit here too, but KeyDB is not available as a Nix package.
   # Could do local (SQLite) discovery, but removes some of the spirit
