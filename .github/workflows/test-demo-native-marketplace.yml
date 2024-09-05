@@ -54,7 +54,7 @@ jobs:
           export MARKETPLACE_SMOKE_TEST=true
           netstat -tnlp
           set -o pipefail
-          scripts/demo-native --tui=false --config process-compose-mp.yml &
+          scripts/demo-native --tui=false -f process-compose.yaml -f process-compose-mp.yml &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
 
       - name: post netstat
