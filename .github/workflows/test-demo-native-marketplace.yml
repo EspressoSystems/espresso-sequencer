@@ -25,8 +25,6 @@ jobs:
   demo-native-marketplace:
     runs-on: ubuntu-latest
     steps:
-      - name: pre netstat
-        run: netstat -tnlp
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
@@ -52,10 +50,6 @@ jobs:
         run: |
           export PATH="$PWD/target/release:$PATH"
           export MARKETPLACE_SMOKE_TEST=true
-          netstat -tnlp
           set -o pipefail
           scripts/demo-native --tui=false -f process-compose.yaml -f process-compose-mp.yml &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
-
-      - name: post netstat
-        run: netstat -tnlp
