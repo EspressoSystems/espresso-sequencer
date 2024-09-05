@@ -326,6 +326,7 @@ impl GlobalState {
             acquire_timeout: None,
             require_ssl: false,
             migrations: true,
+            reset: false,
         };
 
         let client = PostgresClient::connect(opts)

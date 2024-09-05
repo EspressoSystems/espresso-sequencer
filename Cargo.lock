@@ -1322,6 +1322,7 @@ dependencies = [
  "jf-merkle-tree",
  "jf-signature",
  "libp2p",
+ "libp2p-networking",
  "portpicker",
  "rand 0.8.5",
  "sequencer",
@@ -2437,9 +2438,9 @@ dependencies = [
 
 [[package]]
 name = "delegate"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e018fccbeeb50ff26562ece792ed06659b9c2dae79ece77c4456bb10d9bf79b"
+checksum = "5060bb0febb73fa907273f8a7ed17ab4bf831d585eac835b28ec24a1e2460956"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3700,6 +3701,7 @@ version = "0.1.0"
 dependencies = [
  "ark-srs",
  "clap",
+ "ethers",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -4077,8 +4079,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4125,7 +4127,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "async-trait",
  "clap",
@@ -4180,8 +4182,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-bn254",
+ "ark-ec",
+ "ark-ed-on-bn254",
  "ark-ff",
  "ark-poly",
+ "ark-serialize",
  "ark-std",
  "contract-bindings",
  "diff-test-bn254",
@@ -4222,8 +4227,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4255,8 +4260,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-fakeapi"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
@@ -4274,8 +4279,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4285,8 +4290,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4371,8 +4376,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4433,8 +4438,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4448,8 +4453,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4485,8 +4490,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4532,7 +4537,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5206,8 +5211,8 @@ dependencies = [
 
 [[package]]
 name = "jf-plonk"
-version = "0.4.4"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.5#7d71dbeff14f1a501b0b0dc391f1dffa1b8374fb"
+version = "0.5.1"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-plonk-v0.5.1#7e2eeef8c06a12f17015d457f1b3ea80b0de3333"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -5788,8 +5793,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.72"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#764b95b406f3a5e5ce042f1c333276cfd61e705c"
+version = "0.5.73"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#da227a0dad0d012b5474b5713110a82e66a109fe"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -5809,6 +5814,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm-derive",
  "pin-project",
+ "portpicker",
  "rand 0.8.5",
  "serde",
  "serde_bytes",
@@ -8621,6 +8627,7 @@ dependencies = [
  "jf-signature",
  "jf-vid",
  "libp2p",
+ "libp2p-networking",
  "marketplace-builder-core",
  "marketplace-solver",
  "num_enum",

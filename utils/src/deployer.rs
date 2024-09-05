@@ -1,5 +1,3 @@
-use std::{collections::HashMap, io::Write, ops::Deref};
-
 use anyhow::{ensure, Context};
 use async_std::sync::Arc;
 use clap::{builder::OsStr, Parser, ValueEnum};
@@ -11,7 +9,7 @@ use contract_bindings::{
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
-    plonk_verifier::PlonkVerifier,
+    plonk_verifier_2::PlonkVerifier2,
 };
 use derive_more::Display;
 use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
@@ -19,6 +17,7 @@ use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeState,
 };
+use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
 
 /// Set of predeployed contracts.
@@ -189,7 +188,7 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
     let plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier::deploy(l1.clone(), ())?,
+            PlonkVerifier2::deploy(l1.clone(), ())?,
         )
         .await?;
     let vk = contracts
@@ -252,7 +251,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     let plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier::deploy(l1.clone(), ())?,
+            PlonkVerifier2::deploy(l1.clone(), ())?,
         )
         .await?;
     let vk = contracts

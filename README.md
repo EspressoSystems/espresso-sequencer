@@ -179,14 +179,14 @@ Running the script will save a file with details about the deployment in `contra
 
 #### Benchmarking and profiling
 
-The gas consumption for updating the state of the light client contract can be seen by running:
+The gas consumption for verifying a plonk proof as well as updating the state of the light client contract can be seen
+by running:
 
 ```
-> just lc-contract-benchmark
-cargo build --bin diff-test --release
-    Finished release [optimized] target(s) in 0.41s
-forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
-[PASS] testCorrectUpdateBench() (gas: 597104)
+> just gas-benchmarks
+> cat gas-benchmarks.txt
+[PASS] test_verify_succeeds() (gas: 507774)
+[PASS] testCorrectUpdateBench() (gas: 594533)
 ```
 
 In order to profile the gas consumption of the light client contract do the following:

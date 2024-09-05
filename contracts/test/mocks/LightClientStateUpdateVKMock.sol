@@ -192,6 +192,14 @@ library LightClientStateUpdateVKMock {
                 add(mload(add(vk, 0x260)), 0x20),
                 7340531586894031137911171437535895150082108255870826703349877706931499230371
             )
+            // g2LSB
+            mstore(
+                add(vk, 0x280), 0xb0838893ec1f237e8b07323b0744599f4e97b598b3b589bcc2bc37b8d5c41801
+            )
+            // g2MSB
+            mstore(
+                add(vk, 0x2A0), 0xc18393c0fa30fe4e8b038e357ad851eae8de9107584effe7c7f1f651b2010e26
+            )
         }
     }
 }

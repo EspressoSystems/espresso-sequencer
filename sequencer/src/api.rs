@@ -541,7 +541,9 @@ pub mod test_helpers {
                 legacy_builder_url = url;
             };
 
-            if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION {
+            if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION
+                || <V as Versions>::Base::VERSION >= MarketplaceVersion::VERSION
+            {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.marketplace_builder_port(),
                     NodeState::default(),

@@ -19,6 +19,8 @@ import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateU
 /// Rollup contracts on L1 (Ethereum).
 /// This state is submitted by any state-prover with evidence which is
 /// a SNARK proof that proves consensus.
+/// This contract also keeps track of the current epoch.
+/// For this version, the epoch is not used. <br>
 /// The light client state primarily consists of:<br>
 /// - the merkle root of finalized block commitments,<br>
 /// - the fee ledger commitment and <br>
@@ -289,7 +291,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
-        uint256[] memory publicInput = new uint256[](8);
+        uint256[8] memory publicInput;
         publicInput[0] = votingThreshold;
         publicInput[1] = uint256(state.viewNum);
         publicInput[2] = uint256(state.blockHeight);
