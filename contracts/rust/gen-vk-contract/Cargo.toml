@@ -11,3 +11,4 @@ hotshot-contract-adapter = { path = "../adapter" }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../../../hotshot-state-prover" }
 jf-pcs = { workspace = true }
+clap = { workspace = true }

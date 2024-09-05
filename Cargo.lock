@@ -3699,6 +3699,7 @@ name = "gen-vk-contract"
 version = "0.1.0"
 dependencies = [
  "ark-srs",
+ "clap",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
