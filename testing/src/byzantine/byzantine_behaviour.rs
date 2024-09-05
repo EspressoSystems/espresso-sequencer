@@ -1,10 +1,12 @@
 use anyhow::Context;
+use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot::tasks::EventTransformerState;
 use hotshot::types::{SignatureKey, SystemContextHandle};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_task_impls::network::test::{ModifierClosure, NetworkEventTaskStateModifier};
 use hotshot_task_impls::network::NetworkEventTaskState;
+use hotshot_types::consensus::Consensus;
 use hotshot_types::message::UpgradeLock;
 use hotshot_types::simple_vote::QuorumVote;
 use hotshot_types::traits::node_implementation::ConsensusTime;
@@ -39,12 +41,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
         _public_key: &TYPES::SignatureKey,
         _private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         _upgrade_lock: &UpgradeLock<TYPES, V>,
+        consensus: Arc<RwLock<Consensus<TYPES>>>,
     ) -> Vec<HotShotEvent<TYPES>> {
         match event {
             HotShotEvent::QuorumProposalSend(proposal, signature) => {
                 let mut result = Vec::new();
 
                 for n in 0..self.multiplier {
+                    // reset last actioned view so we actually propose multiple times
+                    consensus.write().await.reset_actions();
                     let mut modified_proposal = proposal.clone();
 
                     modified_proposal.data.view_number += n * self.increment;
@@ -80,6 +85,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
         _public_key: &TYPES::SignatureKey,
         _private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         _upgrade_lock: &UpgradeLock<TYPES, V>,
+        _consensus: Arc<RwLock<Consensus<TYPES>>>,
     ) -> Vec<HotShotEvent<TYPES>> {
         match event {
             HotShotEvent::QuorumProposalSend(_, _) | HotShotEvent::QuorumVoteSend(_) => {
@@ -155,6 +161,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         _public_key: &TYPES::SignatureKey,
         _private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         _upgrade_lock: &UpgradeLock<TYPES, V>,
+        _consensus: Arc<RwLock<Consensus<TYPES>>>,
     ) -> Vec<HotShotEvent<TYPES>> {
         match event {
             HotShotEvent::QuorumProposalSend(proposal, sender) => {
@@ -195,6 +202,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         _public_key: &TYPES::SignatureKey,
         _private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         _upgrade_lock: &UpgradeLock<TYPES, V>,
+        _consensus: Arc<RwLock<Consensus<TYPES>>>,
     ) -> Vec<HotShotEvent<TYPES>> {
         if let HotShotEvent::DacSend(cert, sender) = event {
             self.total_da_certs_sent_from_node += 1;
@@ -264,6 +272,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         _public_key: &TYPES::SignatureKey,
         _private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         _upgrade_lock: &UpgradeLock<TYPES, V>,
+        _consensus: Arc<RwLock<Consensus<TYPES>>>,
     ) -> Vec<HotShotEvent<TYPES>> {
         vec![event.clone()]
     }
@@ -291,6 +300,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         public_key: &TYPES::SignatureKey,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         upgrade_lock: &UpgradeLock<TYPES, V>,
+        _consensus: Arc<RwLock<Consensus<TYPES>>>,
     ) -> Vec<HotShotEvent<TYPES>> {
         if let HotShotEvent::QuorumVoteSend(vote) = event {
             let new_view = vote.view_number + self.view_increment;
@@ -323,6 +333,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
             membership,
             filter,
             storage: Arc::clone(&handle.storage()),
+            consensus: Arc::clone(&handle.consensus()),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),
         };
         let modified_network_state = NetworkEventTaskStateModifier {

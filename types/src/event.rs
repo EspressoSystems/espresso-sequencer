@@ -173,7 +173,7 @@ pub enum EventType<TYPES: NodeType> {
     /// A message destined for external listeners was received
     ExternalMessageReceived(Vec<u8>),
 }
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 /// A list of actions that we track for nodes
 pub enum HotShotAction {
     /// A quorum vote was sent

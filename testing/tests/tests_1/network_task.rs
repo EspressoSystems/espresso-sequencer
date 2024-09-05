@@ -17,8 +17,8 @@ use hotshot_task_impls::{
     network::{self, NetworkEventTaskState},
 };
 use hotshot_testing::{
-    test_builder::TestDescription, test_task::add_network_message_test_task,
-    view_generator::TestViewGenerator,
+    helpers::build_system_handle, test_builder::TestDescription,
+    test_task::add_network_message_test_task, view_generator::TestViewGenerator,
 };
 use hotshot_types::{
     data::ViewNumber,
@@ -28,7 +28,6 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
-
 // Test that the event task sends a message, and the message task receives it
 // and emits the proper event
 #[cfg(test)]
@@ -46,12 +45,15 @@ async fn test_network_task() {
         TestDescription::default_multiple_rounds();
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let node_id = 1;
-
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
+        .await
+        .0;
     let launcher = builder.gen_launcher(node_id);
 
     let network = (launcher.resource_generator.channel_generator)(node_id).await;
 
     let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
+    let consensus = handle.hotshot.consensus();
     let config = launcher.resource_generator.config.clone();
     let public_key = config.my_own_validator_config.public_key;
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
@@ -70,6 +72,7 @@ async fn test_network_task() {
             filter: network::quorum_filter,
             upgrade_lock: upgrade_lock.clone(),
             storage,
+            consensus,
         };
     let (tx, rx) = async_broadcast::broadcast(10);
     let mut task_reg = ConsensusTaskRegistry::new();
@@ -120,11 +123,14 @@ async fn test_network_storage_fail() {
     let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
         TestDescription::default_multiple_rounds();
     let node_id = 1;
-
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
+        .await
+        .0;
     let launcher = builder.gen_launcher(node_id);
 
     let network = (launcher.resource_generator.channel_generator)(node_id).await;
 
+    let consensus = handle.hotshot.consensus();
     let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
     storage.write().await.should_return_err = true;
     let config = launcher.resource_generator.config.clone();
@@ -146,6 +152,7 @@ async fn test_network_storage_fail() {
             filter: network::quorum_filter,
             upgrade_lock: upgrade_lock.clone(),
             storage,
+            consensus,
         };
     let (tx, rx) = async_broadcast::broadcast(10);
     let mut task_reg = ConsensusTaskRegistry::new();

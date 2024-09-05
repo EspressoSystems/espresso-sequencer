@@ -23,6 +23,7 @@ pub use crate::utils::{View, ViewInner};
 use crate::{
     data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
     error::HotShotError,
+    event::HotShotAction,
     message::Proposal,
     simple_certificate::{DaCertificate, QuorumCertificate},
     traits::{
@@ -230,6 +231,41 @@ impl<'a, TYPES: NodeType> Drop for ConsensusUpgradableReadLockGuard<'a, TYPES> {
     }
 }
 
+/// A bundle of views that we have most recently performed some action
+#[derive(Debug, Clone, Copy)]
+struct HotShotActionViews<T: ConsensusTime> {
+    /// View we last proposed in to the Quorum
+    proposed: T,
+    /// View we last voted in for a QuorumProposal
+    voted: T,
+    /// View we last proposed to the DA committee
+    da_proposed: T,
+    /// View we lasted voted for DA proposal
+    da_vote: T,
+}
+
+impl<T: ConsensusTime> Default for HotShotActionViews<T> {
+    fn default() -> Self {
+        let genesis = T::genesis();
+        Self {
+            proposed: genesis,
+            voted: genesis,
+            da_proposed: genesis,
+            da_vote: genesis,
+        }
+    }
+}
+impl<T: ConsensusTime> HotShotActionViews<T> {
+    /// Create HotShotActionViews from a view number
+    fn from_view(view: T) -> Self {
+        Self {
+            proposed: view,
+            voted: view,
+            da_proposed: view,
+            da_vote: view,
+        }
+    }
+}
 /// A reference to the consensus algorithm
 ///
 /// This will contain the state of all rounds.
@@ -262,6 +298,11 @@ pub struct Consensus<TYPES: NodeType> {
     /// - contains undecided leaves
     /// - includes the MOST RECENT decided leaf
     saved_leaves: CommitmentMap<Leaf<TYPES>>,
+
+    /// Bundle of views which we performed the most recent action
+    /// visibible to the network.  Actions are votes and proposals
+    /// for DA and Quorum
+    last_actions: HotShotActionViews<TYPES::Time>,
 
     /// Saved payloads.
     ///
@@ -350,6 +391,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         cur_view: TYPES::Time,
         locked_view: TYPES::Time,
         last_decided_view: TYPES::Time,
+        last_actioned_view: TYPES::Time,
         last_proposals: BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
         saved_leaves: CommitmentMap<Leaf<TYPES>>,
         saved_payloads: BTreeMap<TYPES::Time, Arc<[u8]>>,
@@ -363,6 +405,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             cur_view,
             last_decided_view,
             last_proposals,
+            last_actions: HotShotActionViews::from_view(last_actioned_view),
             locked_view,
             saved_leaves,
             saved_payloads,
@@ -433,11 +476,43 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         Ok(())
     }
 
+    /// Update the last actioned view internally for votes and proposals
+    ///
+    /// Returns true if the action is for a newer view than the last action of that type
+    pub fn update_action(&mut self, action: HotShotAction, view: TYPES::Time) -> bool {
+        let old_view = match action {
+            HotShotAction::Vote => &mut self.last_actions.voted,
+            HotShotAction::Propose => &mut self.last_actions.proposed,
+            HotShotAction::DaPropose => &mut self.last_actions.da_proposed,
+            HotShotAction::DaVote => {
+                if view > self.last_actions.da_vote {
+                    self.last_actions.da_vote = view;
+                }
+                // TODO Add logic to prevent double voting.  For now the simple check if
+                // the last voted view is less than the view we are trying to vote doesn't work
+                // becuase the leader of view n + 1 may propose to the DA (and we would vote)
+                // before the leader of view n.
+                return true;
+            }
+            _ => return true,
+        };
+        if view > *old_view {
+            *old_view = view;
+            return true;
+        }
+        false
+    }
+
+    /// reset last actions to genesis so we can resend events in tests
+    pub fn reset_actions(&mut self) {
+        self.last_actions = HotShotActionViews::default();
+    }
+
     /// Update the last proposal.
     ///
     /// # Errors
     /// Can return an error when the new view_number is not higher than the existing proposed view number.
-    pub fn update_last_proposed_view(
+    pub fn update_proposed_view(
         &mut self,
         proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
     ) -> Result<()> {

@@ -15,9 +15,13 @@ use async_trait::async_trait;
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, Leaf, QuorumProposal, VidDisperseShare},
+    event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
-    traits::{node_implementation::NodeType, storage::Storage},
+    traits::{
+        node_implementation::{ConsensusTime, NodeType},
+        storage::Storage,
+    },
     utils::View,
     vote::HasViewNumber,
 };
@@ -35,6 +39,7 @@ pub struct TestStorageState<TYPES: NodeType> {
     das: HashMap<TYPES::Time, Proposal<TYPES, DaProposal<TYPES>>>,
     proposals: BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
     high_qc: Option<hotshot_types::simple_certificate::QuorumCertificate<TYPES>>,
+    action: TYPES::Time,
 }
 
 impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
@@ -44,6 +49,7 @@ impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
             das: HashMap::new(),
             proposals: BTreeMap::new(),
             high_qc: None,
+            action: TYPES::Time::genesis(),
         }
     }
 }
@@ -84,6 +90,9 @@ impl<TYPES: NodeType> TestStorage<TYPES> {
     }
     pub async fn high_qc_cloned(&self) -> Option<QuorumCertificate<TYPES>> {
         self.inner.read().await.high_qc.clone()
+    }
+    pub async fn last_actioned_view(&self) -> TYPES::Time {
+        self.inner.read().await.action
     }
 }
 
@@ -131,11 +140,15 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
 
     async fn record_action(
         &self,
-        _view: <TYPES as NodeType>::Time,
-        _action: hotshot_types::event::HotShotAction,
+        view: <TYPES as NodeType>::Time,
+        action: hotshot_types::event::HotShotAction,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append Action to storage");
+        }
+        let mut inner = self.inner.write().await;
+        if view > inner.action && matches!(action, HotShotAction::Vote | HotShotAction::Propose) {
+            inner.action = view;
         }
         Self::run_delay_settings_from_config(&self.delay_config).await;
         Ok(())

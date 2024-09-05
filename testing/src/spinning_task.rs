@@ -20,6 +20,7 @@ use hotshot_example_types::{
     storage_types::TestStorage,
     testable_delay::DelayConfig,
 };
+use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
     data::Leaf,
     event::Event,
@@ -134,7 +135,8 @@ where
                                             self.last_decided_leaf.clone(),
                                             TestInstanceState::new(self.async_delay_config.clone()),
                                             None,
-                                            view_number,
+                                            TYPES::Time::genesis(),
+                                            TYPES::Time::genesis(),
                                             BTreeMap::new(),
                                             self.high_qc.clone(),
                                             Vec::new(),
@@ -212,6 +214,7 @@ where
                                     TestInstanceState::new(self.async_delay_config.clone()),
                                     None,
                                     view_number,
+                                    read_storage.last_actioned_view().await,
                                     read_storage.proposals_cloned().await,
                                     read_storage.high_qc_cloned().await.unwrap_or(
                                         QuorumCertificate::genesis(

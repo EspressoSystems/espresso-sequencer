@@ -306,9 +306,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             validated_state_map,
             anchored_leaf.view_number(),
             anchored_leaf.view_number(),
-            // TODO this is incorrect
-            // https://github.com/EspressoSystems/HotShot/issues/560
             anchored_leaf.view_number(),
+            initializer.actioned_view,
             initializer.saved_proposals,
             saved_leaves,
             saved_payloads,
@@ -951,8 +950,11 @@ pub struct HotShotInitializer<TYPES: NodeType> {
     /// If it's given, we'll use it to construct the `SystemContext`.
     state_delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
 
-    /// Starting view number that we are confident won't lead to a double vote after restart.
+    /// Starting view number that should be equivelant to the view the node shut down with last.
     start_view: TYPES::Time,
+    /// The view we last performed an action in.  An action is Proposing or voting for
+    /// Either the quorum or DA.
+    actioned_view: TYPES::Time,
     /// Highest QC that was seen, for genesis it's the genesis QC.  It should be for a view greater
     /// than `inner`s view number for the non genesis case because we must have seen higher QCs
     /// to decide on the leaf.
@@ -981,6 +983,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             validated_state: Some(Arc::new(validated_state)),
             state_delta: Some(Arc::new(state_delta)),
             start_view: TYPES::Time::new(0),
+            actioned_view: TYPES::Time::new(0),
             saved_proposals: BTreeMap::new(),
             high_qc,
             undecided_leafs: Vec::new(),
@@ -1002,6 +1005,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         instance_state: TYPES::InstanceState,
         validated_state: Option<Arc<TYPES::ValidatedState>>,
         start_view: TYPES::Time,
+        actioned_view: TYPES::Time,
         saved_proposals: BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
         high_qc: QuorumCertificate<TYPES>,
         undecided_leafs: Vec<Leaf<TYPES>>,
@@ -1013,6 +1017,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             validated_state,
             state_delta: None,
             start_view,
+            actioned_view,
             saved_proposals,
             high_qc,
             undecided_leafs,
