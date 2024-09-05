@@ -17,7 +17,7 @@ contract LightClientUpgradeSameContractTest is Test {
     UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
 
     LCV1.LightClientState public stateV1;
-    LCV1.StakeState public stakeStateV1;
+    LCV1.StakeTableState public stakeStateV1;
 
     address public admin;
     address public proxy;

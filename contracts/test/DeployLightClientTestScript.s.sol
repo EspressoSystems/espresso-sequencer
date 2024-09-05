@@ -20,8 +20,8 @@ contract DeployLightClientTestScript is Script {
         cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,, LC.StakeState memory stakeState) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeState));
+        (LC.LightClientState memory state,,, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
 
         return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
     }
@@ -53,7 +53,7 @@ contract DeployLightClientTestScript is Script {
 
     //     bytes memory result = vm.ffi(cmds);
     //     LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
-    //     LC.StakeState memory stakeState = LC.StakeState(
+    //     LC.StakeTableState memory stakeState = LC.StakeTableState(
     //         state.threshold,
     //         state.stakeTableBlsKeyComm,
     //         state.stakeTableSchnorrKeyComm,
@@ -69,7 +69,7 @@ contract DeployLightClientTestScript is Script {
     /// @return the light client state
     function deployContract(
         LC.LightClientState memory state,
-        LC.StakeState memory stakeState,
+        LC.StakeTableState memory stakeState,
         uint32 stateHistoryRetentionPeriod,
         address owner
     ) public returns (address payable proxyAddress, address admin, LC.LightClientState memory) {

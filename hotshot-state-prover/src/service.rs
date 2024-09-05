@@ -23,7 +23,7 @@ use ethers::{
 use futures::FutureExt;
 use hotshot_contract_adapter::{
     jellyfish::{field_to_u256, u256_to_field, ParsedPlonkProof},
-    light_client::{ParsedLightClientState, ParsedStakeState},
+    light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
 use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
 use hotshot_types::{

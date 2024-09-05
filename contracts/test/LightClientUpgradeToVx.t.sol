@@ -24,7 +24,7 @@ contract LightClientUpgradeToVxTest is Test {
     ULCV3 public upgraderV3 = new ULCV3();
 
     LCV1.LightClientState public stateV1;
-    LCV1.StakeState public stakeStateV1;
+    LCV1.StakeTableState public stakeStateV1;
 
     address public admin;
     address public proxy;

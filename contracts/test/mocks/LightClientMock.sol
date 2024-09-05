@@ -15,10 +15,10 @@ contract LightClientMock is LC {
 
     constructor(
         LC.LightClientState memory genesis,
-        LC.StakeState memory genesisStakeState,
+        LC.StakeTableState memory genesisStakeTableState,
         uint32 maxHistorySeconds
     ) LC() {
-        _initializeState(genesis, genesisStakeState, maxHistorySeconds);
+        _initializeState(genesis, genesisStakeTableState, maxHistorySeconds);
     }
 
     /// @dev Directly mutate finalizedState variable for test

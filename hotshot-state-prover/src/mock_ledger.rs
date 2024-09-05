@@ -16,13 +16,13 @@ use ethers::{
 };
 use hotshot_contract_adapter::{
     jellyfish::{field_to_u256, open_key, u256_to_field /* , u256_to_field*/},
-    light_client::{ParsedLightClientState, ParsedStakeState},
+    light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::{
     light_client::{
-        GenericLightClientState, GenericPublicInput, GenericStakeState, LightClientState,
-        StakeState,
+        GenericLightClientState, GenericPublicInput, GenericStakeTableState, LightClientState,
+        StakeTableState,
     },
     traits::stake_table::{SnapshotVersion, StakeTableScheme},
 };
@@ -79,7 +79,7 @@ pub struct MockLedger {
     pub rng: StdRng,
     epoch: u64,
     state: GenericLightClientState<F>,
-    // stake_state: GenericStakeState<F>,
+    stake_table_state: GenericStakeTableState<F>,
     pub(crate) st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
     threshold: U256, // quorum threshold for SnapShot::LastEpochStart
     pub(crate) qc_keys: Vec<BLSVerKey>,
@@ -98,29 +98,25 @@ impl MockLedger {
             key_archive.insert(qc_keys[i], state_keys[i].0.clone());
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
-        // let (bls_key_comm, schnorr_key_comm, amount_comm) =
-        //     st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-
+        let (bls_key_comm, schnorr_key_comm, amount_comm) =
+            st.commitment(SnapshotVersion::LastEpochStart).unwrap();
         let threshold =
             one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
 
-        // let stake_state = StakeState {
-        //     threshold: u256_to_field(threshold),
-        //     stake_table_bls_key_comm: bls_key_comm,
-        //     stake_table_schnorr_key_comm: schnorr_key_comm,
-        //     stake_table_amount_comm: amount_comm,
-        // };
+        let stake_table_state = StakeTableState {
+            threshold: u256_to_field(threshold),
+            bls_key_comm,
+            schnorr_key_comm,
+            amount_comm,
+        };
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
-        // let fee_ledger_comm: ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4> = F::from(5678);
 
         let genesis = LightClientState {
             view_number: 0,
             block_height: 0,
             block_comm_root,
-            // fee_ledger_comm,
-            // stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
 
         Self {
@@ -128,7 +124,7 @@ impl MockLedger {
             rng,
             epoch: 0,
             state: genesis,
-            // stake_state,
+            stake_table_state,
             st,
             threshold,
             qc_keys,
@@ -394,7 +390,7 @@ impl MockLedger {
     }
 
     /// Returns the (bytes32 votingStakeTableComm, bytes32 frozenStakeTableComm) used in contract
-    pub fn get_stake_table_comms(&self) -> (H256, H256, ParsedStakeState) {
+    pub fn get_stake_table_comms(&self) -> (H256, H256, ParsedStakeTableState) {
         let (bls_key_comm, schnorr_key_comm, amount_comm) =
             self.st.commitment(SnapshotVersion::EpochStart).unwrap();
         let frozen_st_comm = utils::keccak256(

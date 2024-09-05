@@ -18,7 +18,7 @@ import { BN254 } from "bn254/BN254.sol";
 contract LightClientCommonTest is Test {
     LCMock public lc;
     LC.LightClientState public genesis;
-    LC.StakeState public genesisStakeState;
+    LC.StakeTableState public genesisStakeTableState;
     uint32 public constant DELAY_THRESHOLD = 6;
     uint32 public constant MAX_HISTORY_SECONDS = 1 days;
     uint32 public initialBlockTimestamp = 1 days;
@@ -31,7 +31,7 @@ contract LightClientCommonTest is Test {
 
     function deployAndInitProxy(
         LC.LightClientState memory state,
-        LC.StakeState memory stakeState,
+        LC.StakeTableState memory stakeState,
         uint32 stateHistoryRetentionPeriod
     ) public returns (address payable, address) {
         vm.warp(1 days);
@@ -62,17 +62,17 @@ contract LightClientCommonTest is Test {
             LC.LightClientState memory state,
             bytes32 votingSTComm,
             bytes32 frozenSTComm,
-            LC.StakeState memory stakeState
-        ) = abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeState));
+            LC.StakeTableState memory stakeState
+        ) = abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
         genesis = state;
-        genesisStakeState = stakeState;
+        genesisStakeTableState = stakeState;
 
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeState, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
 
-        bytes32 expectedStakeTableComm = lc.computeStakeTableComm(genesisStakeState);
+        bytes32 expectedStakeTableComm = lc.computeStakeTableComm(genesisStakeTableState);
         assertEq(votingSTComm, expectedStakeTableComm);
         assertEq(frozenSTComm, expectedStakeTableComm);
-        // assertEq(genesisStakeState, lc.genesisStakeState());
+        // assertEq(genesisStakeTableState, lc.genesisStakeTableState());
     }
 
     function assertEq(BN254.ScalarField a, BN254.ScalarField b) public pure {
@@ -93,66 +93,66 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         assertEq(blockHeight, genesis.blockHeight);
         assertEq(abi.encode(blockCommRoot), abi.encode(genesis.blockCommRoot));
 
-        bytes32 stakeTableComm = lc.computeStakeTableComm(genesisStakeState);
+        bytes32 stakeTableComm = lc.computeStakeTableComm(genesisStakeTableState);
         assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
         assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lc.votingThreshold(), genesisStakeState.threshold);
-        assertEq(lc.frozenThreshold(), genesisStakeState.threshold);
+        assertEq(lc.votingThreshold(), genesisStakeTableState.threshold);
+        assertEq(lc.frozenThreshold(), genesisStakeTableState.threshold);
     }
 
     // @dev helper function to be able to initialize the contract and capture the revert error
     function initWithExpectRevert(
         LC.LightClientState memory _genesis,
-        LC.StakeState memory _genesisStakeState,
+        LC.StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod
     ) private {
         vm.expectRevert(LC.InvalidArgs.selector);
 
-        lc = new LCMock(_genesis, _genesisStakeState, _stateHistoryRetentionPeriod);
+        lc = new LCMock(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
     }
 
     function test_RevertWhen_InvalidGenesis() external {
         LC.LightClientState memory badGenesis = genesis;
-        LC.StakeState memory badGenesisStakeState = genesisStakeState;
+        LC.StakeTableState memory badGenesisStakeTableState = genesisStakeTableState;
 
         // wrong viewNum would revert
         badGenesis.viewNum = 1;
-        initWithExpectRevert(badGenesis, badGenesisStakeState, MAX_HISTORY_SECONDS);
+        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
         badGenesis.viewNum = genesis.viewNum; // revert to correct
 
         // wrong blockHeight would revert
         badGenesis.blockHeight = 1;
-        initWithExpectRevert(badGenesis, badGenesisStakeState, MAX_HISTORY_SECONDS);
+        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
-        badGenesisStakeState.stakeTableBlsKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, badGenesisStakeState, MAX_HISTORY_SECONDS);
+        badGenesisStakeTableState.blsKeyComm = BN254.ScalarField.wrap(0);
+        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
 
-        badGenesisStakeState.stakeTableBlsKeyComm = badGenesisStakeState.stakeTableBlsKeyComm; // revert
+        badGenesisStakeTableState.blsKeyComm = badGenesisStakeTableState.blsKeyComm; // revert
             // to correct
-        badGenesisStakeState.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, badGenesisStakeState, MAX_HISTORY_SECONDS);
+        badGenesisStakeTableState.schnorrKeyComm = BN254.ScalarField.wrap(0);
+        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
 
-        badGenesisStakeState.stakeTableSchnorrKeyComm =
-            badGenesisStakeState.stakeTableSchnorrKeyComm; // revert to correct
-        badGenesisStakeState.stakeTableAmountComm = BN254.ScalarField.wrap(0);
+        badGenesisStakeTableState.schnorrKeyComm =
+            badGenesisStakeTableState.schnorrKeyComm; // revert to correct
+        badGenesisStakeTableState.amountComm = BN254.ScalarField.wrap(0);
 
-        initWithExpectRevert(badGenesis, badGenesisStakeState, MAX_HISTORY_SECONDS);
-        badGenesisStakeState.stakeTableAmountComm = badGenesisStakeState.stakeTableAmountComm; // revert
+        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
+        badGenesisStakeTableState.amountComm = badGenesisStakeTableState.amountComm; // revert
             // to correct
 
         // zero-valued threshold would revert
-        badGenesisStakeState.threshold = 0;
-        initWithExpectRevert(badGenesis, badGenesisStakeState, MAX_HISTORY_SECONDS);
-        badGenesisStakeState.threshold = badGenesisStakeState.threshold; // revert to correct
+        badGenesisStakeTableState.threshold = 0;
+        initWithExpectRevert(badGenesis, badGenesisStakeTableState, MAX_HISTORY_SECONDS);
+        badGenesisStakeTableState.threshold = badGenesisStakeTableState.threshold; // revert to correct
     }
 }
 
 contract LightClient_permissionedProver_Test is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
-    LC.StakeState internal newStakeState;
+    LC.StakeTableState internal newStakeTableState;
 
     function setUp() public {
         init();
@@ -168,12 +168,12 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         (
             LC.LightClientState[] memory states,
             V.PlonkProof[] memory proofs,
-            LC.StakeState[] memory stakeStates
-        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            LC.StakeTableState[] memory stakeStates
+        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         newState = states[0];
         newProof = proofs[0];
-        newStakeState = stakeStates[0];
+        newStakeTableState = stakeStates[0];
     }
 
     function test_NoProverPermissionsRequired() external {
@@ -317,7 +317,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[0].viewNum, states[0].blockHeight, states[0].blockCommRoot);
@@ -348,9 +348,9 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState memory state,,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeState));
+            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
         genesis = state;
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeState, MAX_HISTORY_SECONDS);
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
 
         genesis = state;
 
@@ -366,8 +366,8 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (
             LC.LightClientState[] memory states,
             V.PlonkProof[] memory proofs,
-            LC.StakeState[] memory stakeStates
-        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            LC.StakeTableState[] memory stakeStates
+        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         uint256 statesLen = states.length;
         uint64 viewNum;
@@ -400,7 +400,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, 3));
 
         // re-assign LightClient with the same genesis
-        deployAndInitProxy(genesis, genesisStakeState, MAX_HISTORY_SECONDS);
+        deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
 
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
@@ -416,11 +416,11 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         vm.prank(permissionedProver);
         lc.newFinalizedState(state, proof);
 
-        bytes32 stakeTableComm = lc.computeStakeTableComm(genesisStakeState);
+        bytes32 stakeTableComm = lc.computeStakeTableComm(genesisStakeTableState);
         assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
         assertEq(lc.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lc.votingThreshold(), genesisStakeState.threshold);
-        assertEq(lc.frozenThreshold(), genesisStakeState.threshold);
+        assertEq(lc.votingThreshold(), genesisStakeTableState.threshold);
+        assertEq(lc.frozenThreshold(), genesisStakeTableState.threshold);
     }
 
     /// @dev Test unhappy path when a valid but oudated finalized state is submitted
@@ -553,7 +553,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 contract LightClient_StateUpdatesTest is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
-    LC.StakeState internal newStakeState;
+    LC.StakeTableState internal newStakeTableState;
 
     function assertInitialStateHistoryConditions() internal view {
         // assert that stateHistoryFirstIndex starts at 0.
@@ -596,12 +596,12 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         (
             LC.LightClientState[] memory states,
             V.PlonkProof[] memory proofs,
-            LC.StakeState[] memory stakeStates
-        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            LC.StakeTableState[] memory stakeStates
+        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         newState = states[1];
         newProof = proofs[1];
-        newStakeState = stakeStates[1];
+        newStakeTableState = stakeStates[1];
     }
 
     function test_1lBlockUpdatesIsUpdated() public {
@@ -655,7 +655,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         // Add one numDays worth of a new state
         uint256 i;
@@ -725,7 +725,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         assertInitialStateHistoryConditions();
 
@@ -1176,7 +1176,7 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         newState = _states[1];
         newProof = _proofs[1];
@@ -1214,7 +1214,7 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         uint256 statesCount = _states.length - 1;
         // Update the state and thus the l1BlockUpdates array would be updated
