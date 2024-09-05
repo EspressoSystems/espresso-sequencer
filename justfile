@@ -71,7 +71,7 @@ dev-commitment:
      --deploy
 
 build-docker-images:
-    scripts/build-docker-images
+    scripts/build-docker-images-native
 
 # generate rust bindings for contracts
 REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$"
