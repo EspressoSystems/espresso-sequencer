@@ -132,7 +132,7 @@ fn main() {
 
             let log_size = cli.args[0].parse::<u32>().unwrap();
             let zeta = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
-            let pi_u256: [U256; 4] = AbiDecode::decode_hex(&cli.args[2]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
@@ -264,7 +264,7 @@ fn main() {
             }
 
             let vk = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: [U256; 4] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
             let msg = {
@@ -302,8 +302,8 @@ fn main() {
             .is_ok());
 
             let vk_parsed: ParsedVerifyingKey = vk.into();
-            let mut pi_parsed = [U256::default(); 4];
-            assert_eq!(public_input.len(), 4);
+            let mut pi_parsed = [U256::default(); 8];
+            assert_eq!(public_input.len(), 8);
             for (i, pi) in public_input.into_iter().enumerate() {
                 pi_parsed[i] = field_to_u256(pi);
             }

@@ -192,7 +192,7 @@ library PlonkVerifier2 {
 
     function _computeChallenges(
         IPlonkVerifier.VerifyingKey memory vk,
-        uint256[4] memory pi,
+        uint256[8] memory pi,
         IPlonkVerifier.PlonkProof memory proof
     ) internal pure returns (Challenges memory res) {
         assembly {
@@ -293,29 +293,33 @@ library PlonkVerifier2 {
             mstore(add(dataPtr, 0x5a0), mload(add(pi, 0x20))) // PI[1]
             mstore(add(dataPtr, 0x5c0), mload(add(pi, 0x40))) // PI[2]
             mstore(add(dataPtr, 0x5e0), mload(add(pi, 0x60))) // PI[3]
+            mstore(add(dataPtr, 0x600), mload(add(pi, 0x80))) // PI[4]
+            mstore(add(dataPtr, 0x620), mload(add(pi, 0xa0))) // PI[5]
+            mstore(add(dataPtr, 0x640), mload(add(pi, 0xc0))) // PI[6]
+            mstore(add(dataPtr, 0x660), mload(add(pi, 0xe0))) // PI[7]
 
             // proof
             let wire0Ptr := mload(proof)
-            mstore(add(dataPtr, 0x600), mload(wire0Ptr)) // wire0.x
-            mstore(add(dataPtr, 0x620), mload(add(wire0Ptr, 0x20))) // wire0.y
+            mstore(add(dataPtr, 0x680), mload(wire0Ptr)) // wire0.x
+            mstore(add(dataPtr, 0x6a0), mload(add(wire0Ptr, 0x20))) // wire0.y
             let wire1Ptr := mload(add(proof, 0x20))
-            mstore(add(dataPtr, 0x640), mload(wire1Ptr)) // wire1.x
-            mstore(add(dataPtr, 0x660), mload(add(wire1Ptr, 0x20))) // wire1.y
+            mstore(add(dataPtr, 0x6c0), mload(wire1Ptr)) // wire1.x
+            mstore(add(dataPtr, 0x6e0), mload(add(wire1Ptr, 0x20))) // wire1.y
             let wire2Ptr := mload(add(proof, 0x40))
-            mstore(add(dataPtr, 0x680), mload(wire2Ptr)) // wire2.x
-            mstore(add(dataPtr, 0x6a0), mload(add(wire2Ptr, 0x20))) // wire2.y
+            mstore(add(dataPtr, 0x700), mload(wire2Ptr)) // wire2.x
+            mstore(add(dataPtr, 0x720), mload(add(wire2Ptr, 0x20))) // wire2.y
             let wire3Ptr := mload(add(proof, 0x60))
-            mstore(add(dataPtr, 0x6c0), mload(wire3Ptr)) // wire3.x
-            mstore(add(dataPtr, 0x6e0), mload(add(wire3Ptr, 0x20))) // wire3.y
+            mstore(add(dataPtr, 0x740), mload(wire3Ptr)) // wire3.x
+            mstore(add(dataPtr, 0x760), mload(add(wire3Ptr, 0x20))) // wire3.y
             let wire4Ptr := mload(add(proof, 0x80))
-            mstore(add(dataPtr, 0x700), mload(wire4Ptr)) // wire4.x
-            mstore(add(dataPtr, 0x720), mload(add(wire4Ptr, 0x20))) // wire4.y
+            mstore(add(dataPtr, 0x780), mload(wire4Ptr)) // wire4.x
+            mstore(add(dataPtr, 0x7a0), mload(add(wire4Ptr, 0x20))) // wire4.y
 
             // challenge: beta
             {
                 mstore(statePtr, 0x0) // init state
-                // preimage len: state(0x20) + transcript(0x740)
-                mstore(add(dataPtr, 0x7c0), keccak256(statePtr, 0x760))
+                // preimage len: state(0x20) + transcript(0x7c0)
+                mstore(add(dataPtr, 0x7c0), keccak256(statePtr, 0x7e0))
                 // update new state (by updating state pointer)
                 statePtr := add(dataPtr, 0x7c0)
                 // empty transcript
@@ -428,7 +432,7 @@ library PlonkVerifier2 {
 
     function verify(
         IPlonkVerifier.VerifyingKey memory vk,
-        uint256[4] memory publicInput,
+        uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
     ) external view returns (bool success) {
         _validateProof(proof);
@@ -437,6 +441,10 @@ library PlonkVerifier2 {
         BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[1]));
         BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[2]));
         BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[3]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[4]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[5]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[6]));
+        BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[7]));
 
         Challenges memory chal = _computeChallenges(vk, publicInput, proof);
         Poly.EvalDomain memory domain = Poly.newEvalDomain(vk.domainSize);
