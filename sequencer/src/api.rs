@@ -386,8 +386,7 @@ pub mod test_helpers {
     use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::light_client::{ParsedLightClientState, ParsedStakeState};
     use hotshot_types::{
-        event::LeafInfo,
-        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+        event::LeafInfo, light_client::LightClientState, traits::{metrics::NoMetrics, node_implementation::ConsensusTime}
     };
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
@@ -627,15 +626,16 @@ pub mod test_helpers {
             }
         }
 
-        pub fn light_client_genesis(&self) -> ParsedLightClientState {
+        // FIXME: update this logic
+        pub fn light_client_genesis(&self) -> LightClientState {
             let st = self.cfg.stake_table();
             light_client_genesis_from_stake_table(st).unwrap()
         }
 
-        pub fn light_client_genesis_stake(&self) -> ParsedStakeState {
-            let st = self.cfg.stake_table();
-            light_client_genesis_stake_from_stake_table(st).unwrap()
-        }
+        // pub fn light_client_genesis_stake(&self) -> ParsedStakeState {
+        //     let st = self.cfg.stake_table();
+        //     light_client_genesis_stake_from_stake_table(st).unwrap()
+        // }
 
         pub async fn stop_consensus(&mut self) {
             self.server.shutdown_consensus().await;

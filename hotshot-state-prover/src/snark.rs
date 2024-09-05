@@ -7,7 +7,9 @@ use ark_std::{
 use ethers::types::U256;
 /// BLS verification key, base field and Schnorr verification key
 pub use hotshot_stake_table::vec_based::config::QCVerKey;
-use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput, StateVerKey};
+use hotshot_types::light_client::{
+    CircuitField, LightClientState, PublicInput, StakeTableState, StateVerKey,
+};
 use jf_plonk::{
     errors::PlonkError,
     proof_system::{PlonkKzgSnark, UniversalSNARK},
@@ -40,9 +42,9 @@ pub fn preprocess(
 /// Given a proving key and
 /// - a list of stake table entries (`Vec<(BLSVerKey, Amount, SchnorrVerKey)>`)
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
-/// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
+/// - updated light client state (`(view_number, block_height, block_comm_root)`)
+/// - the static stake table state (containing 3 commitments to the 3 columns of the stake table and a threshold)
 /// - a bit vector indicates the signers
-/// - a quorum threshold
 ///
 /// Returns error or a pair `(proof, public_inputs)` asserting that
 /// - the signer's accumulated weight exceeds the quorum threshold
@@ -62,7 +64,7 @@ pub fn generate_state_update_proof<STIter, R, BitIter, SigIter>(
     signer_bit_vec: BitIter,
     signatures: SigIter,
     lightclient_state: &LightClientState,
-    threshold: &U256,
+    stake_table_state: &StakeTableState,
     stake_table_capacity: usize,
 ) -> Result<(Proof, PublicInput), PlonkError>
 where
@@ -90,7 +92,7 @@ where
         signer_bit_vec,
         signatures,
         lightclient_state,
-        threshold,
+        stake_table_state,
         stake_table_capacity,
     )?;
     let proof = PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(rng, &circuit, pk, None)?;
@@ -106,9 +108,8 @@ mod tests {
         rand::{CryptoRng, RngCore},
         One,
     };
-    use ethers::types::U256;
     use hotshot_types::{
-        light_client::GenericLightClientState,
+        light_client::LightClientState,
         traits::stake_table::{SnapshotVersion, StakeTableScheme},
     };
     use jf_crhf::CRHF;
@@ -127,7 +128,7 @@ mod tests {
     use super::{generate_state_update_proof, preprocess, CircuitField, UniversalSrs};
     use crate::{
         circuit::build_for_preprocessing,
-        test_utils::{key_pairs_for_testing, stake_table_for_testing},
+        test_utils::{genesis_stake_table_state, key_pairs_for_testing, stake_table_for_testing},
     };
 
     const ST_CAPACITY: usize = 20;
@@ -194,6 +195,7 @@ mod tests {
 
         let (bls_keys, schnorr_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(ST_CAPACITY, &bls_keys, &schnorr_keys);
+        let st_state = genesis_stake_table_state(&st);
 
         let stake_table_entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -206,18 +208,11 @@ mod tests {
             CircuitField::from(2u32),
         ])
         .unwrap()[0];
-        let _fee_ledger_comm = VariableLengthRescueCRHF::<CircuitField, 1>::evaluate(vec![
-            CircuitField::from(3u32),
-            CircuitField::from(5u32),
-        ])
-        .unwrap()[0];
 
-        let lightclient_state = GenericLightClientState {
+        let lightclient_state = LightClientState {
             view_number: 100,
             block_height: 73,
             block_comm_root,
-            // fee_ledger_comm,
-            // stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
         let state_msg: [CircuitField; 3] = lightclient_state.clone().into();
 
@@ -263,7 +258,7 @@ mod tests {
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &U256::from(26u32),
+            &st_state,
             ST_CAPACITY,
         );
         assert!(result.is_ok());
@@ -278,6 +273,8 @@ mod tests {
         .is_ok());
 
         // minimum bad path, other bad cases are checked inside `circuit.rs`
+        let mut bad_st_state = st_state.clone();
+        bad_st_state.threshold = CircuitField::from(100u32);
         let result = generate_state_update_proof::<_, _, _, _>(
             &mut prng,
             &pk,
@@ -285,7 +282,7 @@ mod tests {
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &U256::from(100u32),
+            &bad_st_state,
             ST_CAPACITY,
         );
         assert!(result.is_err());

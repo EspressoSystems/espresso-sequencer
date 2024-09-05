@@ -1,5 +1,6 @@
 //! Helpers and test mocks for Light Client logic
 
+use ark_ff::PrimeField;
 use ark_std::str::FromStr;
 use diff_test_bn254::{field_to_u256, u256_to_field};
 use ethers::{
@@ -9,7 +10,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput, StakeTableState};
+use hotshot_types::light_client::{GenericLightClientState, GenericStakeTableState, PublicInput};
 
 /// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
@@ -52,12 +53,22 @@ impl From<contract_bindings::light_client::LightClientState> for ParsedLightClie
     }
 }
 
-impl From<ParsedLightClientState> for LightClientState {
+impl<F: PrimeField> From<ParsedLightClientState> for GenericLightClientState<F> {
     fn from(v: ParsedLightClientState) -> Self {
         Self {
             view_number: v.view_num as usize,
             block_height: v.block_height as usize,
             block_comm_root: u256_to_field(v.block_comm_root),
+        }
+    }
+}
+
+impl From<PublicInput> for ParsedLightClientState {
+    fn from(pi: PublicInput) -> Self {
+        Self {
+            view_num: field_to_u256(pi.view_number()).as_u64(),
+            block_height: field_to_u256(pi.block_height()).as_u64(),
+            block_comm_root: field_to_u256(pi.block_comm_root()),
         }
     }
 }
@@ -104,7 +115,7 @@ impl ParsedStakeTableState {
     }
 }
 
-impl From<ParsedStakeTableState> for StakeTableState {
+impl<F: PrimeField> From<ParsedStakeTableState> for GenericStakeTableState<F> {
     fn from(s: ParsedStakeTableState) -> Self {
         Self {
             threshold: u256_to_field(s.threshold),
