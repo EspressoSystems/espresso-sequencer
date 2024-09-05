@@ -748,6 +748,11 @@
 <a href="#748" id="748">748</a>
 <a href="#749" id="749">749</a>
 <a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::{BTreeMap, HashMap},
     path::Path,
@@ -810,8 +815,13 @@
         <span class="kw">let </span>upgrades: Vec&lt;<span class="kw-2">&amp;</span>Upgrade&gt; = <span class="self">self</span>.upgrades.values().collect();
 
         <span class="kw">for </span>upgrade <span class="kw">in </span>upgrades {
-            <span class="kw">if let </span>UpgradeType::Fee { chain_config } = upgrade.upgrade_type {
-                base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+            <span class="kw">match </span>upgrade.upgrade_type {
+                UpgradeType::Fee { chain_config } =&gt; {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
+                UpgradeType::Marketplace { chain_config } =&gt; {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
             }
         }
 

@@ -166,6 +166,7 @@
 <a href="#166" id="166">166</a>
 <a href="#167" id="167">167</a>
 <a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 <span class="kw">use </span>builder::non_permissioned::{build_instance_state, BuilderConfig};
@@ -302,6 +303,7 @@
         build_instance_state::&lt;V&gt;(genesis.chain_config, l1_params, opt.state_peers).unwrap();
 
     <span class="kw">let </span>base_fee = genesis.max_base_fee();
+    <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>base_fee, <span class="string">"base_fee"</span>);
 
     <span class="kw">let </span>validated_state = ValidatedState::genesis(<span class="kw-2">&amp;</span>instance_state).<span class="number">0</span>;
 

@@ -291,13 +291,13 @@
     <span class="kw">while let </span><span class="prelude-val">Some</span>(event) = stream.next().<span class="kw">await </span>{
         <span class="kw">let </span>event = event<span class="question-mark">?</span>;
 
-        <span class="macro">tracing::info!</span>(<span class="string">"received event {:?}"</span>, event.event);
+        <span class="macro">tracing::debug!</span>(<span class="string">"received event {:?}"</span>, event.event);
 
         <span class="comment">// TODO ED: Remove this lint later
         </span><span class="attr">#[allow(clippy::single_match)]
         </span><span class="kw">match </span>event.event {
             hotshot::types::EventType::ViewFinished { view_number } =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"received view finished event {view_number:?}"</span>)
+                <span class="macro">tracing::debug!</span>(<span class="string">"received view finished event {view_number:?}"</span>)
             }
             <span class="kw">_ </span>=&gt; (),
         }
