@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -eE
 
+PATH="$PWD/target/release:$PATH"
+
 # Duplicate some debugging information to stdout in case the process exits
 trap 'error_handler "${LINENO}" "$BASH_COMMAND"' ERR INT
 error_handler() {
