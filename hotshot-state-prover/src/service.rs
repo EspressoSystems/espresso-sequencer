@@ -296,7 +296,7 @@ pub async fn read_contract_state(
     light_client_address: Address,
 ) -> Result<LightClientState, ProverError> {
     let contract = prepare_contract(provider, key, light_client_address).await?;
-    let state: ParsedLightClientState = match contract.get_finalized_state().call().await {
+    let state: ParsedLightClientState = match contract.finalized_state().call().await {
         Ok(s) => s.into(),
         Err(e) => {
             tracing::error!("unable to read finalized_state from contract: {}", e);
@@ -732,10 +732,10 @@ mod test {
                 .await?;
 
         // now test if we can read from the contract
-        let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
+        let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
         assert_eq!(genesis, dummy_genesis);
 
-        let stake_genesis: ParsedStakeState = contract.get_genesis_stake_state().await?.into();
+        let stake_genesis: ParsedStakeState = contract.genesis_stake_state().await?.into();
         assert_eq!(stake_genesis, dummy_stake_genesis);
 
         let mut config = StateProverConfig::default();
@@ -763,7 +763,7 @@ mod test {
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
 
-        let genesis_l1: ParsedLightClientState = contract.get_genesis_state().await?.into();
+        let genesis_l1: ParsedLightClientState = contract.genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
 
         let mut new_state = genesis.clone();
@@ -783,7 +783,7 @@ mod test {
         .await?;
         tracing::info!("Successfully submitted new finalized state to L1.");
         // test if new state is updated in l1
-        let finalized_l1: ParsedLightClientState = contract.get_finalized_state().await?.into();
+        let finalized_l1: ParsedLightClientState = contract.finalized_state().await?.into();
         assert_eq!(finalized_l1, new_state);
         Ok(())
     }

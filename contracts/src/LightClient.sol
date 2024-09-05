@@ -261,8 +261,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         if (
-            newState.viewNum <= getFinalizedState().viewNum
-                || newState.blockHeight <= getFinalizedState().blockHeight
+            newState.viewNum <= finalizedState.viewNum
+                || newState.blockHeight <= finalizedState.blockHeight
         ) {
             revert OutdatedState();
         }
@@ -278,21 +278,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         updateStateHistory(uint64(block.number), uint64(block.timestamp), newState);
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
-    }
-
-    /// @dev Simple getter function for the genesis state
-    function getGenesisState() public view virtual returns (LightClientState memory) {
-        return genesisState;
-    }
-
-    /// @dev Simple getter function for the genesis stake state
-    function getGenesisStakeState() public view virtual returns (StakeState memory) {
-        return genesisStakeState;
-    }
-
-    /// @dev Simple getter function for the finalized state
-    function getFinalizedState() public view virtual returns (LightClientState memory) {
-        return finalizedState;
     }
 
     /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK

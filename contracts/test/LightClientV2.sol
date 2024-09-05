@@ -56,8 +56,8 @@ contract LightClientV2 is LightClient {
         IPlonkVerifier.PlonkProof memory proof
     ) external virtual override {
         if (
-            newState.viewNum <= getFinalizedState().viewNum
-                || newState.blockHeight <= getFinalizedState().blockHeight
+            newState.viewNum <= finalizedState.viewNum
+                || newState.blockHeight <= finalizedState.blockHeight
         ) {
             revert OutdatedState();
         }

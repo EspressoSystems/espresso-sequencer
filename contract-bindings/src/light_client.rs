@@ -207,71 +207,6 @@ pub mod light_client {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("getFinalizedState"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("getFinalizedState"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                            ],),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned(
-                                    "struct LightClient.LightClientState",
-                                ),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("getGenesisStakeState"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("getGenesisStakeState",),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                            ],),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("struct LightClient.StakeState",),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("getGenesisState"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("getGenesisState"),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                            ],),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned(
-                                    "struct LightClient.LightClientState",
-                                ),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("getHotShotCommitment"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("getHotShotCommitment",),
@@ -1174,30 +1109,6 @@ pub mod light_client {
         {
             self.0
                 .method_hash([210, 77, 147, 61], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `getFinalizedState` (0x82d07ff3) function
-        pub fn get_finalized_state(
-            &self,
-        ) -> ::ethers::contract::builders::ContractCall<M, LightClientState> {
-            self.0
-                .method_hash([130, 208, 127, 243], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `getGenesisStakeState` (0x0c693a22) function
-        pub fn get_genesis_stake_state(
-            &self,
-        ) -> ::ethers::contract::builders::ContractCall<M, StakeState> {
-            self.0
-                .method_hash([12, 105, 58, 34], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `getGenesisState` (0x4847ae5d) function
-        pub fn get_genesis_state(
-            &self,
-        ) -> ::ethers::contract::builders::ContractCall<M, LightClientState> {
-            self.0
-                .method_hash([72, 71, 174, 93], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `getHotShotCommitment` (0x8584d23f) function
@@ -2541,51 +2452,6 @@ pub mod light_client {
     )]
     #[ethcall(name = "genesisState", abi = "genesisState()")]
     pub struct GenesisStateCall;
-    ///Container type for all input parameters for the `getFinalizedState` function with signature `getFinalizedState()` and selector `0x82d07ff3`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "getFinalizedState", abi = "getFinalizedState()")]
-    pub struct GetFinalizedStateCall;
-    ///Container type for all input parameters for the `getGenesisStakeState` function with signature `getGenesisStakeState()` and selector `0x0c693a22`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "getGenesisStakeState", abi = "getGenesisStakeState()")]
-    pub struct GetGenesisStakeStateCall;
-    ///Container type for all input parameters for the `getGenesisState` function with signature `getGenesisState()` and selector `0x4847ae5d`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "getGenesisState", abi = "getGenesisState()")]
-    pub struct GetGenesisStateCall;
     ///Container type for all input parameters for the `getHotShotCommitment` function with signature `getHotShotCommitment(uint256)` and selector `0x8584d23f`
     #[derive(
         Clone,
@@ -2938,9 +2804,6 @@ pub mod light_client {
         FrozenThreshold(FrozenThresholdCall),
         GenesisStakeState(GenesisStakeStateCall),
         GenesisState(GenesisStateCall),
-        GetFinalizedState(GetFinalizedStateCall),
-        GetGenesisStakeState(GetGenesisStakeStateCall),
-        GetGenesisState(GetGenesisStateCall),
         GetHotShotCommitment(GetHotShotCommitmentCall),
         GetStateHistoryCount(GetStateHistoryCountCall),
         GetVersion(GetVersionCall),
@@ -3005,21 +2868,6 @@ pub mod light_client {
             if let Ok(decoded) = <GenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::GenesisState(decoded));
-            }
-            if let Ok(decoded) =
-                <GetFinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::GetFinalizedState(decoded));
-            }
-            if let Ok(decoded) =
-                <GetGenesisStakeStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::GetGenesisStakeState(decoded));
-            }
-            if let Ok(decoded) =
-                <GetGenesisStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::GetGenesisState(decoded));
             }
             if let Ok(decoded) =
                 <GetHotShotCommitmentCall as ::ethers::core::abi::AbiDecode>::decode(data)
@@ -3136,11 +2984,6 @@ pub mod light_client {
                 Self::FrozenThreshold(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GenesisStakeState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::GetFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::GetGenesisStakeState(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::GetGenesisState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::GetHotShotCommitment(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -3199,9 +3042,6 @@ pub mod light_client {
                 Self::FrozenThreshold(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisStakeState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GenesisState(element) => ::core::fmt::Display::fmt(element, f),
-                Self::GetFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
-                Self::GetGenesisStakeState(element) => ::core::fmt::Display::fmt(element, f),
-                Self::GetGenesisState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetHotShotCommitment(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetStateHistoryCount(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetVersion(element) => ::core::fmt::Display::fmt(element, f),
@@ -3265,21 +3105,6 @@ pub mod light_client {
     impl ::core::convert::From<GenesisStateCall> for LightClientCalls {
         fn from(value: GenesisStateCall) -> Self {
             Self::GenesisState(value)
-        }
-    }
-    impl ::core::convert::From<GetFinalizedStateCall> for LightClientCalls {
-        fn from(value: GetFinalizedStateCall) -> Self {
-            Self::GetFinalizedState(value)
-        }
-    }
-    impl ::core::convert::From<GetGenesisStakeStateCall> for LightClientCalls {
-        fn from(value: GetGenesisStakeStateCall) -> Self {
-            Self::GetGenesisStakeState(value)
-        }
-    }
-    impl ::core::convert::From<GetGenesisStateCall> for LightClientCalls {
-        fn from(value: GetGenesisStateCall) -> Self {
-            Self::GetGenesisState(value)
         }
     }
     impl ::core::convert::From<GetHotShotCommitmentCall> for LightClientCalls {
@@ -3493,48 +3318,6 @@ pub mod light_client {
         pub block_height: u64,
         pub block_comm_root: ::ethers::core::types::U256,
     }
-    ///Container type for all return fields from the `getFinalizedState` function with signature `getFinalizedState()` and selector `0x82d07ff3`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct GetFinalizedStateReturn(pub LightClientState);
-    ///Container type for all return fields from the `getGenesisStakeState` function with signature `getGenesisStakeState()` and selector `0x0c693a22`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct GetGenesisStakeStateReturn(pub StakeState);
-    ///Container type for all return fields from the `getGenesisState` function with signature `getGenesisState()` and selector `0x4847ae5d`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct GetGenesisStateReturn(pub LightClientState);
     ///Container type for all return fields from the `getHotShotCommitment` function with signature `getHotShotCommitment(uint256)` and selector `0x8584d23f`
     #[derive(
         Clone,

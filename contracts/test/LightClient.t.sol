@@ -88,8 +88,10 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     /// @dev Test the constructor has initialized the contract state properly, especially genesis
     /// block.
     function test_CorrectInitialization() external view {
-        assertEq(abi.encode(lc.getGenesisState()), abi.encode(genesis));
-        assertEq(abi.encode(lc.getFinalizedState()), abi.encode(genesis));
+        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) = lc.genesisState();
+        assertEq(viewNum, genesis.viewNum);
+        assertEq(blockHeight, genesis.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(genesis.blockCommRoot));
 
         bytes32 stakeTableComm = lc.computeStakeTableComm(genesisStakeState);
         assertEq(lc.votingStakeTableCommitment(), stakeTableComm);
@@ -368,14 +370,19 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
 
         uint256 statesLen = states.length;
-
+        uint64 viewNum;
+        uint64 blockHeight;
+        BN254.ScalarField blockCommRoot;
         for (uint256 i = 0; i < statesLen; i++) {
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
             vm.prank(permissionedProver);
             lc.newFinalizedState(states[i], proofs[i]);
 
-            assertEq(abi.encode(lc.getFinalizedState()), abi.encode(states[i]));
+            (viewNum, blockHeight, blockCommRoot) = lc.finalizedState();
+            assertEq(viewNum, states[i].viewNum);
+            assertEq(blockHeight, states[i].blockHeight);
+            assertEq(abi.encode(blockCommRoot), abi.encode(states[i].blockCommRoot));
 
             bytes32 stakeTableComm = lc.computeStakeTableComm(stakeStates[i]);
             assertEq(lc.votingStakeTableCommitment(), stakeTableComm);

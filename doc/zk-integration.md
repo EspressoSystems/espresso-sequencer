@@ -81,7 +81,7 @@ contract RollupContract {
 
     /// Detects if the escape hatch is activated or not.
     function isEscapeHatchActivated() private returns (bool) {
-        if (lcContract.getFinalizedState().blockHeight > lastEspressoBlockNumber){
+        if (lcContract.finalizedState().blockHeight > lastEspressoBlockNumber){
             return false;
         } else {
             return lcContract.lagOverEscapeHatchThreshold(block.number, escapeHatchThreshold);
@@ -205,7 +205,7 @@ contract RollupContract1 is RollupContract {
         if (isEscapeHatchActivated()){
             this.updateStateBackupSequencingMode(commTxsRollup,newVMState,snarkProof);
         } else { // No escape hatch, use the state of Espresso consensus
-            lightClientState = lcContract.getFinalizedState();
+            lightClientState = lcContract.finalizedState();
             newEspressoState = lightClientState.blockCommRoot;
             blockNumberEspresso = lightClientState.blockHeight;
             this.updateStateFromEspresso(newEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
