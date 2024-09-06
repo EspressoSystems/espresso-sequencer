@@ -17,7 +17,7 @@ contract LightClientUpgradeSameContractTest is Test {
     UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
 
     LCV1.LightClientState public stateV1;
-    LCV1.StakeState public stakeStateV1;
+    LCV1.StakeTableState public stakeStateV1;
 
     address public admin;
     address public proxy;
@@ -42,11 +42,19 @@ contract LightClientUpgradeSameContractTest is Test {
         assertEq(blockHeight, stateV1.blockHeight);
         assertEq(abi.encode(blockCommRoot), abi.encode(stateV1.blockCommRoot));
 
-        bytes32 stakeTableComm = lcV1Proxy.computeStakeTableComm(stakeStateV1);
-        assertEq(lcV1Proxy.votingStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.votingThreshold(), stakeStateV1.threshold);
-        assertEq(lcV1Proxy.frozenThreshold(), stakeStateV1.threshold);
+        (
+            uint256 threshold,
+            BN254.ScalarField stakeTableBlsKeyComm,
+            BN254.ScalarField stakeTableSchnorrKeyComm,
+            BN254.ScalarField stakeTableAmountComm
+        ) = lcV1Proxy.genesisStakeTableState();
+
+        assertEq(
+            abi.encode(stakeStateV1),
+            abi.encode(
+                threshold, stakeTableBlsKeyComm, stakeTableSchnorrKeyComm, stakeTableAmountComm
+            )
+        );
     }
 
     // that the data remains the same after upgrading the implementation

@@ -28,7 +28,7 @@ contract LightClientBench is LightClientCommonTest {
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeState[]));
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
 
         state = states[0];
         proof = proofs[0];

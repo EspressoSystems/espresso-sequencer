@@ -15,7 +15,7 @@ use derive_more::Display;
 use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
-    LightClientConstructorArgs, ParsedLightClientState, ParsedStakeState,
+    LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
 };
 use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
@@ -311,7 +311,7 @@ pub async fn deploy(
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<ParsedLightClientState>>,
-    genesis_stake: BoxFuture<'_, anyhow::Result<ParsedStakeState>>,
+    genesis_stake: BoxFuture<'_, anyhow::Result<ParsedStakeTableState>>,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;

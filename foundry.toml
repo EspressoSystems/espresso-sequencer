@@ -11,7 +11,7 @@ broadcast = "contracts/broadcast"
 cache_path = "contracts/cache"
 optimizer = true
 optimizer_runs = 200 # Increasing the number of runs saves gas but increases the size of the contract
-viaIR = true
+# viaIR = true
 # Version should match the solc installed via flake, otherwise the contract
 # artifacts may differ slightly.
 solc = "0.8.23"

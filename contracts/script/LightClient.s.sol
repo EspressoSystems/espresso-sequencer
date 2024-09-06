@@ -13,7 +13,7 @@ contract DeployLightClientContractScript is Script {
             address payable proxyAddress,
             address admin,
             LC.LightClientState memory,
-            LC.StakeState memory
+            LC.StakeTableState memory
         )
     {
         // TODO for a production deployment provide the right genesis state and value
@@ -24,8 +24,8 @@ contract DeployLightClientContractScript is Script {
         cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,, LC.StakeState memory stakeState) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeState));
+        (LC.LightClientState memory state,,, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
 
         return deployContract(state, stakeState, stateHistoryRetentionPeriod);
     }
@@ -39,7 +39,7 @@ contract DeployLightClientContractScript is Script {
 
     //     bytes memory result = vm.ffi(cmds);
     //     LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
-    //     LC.StakeState memory stakeState = LC.StakeState(
+    //     LC.StakeTableState memory stakeState = LC.StakeTableState(
     //         state.threshold,
     //         state.stakeTableBlsKeyComm,
     //         state.stakeTableSchnorrKeyComm,
@@ -55,7 +55,7 @@ contract DeployLightClientContractScript is Script {
 
     function deployContract(
         LC.LightClientState memory state,
-        LC.StakeState memory stakeState,
+        LC.StakeTableState memory stakeState,
         uint32 stateHistoryRetentionPeriod
     )
         private
@@ -63,7 +63,7 @@ contract DeployLightClientContractScript is Script {
             address payable proxyAddress,
             address admin,
             LC.LightClientState memory,
-            LC.StakeState memory
+            LC.StakeTableState memory
         )
     {
         string memory seedPhrase = vm.envString("MNEMONIC");

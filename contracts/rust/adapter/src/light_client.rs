@@ -1,7 +1,7 @@
 //! Helpers and test mocks for Light Client logic
 
 use ark_std::str::FromStr;
-use diff_test_bn254::{field_to_u256, u256_to_field};
+use diff_test_bn254::u256_to_field;
 use ethers::{
     abi::AbiDecode,
     abi::Token,
@@ -9,7 +9,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::light_client::{CircuitField, LightClientState, PublicInput, StakeState};
+use hotshot_types::light_client::{LightClientState, StakeTableState};
 
 /// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
@@ -42,16 +42,6 @@ impl FromStr for ParsedLightClientState {
     }
 }
 
-impl From<PublicInput> for ParsedLightClientState {
-    fn from(pi: PublicInput) -> Self {
-        Self {
-            view_num: field_to_u256(pi.view_number()).as_u64(),
-            block_height: field_to_u256(pi.block_height()).as_u64(),
-            block_comm_root: field_to_u256(pi.block_comm_root()),
-        }
-    }
-}
-
 impl From<contract_bindings::light_client::LightClientState> for ParsedLightClientState {
     fn from(state: contract_bindings::light_client::LightClientState) -> Self {
         Self {
@@ -62,14 +52,13 @@ impl From<contract_bindings::light_client::LightClientState> for ParsedLightClie
     }
 }
 
-impl From<ParsedLightClientState> for PublicInput {
-    fn from(s: ParsedLightClientState) -> Self {
-        let fields: Vec<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>> = vec![
-            CircuitField::from(s.view_num),
-            CircuitField::from(s.block_height),
-            u256_to_field(s.block_comm_root),
-        ];
-        Self::from(fields)
+impl From<ParsedLightClientState> for LightClientState {
+    fn from(v: ParsedLightClientState) -> Self {
+        Self {
+            view_number: v.view_num as usize,
+            block_height: v.block_height as usize,
+            block_comm_root: u256_to_field(v.block_comm_root),
+        }
     }
 }
 
@@ -83,16 +72,6 @@ impl From<(u64, u64, U256)> for ParsedLightClientState {
     }
 }
 
-impl From<ParsedLightClientState> for LightClientState {
-    fn from(s: ParsedLightClientState) -> Self {
-        Self {
-            view_number: s.view_num as usize,
-            block_height: s.block_height as usize,
-            block_comm_root: u256_to_field(s.block_comm_root),
-        }
-    }
-}
-
 impl From<ParsedLightClientState> for contract_bindings::light_client::LightClientState {
     fn from(s: ParsedLightClientState) -> Self {
         // exactly the same struct with same field types, safe to transmute
@@ -102,14 +81,14 @@ impl From<ParsedLightClientState> for contract_bindings::light_client::LightClie
 
 /// Parsed Stake State
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
-pub struct ParsedStakeState {
+pub struct ParsedStakeTableState {
     pub threshold: U256,
     pub bls_key_comm: U256,
     pub schnorr_key_comm: U256,
     pub amount_comm: U256,
 }
 
-impl ParsedStakeState {
+impl ParsedStakeTableState {
     /// Return a dummy new genesis stake state that will pass constructor/initializer sanity checks
     /// in the contract.
     ///
@@ -125,18 +104,18 @@ impl ParsedStakeState {
     }
 }
 
-impl From<ParsedStakeState> for StakeState {
-    fn from(s: ParsedStakeState) -> Self {
+impl From<ParsedStakeTableState> for StakeTableState {
+    fn from(s: ParsedStakeTableState) -> Self {
         Self {
             threshold: u256_to_field(s.threshold),
-            stake_table_bls_key_comm: u256_to_field(s.bls_key_comm),
-            stake_table_schnorr_key_comm: u256_to_field(s.schnorr_key_comm),
-            stake_table_amount_comm: u256_to_field(s.amount_comm),
+            bls_key_comm: u256_to_field(s.bls_key_comm),
+            schnorr_key_comm: u256_to_field(s.schnorr_key_comm),
+            amount_comm: u256_to_field(s.amount_comm),
         }
     }
 }
 
-impl FromStr for ParsedStakeState {
+impl FromStr for ParsedStakeTableState {
     type Err = AbiError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parsed: (Self,) = AbiDecode::decode_hex(s)?;
@@ -144,18 +123,18 @@ impl FromStr for ParsedStakeState {
     }
 }
 
-impl From<contract_bindings::light_client::StakeState> for ParsedStakeState {
-    fn from(state: contract_bindings::light_client::StakeState) -> Self {
+impl From<contract_bindings::light_client::StakeTableState> for ParsedStakeTableState {
+    fn from(state: contract_bindings::light_client::StakeTableState) -> Self {
         Self {
             threshold: state.threshold,
-            bls_key_comm: state.stake_table_bls_key_comm,
-            schnorr_key_comm: state.stake_table_schnorr_key_comm,
-            amount_comm: state.stake_table_amount_comm,
+            bls_key_comm: state.bls_key_comm,
+            schnorr_key_comm: state.schnorr_key_comm,
+            amount_comm: state.amount_comm,
         }
     }
 }
 
-impl From<(U256, U256, U256, U256)> for ParsedStakeState {
+impl From<(U256, U256, U256, U256)> for ParsedStakeTableState {
     fn from(s: (U256, U256, U256, U256)) -> Self {
         Self {
             threshold: s.0,
@@ -166,8 +145,8 @@ impl From<(U256, U256, U256, U256)> for ParsedStakeState {
     }
 }
 
-impl From<ParsedStakeState> for contract_bindings::light_client::StakeState {
-    fn from(s: ParsedStakeState) -> Self {
+impl From<ParsedStakeTableState> for contract_bindings::light_client::StakeTableState {
+    fn from(s: ParsedStakeTableState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }
     }
@@ -176,7 +155,7 @@ impl From<ParsedStakeState> for contract_bindings::light_client::StakeState {
 /// `LightClientConstructorArgs` holds the arguments required to initialize a light client contract.
 pub struct LightClientConstructorArgs {
     pub light_client_state: ParsedLightClientState,
-    pub stake_state: ParsedStakeState,
+    pub stake_table_state: ParsedStakeTableState,
     pub max_history_seconds: u32,
 }
 
@@ -188,7 +167,7 @@ impl LightClientConstructorArgs {
     pub fn dummy_genesis() -> Self {
         Self {
             light_client_state: ParsedLightClientState::dummy_genesis(),
-            stake_state: ParsedStakeState::dummy_genesis(),
+            stake_table_state: ParsedStakeTableState::dummy_genesis(),
             max_history_seconds: 864000,
         }
     }
@@ -203,7 +182,7 @@ impl Tokenize for LightClientConstructorArgs {
     fn into_tokens(self) -> Vec<Token> {
         vec![
             ethers::abi::Token::Tuple(self.light_client_state.into_tokens()),
-            ethers::abi::Token::Tuple(self.stake_state.into_tokens()),
+            ethers::abi::Token::Tuple(self.stake_table_state.into_tokens()),
             ethers::abi::Token::Uint(U256::from(self.max_history_seconds)),
         ]
     }

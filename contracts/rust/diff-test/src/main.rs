@@ -14,7 +14,7 @@ use ethers::{
 };
 use hotshot_contract_adapter::{
     jellyfish::*,
-    light_client::{ParsedLightClientState, ParsedStakeState},
+    light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
 use hotshot_state_prover::mock_ledger::{
     gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
@@ -410,7 +410,7 @@ fn main() {
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
-            let mut stake_stakes: Vec<ParsedStakeState> = vec![];
+            let mut stake_stakes: Vec<ParsedStakeTableState> = vec![];
 
             for i in 1..block_per_epoch + 2 {
                 // only update stake table at the last block, as it would only take effect in next epoch anyway.
@@ -432,7 +432,7 @@ fn main() {
                 new_states.push(pi.into());
                 proofs.push(proof.into());
 
-                let parsed_stake_state = ParsedStakeState {
+                let parsed_stake_state = ParsedStakeTableState {
                     threshold: field_to_u256(stt.threshold),
                     bls_key_comm: field_to_u256(stt.stake_table_bls_key_comm),
                     schnorr_key_comm: field_to_u256(stt.stake_table_schnorr_key_comm),

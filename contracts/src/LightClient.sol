@@ -43,20 +43,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     //
     // === Storage ===
     //
-    /// @notice The commitment of the stake table used in current voting
-    bytes32 public votingStakeTableCommitment;
-
-    /// @notice The quorum threshold for the stake table used in current voting
-    uint256 public votingThreshold;
-
-    /// @notice The commitment of the stake table frozen for change
-    bytes32 public frozenStakeTableCommitment;
-
-    /// @notice The quorum threshold for the frozen stake table
-    uint256 public frozenThreshold;
-
     /// @notice genesis stake commitment
-    StakeState public genesisStakeState;
+    StakeTableState public genesisStakeTableState;
 
     /// @notice genesis block commitment
     LightClientState public genesisState;
@@ -101,14 +89,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice The finalized HotShot Stake state (as the digest of the entire HotShot state)
     /// @param threshold The (stake-weighted) quorum threshold for a QC to be considered as valid
-    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake table
-    /// @param stakeTableSchnorrKeyComm The commitment to the SchnorrVerKey column of the table
-    /// @param stakeTableAmountComm The commitment to the stake amount column of the stake table
-    struct StakeState {
+    /// @param blsKeyComm The commitment to the BlsVerKey column of the stake table
+    /// @param schnorrKeyComm The commitment to the SchnorrVerKey column of the table
+    /// @param amountComm The commitment to the stake amount column of the stake table
+    struct StakeTableState {
         uint256 threshold;
-        BN254.ScalarField stakeTableBlsKeyComm;
-        BN254.ScalarField stakeTableSchnorrKeyComm;
-        BN254.ScalarField stakeTableAmountComm;
+        BN254.ScalarField blsKeyComm;
+        BN254.ScalarField schnorrKeyComm;
+        BN254.ScalarField amountComm;
     }
 
     /// @notice Simplified HotShot commitment struct
@@ -172,13 +160,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
-        StakeState memory _genesisStakeState,
+        StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod,
         address owner
     ) public initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
-        _initializeState(_genesis, _genesisStakeState, _stateHistoryRetentionPeriod);
+        _initializeState(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -202,12 +190,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param _genesis The initial state of the light client
-    /// @param _genesisStakeState The initial stake state of the light client
+    /// @param _genesisStakeTableState The initial stake state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history
     function _initializeState(
         LightClientState memory _genesis,
-        StakeState memory _genesisStakeState,
+        StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod
     ) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
@@ -216,24 +204,18 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // feeLedgerComm can be zero, if we optionally support fee ledger yet.
         if (
             _genesis.viewNum != 0 || _genesis.blockHeight != 0
-                || BN254.ScalarField.unwrap(_genesisStakeState.stakeTableBlsKeyComm) == 0
-                || BN254.ScalarField.unwrap(_genesisStakeState.stakeTableSchnorrKeyComm) == 0
-                || BN254.ScalarField.unwrap(_genesisStakeState.stakeTableAmountComm) == 0
-                || _genesisStakeState.threshold == 0
+                || BN254.ScalarField.unwrap(_genesisStakeTableState.blsKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesisStakeTableState.schnorrKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesisStakeTableState.amountComm) == 0
+                || _genesisStakeTableState.threshold == 0
         ) {
             revert InvalidArgs();
         }
         genesisState = _genesis;
-        genesisStakeState = _genesisStakeState;
+        genesisStakeTableState = _genesisStakeTableState;
         finalizedState = _genesis;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
-
-        bytes32 initStakeTableComm = computeStakeTableComm(_genesisStakeState);
-        votingStakeTableCommitment = initStakeTableComm;
-        votingThreshold = _genesisStakeState.threshold;
-        frozenStakeTableCommitment = initStakeTableComm;
-        frozenThreshold = _genesisStakeState.threshold;
 
         updateStateHistory(uint64(block.number), uint64(block.timestamp), _genesis);
     }
@@ -300,17 +282,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
-    }
-
-    /// @notice Given the light client state, compute the short commitment of the stake table
-    function computeStakeTableComm(StakeState memory state) public pure virtual returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(
-                state.stakeTableBlsKeyComm,
-                state.stakeTableSchnorrKeyComm,
-                state.stakeTableAmountComm
-            )
-        );
     }
 
     /// @notice set the permissionedProverMode to true and set the permissionedProver to the
