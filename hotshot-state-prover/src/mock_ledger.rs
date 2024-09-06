@@ -99,14 +99,11 @@ impl MockLedger {
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
-        let fee_ledger_comm = F::from(5678);
 
         let genesis = LightClientState {
             view_number: 0,
             block_height: 0,
             block_comm_root,
-            fee_ledger_comm,
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
         Self {
             pp,
@@ -137,12 +134,10 @@ impl MockLedger {
         }
 
         let new_root = self.new_dummy_comm();
-        let new_fee_ledger_comm = self.new_dummy_comm();
 
         self.state.view_number += 1;
         self.state.block_height += 1;
         self.state.block_comm_root = new_root;
-        self.state.fee_ledger_comm = new_fee_ledger_comm;
     }
 
     /// Elapse a view without a new finalized block
@@ -296,7 +291,6 @@ impl MockLedger {
         let adv_st = stake_table_for_testing(&adv_qc_keys, &adv_state_keys);
 
         // replace new state with adversarial stake table commitment
-        new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
         let state_msg: [F; 7] = new_state.clone().into();
 
         // every fake stakers sign on the adverarial new state
@@ -351,10 +345,6 @@ impl MockLedger {
             F::from(self.state.view_number as u64),
             F::from(self.state.block_height as u64),
             self.state.block_comm_root,
-            self.state.fee_ledger_comm,
-            self.state.stake_table_comm.0,
-            self.state.stake_table_comm.1,
-            self.state.stake_table_comm.2,
         ];
         let pi: GenericPublicInput<F> = pi.into();
         pi.into()

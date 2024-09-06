@@ -17,7 +17,6 @@ pub struct ParsedLightClientState {
     pub view_num: u64,
     pub block_height: u64,
     pub block_comm_root: U256,
-    pub fee_ledger_comm: U256,
     pub bls_key_comm: U256,
     pub schnorr_key_comm: U256,
     pub amount_comm: U256,
@@ -35,7 +34,6 @@ impl ParsedLightClientState {
             view_num: 0,
             block_height: 0,
             block_comm_root: U256::from(0),
-            fee_ledger_comm: U256::from(0),
             bls_key_comm: U256::from(123),
             schnorr_key_comm: U256::from(123),
             amount_comm: U256::from(20),
@@ -62,7 +60,6 @@ impl From<PublicInput> for ParsedLightClientState {
             schnorr_key_comm: field_to_u256(pi.state_key_comm()),
             amount_comm: field_to_u256(pi.stake_amount_comm()),
             threshold: field_to_u256(pi.threshold()),
-            fee_ledger_comm: field_to_u256(pi),
         }
     }
 }
@@ -73,7 +70,6 @@ impl From<contract_bindings::light_client::LightClientState> for ParsedLightClie
             view_num: state.view_num,
             block_height: state.block_height,
             block_comm_root: state.block_comm_root,
-            fee_ledger_comm: state.fee_ledger_comm,
             bls_key_comm: state.stake_table_bls_key_comm,
             schnorr_key_comm: state.stake_table_schnorr_key_comm,
             amount_comm: state.stake_table_amount_comm,
@@ -89,7 +85,6 @@ impl From<ParsedLightClientState> for PublicInput {
             CircuitField::from(s.view_num),
             CircuitField::from(s.block_height),
             u256_to_field(s.block_comm_root),
-            u256_to_field(s.fee_ledger_comm),
             u256_to_field(s.bls_key_comm),
             u256_to_field(s.schnorr_key_comm),
             u256_to_field(s.amount_comm),
@@ -98,17 +93,16 @@ impl From<ParsedLightClientState> for PublicInput {
     }
 }
 
-impl From<(u64, u64, U256, U256, U256, U256, U256, U256)> for ParsedLightClientState {
-    fn from(s: (u64, u64, U256, U256, U256, U256, U256, U256)) -> Self {
+impl From<(u64, u64, U256, U256, U256, U256, U256)> for ParsedLightClientState {
+    fn from(s: (u64, u64, U256, U256, U256, U256, U256)) -> Self {
         Self {
             view_num: s.0,
             block_height: s.1,
             block_comm_root: s.2,
-            fee_ledger_comm: s.3,
-            bls_key_comm: s.4,
-            schnorr_key_comm: s.5,
-            amount_comm: s.6,
-            threshold: s.7,
+            bls_key_comm: s.3,
+            schnorr_key_comm: s.4,
+            amount_comm: s.5,
+            threshold: s.6,
         }
     }
 }

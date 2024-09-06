@@ -49,9 +49,7 @@ pub struct LightClientStateVar {
     ///  `vars[0]`: view number
     ///  `vars[1]`: block height
     ///  `vars[2]`: block commitment root
-    ///  `vars[3]`: fee ledger commitment
-    ///  `vars[4-6]`: stake table commitment
-    vars: [Variable; 7],
+    vars: [Variable; 3],
 }
 
 impl LightClientStateVar {
@@ -68,10 +66,6 @@ impl LightClientStateVar {
                 circuit.create_public_variable(view_number_f)?,
                 circuit.create_public_variable(block_height_f)?,
                 circuit.create_public_variable(state.block_comm_root)?,
-                circuit.create_public_variable(state.fee_ledger_comm)?,
-                circuit.create_public_variable(state.stake_table_comm.0)?,
-                circuit.create_public_variable(state.stake_table_comm.1)?,
-                circuit.create_public_variable(state.stake_table_comm.2)?,
             ],
         })
     }
@@ -257,10 +251,6 @@ where
         view_number_f,
         block_height_f,
         lightclient_state.block_comm_root,
-        lightclient_state.fee_ledger_comm,
-        lightclient_state.stake_table_comm.0,
-        lightclient_state.stake_table_comm.1,
-        lightclient_state.stake_table_comm.2,
     ];
 
     // Checking whether the accumulated weight exceeds the quorum threshold
@@ -359,8 +349,6 @@ where
         view_number: 0,
         block_height: 0,
         block_comm_root: F::default(),
-        fee_ledger_comm: F::default(),
-        stake_table_comm: (F::default(), F::default(), F::default()),
     };
     build::<F, P, _, _, _>(
         &[],
@@ -418,8 +406,6 @@ mod tests {
             view_number: 100,
             block_height: 73,
             block_comm_root,
-            fee_ledger_comm,
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
         let state_msg: [F; 7] = lightclient_state.clone().into();
 
@@ -551,7 +537,6 @@ mod tests {
         // bad path: incorrect signatures
         let mut wrong_light_client_state = lightclient_state.clone();
         // state with a different qc key commitment
-        wrong_light_client_state.stake_table_comm.0 = F::default();
         let wrong_state_msg: [F; 7] = wrong_light_client_state.into();
         let wrong_sigs = state_keys
             .iter()
