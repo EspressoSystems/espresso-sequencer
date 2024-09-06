@@ -31,8 +31,7 @@ contract LightClientDefenderDeployScript is Script {
 
         bytes memory result = vm.ffi(cmds);
         LC.StakeTableState memory stakeState;
-        (state,,, stakeState) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
+        (state, stakeState) = abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
         ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
         multisig = upgradeApprovalProcess.via;

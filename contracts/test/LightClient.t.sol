@@ -58,10 +58,8 @@ contract LightClientCommonTest is Test {
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
 
         bytes memory result = vm.ffi(cmds);
-        (
-            LC.LightClientState memory state,
-            LC.StakeTableState memory stakeState
-        ) = abi.decode(result, (LC.LightClientState, LC.StakeTableState));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
         genesis = state;
         genesisStakeTableState = stakeState;
 
@@ -163,10 +161,8 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
 
         bytes memory result = vm.ffi(cmds);
-        (
-            LC.LightClientState[] memory states,
-            V.PlonkProof[] memory proofs
-        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         newState = states[0];
         newProof = proofs[0];
@@ -326,7 +322,6 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     function testFuzz_ConsecutiveUpdate(uint64 numInitValidators) external {
         numInitValidators = uint64(bound(numInitValidators, 1, STAKE_TABLE_CAPACITY));
 
-        // TODO: (Alex) simplify mock-genesis
         // since we have have a fuzzer-provided `numInitValidators`, we should instantiate light
         // client contract separately in each test run
         string[] memory cmds = new string[](3);
