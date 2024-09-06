@@ -22,13 +22,14 @@ use ethers::{
 };
 use futures::FutureExt;
 use hotshot_contract_adapter::{
-    jellyfish::{field_to_u256, u256_to_field, ParsedPlonkProof},
+    jellyfish::{field_to_u256, ParsedPlonkProof},
     light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
 use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
 use hotshot_types::{
     light_client::{
-        CircuitField, GenericPublicInput, LightClientState, PublicInput, StakeTableState, StateSignaturesBundle, StateVerKey
+        CircuitField, LightClientState, PublicInput, StakeTableState, StateSignaturesBundle,
+        StateVerKey,
     },
     signature_key::BLSPubKey,
     traits::{
@@ -49,8 +50,6 @@ use url::Url;
 use vbs::version::StaticVersionType;
 
 use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
-
-type F = ark_ed_on_bn254::Fq;
 
 /// A wallet with local signer and connected to network via http
 pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -167,10 +166,11 @@ async fn init_stake_table_from_sequencer(
     Ok(st)
 }
 
+/// Returns both genesis light client state and stake table state
 pub async fn light_client_genesis(
     sequencer_url: &Url,
     stake_table_capacity: usize,
-) -> anyhow::Result<ParsedLightClientState> {
+) -> anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)> {
     let st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
         .await
         .with_context(|| "Failed to initialize stake table")?;
@@ -180,51 +180,25 @@ pub async fn light_client_genesis(
 #[inline]
 pub fn light_client_genesis_from_stake_table(
     st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-) -> anyhow::Result<ParsedLightClientState> {
+) -> anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)> {
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
     let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
-    let pi = vec![
-        F::from(0_u64), // Arbitrary value for view number
-        F::from(0_u64), // Arbitrary value for block height
-        F::from(0_u64), // Arbitrary value for state commitment
-        bls_comm,
-        schnorr_comm,
-        stake_comm,
-        u256_to_field(threshold),
-    ];
-    let pi: GenericPublicInput<F> = pi.into();
-    Ok(pi.into())
-}
 
-pub async fn light_client_genesis_stake(
-    sequencer_url: &Url,
-    stake_table_capacity: usize,
-) -> anyhow::Result<ParsedStakeTableState> {
-    let st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
-        .await
-        .with_context(|| "Failed to initialize stake table")?;
-    light_client_genesis_stake_from_stake_table(st)
-}
-
-#[inline]
-pub fn light_client_genesis_stake_from_stake_table(
-    st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-) -> anyhow::Result<ParsedStakeTableState> {
-    let (bls_comm, schnorr_comm, stake_comm) = st
-        .commitment(SnapshotVersion::LastEpochStart)
-        .expect("Commitment computation shouldn't fail.");
-    let honest_threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
-
-    let stt = ParsedStakeTableState {
-        threshold: honest_threshold,
-        bls_key_comm: field_to_u256(bls_comm),
-        schnorr_key_comm: field_to_u256(schnorr_comm),
-        amount_comm: field_to_u256(stake_comm),
-    };
-
-    Ok(stt)
+    Ok((
+        ParsedLightClientState {
+            view_num: 0,
+            block_height: 0,
+            block_comm_root: U256::from(0u32),
+        },
+        ParsedStakeTableState {
+            bls_key_comm: field_to_u256(bls_comm),
+            schnorr_key_comm: field_to_u256(schnorr_comm),
+            amount_comm: field_to_u256(stake_comm),
+            threshold,
+        },
+    ))
 }
 
 pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
@@ -304,7 +278,10 @@ pub async fn read_contract_state(
     let st_state: ParsedStakeTableState = match contract.genesis_stake_table_state().call().await {
         Ok(s) => s.into(),
         Err(e) => {
-            tracing::error!("unable to read genesis_stake_table_state from contract: {}", e);
+            tracing::error!(
+                "unable to read genesis_stake_table_state from contract: {}",
+                e
+            );
             return Err(ProverError::ContractError(e.into()));
         }
     };
@@ -565,7 +542,9 @@ mod test {
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
     use ethers::utils::{Anvil, AnvilInstance};
-    use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedStakeTableState};
+    use hotshot_contract_adapter::light_client::{
+        LightClientConstructorArgs, ParsedStakeTableState,
+    };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
@@ -737,7 +716,8 @@ mod test {
         let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
         assert_eq!(genesis, dummy_genesis);
 
-        let stake_genesis: ParsedStakeTableState = contract.genesis_stake_table_state().await?.into();
+        let stake_genesis: ParsedStakeTableState =
+            contract.genesis_stake_table_state().await?.into();
         assert_eq!(stake_genesis, dummy_stake_genesis);
 
         let mut config = StateProverConfig::default();

@@ -66,11 +66,10 @@ pub(crate) fn genesis_stake_table_state(
         st.commitment(SnapshotVersion::LastEpochStart).unwrap();
     let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
 
-    let st_state = GenericStakeTableState {
+    GenericStakeTableState {
         bls_key_comm,
         schnorr_key_comm,
         amount_comm,
         threshold: u256_to_field(&threshold),
-    };
-    st_state
+    }
 }

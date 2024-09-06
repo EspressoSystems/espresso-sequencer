@@ -12,10 +12,7 @@ use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
 };
-use hotshot_contract_adapter::{
-    jellyfish::*,
-    light_client::{ParsedLightClientState, ParsedStakeTableState},
-};
+use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientState};
 use hotshot_state_prover::mock_ledger::{
     gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
 };
@@ -410,7 +407,6 @@ fn main() {
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
-            let mut stake_stakes: Vec<ParsedStakeTableState> = vec![];
 
             for i in 1..block_per_epoch + 2 {
                 // only update stake table at the last block, as it would only take effect in next epoch anyway.
@@ -428,20 +424,12 @@ fn main() {
 
                 ledger.elapse_with_block();
 
-                let (pi, proof, stt) = ledger.gen_state_proof();
+                let (pi, proof) = ledger.gen_state_proof();
                 new_states.push(pi.into());
                 proofs.push(proof.into());
-
-                let parsed_stake_state = ParsedStakeTableState {
-                    threshold: field_to_u256(stt.threshold),
-                    bls_key_comm: field_to_u256(stt.stake_table_bls_key_comm),
-                    schnorr_key_comm: field_to_u256(stt.stake_table_schnorr_key_comm),
-                    amount_comm: field_to_u256(stt.stake_table_amount_comm),
-                };
-                stake_stakes.push(parsed_stake_state);
             }
 
-            let res = (new_states, proofs, stake_stakes);
+            let res = (new_states, proofs);
             println!("{}", res.encode_hex());
         }
         Action::MockSkipBlocks => {
@@ -466,7 +454,7 @@ fn main() {
             }
 
             let res = if require_valid_proof {
-                let (pi, proof, _) = ledger.gen_state_proof();
+                let (pi, proof) = ledger.gen_state_proof();
                 let pi_parsed: ParsedLightClientState = pi.into();
                 let proof_parsed: ParsedPlonkProof = proof.into();
                 (pi_parsed, proof_parsed)
@@ -488,7 +476,7 @@ fn main() {
 
             ledger.elapse_with_block();
             // first block in epoch 1
-            let (pi, proof, _) = ledger.gen_state_proof();
+            let (pi, proof) = ledger.gen_state_proof();
             new_states.push(pi.into());
             proofs.push(proof.into());
 

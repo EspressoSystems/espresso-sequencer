@@ -403,14 +403,12 @@ mod tests {
             .map(|b| if b { F::from(1u64) } else { F::from(0u64) })
             .collect::<Vec<_>>();
         // good path
-        let mut good_st_state = st_state.clone();
-        good_st_state.threshold = F::from(26u32);
         let (circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &good_st_state,
+            &st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -418,6 +416,8 @@ mod tests {
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_ok());
 
+        // lower threshold should also pass
+        let mut good_st_state = st_state.clone();
         good_st_state.threshold = F::from(10u32);
         let (circuit, public_inputs) = build(
             &entries,
@@ -448,9 +448,8 @@ mod tests {
             .is_err());
 
         // bad path: total weight doesn't meet the threshold
-        // bit vector with total weight 23
         let bad_bit_vec = [
-            true, true, true, true, true, false, false, true, false, false,
+            false, false, true, false, true, false, false, true, false, false,
         ];
         let bad_bit_masked_sigs = bad_bit_vec
             .iter()

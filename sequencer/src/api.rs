@@ -22,9 +22,7 @@ use hotshot_events_service::events_source::{
 };
 use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_state_prover::service::{
-    light_client_genesis_from_stake_table, light_client_genesis_stake_from_stake_table,
-};
+use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
@@ -386,7 +384,8 @@ pub mod test_helpers {
     use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::light_client::{ParsedLightClientState, ParsedStakeTableState};
     use hotshot_types::{
-        event::LeafInfo, light_client::LightClientState, traits::{metrics::NoMetrics, node_implementation::ConsensusTime}
+        event::LeafInfo,
+        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
@@ -626,15 +625,9 @@ pub mod test_helpers {
             }
         }
 
-        // FIXME: update this logic
-        pub fn light_client_genesis(&self) -> LightClientState {
+        pub fn light_client_genesis(&self) -> (ParsedLightClientState, ParsedStakeTableState) {
             let st = self.cfg.stake_table();
             light_client_genesis_from_stake_table(st).unwrap()
-        }
-
-        pub fn light_client_genesis_stake(&self) -> ParsedStakeTableState {
-            let st = self.cfg.stake_table();
-            light_client_genesis_stake_from_stake_table(st).unwrap()
         }
 
         pub async fn stop_consensus(&mut self) {
