@@ -205,20 +205,13 @@ mod tests {
             CircuitField::from(2u32),
         ])
         .unwrap()[0];
-        let fee_ledger_comm = VariableLengthRescueCRHF::<CircuitField, 1>::evaluate(vec![
-            CircuitField::from(3u32),
-            CircuitField::from(5u32),
-        ])
-        .unwrap()[0];
 
         let lightclient_state = GenericLightClientState {
             view_number: 100,
             block_height: 73,
             block_comm_root,
-            fee_ledger_comm,
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        let state_msg: [CircuitField; 7] = lightclient_state.clone().into();
+        let state_msg: [CircuitField; 3] = lightclient_state.clone().into();
 
         let sigs = schnorr_keys
             .iter()

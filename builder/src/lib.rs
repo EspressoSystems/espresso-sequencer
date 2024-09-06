@@ -355,10 +355,6 @@ pub mod testing {
         )> {
             let num_staked_nodes = self.num_staked_nodes();
             let mut is_staked = false;
-            let stake_table_commit = static_stake_table_commitment(
-                &self.config.known_nodes_with_stake,
-                Self::total_nodes(),
-            );
 
             join_all((0..self.num_staking_non_staking_nodes()).map(|i| {
                 is_staked = i < num_staked_nodes;
@@ -366,14 +362,7 @@ pub mod testing {
                 async move {
                     let persistence = options.create().await.unwrap();
                     let (hotshot_handle, state_signer) = self
-                        .init_node(
-                            i,
-                            is_staked,
-                            stake_table_commit,
-                            &NoMetrics,
-                            bind_version,
-                            persistence,
-                        )
+                        .init_node(i, is_staked, &NoMetrics, bind_version, persistence)
                         .await;
                     // wrapped in some because need to take later
                     (Arc::new(hotshot_handle), Some(state_signer))
@@ -386,7 +375,6 @@ pub mod testing {
             &self,
             i: usize,
             is_staked: bool,
-            stake_table_commit: StakeTableCommitmentType,
             metrics: &dyn Metrics,
             bind_version: V,
             persistence: P,
@@ -429,7 +417,6 @@ pub mod testing {
                 metrics,
                 i as u64,
                 None,
-                stake_table_commit,
                 bind_version,
                 persistence,
             )

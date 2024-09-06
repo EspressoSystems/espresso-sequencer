@@ -7,7 +7,7 @@ use ethers::types::U256;
 use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput};
 use jf_plonk::PlonkError;
 use jf_relation::{BoolVar, Circuit, CircuitError, PlonkCircuit, Variable};
-use jf_rescue::{gadgets::RescueNativeGadget, RescueParameter};
+use jf_rescue::RescueParameter;
 use jf_signature::{
     gadgets::schnorr::{SignatureGadget, VerKeyVar},
     schnorr::{Signature, VerKey as SchnorrVerKey},
@@ -86,22 +86,6 @@ impl LightClientStateVar {
     #[must_use]
     pub fn block_comm_root(&self) -> Variable {
         self.vars[2]
-    }
-
-    /// Returns the commitment of the fee ledger
-    #[must_use]
-    pub fn fee_ledger_comm(&self) -> Variable {
-        self.vars[3]
-    }
-
-    /// Returns the commitment of the associated stake table
-    #[must_use]
-    pub fn stake_table_comm(&self) -> StakeTableCommVar {
-        StakeTableCommVar {
-            qc_keys_comm: self.vars[4],
-            state_keys_comm: self.vars[5],
-            stake_amount_comm: self.vars[6],
-        }
     }
 }
 
@@ -277,38 +261,6 @@ where
     let acc_amount_var = circuit.sum(&signed_amount_var)?;
     circuit.enforce_leq(threshold_pub_var, acc_amount_var)?;
 
-    // checking the commitment for the list of schnorr keys
-    let state_ver_key_preimage_vars = stake_table_var
-        .iter()
-        .flat_map(|var| [var.state_ver_key.0.get_x(), var.state_ver_key.0.get_y()])
-        .collect::<Vec<_>>();
-    let state_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
-        &mut circuit,
-        &state_ver_key_preimage_vars,
-        1,
-    )?[0];
-    circuit.enforce_equal(
-        state_ver_key_comm,
-        lightclient_state_pub_var.stake_table_comm().state_keys_comm,
-    )?;
-
-    // checking the commitment for the list of stake amounts
-    let stake_amount_preimage_vars = stake_table_var
-        .iter()
-        .map(|var| var.stake_amount)
-        .collect::<Vec<_>>();
-    let stake_amount_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
-        &mut circuit,
-        &stake_amount_preimage_vars,
-        1,
-    )?[0];
-    circuit.enforce_equal(
-        stake_amount_comm,
-        lightclient_state_pub_var
-            .stake_table_comm()
-            .stake_amount_comm,
-    )?;
-
     // checking all signatures
     let verification_result_vars = stake_table_var
         .iter()
@@ -398,10 +350,6 @@ mod tests {
         let block_comm_root =
             VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(1u32), F::from(2u32)]).unwrap()
                 [0];
-        let fee_ledger_comm =
-            VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(3u32), F::from(5u32)]).unwrap()
-                [0];
-
         let lightclient_state = GenericLightClientState {
             view_number: 100,
             block_height: 73,
@@ -511,7 +459,7 @@ mod tests {
             .is_err());
 
         // bad path: bad stake table commitment
-        let mut bad_lightclient_state = lightclient_state.clone();
+        let bad_lightclient_state = lightclient_state.clone();
         let bad_state_msg: [F; 3] = bad_lightclient_state.clone().into();
         let sig_for_bad_state = state_keys
             .iter()
@@ -534,9 +482,9 @@ mod tests {
             .is_err());
 
         // bad path: incorrect signatures
-        let mut wrong_light_client_state = lightclient_state.clone();
+        let wrong_light_client_state = lightclient_state.clone();
         // state with a different qc key commitment
-        let wrong_state_msg: [F; 7] = wrong_light_client_state.into();
+        let wrong_state_msg: [F; 3] = wrong_light_client_state.into();
         let wrong_sigs = state_keys
             .iter()
             .map(|(key, _)| {
