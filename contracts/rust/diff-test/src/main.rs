@@ -12,12 +12,9 @@ use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
 };
-use hotshot_contract_adapter::{
-    jellyfish::*,
-    light_client::{ParsedLightClientState, ParsedStakeTableState},
-};
+use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientState};
 use hotshot_state_prover::mock_ledger::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
 };
 use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
@@ -86,10 +83,6 @@ enum Action {
     MockConsecutiveFinalizedStates,
     /// Get a light client state that skipped a few blocks
     MockSkipBlocks,
-    /// Get light client states when missing ending block of an epoch
-    MockMissEndingBlock,
-    /// Get a malicious state update with a wrong stake table
-    MockWrongStakeTable,
 }
 
 #[allow(clippy::type_complexity)]
@@ -132,7 +125,7 @@ fn main() {
 
             let log_size = cli.args[0].parse::<u32>().unwrap();
             let zeta = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
-            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[2]).unwrap();
+            let pi_u256: [U256; 7] = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
@@ -264,7 +257,7 @@ fn main() {
             }
 
             let vk = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
+            let pi_u256: [U256; 7] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
             let msg = {
@@ -302,8 +295,8 @@ fn main() {
             .is_ok());
 
             let vk_parsed: ParsedVerifyingKey = vk.into();
-            let mut pi_parsed = [U256::default(); 8];
-            assert_eq!(public_input.len(), 8);
+            let mut pi_parsed = [U256::default(); 7];
+            assert_eq!(public_input.len(), 7);
             for (i, pi) in public_input.into_iter().enumerate() {
                 pi_parsed[i] = field_to_u256(pi);
             }
@@ -384,40 +377,25 @@ fn main() {
             }
             let num_init_validators = cli.args[0].parse::<u64>().unwrap();
 
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            let pp = MockSystemParam::init();
             let ledger = MockLedger::init(pp, num_init_validators as usize);
 
-            let (voting_st_comm, frozen_st_comm, stake_table) = ledger.get_stake_table_comms();
-            let res = (
-                ledger.get_state(),
-                voting_st_comm,
-                frozen_st_comm,
-                stake_table,
-            );
+            let res = (ledger.get_state(), ledger.get_stake_table_state());
             println!("{}", res.encode_hex());
         }
         Action::MockConsecutiveFinalizedStates => {
-            if cli.args.len() != 3 {
-                panic!("Should provide arg1=numInitValidators,arg2=numRegs,arg3=numExit");
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numInitValidators");
             }
-            let block_per_epoch = BLOCKS_PER_EPOCH;
             let num_init_validators = cli.args[0].parse::<u64>().unwrap();
-            let num_reg = cli.args[1].parse::<u64>().unwrap();
-            let num_exit = cli.args[2].parse::<u64>().unwrap();
 
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            let pp = MockSystemParam::init();
             let mut ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
-            let mut stake_stakes: Vec<ParsedStakeTableState> = vec![];
 
-            for i in 1..block_per_epoch + 2 {
-                // only update stake table at the last block, as it would only take effect in next epoch anyway.
-                if i == block_per_epoch {
-                    ledger.sync_stake_table(num_reg as usize, num_exit as usize);
-                }
-
+            for _ in 1..4 {
                 // random number of notorized but not finalized block
                 if ledger.rng.gen_bool(0.5) {
                     let num_non_blk = ledger.rng.gen_range(0..5);
@@ -428,20 +406,12 @@ fn main() {
 
                 ledger.elapse_with_block();
 
-                let (pi, proof, stt) = ledger.gen_state_proof();
+                let (pi, proof) = ledger.gen_state_proof();
                 new_states.push(pi.into());
                 proofs.push(proof.into());
-
-                let parsed_stake_state = ParsedStakeTableState {
-                    threshold: field_to_u256(stt.threshold),
-                    bls_key_comm: field_to_u256(stt.stake_table_bls_key_comm),
-                    schnorr_key_comm: field_to_u256(stt.stake_table_schnorr_key_comm),
-                    amount_comm: field_to_u256(stt.stake_table_amount_comm),
-                };
-                stake_stakes.push(parsed_stake_state);
             }
 
-            let res = (new_states, proofs, stake_stakes);
+            let res = (new_states, proofs);
             println!("{}", res.encode_hex());
         }
         Action::MockSkipBlocks => {
@@ -456,65 +426,24 @@ fn main() {
                 true
             };
 
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            let pp = MockSystemParam::init();
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
-            // random stake table update
-            ledger.sync_stake_table(4, 3);
             for _ in 0..num_block_skipped {
                 ledger.elapse_with_block();
             }
 
             let res = if require_valid_proof {
-                let (pi, proof, _) = ledger.gen_state_proof();
-                let pi_parsed: ParsedLightClientState = pi.into();
+                let (state, proof) = ledger.gen_state_proof();
+                let state_parsed: ParsedLightClientState = state.into();
                 let proof_parsed: ParsedPlonkProof = proof.into();
-                (pi_parsed, proof_parsed)
+                (state_parsed, proof_parsed)
             } else {
-                let pi_parsed = ledger.get_state();
+                let state_parsed = ledger.get_state();
                 let proof_parsed = ParsedPlonkProof::dummy(&mut ledger.rng);
-                (pi_parsed, proof_parsed)
+                (state_parsed, proof_parsed)
             };
             println!("{}", res.encode_hex());
-        }
-        Action::MockMissEndingBlock => {
-            let block_per_epoch = BLOCKS_PER_EPOCH;
-
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
-            let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
-
-            let mut new_states: Vec<ParsedLightClientState> = vec![];
-            let mut proofs: Vec<ParsedPlonkProof> = vec![];
-
-            ledger.elapse_with_block();
-            // first block in epoch 1
-            let (pi, proof, _) = ledger.gen_state_proof();
-            new_states.push(pi.into());
-            proofs.push(proof.into());
-
-            // skipping all remaining blocks in epoch 1, including the last/ending block
-            for _ in 2..block_per_epoch + 1 {
-                ledger.elapse_with_block();
-            }
-            // first block in epoch 2
-            ledger.elapse_with_block();
-            new_states.push(ledger.get_state());
-            proofs.push(ParsedPlonkProof::dummy(&mut ledger.rng)); // we don't need correct proof here
-
-            let res = (new_states, proofs);
-            println!("{}", res.encode_hex());
-        }
-        Action::MockWrongStakeTable => {
-            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
-            let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
-
-            ledger.elapse_with_block();
-            let (pi, proof, _) = ledger.gen_state_proof_with_fake_stakers();
-
-            let new_state: ParsedLightClientState = pi.into();
-            let proof: ParsedPlonkProof = proof.into();
-
-            println!("{}", (new_state, proof).encode_hex());
         }
         Action::GenBLSHashes => {
             if cli.args.len() != 1 {

@@ -58,12 +58,8 @@ contract LightClientCommonTest is Test {
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
 
         bytes memory result = vm.ffi(cmds);
-        (
-            LC.LightClientState memory state,
-            bytes32 votingSTComm,
-            ,
-            LC.StakeTableState memory stakeState
-        ) = abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
         genesis = state;
         genesisStakeTableState = stakeState;
 
@@ -71,16 +67,16 @@ contract LightClientCommonTest is Test {
             deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
 
         (
-            ,
+            uint256 threshold,
             BN254.ScalarField stakeTableBlsKeyComm,
             BN254.ScalarField stakeTableSchnorrKeyComm,
             BN254.ScalarField stakeTableAmountComm
         ) = lc.genesisStakeTableState();
 
-        assertEq(
-            abi.encodePacked(votingSTComm),
-            abi.encodePacked(stakeTableBlsKeyComm, stakeTableSchnorrKeyComm, stakeTableAmountComm)
-        );
+        assertEq(stakeState.blsKeyComm, stakeTableBlsKeyComm);
+        assertEq(stakeState.schnorrKeyComm, stakeTableSchnorrKeyComm);
+        assertEq(stakeState.amountComm, stakeTableAmountComm);
+        assertEq(stakeState.threshold, threshold);
     }
 
     function assertEq(BN254.ScalarField a, BN254.ScalarField b) public pure {
@@ -155,28 +151,21 @@ contract LightClient_constructor_Test is LightClientCommonTest {
 contract LightClient_permissionedProver_Test is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
-    LC.StakeTableState internal newStakeTableState;
 
     function setUp() public {
         init();
 
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[3] = vm.toString(uint64(1));
-        cmds[4] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
-        (
-            LC.LightClientState[] memory states,
-            V.PlonkProof[] memory proofs,
-            LC.StakeTableState[] memory stakeStates
-        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         newState = states[0];
         newProof = proofs[0];
-        newStakeTableState = stakeStates[0];
     }
 
     function test_NoProverPermissionsRequired() external {
@@ -311,16 +300,14 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// @dev for benchmarking purposes only
     function testCorrectUpdate() external {
         // Generating a few consecutive states and proofs
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[3] = vm.toString(uint64(3));
-        cmds[4] = vm.toString(uint64(3));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[0].viewNum, states[0].blockHeight, states[0].blockCommRoot);
@@ -332,15 +319,8 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// forge-config: default.fuzz.runs = 1
     /// forge-config: quick.fuzz.runs = 1
     /// forge-config: ci.fuzz.runs = 10
-    function testFuzz_ConsecutiveUpdate(
-        uint64 numInitValidators,
-        uint64 numRegistrations,
-        uint64 numExits
-    ) external {
+    function testFuzz_ConsecutiveUpdate(uint64 numInitValidators) external {
         numInitValidators = uint64(bound(numInitValidators, 1, STAKE_TABLE_CAPACITY));
-        numRegistrations =
-            uint64(bound(numRegistrations, 0, STAKE_TABLE_CAPACITY - numInitValidators));
-        numExits = uint64(bound(numExits, 0, numInitValidators));
 
         // since we have have a fuzzer-provided `numInitValidators`, we should instantiate light
         // client contract separately in each test run
@@ -350,28 +330,22 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         cmds[2] = vm.toString(numInitValidators);
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
         genesis = state;
+        genesisStakeTableState = stakeState;
         (lcTestProxy, admin) =
             deployAndInitProxy(genesis, genesisStakeTableState, MAX_HISTORY_SECONDS);
 
-        genesis = state;
-
         // Generating a few consecutive states and proofs
-        cmds = new string[](5);
+        cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(numInitValidators);
-        cmds[3] = vm.toString(numRegistrations);
-        cmds[4] = vm.toString(numExits);
 
         result = vm.ffi(cmds);
-        (
-            LC.LightClientState[] memory states,
-            V.PlonkProof[] memory proofs,
-            LC.StakeTableState[] memory stakeStates
-        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         uint256 statesLen = states.length;
         uint64 viewNum;
@@ -387,20 +361,6 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
             assertEq(viewNum, states[i].viewNum);
             assertEq(blockHeight, states[i].blockHeight);
             assertEq(abi.encode(blockCommRoot), abi.encode(states[i].blockCommRoot));
-
-            (
-                uint256 threshold,
-                BN254.ScalarField stakeTableBlsKeyComm,
-                BN254.ScalarField stakeTableSchnorrKeyComm,
-                BN254.ScalarField stakeTableAmountComm
-            ) = lc.genesisStakeTableState();
-
-            assertEq(
-                abi.encode(stakeStates[i]),
-                abi.encode(
-                    threshold, stakeTableBlsKeyComm, stakeTableSchnorrKeyComm, stakeTableAmountComm
-                )
-            );
         }
     }
 
@@ -533,33 +493,11 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
 
         vm.stopPrank();
     }
-
-    /// @dev Test that update on finalized state will fail if a different stake table is used
-    function test_revertWhenWrongStakeTableUsed() external {
-        string[] memory cmds = new string[](2);
-        cmds[0] = "diff-test";
-        cmds[1] = "mock-wrong-stake-table";
-
-        bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory newState, V.PlonkProof memory proof) =
-            abi.decode(result, (LC.LightClientState, V.PlonkProof));
-
-        LC.LightClientState memory newLCState = LC.LightClientState({
-            viewNum: newState.viewNum,
-            blockHeight: newState.blockHeight,
-            blockCommRoot: newState.blockCommRoot
-        });
-
-        vm.expectRevert(LC.InvalidProof.selector);
-        vm.prank(permissionedProver);
-        lc.newFinalizedState(newLCState, proof);
-    }
 }
 
 contract LightClient_StateUpdatesTest is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
-    LC.StakeTableState internal newStakeTableState;
 
     function assertInitialStateHistoryConditions() internal view {
         // assert that stateHistoryFirstIndex starts at 0.
@@ -587,27 +525,21 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // Assert owner is correctly set, add this to check owner state
         assertEq(lc.owner(), admin, "Admin should be the owner.");
 
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[3] = vm.toString(uint64(1));
-        cmds[4] = vm.toString(uint64(1));
 
         //assert initial conditions
         assertEq(lc.stateHistoryFirstIndex(), 0);
         assertGe(lc.stateHistoryRetentionPeriod(), 1 days);
 
         bytes memory result = vm.ffi(cmds);
-        (
-            LC.LightClientState[] memory states,
-            V.PlonkProof[] memory proofs,
-            LC.StakeTableState[] memory stakeStates
-        ) = abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         newState = states[1];
         newProof = proofs[1];
-        newStakeTableState = stakeStates[1];
     }
 
     function test_1lBlockUpdatesIsUpdated() public {
@@ -648,20 +580,18 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     }
 
     function test_stateHistoryHandlingWithOneDayMaxHistory() public {
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[3] = vm.toString(uint64(5));
-        cmds[4] = vm.toString(uint64(5));
 
         uint32 numDays = 1;
 
         assertInitialStateHistoryConditions();
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         // Add one numDays worth of a new state
         uint256 i;
@@ -721,17 +651,15 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     }
 
     function test_stateHistoryHandlingWithTwoDaysMaxHistory() public {
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[3] = vm.toString(uint64(5));
-        cmds[4] = vm.toString(uint64(5));
         uint32 numDays = 2;
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         assertInitialStateHistoryConditions();
 
@@ -1173,16 +1101,14 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         // Assert owner is correctly set, add this to check owner state
         assertEq(lc.owner(), admin, "Admin should be the owner.");
 
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[3] = vm.toString(uint64(1));
-        cmds[4] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         newState = _states[1];
         newProof = _proofs[1];
@@ -1211,16 +1137,14 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
     function test_hotShotBlockCommIsUpdatedXTimes() public {
         uint256 blockCommCount = lc.getStateHistoryCount();
 
-        string[] memory cmds = new string[](5);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
         cmds[2] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-        cmds[3] = vm.toString(uint64(1));
-        cmds[4] = vm.toString(uint64(1));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs,) =
-            abi.decode(result, (LC.LightClientState[], V.PlonkProof[], LC.StakeTableState[]));
+        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         uint256 statesCount = _states.length - 1;
         // Update the state and thus the l1BlockUpdates array would be updated

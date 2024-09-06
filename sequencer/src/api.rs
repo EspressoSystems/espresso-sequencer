@@ -22,9 +22,7 @@ use hotshot_events_service::events_source::{
 };
 use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_state_prover::service::{
-    light_client_genesis_from_stake_table, light_client_genesis_stake_from_stake_table,
-};
+use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
@@ -627,14 +625,9 @@ pub mod test_helpers {
             }
         }
 
-        pub fn light_client_genesis(&self) -> ParsedLightClientState {
+        pub fn light_client_genesis(&self) -> (ParsedLightClientState, ParsedStakeTableState) {
             let st = self.cfg.stake_table();
             light_client_genesis_from_stake_table(st).unwrap()
-        }
-
-        pub fn light_client_genesis_stake(&self) -> ParsedStakeTableState {
-            let st = self.cfg.stake_table();
-            light_client_genesis_stake_from_stake_table(st).unwrap()
         }
 
         pub async fn stop_consensus(&mut self) {

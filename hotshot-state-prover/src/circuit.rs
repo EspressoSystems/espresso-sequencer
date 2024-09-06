@@ -4,7 +4,10 @@ use ark_ec::twisted_edwards::TECurveConfig;
 use ark_ff::PrimeField;
 use ark_std::borrow::Borrow;
 use ethers::types::U256;
-use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput};
+use hotshot_contract_adapter::light_client::{ParsedLightClientState, ParsedStakeTableState};
+use hotshot_types::light_client::{
+    GenericLightClientState, GenericPublicInput, GenericStakeTableState,
+};
 use jf_plonk::PlonkError;
 use jf_relation::{BoolVar, Circuit, CircuitError, PlonkCircuit, Variable};
 use jf_rescue::{gadgets::RescueNativeGadget, RescueParameter};
@@ -33,25 +36,39 @@ pub struct StakeTableEntryVar {
 /// The stake table commitment is a triple `(qc_keys_comm, state_keys_comm, stake_amount_comm)`.
 /// Variable for a stake table commitment
 #[derive(Clone, Debug)]
-pub struct StakeTableCommVar {
+pub struct StakeTableVar {
     /// Commitment for QC verification keys
     pub qc_keys_comm: Variable,
     /// Commitment for state verification keys
     pub state_keys_comm: Variable,
     /// Commitment for stake amount
     pub stake_amount_comm: Variable,
+    /// Threshold for quorum signatures
+    pub threshold: Variable,
+}
+
+impl StakeTableVar {
+    /// # Errors
+    /// if unable to create any of the public variables
+    pub fn new<F: PrimeField>(
+        circuit: &mut PlonkCircuit<F>,
+        st: &GenericStakeTableState<F>,
+    ) -> Result<Self, CircuitError> {
+        Ok(Self {
+            qc_keys_comm: circuit.create_public_variable(st.bls_key_comm)?,
+            state_keys_comm: circuit.create_public_variable(st.schnorr_key_comm)?,
+            stake_amount_comm: circuit.create_public_variable(st.amount_comm)?,
+            threshold: circuit.create_public_variable(st.threshold)?,
+        })
+    }
 }
 
 /// Light client state Variable
 #[derive(Clone, Debug)]
 pub struct LightClientStateVar {
-    /// Private list holding all variables
-    ///  `vars[0]`: view number
-    ///  `vars[1]`: block height
-    ///  `vars[2]`: block commitment root
-    ///  `vars[3]`: fee ledger commitment
-    ///  `vars[4-6]`: stake table commitment
-    vars: [Variable; 3],
+    pub(crate) view_num: Variable,
+    pub(crate) block_height: Variable,
+    pub(crate) block_comm_root: Variable,
 }
 
 impl LightClientStateVar {
@@ -61,55 +78,11 @@ impl LightClientStateVar {
         circuit: &mut PlonkCircuit<F>,
         state: &GenericLightClientState<F>,
     ) -> Result<Self, CircuitError> {
-        let view_number_f = F::from(state.view_number as u64);
-        let block_height_f = F::from(state.block_height as u64);
         Ok(Self {
-            vars: [
-                circuit.create_public_variable(view_number_f)?,
-                circuit.create_public_variable(block_height_f)?,
-                circuit.create_public_variable(state.block_comm_root)?,
-            ],
+            view_num: circuit.create_public_variable(F::from(state.view_number as u64))?,
+            block_height: circuit.create_public_variable(F::from(state.block_height as u64))?,
+            block_comm_root: circuit.create_public_variable(state.block_comm_root)?,
         })
-    }
-
-    /// Returns the view number
-    #[must_use]
-    pub fn view_number(&self) -> Variable {
-        self.vars[0]
-    }
-
-    /// Returns the block height
-    #[must_use]
-    pub fn block_height(&self) -> Variable {
-        self.vars[1]
-    }
-
-    /// Returns the Merkle root of the block commitments
-    #[must_use]
-    pub fn block_comm_root(&self) -> Variable {
-        self.vars[2]
-    }
-
-    // /// Returns the commitment of the fee ledger
-    // #[must_use]
-    // pub fn fee_ledger_comm(&self) -> Variable {
-    //     self.vars[3]
-    // }
-
-    // /// Returns the commitment of the associated stake table
-    // #[must_use]
-    // pub fn stake_table_comm(&self) -> StakeTableCommVar {
-    //     StakeTableCommVar {
-    //         qc_keys_comm: self.vars[4],
-    //         state_keys_comm: self.vars[5],
-    //         stake_amount_comm: self.vars[6],
-    //     }
-    // }
-}
-
-impl AsRef<[Variable]> for LightClientStateVar {
-    fn as_ref(&self) -> &[Variable] {
-        &self.vars
     }
 }
 
@@ -117,8 +90,8 @@ impl AsRef<[Variable]> for LightClientStateVar {
 /// - a list of stake table entries (`Vec<(SchnorrVerKey, Amount)>`)
 /// - a bit vector indicates the signers
 /// - a list of schnorr signatures of the updated states (`Vec<SchnorrSignature>`), default if the node doesn't sign the state
-/// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
-/// - a quorum threshold
+/// - updated light client state (`(view_number, block_height, block_comm_root)`)
+/// - the static stake table state (containing 3 commitments to the 3 columns of the stake table and a threshold)
 ///
 /// Lengths of input vectors should not exceed the `stake_table_capacity`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `stake_table_capacity`.
@@ -138,7 +111,7 @@ pub(crate) fn build<F, P, STIter, BitIter, SigIter>(
     signer_bit_vec: BitIter,
     signatures: SigIter,
     lightclient_state: &GenericLightClientState<F>,
-    threshold: &U256,
+    stake_table_state: &GenericStakeTableState<F>,
     stake_table_capacity: usize,
 ) -> Result<(PlonkCircuit<F>, GenericPublicInput<F>), PlonkError>
 where
@@ -241,18 +214,9 @@ where
             .collect::<Result<Vec<_>, CircuitError>>()?,
     );
 
-    let threshold = u256_to_field::<F>(threshold);
-    let threshold_pub_var = circuit.create_public_variable(threshold)?;
-
+    // public inputs
     let lightclient_state_pub_var = LightClientStateVar::new(&mut circuit, lightclient_state)?;
-
-    let view_number_f = F::from(lightclient_state.view_number as u64);
-    let block_height_f = F::from(lightclient_state.block_height as u64);
-    let public_inputs = vec![
-        view_number_f,
-        block_height_f,
-        lightclient_state.block_comm_root,
-    ];
+    let stake_table_state_pub_var = StakeTableVar::new(&mut circuit, stake_table_state)?;
 
     // Checking whether the accumulated weight exceeds the quorum threshold
     let mut signed_amount_var = (0..stake_table_capacity / 2)
@@ -276,39 +240,37 @@ where
         )?);
     }
     let acc_amount_var = circuit.sum(&signed_amount_var)?;
-    circuit.enforce_leq(threshold_pub_var, acc_amount_var)?;
+    circuit.enforce_leq(stake_table_state_pub_var.threshold, acc_amount_var)?;
 
     // checking the commitment for the list of schnorr keys
     let state_ver_key_preimage_vars = stake_table_var
         .iter()
         .flat_map(|var| [var.state_ver_key.0.get_x(), var.state_ver_key.0.get_y()])
         .collect::<Vec<_>>();
-    let _state_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
+    let state_ver_key_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
         &mut circuit,
         &state_ver_key_preimage_vars,
         1,
     )?[0];
-    // circuit.enforce_equal(
-    //     state_ver_key_comm,
-    //     lightclient_state_pub_var.stake_table_comm().state_keys_comm,
-    // )?;
+    circuit.enforce_equal(
+        state_ver_key_comm,
+        stake_table_state_pub_var.state_keys_comm,
+    )?;
 
     // checking the commitment for the list of stake amounts
     let stake_amount_preimage_vars = stake_table_var
         .iter()
         .map(|var| var.stake_amount)
         .collect::<Vec<_>>();
-    let _stake_amount_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
+    let stake_amount_comm = RescueNativeGadget::<F>::rescue_sponge_with_padding(
         &mut circuit,
         &stake_amount_preimage_vars,
         1,
     )?[0];
-    // circuit.enforce_equal(
-    //     stake_amount_comm,
-    //     lightclient_state_pub_var
-    //         .stake_table_comm()
-    //         .stake_amount_comm,
-    // )?;
+    circuit.enforce_equal(
+        stake_amount_comm,
+        stake_table_state_pub_var.stake_amount_comm,
+    )?;
 
     // checking all signatures
     let verification_result_vars = stake_table_var
@@ -318,7 +280,11 @@ where
             SignatureGadget::<_, P>::check_signature_validity(
                 &mut circuit,
                 &entry.state_ver_key,
-                lightclient_state_pub_var.as_ref(),
+                &[
+                    lightclient_state_pub_var.view_num,
+                    lightclient_state_pub_var.block_height,
+                    lightclient_state_pub_var.block_comm_root,
+                ],
                 &sig,
             )
         })
@@ -335,7 +301,10 @@ where
     circuit.enforce_true(sig_ver_result.0)?;
 
     circuit.finalize_for_arithmetization()?;
-    Ok((circuit, public_inputs.into()))
+    Ok((
+        circuit,
+        GenericPublicInput::new(lightclient_state.clone(), stake_table_state.clone()),
+    ))
 }
 
 /// Internal function to build a dummy circuit
@@ -346,18 +315,15 @@ where
     F: RescueParameter,
     P: TECurveConfig<BaseField = F>,
 {
-    let lightclient_state = GenericLightClientState {
-        view_number: 0,
-        block_height: 0,
-        block_comm_root: F::default(),
-    };
+    let lightclient_state = ParsedLightClientState::dummy_genesis().into();
+    let stake_table_state = ParsedStakeTableState::dummy_genesis().into();
 
     build::<F, P, _, _, _>(
         &[],
         &[],
         &[],
         &lightclient_state,
-        &U256::zero(),
+        &stake_table_state,
         stake_table_capacity,
     )
 }
@@ -365,7 +331,7 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ed_on_bn254::EdwardsConfig as Config;
-    use ethers::types::U256;
+    use hotshot_types::light_client::LightClientState;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
     use jf_crhf::CRHF;
     use jf_relation::Circuit;
@@ -376,8 +342,10 @@ mod tests {
     };
     use jf_utils::test_rng;
 
-    use super::{build, GenericLightClientState};
-    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
+    use super::build;
+    use crate::test_utils::{
+        genesis_stake_table_state, key_pairs_for_testing, stake_table_for_testing,
+    };
 
     type F = ark_ed_on_bn254::Fq;
     const ST_CAPACITY: usize = 20;
@@ -390,6 +358,7 @@ mod tests {
 
         let (qc_keys, state_keys) = key_pairs_for_testing(num_validators, &mut prng);
         let st = stake_table_for_testing(ST_CAPACITY, &qc_keys, &state_keys);
+        let st_state = genesis_stake_table_state(&st);
 
         let entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -401,7 +370,7 @@ mod tests {
             VariableLengthRescueCRHF::<F, 1>::evaluate(vec![F::from(1u32), F::from(2u32)]).unwrap()
                 [0];
 
-        let lightclient_state = GenericLightClientState {
+        let lightclient_state = LightClientState {
             view_number: 100,
             block_height: 73,
             block_comm_root,
@@ -439,7 +408,7 @@ mod tests {
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &U256::from(26u32),
+            &st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -447,12 +416,15 @@ mod tests {
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_ok());
 
+        // lower threshold should also pass
+        let mut good_st_state = st_state.clone();
+        good_st_state.threshold = F::from(10u32);
         let (circuit, public_inputs) = build(
             &entries,
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &U256::from(10u32),
+            &good_st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -467,7 +439,7 @@ mod tests {
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &U256::from(26u32),
+            &st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -476,9 +448,8 @@ mod tests {
             .is_err());
 
         // bad path: total weight doesn't meet the threshold
-        // bit vector with total weight 23
         let bad_bit_vec = [
-            true, true, true, true, true, false, false, true, false, false,
+            false, false, true, false, true, false, false, true, false, false,
         ];
         let bad_bit_masked_sigs = bad_bit_vec
             .iter()
@@ -501,7 +472,7 @@ mod tests {
             &bad_bit_vec,
             &bad_bit_masked_sigs,
             &lightclient_state,
-            &U256::from(25u32),
+            &st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -525,7 +496,7 @@ mod tests {
             &bit_vec,
             &sig_for_bad_state,
             &bad_lightclient_state,
-            &U256::from(26u32),
+            &st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -550,7 +521,7 @@ mod tests {
             &bit_vec,
             &wrong_sigs,
             &lightclient_state,
-            &U256::from(26u32),
+            &st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -564,7 +535,7 @@ mod tests {
             &bit_vec,
             &bit_masked_sigs,
             &lightclient_state,
-            &U256::from(26u32),
+            &st_state,
             9
         )
         .is_err());

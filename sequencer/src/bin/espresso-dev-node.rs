@@ -195,8 +195,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Hotshot config {config:?}");
 
-    let light_client_genesis = network.light_client_genesis();
-    let light_client_genesis_stake = network.light_client_genesis_stake();
+    let lc_genesis = network.light_client_genesis();
 
     let contracts = Contracts::new();
     let mut light_client_addresses = vec![];
@@ -240,8 +239,7 @@ async fn main() -> anyhow::Result<()> {
             account_index,
             true,
             None,
-            async { Ok(light_client_genesis.clone()) }.boxed(),
-            async { Ok(light_client_genesis_stake.clone()) }.boxed(),
+            async { Ok(lc_genesis.clone()) }.boxed(),
             contracts.clone(),
         )
         .await?;

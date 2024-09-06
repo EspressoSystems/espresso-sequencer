@@ -1,7 +1,8 @@
 //! Helpers and test mocks for Light Client logic
 
+use ark_ff::PrimeField;
 use ark_std::str::FromStr;
-use diff_test_bn254::u256_to_field;
+use diff_test_bn254::{field_to_u256, u256_to_field};
 use ethers::{
     abi::AbiDecode,
     abi::Token,
@@ -9,7 +10,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::light_client::{LightClientState, StakeTableState};
+use hotshot_types::light_client::{GenericLightClientState, GenericStakeTableState, PublicInput};
 
 /// Intermediate representations for `LightClientState` in Solidity
 #[derive(Clone, Debug, EthAbiType, EthAbiCodec, PartialEq)]
@@ -52,12 +53,32 @@ impl From<contract_bindings::light_client::LightClientState> for ParsedLightClie
     }
 }
 
-impl From<ParsedLightClientState> for LightClientState {
+impl<F: PrimeField> From<ParsedLightClientState> for GenericLightClientState<F> {
     fn from(v: ParsedLightClientState) -> Self {
         Self {
             view_number: v.view_num as usize,
             block_height: v.block_height as usize,
             block_comm_root: u256_to_field(v.block_comm_root),
+        }
+    }
+}
+
+impl<F: PrimeField> From<GenericLightClientState<F>> for ParsedLightClientState {
+    fn from(v: GenericLightClientState<F>) -> Self {
+        Self {
+            view_num: v.view_number as u64,
+            block_height: v.block_height as u64,
+            block_comm_root: field_to_u256(v.block_comm_root),
+        }
+    }
+}
+
+impl From<PublicInput> for ParsedLightClientState {
+    fn from(pi: PublicInput) -> Self {
+        Self {
+            view_num: field_to_u256(pi.view_number()).as_u64(),
+            block_height: field_to_u256(pi.block_height()).as_u64(),
+            block_comm_root: field_to_u256(pi.block_comm_root()),
         }
     }
 }
@@ -104,7 +125,7 @@ impl ParsedStakeTableState {
     }
 }
 
-impl From<ParsedStakeTableState> for StakeTableState {
+impl<F: PrimeField> From<ParsedStakeTableState> for GenericStakeTableState<F> {
     fn from(s: ParsedStakeTableState) -> Self {
         Self {
             threshold: u256_to_field(s.threshold),
@@ -149,6 +170,17 @@ impl From<ParsedStakeTableState> for contract_bindings::light_client::StakeTable
     fn from(s: ParsedStakeTableState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }
+    }
+}
+
+impl<F: PrimeField> From<GenericStakeTableState<F>> for ParsedStakeTableState {
+    fn from(v: GenericStakeTableState<F>) -> Self {
+        Self {
+            bls_key_comm: field_to_u256(v.bls_key_comm),
+            schnorr_key_comm: field_to_u256(v.schnorr_key_comm),
+            amount_comm: field_to_u256(v.amount_comm),
+            threshold: field_to_u256(v.threshold),
+        }
     }
 }
 
