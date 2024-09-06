@@ -54,7 +54,7 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74", features = ["dependency-tasks"] }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.74" }
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "hotshot/rc-0.5.74" }
@@ -65,7 +65,7 @@ hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-quer
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74", features = ["dependency-tasks"] }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74" }
 libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.74" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
