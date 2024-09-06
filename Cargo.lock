@@ -727,7 +727,7 @@ dependencies = [
  "futures-lite 2.3.0",
  "parking",
  "polling 3.7.3",
- "rustix 0.38.36",
+ "rustix 0.38.35",
  "slab",
  "tracing",
  "windows-sys 0.59.0",
@@ -795,7 +795,7 @@ dependencies = [
  "cfg-if",
  "event-listener 3.1.0",
  "futures-lite 1.13.0",
- "rustix 0.38.36",
+ "rustix 0.38.35",
  "windows-sys 0.48.0",
 ]
 
@@ -811,7 +811,7 @@ dependencies = [
  "cfg-if",
  "futures-core",
  "futures-io",
- "rustix 0.38.36",
+ "rustix 0.38.35",
  "signal-hook-registry",
  "slab",
  "windows-sys 0.59.0",
@@ -1697,9 +1697,9 @@ checksum = "da987586004ae7c43b7df5e3f7693775068522e1086f8d9b2d74c778a0f43313"
 
 [[package]]
 name = "clap"
-version = "4.5.17"
+version = "4.5.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e5a21b8495e732f1b3c364c9949b201ca7bae518c502c80256c96ad79eaf6ac"
+checksum = "ed6719fffa43d0d87e5fd8caeab59be1554fb028cd30edc88fc4369b17971019"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1707,9 +1707,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.17"
+version = "4.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf2dd12af7a047ad9d6da2b6b249759a22a7abc0f474c1dae1777afa4b21a73"
+checksum = "216aec2b177652e3846684cbfe25c9964d18ec45234f0f5da5157b207ed1aab6"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2398,9 +2398,9 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "6.1.0"
+version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
 dependencies = [
  "cfg-if",
  "crossbeam-utils",
@@ -3700,7 +3700,6 @@ name = "gen-vk-contract"
 version = "0.1.0"
 dependencies = [
  "ark-srs",
- "clap",
  "ethers",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
@@ -4080,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4127,7 +4126,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "async-trait",
  "clap",
@@ -4146,7 +4145,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.45"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=lc-contract-updates#77cc616a61f8fdd99898ab2e08befce64ada8104"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.46#0acfd21524d40fa369010823a3a5c4ad6392c13c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4201,8 +4200,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=lc-contract-updates#e9ecce293c4d8fdfb51d2dcf062c2cb1d3617be9"
+version = "0.1.40"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.45#4eda3b6c505c10bfea11dd558ce61740c8ac8f39"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4228,7 +4227,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4261,7 +4260,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
@@ -4280,7 +4279,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4291,7 +4290,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4320,8 +4319,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.52"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=lc-contract-updates#c2c7ee9d07e7ee14b45ddbf5946a14c5cd236a9a"
+version = "0.1.53"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.55#cb73be6ce0dd5a2409c18cab1f40137bf9a83f7f"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4377,7 +4376,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4439,7 +4438,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4454,7 +4453,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4491,7 +4490,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4537,7 +4536,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5794,7 +5793,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.73"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=lc-contract-updates#688e0899cd85e9f5601b143f533acd429b2a7f1c"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.73#92dfe8406567bba5d1e553df95807f680790fce0"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -6182,7 +6181,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.1.46"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=lc-contract-updates#64c7321204240c880672deb884cb82cae7759b20"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.9#8704dd126b5345d065518664ec3ecaeb02e8f5bf"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7279,7 +7278,7 @@ dependencies = [
  "concurrent-queue",
  "hermit-abi 0.4.0",
  "pin-project-lite 0.2.14",
- "rustix 0.38.36",
+ "rustix 0.38.35",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -8288,9 +8287,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.36"
+version = "0.38.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f55e80d50763938498dd5ebb18647174e0c76dc38c5505294bb224624f30f36"
+checksum = "a85d50532239da68e9addb745ba38ff4612a242c1c7ceea689c4bc7c2f43c36f"
 dependencies = [
  "bitflags 2.6.0",
  "errno",
@@ -8734,9 +8733,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.128"
+version = "1.0.127"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ff5456707a1de34e7e37f2a6fd3d3f808c318259cbd01ab6377795054b483d8"
+checksum = "8043c06d9f82bd7271361ed64f415fe5e12a77fdb52e573e7f06a516dea329ad"
 dependencies = [
  "itoa",
  "memchr",
@@ -9774,7 +9773,7 @@ dependencies = [
  "cfg-if",
  "fastrand 2.1.1",
  "once_cell",
- "rustix 0.38.36",
+ "rustix 0.38.35",
  "windows-sys 0.59.0",
 ]
 
@@ -10126,9 +10125,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.16"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f4e6ce100d0eb49a2734f8c0812bcd324cf357d21810932c5df6b96ef2b86f1"
+checksum = "267ac89e0bec6e691e5813911606935d77c476ff49024f98abcea3e7b15e37af"
 dependencies = [
  "futures-core",
  "pin-project-lite 0.2.14",
@@ -10152,9 +10151,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.12"
+version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61e7c3654c13bcd040d4a03abee2c75b1d14a37b423cf5a813ceae1cc903ec6a"
+checksum = "9cf6b47b3771c49ac75ad09a6162f53ad4b8088b76ac60e8ec1455b31a189fe1"
 dependencies = [
  "bytes 1.7.1",
  "futures-core",

@@ -20,6 +20,7 @@ use crate::{
 
 pub struct MockSolver {
     pub events_url: Url,
+    /// Solver base URL, forming the path to the solver API, with `SOLVER_API_PATH`.
     pub solver_url: Url,
     pub state: Arc<RwLock<GlobalState>>,
     pub database: PostgresClient,

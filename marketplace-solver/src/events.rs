@@ -52,13 +52,13 @@ pub async fn handle_events(
     while let Some(event) = stream.next().await {
         let event = event?;
 
-        tracing::info!("received event {:?}", event.event);
+        tracing::debug!("received event {:?}", event.event);
 
         // TODO ED: Remove this lint later
         #[allow(clippy::single_match)]
         match event.event {
             hotshot::types::EventType::ViewFinished { view_number } => {
-                tracing::info!("received view finished event {view_number:?}")
+                tracing::debug!("received view finished event {view_number:?}")
             }
             _ => (),
         }
