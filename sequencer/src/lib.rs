@@ -408,7 +408,6 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         network,
         Some(network_params.state_relay_server_url),
         metrics,
-        genesis.stake_table.capacity,
         network_params.public_api_url,
         seq_versions,
         marketplace_config,
@@ -899,7 +898,6 @@ pub mod testing {
                 network,
                 self.state_relay_url.clone(),
                 metrics,
-                stake_table_capacity,
                 None, // The public API URL
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {

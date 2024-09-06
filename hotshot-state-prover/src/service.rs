@@ -352,7 +352,7 @@ pub async fn sync_state<ApiVer: StaticVersionType>(
     entries.iter().enumerate().for_each(|(i, (key, stake))| {
         if let Some(sig) = bundle.signatures.get(key) {
             // Check if the signature is valid
-            let state_msg: [FieldType; 7] = (&bundle.state).into();
+            let state_msg: [FieldType; 3] = (&bundle.state).into();
             if key.verify(&state_msg, sig, CS_ID_SCHNORR).is_ok() {
                 signer_bit_vec[i] = true;
                 signatures[i] = sig.clone();
@@ -572,7 +572,7 @@ mod test {
         let st = ledger.st;
 
         eprintln!(
-            "Genesis: view_num: {}, block_height: {}, block_comm_root: {}, fee_ledger_comm: {}\
+            "Genesis: view_num: {}, block_height: {}, block_comm_root: {}\
              bls_key_comm: {:x?},\
              schnorr_key_comm: {:x?},\
              amount_comm: {:x?},\
@@ -580,7 +580,6 @@ mod test {
             genesis.view_num,
             genesis.block_height,
             genesis.block_comm_root,
-            genesis.fee_ledger_comm,
             genesis.bls_key_comm.encode_hex(),
             genesis.schnorr_key_comm.encode_hex(),
             genesis.amount_comm.encode_hex(),
@@ -598,7 +597,7 @@ mod test {
     ) -> (PublicInput, Proof) {
         let mut rng = test_rng();
 
-        let new_state_msg: [CircuitField; 7] = {
+        let new_state_msg: [CircuitField; 3] = {
             // sorry for the complicated .into() conversion chain, might improve in the future
             let pi_msg: LightClientState = new_state.clone().into();
             pi_msg.into()

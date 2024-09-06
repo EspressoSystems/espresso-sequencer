@@ -45,18 +45,14 @@ pub struct StateSigner<ApiVer: StaticVersionType> {
     /// The most recent light client state signatures
     signatures: RwLock<StateSignatureMemStorage>,
 
-    /// Commitment for current fixed stake table
-    stake_table_comm: StakeTableCommitmentType,
-
     /// The state relay server url
     relay_server_client: Option<Client<ServerError, ApiVer>>,
 }
 
 impl<ApiVer: StaticVersionType> StateSigner<ApiVer> {
-    pub fn new(key_pair: StateKeyPair, stake_table_comm: StakeTableCommitmentType) -> Self {
+    pub fn new(key_pair: StateKeyPair) -> Self {
         Self {
             key_pair,
-            stake_table_comm,
             signatures: Default::default(),
             relay_server_client: Default::default(),
         }
@@ -75,7 +71,7 @@ impl<ApiVer: StaticVersionType> StateSigner<ApiVer> {
         let Some(LeafInfo { leaf, .. }) = leaf_chain.first() else {
             return;
         };
-        match form_light_client_state(leaf, &self.stake_table_comm) {
+        match form_light_client_state(leaf) {
             Ok(state) => {
                 let signature = self.sign_new_state(&state).await;
                 tracing::debug!("New leaves decided. Latest block height: {}", leaf.height(),);
@@ -111,7 +107,7 @@ impl<ApiVer: StaticVersionType> StateSigner<ApiVer> {
 
     /// Sign the light client state at given height and store it.
     async fn sign_new_state(&self, state: &LightClientState) -> StateSignature {
-        let msg: [CircuitField; 7] = state.into();
+        let msg: [CircuitField; 3] = state.into();
         let signature = StateSignatureScheme::sign(
             &(),
             self.key_pair.sign_key_ref(),
@@ -146,10 +142,7 @@ fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, RescueError> {
     Ok(VariableLengthRescueCRHF::<_, 1>::evaluate(elem)?[0])
 }
 
-fn form_light_client_state(
-    leaf: &Leaf,
-    stake_table_comm: &StakeTableCommitmentType,
-) -> anyhow::Result<LightClientState> {
+fn form_light_client_state(leaf: &Leaf) -> anyhow::Result<LightClientState> {
     let header = leaf.block_header();
     let mut block_comm_root_bytes = vec![];
     header
@@ -164,8 +157,6 @@ fn form_light_client_state(
         view_number: leaf.view_number().u64() as usize,
         block_height: leaf.height() as usize,
         block_comm_root: hash_bytes_to_field(&block_comm_root_bytes)?,
-        fee_ledger_comm: hash_bytes_to_field(&fee_ledger_comm_bytes)?,
-        stake_table_comm: *stake_table_comm,
     })
 }
 

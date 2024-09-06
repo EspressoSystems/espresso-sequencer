@@ -407,7 +407,7 @@ mod tests {
             block_height: 73,
             block_comm_root,
         };
-        let state_msg: [F; 7] = lightclient_state.clone().into();
+        let state_msg: [F; 3] = lightclient_state.clone().into();
 
         let sigs = state_keys
             .iter()
@@ -512,8 +512,7 @@ mod tests {
 
         // bad path: bad stake table commitment
         let mut bad_lightclient_state = lightclient_state.clone();
-        bad_lightclient_state.stake_table_comm.1 = F::default();
-        let bad_state_msg: [F; 7] = bad_lightclient_state.clone().into();
+        let bad_state_msg: [F; 3] = bad_lightclient_state.clone().into();
         let sig_for_bad_state = state_keys
             .iter()
             .map(|(key, _)| {

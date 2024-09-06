@@ -392,7 +392,7 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
 
     tracing::debug!("Hotshot handle initialized");
 
-    let mut state_signer = StateSigner::new(state_key_pair, stake_table_commit);
+    let mut state_signer = StateSigner::new(state_key_pair);
 
     if let Some(url) = state_relay_server {
         state_signer = state_signer.with_relay_server(url);

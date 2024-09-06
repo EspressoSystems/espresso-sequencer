@@ -204,7 +204,7 @@ impl MockLedger {
 
     /// Return the light client state and proof of consensus on this finalized state
     pub fn gen_state_proof(&mut self) -> (GenericPublicInput<F>, Proof) {
-        let state_msg: [F; 7] = self.state.clone().into();
+        let state_msg: [F; 3] = self.state.clone().into();
 
         let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
             .st
@@ -284,14 +284,14 @@ impl MockLedger {
     /// adv-controlled stakers signed the state and replace the stake table commitment with that of the fake one
     /// in an attempt to hijack the correct stake table.
     pub fn gen_state_proof_with_fake_stakers(&mut self) -> (GenericPublicInput<F>, Proof) {
-        let mut new_state = self.state.clone();
+        let new_state = self.state.clone();
 
         let (adv_qc_keys, adv_state_keys) =
             key_pairs_for_testing(STAKE_TABLE_CAPACITY, &mut self.rng);
         let adv_st = stake_table_for_testing(&adv_qc_keys, &adv_state_keys);
 
         // replace new state with adversarial stake table commitment
-        let state_msg: [F; 7] = new_state.clone().into();
+        let state_msg: [F; 3] = self.state.clone().into();
 
         // every fake stakers sign on the adverarial new state
         let bit_vec = vec![true; STAKE_TABLE_CAPACITY];
