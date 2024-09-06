@@ -58,11 +58,11 @@ impl From<PublicInput> for ParsedLightClientState {
             view_num: field_to_u256(pi.view_number()).as_u64(),
             block_height: field_to_u256(pi.block_height()).as_u64(),
             block_comm_root: field_to_u256(pi.block_comm_root()),
-            fee_ledger_comm: field_to_u256(pi.fee_ledger_comm()),
             bls_key_comm: field_to_u256(pi.qc_key_comm()),
             schnorr_key_comm: field_to_u256(pi.state_key_comm()),
             amount_comm: field_to_u256(pi.stake_amount_comm()),
             threshold: field_to_u256(pi.threshold()),
+            fee_ledger_comm: field_to_u256(pi),
         }
     }
 }
@@ -119,12 +119,6 @@ impl From<ParsedLightClientState> for LightClientState {
             view_number: s.view_num as usize,
             block_height: s.block_height as usize,
             block_comm_root: u256_to_field(s.block_comm_root),
-            fee_ledger_comm: u256_to_field(s.fee_ledger_comm),
-            stake_table_comm: (
-                u256_to_field(s.bls_key_comm),
-                u256_to_field(s.schnorr_key_comm),
-                u256_to_field(s.amount_comm),
-            ),
         }
     }
 }
