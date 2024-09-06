@@ -6,16 +6,6 @@
 
 use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 
-use super::{
-    completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
-    overall_safety_task::OverallSafetyPropertiesDescription,
-    txn_task::TxnTaskDescription,
-};
-use crate::{
-    spinning_task::SpinningTaskDescription,
-    test_launcher::{Network, ResourceGenerators, TestLauncher},
-    view_sync_task::ViewSyncTaskDescription,
-};
 use hotshot::{
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
@@ -33,6 +23,17 @@ use hotshot_types::{
 };
 use tide_disco::Url;
 use vec1::Vec1;
+
+use super::{
+    completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
+    overall_safety_task::OverallSafetyPropertiesDescription,
+    txn_task::TxnTaskDescription,
+};
+use crate::{
+    spinning_task::SpinningTaskDescription,
+    test_launcher::{Network, ResourceGenerators, TestLauncher},
+    view_sync_task::ViewSyncTaskDescription,
+};
 /// data describing how a round should be timed.
 #[derive(Clone, Debug, Copy)]
 pub struct TimingData {

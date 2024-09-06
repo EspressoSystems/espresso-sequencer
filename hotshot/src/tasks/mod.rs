@@ -8,11 +8,7 @@
 
 /// Provides trait to create task states from a `SystemContextHandle`
 pub mod task_state;
-use crate::{
-    tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi,
-    ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer,
-    MarketplaceConfig, Memberships, NetworkTaskRegistry, SignatureKey, SystemContext, Versions,
-};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use async_broadcast::broadcast;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -36,19 +32,23 @@ use hotshot_task_impls::{
     vid::VidTaskState,
     view_sync::ViewSyncTaskState,
 };
-use hotshot_types::{consensus::Consensus, message::UpgradeLock};
 use hotshot_types::{
+    consensus::Consensus,
     constants::EVENT_CHANNEL_SIZE,
-    message::Messages,
+    message::{Messages, UpgradeLock},
     request_response::RequestReceiver,
     traits::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
 };
-use std::fmt::Debug;
-use std::{sync::Arc, time::Duration};
 use vbs::version::StaticVersionType;
+
+use crate::{
+    tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi,
+    ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer,
+    MarketplaceConfig, Memberships, NetworkTaskRegistry, SignatureKey, SystemContext, Versions,
+};
 
 /// event for global event stream
 #[derive(Clone, Debug)]

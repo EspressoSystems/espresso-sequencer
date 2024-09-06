@@ -20,14 +20,13 @@ use hotshot_example_types::{
     storage_types::TestStorage,
     testable_delay::DelayConfig,
 };
-use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
     data::Leaf,
     event::Event,
     simple_certificate::QuorumCertificate,
     traits::{
         network::ConnectedNetwork,
-        node_implementation::{NodeImplementation, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
     },
     vote::HasViewNumber,
     ValidatorConfig,

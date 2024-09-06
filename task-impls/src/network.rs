@@ -622,12 +622,14 @@ impl<
 
 /// A module with test helpers
 pub mod test {
+    use std::ops::{Deref, DerefMut};
+
+    use async_trait::async_trait;
+
     use super::{
         Arc, ConnectedNetwork, HotShotEvent, MessageKind, NetworkEventTaskState, NodeType,
         Receiver, Result, Sender, Storage, TaskState, TransmitType, Versions,
     };
-    use async_trait::async_trait;
-    use std::ops::{Deref, DerefMut};
 
     /// A dynamic type alias for a function that takes the result of `NetworkEventTaskState::parse_event`
     /// and changes it before transmitting on the network.

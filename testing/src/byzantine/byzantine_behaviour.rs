@@ -1,22 +1,29 @@
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+
 use anyhow::Context;
 use async_lock::RwLock;
 use async_trait::async_trait;
-use hotshot::tasks::EventTransformerState;
-use hotshot::types::{SignatureKey, SystemContextHandle};
-use hotshot_task_impls::events::HotShotEvent;
-use hotshot_task_impls::network::test::{ModifierClosure, NetworkEventTaskStateModifier};
-use hotshot_task_impls::network::NetworkEventTaskState;
-use hotshot_types::consensus::Consensus;
-use hotshot_types::message::UpgradeLock;
-use hotshot_types::simple_vote::QuorumVote;
-use hotshot_types::traits::node_implementation::ConsensusTime;
-use hotshot_types::{
-    data::QuorumProposal,
-    message::Proposal,
-    traits::node_implementation::{NodeImplementation, NodeType, Versions},
+use hotshot::{
+    tasks::EventTransformerState,
+    types::{SignatureKey, SystemContextHandle},
 };
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use hotshot_task_impls::{
+    events::HotShotEvent,
+    network::{
+        test::{ModifierClosure, NetworkEventTaskStateModifier},
+        NetworkEventTaskState,
+    },
+};
+use hotshot_types::{
+    consensus::Consensus,
+    data::QuorumProposal,
+    message::{Proposal, UpgradeLock},
+    simple_vote::QuorumVote,
+    traits::node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
+};
 
 #[derive(Debug)]
 /// An `EventTransformerState` that multiplies `QuorumProposalSend` events, incrementing the view number of the proposal
