@@ -273,12 +273,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
-        /**
-         * TODO
-         * change the array length once we confirm the items in publicInput
-         */
-        uint256[8] memory publicInput;
-        publicInput[0] = genesisStakeTableState.threshold;
+        uint256[7] memory publicInput;
+        publicInput[0] = votingThreshold;
         publicInput[1] = uint256(state.viewNum);
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
