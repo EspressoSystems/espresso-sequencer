@@ -67,7 +67,6 @@ the Espresso light client contract which is referenced by the rollup contract vi
 contract RollupContract {
 
     VMState previousVMState;
-    EspressoState previousEspressoState;
     uint256 lastEspressoBlockNumber;
     LightClient lcContract;
     bytes[] vkRollup; // This verification key corresponds to the circuit depicted in Figure 1.
@@ -81,7 +80,7 @@ contract RollupContract {
 
     /// Detects if the escape hatch is activated or not.
     function isEscapeHatchActivated() private returns (bool) {
-        if (lcContract.finalizedState().blockHeight > lastEspressoBlockNumber){
+        if (lcContract.getFinalizedState().blockHeight > lastEspressoBlockNumber){
             return false;
         } else {
             return lcContract.lagOverEscapeHatchThreshold(block.number, escapeHatchThreshold);
@@ -107,7 +106,7 @@ contract RollupContract {
 
     // Update the rollup state using the Espresso ledger as input.
     function updateStateFromEspresso(
-        newEspressoState,
+        currentEspressoState,
         blockNumberEspresso,
         commTxsRollup,
         newVMState,
@@ -121,8 +120,7 @@ contract RollupContract {
           previousVMState,
           newVMState,
           commTxsRollup,
-          previousEspressoState,
-          newEspressoState,
+          currentEspressoState,
           lastEspressoBlockNumber,
           blockNumberEspresso
         ];
@@ -133,7 +131,6 @@ contract RollupContract {
           vkEspresso
         );
 
-        previousEspressoState = newEspressoState;
         lastBlockNumberEspresso =  blockNumberEspresso;
 
         previousVMState = newVMState;
@@ -150,43 +147,36 @@ contract RollupContract {
 ## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso light client contract
 
 For this integration, Espresso consensus verification is delegated to the Espresso light client contract. In practice
-the rollup contract will be given some recent Espresso block commitment[^1] and feed it to the circuit. Still additional
-gadgets need to be introduced in order to implement the derivation pipeline logic consisting at a high level of:
+the rollup contract will be given a Merkle root of all Espresso block commitments up to now[^1] and feed it to the
+circuit. Still additional gadgets need to be introduced in order to implement the derivation pipeline logic consisting
+at a high level of:
 
-- Collecting all the Espresso commitments since the last update.
-- For each of these commitments, filter the corresponding Espresso blocks in order to obtain the transactions belonging
-  to the rollups.
-- Establishing some equivalence between the commitment to the rollup transactions used in the zkVM and the commitment to
-  those same transactions obtained after namespace filtering.
+- Collecting all the Espresso blocks since last update, along with proofs of membership for their commitments in the
+  given Merkle root.
+- Filtering each of these Espresso blocks to gather all the transactions belonging to the rollups.
+- Establishing some equivalence between the commitment to the rollup transactions used in the zkVM and those same
+  transactions obtained after namespace filtering.
 
-![image](zk-rollup-circuit-no-espresso-consensus.svg) **Figure 2:** Rollup circuit with additional gadgets _Collect &
-Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in uppercase and bold font.
+![image](zk-rollup-circuit-no-espresso-consensus.svg) **Figure 2:** Rollup circuit with additional gadgets _Espresso
+Derivation_. Private inputs of the circuit are written in uppercase and bold font.
 
 The circuit depicted in Figure 2 operates as follows:
 
-- The _Collect & Filter_ gadget receives as input `blk_cm_new` which is the commitment to the latest Espresso block
-  available and `blk_cm_old`. Both of these commitments are public inputs. The first witness of this circuit is
-  `CM_TXS_HISTORY` which is a commitment to all the rollup transactions that have been sequenced since the last Espresso
-  state update `blk_cm_old` (`CM_TXS_HISTORY` is a rollup-specific commitment, so each rollup's prover must compute this
-  commitment in order to proceed.). The relationship between `blk_cm_new`, `blk_cm_old`, and `CM_TXS_HISTORY` can be
-  checked using a second witness `proof_txs_history`. This gadget is required in order to ensure that for each Espresso
-  block in the range defined by `blk_cm_old` and `blk_cm_new`, the transactions applied to the rollup state correspond
-  to the rollup namespace. The value `proof_txs_history` contains a list of namespace proofs, one for each Espresso
-  block in the range. Note that such list of proofs could be aggregated or verified in batch depending on the commitment
-  scheme used to represent each Espresso block.
-- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain `CM_TXS_HISTORY` using
-  the Espresso commitment scheme for representing a set of transactions and the commitment `cm_txs_rollup` that is used
-  by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the Espresso
-  blocks and represented as `CM_TXS_HISTORY` is consistent with the set of transactions applied to the rollup state and
-  represented by the commitment `cm_txs_rollup`. Note that if both commitment schemes (used in Espresso and the Rollup)
-  were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is possible in practice, by
-  using the Espresso commitment scheme inside the zkVM gadget, one can remove the need for the _COMMs Equivalence_
-  gadget.
+- The _Espresso Derivation_ gadget receives as public inputs a `blk_cm_root` which is the Merkle root of all finalized
+  Espresso block commitments up to now, and a commitment of transactions `cm_txs_rollup` that is used by _zkVM_ gadget.
+  With witnesses of all transactions to the rollup `ROLLUP_TXS` and proofs that they are complete and correctly filtered
+  from finalized Espresso blocks since last update `TXS_NAMESPACE_PROOFS`, it checks that:
+  - Namespace proofs `TXS_NAMESPACE_PROOFS` are valid, saying that `ROLLUP_TXS` are complete and correctly filtered from
+    Espresso blockscommited in a Merkle tree with root `blk_cm_root` since last update.
+  - Given `cm_txs_rollup` commits to the filtered transactions `ROLLUP_TXS`.
 - The _zkVM_ gadget is the original gadget of the rollup circuit that proves a correct transition from state
   `cm_state_vm i` to the next state `cm_state_vm i+1` when applying the transactions represented by the commitment value
   `cm_txs_rollup`.
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
+
+Please read [our doc](https://github.com/EspressoSystems/zkrollup-integration) for more detailed description along with
+a reference implementation.[^2]
 
 The pseudocode of the rollup contract below shows that in the case we rely on the Espresso light client contract to
 fetch the Espresso state, the only inputs to the function `updateRollupState` are `newVMState`, `commTxsRollup` and
@@ -205,10 +195,10 @@ contract RollupContract1 is RollupContract {
         if (isEscapeHatchActivated()){
             this.updateStateBackupSequencingMode(commTxsRollup,newVMState,snarkProof);
         } else { // No escape hatch, use the state of Espresso consensus
-            lightClientState = lcContract.finalizedState();
-            newEspressoState = lightClientState.blockCommRoot;
+            lightClientState = lcContract.getFinalizedState();
+            currentEspressoState = lightClientState.blockCommRoot;
             blockNumberEspresso = lightClientState.blockHeight;
-            this.updateStateFromEspresso(newEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
+            this.updateStateFromEspresso(currentEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
         }
     }
 }
@@ -216,23 +206,22 @@ contract RollupContract1 is RollupContract {
 
 ## Integration 2: Verify Espresso consensus inside the rollup circuit
 
-![image](zk-rollup-circuit.svg) **Figure 3:** Rollup circuit with additional gadgets _Espresso Consensus_, _Collect &
-Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in uppercase and bold font.
+![image](zk-rollup-circuit.svg) **Figure 3:** Rollup circuit with additional gadgets _Espresso Consensus_ and _Espresso
+Derivation_. Private inputs of the circuit are written in uppercase and bold font.
 
 The circuit depicted in Figure 3 operates as follows:
 
-- The _Espresso Consensus_ gadget checks that the block commitment for Espresso block `BLOCK_NUMBER` is `blk_cm` using
-  the multi-signature `STATE_SIGS` obtained by the HotShot replicas. To achieve this goal, it is required to obtain the
-  state of the stake table from the previous HotShot epoch. Assuming the rollup state is updated at least once per
-  epoch, the commitment `blk_cm_old` will be computed from such state. Hence, the private input `STAKE_TABLE_ENTRIES`,
-  containing the list of public keys with their respective stake, can be linked to the commitment `blk_cm_old` via the
-  private inputs `STAKE_TABLE_OPENINGS`. Finally, note that the first `blk_cm_old` value needs to be read from the light
+- The _Espresso Consensus_ gadget checks the Merkle root of Espresso block commitments `blk_cm_root` using the
+  multi-signature `STATE_SIGS` obtained by the HotShot replicas. To achieve this goal, it is required to obtain the
+  stake table from the previous HotShot epoch `STAKE_TABLE_ENTRIES` as witness, containing the list of public keys with
+  their respective stake. It can be linked to some old blocks from last epoch committed in the `blk_cm_root` via the
+  witness `STAKE_TABLE_OPENINGS`. Finally, note that the first `blk_cm_root` value needs to be read from the light
   client contract. Afterward, no dependency on the light client contract is needed.
 - The other gadgets are the same as in Integration 1.
 
 The pseudocode of the rollup contract below shows that in the case we do not rely on the Espresso light client contract
 to fetch the Espresso state, the function `updateRollupState` requires additional inputs (compared to Integration 1)
-which are `newEspressoState` and `blockNumberEspresso`.
+which are `currentEspressoState` and `blockNumberEspresso`.
 
 ```solidity
 
@@ -240,7 +229,7 @@ which are `newEspressoState` and `blockNumberEspresso`.
 contract RollupContract2 is RollupContract {
 
   function updateRollupState(
-    newEspressoState,
+    currentEspressoState,
     blockNumberEspresso,
     newVMState,
     commTxsRollup,
@@ -250,7 +239,7 @@ contract RollupContract2 is RollupContract {
     if (isEscapeHatchActivated()){
       this.updateStateBackupSequencingMode(commTxsRollup,newVMState,snarkProof);
     } else { // No escape hatch, use the state of Espresso consensus
-      this.updateStateFromEspresso(newEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
+      this.updateStateFromEspresso(currentEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
     }
   }
 }
@@ -259,3 +248,5 @@ contract RollupContract2 is RollupContract {
 [^1]:
     Note that the rollup state is updated at a much lower frequency (in the order of minutes / hours) than the Espresso
     state (in the order of seconds).
+
+[^2]: Soon to be published.
