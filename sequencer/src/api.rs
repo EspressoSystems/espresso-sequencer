@@ -529,14 +529,13 @@ pub mod test_helpers {
         ) -> Self {
             let mut cfg = cfg;
             let mut builder_tasks = Vec::new();
-            let mut legacy_builder_url = "http://example.com".parse().unwrap();
             let mut marketplace_builder_url = "http://example.com".parse().unwrap();
 
             if <V as Versions>::Base::VERSION < MarketplaceVersion::VERSION {
                 let (task, url) =
                     run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
                 builder_tasks.push(task);
-                legacy_builder_url = url;
+                cfg.network_config.set_builder_urls(vec1::vec1![url]);
             };
 
             if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION
@@ -549,11 +548,10 @@ pub mod test_helpers {
                 )
                 .await;
                 builder_tasks.push(task);
+                cfg.network_config
+                    .set_builder_urls(vec1::vec1![url.clone()]);
                 marketplace_builder_url = url;
             }
-
-            cfg.network_config
-                .set_builder_urls(vec1::vec1![legacy_builder_url]);
 
             let mut nodes = join_all(
                 izip!(cfg.state, cfg.persistence, cfg.catchup)
