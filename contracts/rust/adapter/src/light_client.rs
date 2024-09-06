@@ -63,6 +63,16 @@ impl<F: PrimeField> From<ParsedLightClientState> for GenericLightClientState<F> 
     }
 }
 
+impl<F: PrimeField> From<GenericLightClientState<F>> for ParsedLightClientState {
+    fn from(v: GenericLightClientState<F>) -> Self {
+        Self {
+            view_num: v.view_number as u64,
+            block_height: v.block_height as u64,
+            block_comm_root: field_to_u256(v.block_comm_root),
+        }
+    }
+}
+
 impl From<PublicInput> for ParsedLightClientState {
     fn from(pi: PublicInput) -> Self {
         Self {
@@ -160,6 +170,17 @@ impl From<ParsedStakeTableState> for contract_bindings::light_client::StakeTable
     fn from(s: ParsedStakeTableState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }
+    }
+}
+
+impl<F: PrimeField> From<GenericStakeTableState<F>> for ParsedStakeTableState {
+    fn from(v: GenericStakeTableState<F>) -> Self {
+        Self {
+            bls_key_comm: field_to_u256(v.bls_key_comm),
+            schnorr_key_comm: field_to_u256(v.schnorr_key_comm),
+            amount_comm: field_to_u256(v.amount_comm),
+            threshold: field_to_u256(v.threshold),
+        }
     }
 }
 

@@ -555,7 +555,6 @@ mod test {
     use crate::mock_ledger::{MockLedger, MockSystemParam};
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
-    const BLOCKS_PER_EPOCH: u32 = 10;
     const MAX_HISTORY_SECONDS: u32 = 864000;
 
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
@@ -571,11 +570,11 @@ mod test {
         Vec<(StateSignKey, StateVerKey)>,
         StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     ) {
-        let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+        let pp = MockSystemParam::init();
         let ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS as usize);
 
         let genesis = ledger.get_state();
-        let (_, _, stake_genesis) = ledger.get_stake_table_comms();
+        let stake_genesis = ledger.get_stake_table_state();
 
         let qc_keys = ledger.qc_keys;
         let state_keys = ledger.state_keys;
