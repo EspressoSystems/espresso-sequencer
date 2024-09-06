@@ -938,23 +938,35 @@ where
             let major = i % major_interval == major_offset % major_interval;
             let span = tracing::warn_span!("proactive scan", i, major, prev_height);
             async {
-                let Some(tx) = self
-                    .read()
-                    .await
-                    .context("starting transaction for scan")
-                    .ok_or_trace()
-                else {
-                    tracing::error!("unable to start transaction, scan will be skipped");
-                    return;
-                };
+                let mut backoff = minor_interval;
+                let max_backoff = Duration::from_secs(60);
 
-                // Read block height at the beginning of the scan, so we don't end up scanning more
-                // than necessary.
-                let Some(heights) = tx.heights().await.ok_or_trace() else {
-                    tracing::error!("unable to load heights, scan will be skipped");
-                    return;
+                // We can't start the scan until we know the current block height and pruned height,
+                // so we know which blocks to scan. Thus we retry until this succeeds.
+                let heights = loop {
+                    let tx = match self.read().await {
+                        Ok(tx) => tx,
+                        Err(err) => {
+                            tracing::error!(
+                                ?backoff,
+                                "unable to start transaction for scan: {err:#}"
+                            );
+                            sleep(backoff).await;
+                            backoff = min(2 * backoff, max_backoff);
+                            continue;
+                        }
+                    };
+                    let heights = match tx.heights().await {
+                        Ok(heights) => heights,
+                        Err(err) => {
+                            tracing::error!(?backoff, "unable to load heights: {err:#}");
+                            sleep(backoff).await;
+                            backoff = min(2 * backoff, max_backoff);
+                            continue;
+                        }
+                    };
+                    break heights;
                 };
-                drop(tx);
 
                 // Get the pruned height or default to 0 if it is not set. We will start looking for
                 // missing blocks from the pruned height.
