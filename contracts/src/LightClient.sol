@@ -274,10 +274,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         // Prepare the public input
         uint256[7] memory publicInput;
-        publicInput[0] = votingThreshold;
-        publicInput[1] = uint256(state.viewNum);
-        publicInput[2] = uint256(state.blockHeight);
-        publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[0] = uint256(state.viewNum);
+        publicInput[1] = uint256(state.blockHeight);
+        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[3] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
+        publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
+        publicInput[6] = genesisStakeTableState.threshold;
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
