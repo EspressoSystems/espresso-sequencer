@@ -281,9 +281,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         current_version: V::Base::VERSION,
     };
 
-    let stake_table_commit =
-        static_stake_table_commitment(&config.config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
-
     let (hotshot_handle, state_signer) = init_hotshot(
         config.config,
         None,
@@ -292,7 +289,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         metrics,
         node_index,
         Some(network_params.state_relay_server_url),
-        stake_table_commit,
         bind_version,
         persistence,
     )
@@ -330,7 +326,6 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
     metrics: &dyn Metrics,
     node_id: u64,
     state_relay_server: Option<Url>,
-    stake_table_commit: StakeTableCommitmentType,
     _: V,
     persistence: P,
 ) -> (Consensus<N, P, V>, StateSigner<SequencerApiVersion>) {

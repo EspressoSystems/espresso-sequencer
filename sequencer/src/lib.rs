@@ -27,7 +27,6 @@ use libp2p::Multiaddr;
 use libp2p_networking::network::GossipConfig;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
-use state_signature::static_stake_table_commitment;
 use url::Url;
 pub mod persistence;
 pub mod state;
@@ -794,7 +793,6 @@ pub mod testing {
                     no_storage::Options,
                     MockStateCatchup::default(),
                     &NoMetrics,
-                    STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
                     Default::default(),
                     Url::parse(&format!(
@@ -836,7 +834,6 @@ pub mod testing {
             persistence_opt: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
-            stake_table_capacity: u64,
             bind_version: V,
             upgrades: BTreeMap<Version, Upgrade>,
             marketplace_builder_url: Url,
