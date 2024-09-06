@@ -29,7 +29,7 @@ contract LightClientUpgradeToVxTest is Test {
     address public admin;
     address public proxy;
 
-    uint32 constant MAX_HISTORY_SECONDS = 864000; //10 days
+    uint32 public constant MAX_HISTORY_SECONDS = 864000; //10 days
 
     // deploy the first implementation with its proxy
     function setUp() public {
@@ -48,12 +48,6 @@ contract LightClientUpgradeToVxTest is Test {
         assertEq(viewNum, stateV1.viewNum);
         assertEq(blockHeight, stateV1.blockHeight);
         assertEq(abi.encode(blockCommRoot), abi.encode(stateV1.blockCommRoot));
-
-        bytes32 stakeTableComm = lcV1Proxy.computeStakeTableComm(stakeStateV1);
-        assertEq(lcV1Proxy.votingStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.votingThreshold(), stakeStateV1.threshold);
-        assertEq(lcV1Proxy.frozenThreshold(), stakeStateV1.threshold);
     }
 
     // test that the data remains the same after upgrading the implementation

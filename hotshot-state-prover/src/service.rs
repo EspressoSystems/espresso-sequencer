@@ -198,15 +198,34 @@ pub fn light_client_genesis_from_stake_table(
     Ok(pi.into())
 }
 
-// pub async fn light_client_genesis_stake(
-//     sequencer_url: &Url,
-//     stake_table_capacity: usize,
-// ) -> anyhow::Result<ParsedStakeTableState> {
-//     let st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
-//         .await
-//         .with_context(|| "Failed to initialize stake table")?;
-//     light_client_genesis_stake_from_stake_table(st)
-// }
+pub async fn light_client_genesis_stake(
+    sequencer_url: &Url,
+    stake_table_capacity: usize,
+) -> anyhow::Result<ParsedStakeTableState> {
+    let st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
+        .await
+        .with_context(|| "Failed to initialize stake table")?;
+    light_client_genesis_stake_from_stake_table(st)
+}
+
+#[inline]
+pub fn light_client_genesis_stake_from_stake_table(
+    st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
+) -> anyhow::Result<ParsedStakeTableState> {
+    let (bls_comm, schnorr_comm, stake_comm) = st
+        .commitment(SnapshotVersion::LastEpochStart)
+        .expect("Commitment computation shouldn't fail.");
+    let honest_threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+
+    let stt = ParsedStakeTableState {
+        threshold: honest_threshold,
+        bls_key_comm: field_to_u256(bls_comm),
+        schnorr_key_comm: field_to_u256(schnorr_comm),
+        amount_comm: field_to_u256(stake_comm),
+    };
+
+    Ok(stt)
+}
 
 pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     let srs = {

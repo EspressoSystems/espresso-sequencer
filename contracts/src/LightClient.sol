@@ -43,18 +43,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     //
     // === Storage ===
     //
-    /// @notice The commitment of the stake table used in current voting
-    bytes32 public votingStakeTableCommitment;
-
-    /// @notice The quorum threshold for the stake table used in current voting
-    uint256 public votingThreshold;
-
-    /// @notice The commitment of the stake table frozen for change
-    bytes32 public frozenStakeTableCommitment;
-
-    /// @notice The quorum threshold for the frozen stake table
-    uint256 public frozenThreshold;
-
     /// @notice genesis stake commitment
     StakeTableState public genesisStakeTableState;
 
@@ -229,12 +217,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
 
-        bytes32 initStakeTableComm = computeStakeTableComm(_genesisStakeTableState);
-        votingStakeTableCommitment = initStakeTableComm;
-        votingThreshold = _genesisStakeTableState.threshold;
-        frozenStakeTableCommitment = initStakeTableComm;
-        frozenThreshold = _genesisStakeTableState.threshold;
-
         updateStateHistory(uint64(block.number), uint64(block.timestamp), _genesis);
     }
 
@@ -291,8 +273,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
+        /**
+         * TODO
+         * change the array length once we confirm the items in publicInput
+         */
         uint256[8] memory publicInput;
-        publicInput[0] = votingThreshold;
+        publicInput[0] = genesisStakeTableState.threshold;
         publicInput[1] = uint256(state.viewNum);
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
@@ -300,17 +286,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
-    }
-
-    /// @notice Given the light client state, compute the short commitment of the stake table
-    function computeStakeTableComm(StakeTableState memory state) public pure virtual returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(
-                state.blsKeyComm,
-                state.schnorrKeyComm,
-                state.amountComm
-            )
-        );
     }
 
     /// @notice set the permissionedProverMode to true and set the permissionedProver to the
