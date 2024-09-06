@@ -9,7 +9,7 @@ use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, MockSequencerVersions, NodeState, PubKey, Transaction,
+    FeeAccountProof, MockSequencerVersions, NodeState, PubKey, Transaction, ValidatedState,
 };
 use ethers::prelude::Address;
 use futures::{
@@ -30,9 +30,7 @@ use hotshot_types::{
 };
 use jf_merkle_tree::MerkleTreeScheme;
 
-use self::data_source::{
-    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
-};
+use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
 use crate::{
     context::Consensus, network, persistence::ChainConfigPersistence, state_signature::StateSigner,
     SeqTypes, SequencerApiVersion, SequencerContext,
@@ -116,6 +114,22 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
 
     async fn node_state(&self) -> &NodeState {
         &self.consensus.as_ref().get().await.get_ref().node_state
+    }
+
+    async fn decided_state(&self) -> Arc<ValidatedState> {
+        Arc::clone(
+            &self
+                .consensus
+                .as_ref()
+                .get()
+                .await
+                .get_ref()
+                .handle
+                .read()
+                .await
+                .decided_state()
+                .await,
+        )
     }
 
     async fn network_config(&self) -> NetworkConfig<PubKey> {
@@ -338,6 +352,10 @@ impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
     async fn get_config(&self) -> PublicNetworkConfig {
         self.as_ref().network_config().await.into()
     }
+
+    async fn decided_state(&self) -> Arc<ValidatedState> {
+        self.as_ref().decided_state().await
+    }
 }
 
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> HotShotConfigDataSource
@@ -346,21 +364,8 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> HotShotC
     async fn get_config(&self) -> PublicNetworkConfig {
         self.network_config().await.into()
     }
-}
-
-impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence> NodeStateDataSource
-    for StorageState<N, P, D, V>
-{
-    async fn get_node_state(&self) -> NodeState {
-        self.as_ref().node_state().await.clone()
-    }
-}
-
-impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> NodeStateDataSource
-    for ApiState<N, P, V>
-{
-    async fn get_node_state(&self) -> NodeState {
-        self.node_state().await.clone()
+    async fn decided_state(&self) -> Arc<ValidatedState> {
+        self.decided_state().await
     }
 }
 
