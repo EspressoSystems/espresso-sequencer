@@ -24,8 +24,8 @@ contract DeployLightClientContractScript is Script {
         cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,, LC.StakeTableState memory stakeState) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32, LC.StakeTableState));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
         return deployContract(state, stakeState, stateHistoryRetentionPeriod);
     }
