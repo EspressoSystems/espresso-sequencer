@@ -575,7 +575,14 @@ pub mod testing {
         .into_app()
         .expect("Failed to create builder tide-disco app");
 
-        async_spawn(app.serve(url.clone(), MarketplaceVersion::instance()));
+        async_spawn(
+            app.serve(
+                format!("http://0.0.0.0:{port}")
+                    .parse::<Url>()
+                    .expect("Failed to parse builder listener"),
+                MarketplaceVersion::instance(),
+            ),
+        );
 
         (
             Box::new(MarketplaceBuilderImplementation { hooks, senders }),
