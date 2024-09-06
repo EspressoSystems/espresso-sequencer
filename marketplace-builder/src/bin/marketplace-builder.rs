@@ -171,6 +171,7 @@ async fn run<V: Versions>(
         build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
 
     let base_fee = genesis.max_base_fee();
+    tracing::info!(?base_fee, "base_fee");
 
     let validated_state = ValidatedState::genesis(&instance_state).0;
 
