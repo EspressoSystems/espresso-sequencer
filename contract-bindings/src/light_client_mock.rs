@@ -190,15 +190,10 @@ pub mod light_client_mock {
                             ),
                         },],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                            ],),
+                            name: ::std::borrow::ToOwned::to_owned("hotShotBlockCommRoot",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned(
-                                    "struct LightClient.HotShotCommitment",
-                                ),
+                                ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -583,10 +578,8 @@ pub mod light_client_mock {
                                     ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
                                         ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
                                         ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                        ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                            ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                            ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                        ],),
+                                        ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                        ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                     ],),
                                 ),
                             ),
@@ -644,15 +637,17 @@ pub mod light_client_mock {
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("hotShotCommitment"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                    ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ],),
+                                name: ::std::borrow::ToOwned::to_owned("hotShotBlockHeight",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned(
-                                        "struct LightClient.HotShotCommitment",
-                                    ),
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("hotShotBlockCommRoot",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                         ],
@@ -1107,7 +1102,7 @@ pub mod light_client_mock {
         pub fn get_hot_shot_commitment(
             &self,
             hot_shot_block_height: ::ethers::core::types::U256,
-        ) -> ::ethers::contract::builders::ContractCall<M, HotShotCommitment> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
             self.0
                 .method_hash([133, 132, 210, 63], hot_shot_block_height)
                 .expect("method not found (this should never happen)")
@@ -1235,13 +1230,13 @@ pub mod light_client_mock {
                 .method_hash([1, 63, 165, 252], prover)
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `setStateHistory` (0x2f5f4600) function
+        ///Calls the contract's `setStateHistory` (0xf5676160) function
         pub fn set_state_history(
             &self,
             state_history_commitments: ::std::vec::Vec<StateHistoryCommitment>,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash([47, 95, 70, 0], state_history_commitments)
+                .method_hash([245, 103, 97, 96], state_history_commitments)
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `setstateHistoryRetentionPeriod` (0x96c1ca61) function
@@ -1257,7 +1252,10 @@ pub mod light_client_mock {
         pub fn state_history_commitments(
             &self,
             p0: ::ethers::core::types::U256,
-        ) -> ::ethers::contract::builders::ContractCall<M, (u64, u64, HotShotCommitment)> {
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (u64, u64, u64, ::ethers::core::types::U256),
+        > {
             self.0
                 .method_hash([2, 181, 146, 243], p0)
                 .expect("method not found (this should never happen)")
@@ -2666,7 +2664,7 @@ pub mod light_client_mock {
     pub struct SetPermissionedProverCall {
         pub prover: ::ethers::core::types::Address,
     }
-    ///Container type for all input parameters for the `setStateHistory` function with signature `setStateHistory((uint64,uint64,(uint64,uint256))[])` and selector `0x2f5f4600`
+    ///Container type for all input parameters for the `setStateHistory` function with signature `setStateHistory((uint64,uint64,uint64,uint256)[])` and selector `0xf5676160`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -2681,7 +2679,7 @@ pub mod light_client_mock {
     )]
     #[ethcall(
         name = "setStateHistory",
-        abi = "setStateHistory((uint64,uint64,(uint64,uint256))[])"
+        abi = "setStateHistory((uint64,uint64,uint64,uint256)[])"
     )]
     pub struct SetStateHistoryCall {
         pub state_history_commitments: ::std::vec::Vec<StateHistoryCommitment>,
@@ -3272,7 +3270,9 @@ pub mod light_client_mock {
         Eq,
         Hash,
     )]
-    pub struct GetHotShotCommitmentReturn(pub HotShotCommitment);
+    pub struct GetHotShotCommitmentReturn {
+        pub hot_shot_block_comm_root: ::ethers::core::types::U256,
+    }
     ///Container type for all return fields from the `getStateHistoryCount` function with signature `getStateHistoryCount()` and selector `0xf9e50d19`
     #[derive(
         Clone,
@@ -3391,7 +3391,8 @@ pub mod light_client_mock {
     pub struct StateHistoryCommitmentsReturn {
         pub l_1_block_height: u64,
         pub l_1_block_timestamp: u64,
-        pub hot_shot_commitment: HotShotCommitment,
+        pub hot_shot_block_height: u64,
+        pub hot_shot_block_comm_root: ::ethers::core::types::U256,
     }
     ///Container type for all return fields from the `stateHistoryFirstIndex` function with signature `stateHistoryFirstIndex()` and selector `0x2f79889d`
     #[derive(
@@ -3421,7 +3422,7 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct StateHistoryRetentionPeriodReturn(pub u32);
-    ///`StateHistoryCommitment(uint64,uint64,(uint64,uint256))`
+    ///`StateHistoryCommitment(uint64,uint64,uint64,uint256)`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -3437,6 +3438,7 @@ pub mod light_client_mock {
     pub struct StateHistoryCommitment {
         pub l_1_block_height: u64,
         pub l_1_block_timestamp: u64,
-        pub hot_shot_commitment: HotShotCommitment,
+        pub hot_shot_block_height: u64,
+        pub hot_shot_block_comm_root: ::ethers::core::types::U256,
     }
 }

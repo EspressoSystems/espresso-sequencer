@@ -100,21 +100,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice Simplified HotShot commitment struct
-    /// @param blockHeight The block height of the latest finalized HotShot block
-    /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
-    struct HotShotCommitment {
-        uint64 blockHeight;
-        BN254.ScalarField blockCommRoot;
-    }
-
-    /// @notice Simplified HotShot commitment struct
     /// @param l1BlockHeight the block height of l1 when this state update was stored
     /// @param l1BlockTimestamp the block timestamp of l1 when this state update was stored
-    /// @param hotShotCommitment The HotShot commitment info of the latest finalized HotShot block
+    /// @param hotShotBlockHeight The block height of the latest finalized HotShot block
+    /// @param hotShotBlockCommRoot The merkle root of historical block commitments
+    /// (BN254::ScalarField)
     struct StateHistoryCommitment {
         uint64 l1BlockHeight;
         uint64 l1BlockTimestamp;
-        HotShotCommitment hotShotCommitment;
+        uint64 hotShotBlockHeight;
+        BN254.ScalarField hotShotBlockCommRoot;
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -352,9 +347,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // add the L1 Block & HotShot commitment to the genesis state
         stateHistoryCommitments.push(
             StateHistoryCommitment(
-                blockNumber,
-                blockTimestamp,
-                HotShotCommitment(state.blockHeight, state.blockCommRoot)
+                blockNumber, blockTimestamp, state.blockHeight, state.blockCommRoot
             )
         );
     }
@@ -413,29 +406,27 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
     /// the provided HotShot height
     /// @param hotShotBlockHeight the HotShot block height
-    /// @return HotShotCommitment the HotShot commitment
+    /// @return hotShotBlockCommRoot the HotShot commitment root
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
         virtual
-        returns (HotShotCommitment memory)
+        returns (BN254.ScalarField hotShotBlockCommRoot)
     {
         uint256 commitmentsHeight = stateHistoryCommitments.length;
-        if (
-            hotShotBlockHeight
-                >= stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment.blockHeight
-        ) {
+        if (hotShotBlockHeight >= stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
+        {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
-            if (stateHistoryCommitments[i].hotShotCommitment.blockHeight > hotShotBlockHeight) {
-                return stateHistoryCommitments[i].hotShotCommitment;
+            if (stateHistoryCommitments[i].hotShotBlockHeight > hotShotBlockHeight) {
+                return stateHistoryCommitments[i].hotShotBlockCommRoot;
             }
         }
 
-        return stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment;
+        return stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockCommRoot;
     }
 
     /// @notice get the number of state history commitments

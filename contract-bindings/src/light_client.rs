@@ -159,15 +159,10 @@ pub mod light_client {
                             ),
                         },],
                         outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                            ],),
+                            name: ::std::borrow::ToOwned::to_owned("hotShotBlockCommRoot",),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned(
-                                    "struct LightClient.HotShotCommitment",
-                                ),
+                                ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -536,15 +531,17 @@ pub mod light_client {
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("hotShotCommitment"),
-                                kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
-                                    ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
-                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
-                                ],),
+                                name: ::std::borrow::ToOwned::to_owned("hotShotBlockHeight",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
                                 internal_type: ::core::option::Option::Some(
-                                    ::std::borrow::ToOwned::to_owned(
-                                        "struct LightClient.HotShotCommitment",
-                                    ),
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("hotShotBlockCommRoot",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
                                 ),
                             },
                         ],
@@ -999,7 +996,7 @@ pub mod light_client {
         pub fn get_hot_shot_commitment(
             &self,
             hot_shot_block_height: ::ethers::core::types::U256,
-        ) -> ::ethers::contract::builders::ContractCall<M, HotShotCommitment> {
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
             self.0
                 .method_hash([133, 132, 210, 63], hot_shot_block_height)
                 .expect("method not found (this should never happen)")
@@ -1116,7 +1113,10 @@ pub mod light_client {
         pub fn state_history_commitments(
             &self,
             p0: ::ethers::core::types::U256,
-        ) -> ::ethers::contract::builders::ContractCall<M, (u64, u64, HotShotCommitment)> {
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (u64, u64, u64, ::ethers::core::types::U256),
+        > {
             self.0
                 .method_hash([2, 181, 146, 243], p0)
                 .expect("method not found (this should never happen)")
@@ -3002,7 +3002,9 @@ pub mod light_client {
         Eq,
         Hash,
     )]
-    pub struct GetHotShotCommitmentReturn(pub HotShotCommitment);
+    pub struct GetHotShotCommitmentReturn {
+        pub hot_shot_block_comm_root: ::ethers::core::types::U256,
+    }
     ///Container type for all return fields from the `getStateHistoryCount` function with signature `getStateHistoryCount()` and selector `0xf9e50d19`
     #[derive(
         Clone,
@@ -3121,7 +3123,8 @@ pub mod light_client {
     pub struct StateHistoryCommitmentsReturn {
         pub l_1_block_height: u64,
         pub l_1_block_timestamp: u64,
-        pub hot_shot_commitment: HotShotCommitment,
+        pub hot_shot_block_height: u64,
+        pub hot_shot_block_comm_root: ::ethers::core::types::U256,
     }
     ///Container type for all return fields from the `stateHistoryFirstIndex` function with signature `stateHistoryFirstIndex()` and selector `0x2f79889d`
     #[derive(
