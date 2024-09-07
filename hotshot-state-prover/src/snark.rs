@@ -273,7 +273,7 @@ mod tests {
         .is_ok());
 
         // minimum bad path, other bad cases are checked inside `circuit.rs`
-        let mut bad_st_state = st_state.clone();
+        let mut bad_st_state = st_state;
         bad_st_state.threshold = CircuitField::from(100u32);
         let result = generate_state_update_proof::<_, _, _, _>(
             &mut prng,

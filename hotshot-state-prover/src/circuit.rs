@@ -303,7 +303,7 @@ where
     circuit.finalize_for_arithmetization()?;
     Ok((
         circuit,
-        GenericPublicInput::new(lightclient_state.clone(), stake_table_state.clone()),
+        GenericPublicInput::new(lightclient_state.clone(), *stake_table_state),
     ))
 }
 
@@ -417,7 +417,7 @@ mod tests {
             .is_ok());
 
         // lower threshold should also pass
-        let mut good_st_state = st_state.clone();
+        let mut good_st_state = st_state;
         good_st_state.threshold = F::from(10u32);
         let (circuit, public_inputs) = build(
             &entries,

@@ -361,7 +361,7 @@ impl MockLedger {
 
     /// Returns the `StakeTableState` in solidity
     pub fn get_stake_table_state(&self) -> ParsedStakeTableState {
-        self.stake_table_state.clone().into()
+        self.stake_table_state.into()
     }
 
     // return a dummy commitment value
