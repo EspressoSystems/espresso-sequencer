@@ -210,7 +210,7 @@ services:
         condition: service_completed_successfully
 
   sequencer0:
-    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    image: sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
       - "$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT"

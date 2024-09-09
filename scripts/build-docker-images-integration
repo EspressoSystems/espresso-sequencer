@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+#
+# Used to build docker images in a quick way for local testing.
+#
+# On Linux:
+#
+#   - Native executables are built and patched to run inside docker.
+#   - Expected to be run in nix-shell or nix develop because it requires patchelf
+#     to be installed.
+#
+# On Darwin: the build is done inside a docker container.
+#
+# Usage: scripts/build-docker-images-native
+#
+set -euo pipefail
+
+# Check kernel
+case $(uname -s) in
+  Linux)
+    KERNEL=linux
+    ;;
+  Darwin)
+    KERNEL=darwin
+    ;;
+  *)
+    echo "This script is only supported on Linux and Darwin"
+    exit 1
+    ;;
+esac
+
+# Check architecture
+case $(uname -m) in
+  x86_64)
+    ARCH=amd64
+    PLATFORM=linux/amd64
+    INTERPRETER=/lib64/ld-linux-x86-64.so.2
+    ;;
+  arm64)
+    ARCH=arm64
+    PLATFORM=linux/arm64
+    ;;
+  *)
+    echo "Machine type $(uname -m) is not supported."
+    exit 1
+    ;;
+esac
+
+# Compile binaries
+case $KERNEL in
+  linux)
+    CARGO_TARGET_DIR=target
+    CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+    cargo build --release
+    ;;
+  darwin)
+  # Use a different target directory for docker builds to avoid conflicts with
+  # native builds.
+  CARGO_TARGET_DIR=target/docker
+  CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+
+  # Pull our latest devops-rust image. Using an older image may cause a failing
+  # rustup channels sync.
+  docker pull ghcr.io/espressosystems/devops-rust:stable
+
+  # Build in docker container:
+  #   - RUSTFLAGS is needed for compilation.
+  #   - CARGO_TARGET_DIR is set to point to the location where the hosts
+  #     CARGO_TARGET_DIR is mounted.
+  #   - PWD is mounted to /work.
+  #   - Cargo registry and git directory are mounted to avoid re-downloading
+  #     dependencies.
+  docker run \
+    -e RUSTFLAGS \
+    -e CARGO_TARGET_DIR=/work/target/docker \
+    -v "$(pwd):/work" \
+    -v "$CARGO_HOME/registry:/usr/local/cargo/registry" \
+    -v "$CARGO_HOME/git:/usr/local/cargo/git" \
+    -it ghcr.io/espressosystems/devops-rust:stable \
+    bash -c "cd /work && cargo build --release"
+    ;;
+esac
+
+# Copy binaries to a temporary directory.
+WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
+
+trap "exit" INT TERM
+trap cleanup EXIT
+cleanup(){
+    rm -rfv "${WORKDIR}"
+}
+
+# Copy data files to Docker context.
+mkdir -p ${WORKDIR}/data
+cp -rv data/genesis ${WORKDIR}/data/
+
+mkdir -p "${WORKDIR}/target/$ARCH/release"
+for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "utils" "state-relay-server" "state-prover" "deploy" "permissionless-builder" "nasty-client" "espresso-bridge" "espresso-dev-node" "marketplace-solver" "marketplace-builder" "dev-rollup" "node-metrics"; do
+  cp -v "${CARGO_TARGET_DIR}/release/$binary" "${WORKDIR}/target/$ARCH/release"
+  # Patch the interpreter for running without nix inside the ubuntu based docker image.
+  if [ $KERNEL == "linux" ]; then
+    patchelf --set-interpreter "$INTERPRETER" "${WORKDIR}/target/$ARCH/release/$binary"
+  fi
+done
+
+mkdir -p ${WORKDIR}/docker/scripts
+cp -v docker/scripts/sequencer-awssecretsmanager.sh ${WORKDIR}/docker/scripts
+
+# Copy the dev-node launch script
+mkdir -p ${WORKDIR}/scripts
+cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}/scripts
+
+branch_name=$(git symbolic-ref -q HEAD)
+branch_name=${branch_name##refs/heads/}
+branch_name=${branch_name:-HEAD}
+echo "tagging with branch name $branch_name"
+
+export DOCKER_BUILDKIT=1
+docker build --platform $PLATFORM -t orchestrator:$branch_name -f docker/orchestrator.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t cdn-broker:$branch_name -f docker/cdn-broker.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t cdn-marshal:$branch_name -f docker/cdn-marshal.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t cdn-whitelist:$branch_name -f docker/cdn-whitelist.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t state-relay-server:$branch_name -f docker/state-relay-server.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t prover-service:$branch_name -f docker/prover-service.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t sequencer:$branch_name -f docker/sequencer.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t commitment-task:$branch_name -f docker/commitment-task.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t submit-transactions:$branch_name -f docker/submit-transactions.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t deploy:$branch_name -f docker/deploy.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t builder:$branch_name -f docker/permissionless-builder.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t nasty-client:$branch_name -f docker/nasty-client.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t espresso-dev-node:$branch_name -f docker/espresso-dev-node.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t bridge:$branch_name -f docker/espresso-bridge.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t marketplace-solver:$branch_name -f docker/marketplace-solver.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t marketplace-builder:$branch_name -f docker/marketplace-builder.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t node-validator:$branch_name -f docker/node-validator.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t dev-rollup:$branch_name -f docker/dev-rollup.Dockerfile ${WORKDIR}
