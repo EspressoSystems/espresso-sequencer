@@ -20,6 +20,7 @@ use hotshot_query_service::{
 use hotshot_types::traits::{
     metrics::{Metrics, NoMetrics},
     network::ConnectedNetwork,
+    node_implementation::Versions,
 };
 use tide_disco::{
     listener::RateLimitListener,
@@ -41,6 +42,7 @@ use crate::{
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
+    SequencerApiVersion,
 };
 
 #[derive(Clone, Debug)]
@@ -148,18 +150,17 @@ impl Options {
     /// The function `init_context` is used to create a sequencer context from a metrics object and
     /// optional saved consensus state. The metrics object is created from the API data source, so
     /// that consensus will populuate metrics that can then be read and served by the API.
-    pub async fn serve<N, P, F, Ver: StaticVersionType + 'static>(
+    pub async fn serve<N, P, F, V: Versions + 'static>(
         mut self,
         init_context: F,
-        bind_version: Ver,
-    ) -> anyhow::Result<SequencerContext<N, P, Ver>>
+    ) -> anyhow::Result<SequencerContext<N, P, V>>
     where
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
         F: FnOnce(
             Box<dyn Metrics>,
             Box<dyn EventConsumer>,
-        ) -> BoxFuture<'static, anyhow::Result<SequencerContext<N, P, Ver>>>,
+        ) -> BoxFuture<'static, anyhow::Result<SequencerContext<N, P, V>>>,
     {
         // Create a channel to send the context to the web server after it is initialized. This
         // allows the web server to start before initialization can complete, since initialization
@@ -177,11 +178,23 @@ impl Options {
         let (metrics, consumer): (Box<dyn Metrics>, Box<dyn EventConsumer>) =
             if let Some(query_opt) = self.query.take() {
                 if let Some(opt) = self.storage_sql.take() {
-                    self.init_with_query_module_sql(query_opt, opt, state, &mut tasks, bind_version)
-                        .await?
+                    self.init_with_query_module_sql(
+                        query_opt,
+                        opt,
+                        state,
+                        &mut tasks,
+                        SequencerApiVersion::instance(),
+                    )
+                    .await?
                 } else if let Some(opt) = self.storage_fs.take() {
-                    self.init_with_query_module_fs(query_opt, opt, state, &mut tasks, bind_version)
-                        .await?
+                    self.init_with_query_module_fs(
+                        query_opt,
+                        opt,
+                        state,
+                        &mut tasks,
+                        SequencerApiVersion::instance(),
+                    )
+                    .await?
                 } else {
                     bail!("query module requested but not storage provided");
                 }
@@ -196,20 +209,20 @@ impl Options {
                 )));
 
                 // Initialize status API.
-                let status_api = status::define_api(&Default::default(), bind_version)?;
+                let status_api =
+                    status::define_api(&Default::default(), SequencerApiVersion::instance())?;
                 app.register_module("status", status_api)?;
 
-                self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
+                self.init_hotshot_modules(&mut app)?;
 
                 if self.hotshot_events.is_some() {
-                    self.init_and_spawn_hotshot_event_streaming_module(
-                        state,
-                        &mut tasks,
-                        bind_version,
-                    )?;
+                    self.init_and_spawn_hotshot_event_streaming_module(state, &mut tasks)?;
                 }
 
-                tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
+                tasks.spawn(
+                    "API server",
+                    self.listen(self.http.port, app, SequencerApiVersion::instance()),
+                );
 
                 (metrics, Box::new(NullEventConsumer))
             } else {
@@ -221,17 +234,16 @@ impl Options {
                 // so we better have been provided the leaf ahead of time if we want it at all.
                 let mut app = App::<_, Error>::with_state(RwLock::new(state.clone()));
 
-                self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
+                self.init_hotshot_modules(&mut app)?;
 
                 if self.hotshot_events.is_some() {
-                    self.init_and_spawn_hotshot_event_streaming_module(
-                        state,
-                        &mut tasks,
-                        bind_version,
-                    )?;
+                    self.init_and_spawn_hotshot_event_streaming_module(state, &mut tasks)?;
                 }
 
-                tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
+                tasks.spawn(
+                    "API server",
+                    self.listen(self.http.port, app, SequencerApiVersion::instance()),
+                );
 
                 (Box::new(NoMetrics), Box::new(NullEventConsumer))
             };
@@ -244,15 +256,15 @@ impl Options {
         Ok(ctx.with_task_list(tasks))
     }
 
-    async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static>(
+    async fn init_app_modules<N, P, D, V: Versions>(
         &self,
         ds: D,
-        state: ApiState<N, P, Ver>,
-        bind_version: Ver,
+        state: ApiState<N, P, V>,
+        bind_version: SequencerApiVersion,
     ) -> anyhow::Result<(
         Box<dyn Metrics>,
-        Arc<RwLock<StorageState<N, P, D, Ver>>>,
-        App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error>,
+        Arc<RwLock<StorageState<N, P, D, V>>>,
+        App<Arc<RwLock<StorageState<N, P, D, V>>>, Error>,
     )>
     where
         N: ConnectedNetwork<PubKey>,
@@ -260,13 +272,13 @@ impl Options {
         D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
     {
         let metrics = ds.populate_metrics();
-        let ds: endpoints::AvailState<N, P, D, Ver> =
+        let ds: endpoints::AvailState<N, P, D, V> =
             Arc::new(RwLock::new(ExtensibleDataSource::new(ds, state.clone())));
         let mut app = App::<_, Error>::with_state(ds.clone());
 
         // Initialize status API
         if self.status.is_some() {
-            let status_api = status::define_api::<endpoints::AvailState<N, P, D, Ver>, Ver>(
+            let status_api = status::define_api::<endpoints::AvailState<N, P, D, _>, _>(
                 &Default::default(),
                 bind_version,
             )?;
@@ -274,20 +286,20 @@ impl Options {
         }
 
         // Initialize availability and node APIs (these both use the same data source).
-        app.register_module("availability", endpoints::availability(bind_version)?)?;
-        app.register_module("node", endpoints::node(bind_version)?)?;
+        app.register_module("availability", endpoints::availability()?)?;
+        app.register_module("node", endpoints::node()?)?;
 
-        self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
+        self.init_hotshot_modules(&mut app)?;
         Ok((metrics, ds, app))
     }
 
-    async fn init_with_query_module_fs<N, P, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_fs<N, P, V: Versions + 'static>(
         &self,
         query_opt: Query,
         mod_opt: persistence::fs::Options,
-        state: ApiState<N, P, Ver>,
+        state: ApiState<N, P, V>,
         tasks: &mut TaskList,
-        bind_version: Ver,
+        bind_version: SequencerApiVersion,
     ) -> anyhow::Result<(Box<dyn Metrics>, Box<dyn EventConsumer>)>
     where
         N: ConnectedNetwork<PubKey>,
@@ -295,7 +307,7 @@ impl Options {
     {
         let ds = <fs::DataSource as SequencerDataSource>::create(
             mod_opt,
-            provider(query_opt.peers, bind_version),
+            provider::<V>(query_opt.peers, bind_version),
             false,
         )
         .await?;
@@ -305,23 +317,20 @@ impl Options {
             .await?;
 
         if self.hotshot_events.is_some() {
-            self.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)?;
+            self.init_and_spawn_hotshot_event_streaming_module(state, tasks)?;
         }
 
-        tasks.spawn(
-            "API server",
-            self.listen(self.http.port, app, Ver::instance()),
-        );
+        tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
         Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
     }
 
-    async fn init_with_query_module_sql<N, P, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_sql<N, P, V: Versions + 'static>(
         self,
         query_opt: Query,
         mod_opt: persistence::sql::Options,
-        state: ApiState<N, P, Ver>,
+        state: ApiState<N, P, V>,
         tasks: &mut TaskList,
-        bind_version: Ver,
+        bind_version: SequencerApiVersion,
     ) -> anyhow::Result<(Box<dyn Metrics>, Box<dyn EventConsumer>)>
     where
         N: ConnectedNetwork<PubKey>,
@@ -329,7 +338,7 @@ impl Options {
     {
         let ds = sql::DataSource::create(
             mod_opt.clone(),
-            provider(query_opt.peers.clone(), bind_version),
+            provider::<V>(query_opt.peers.clone(), bind_version),
             false,
         )
         .await?;
@@ -338,19 +347,19 @@ impl Options {
             .await?;
 
         if self.explorer.is_some() {
-            app.register_module("explorer", endpoints::explorer(bind_version)?)?;
+            app.register_module("explorer", endpoints::explorer()?)?;
         }
 
         if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
                 "block-state",
-                endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>(bind_version)?,
+                endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>()?,
             )?;
             // Initialize merklized state module for fee merkle tree
             app.register_module(
                 "fee-state",
-                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>(bind_version)?,
+                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>()?,
             )?;
 
             let state = state.clone();
@@ -362,12 +371,12 @@ impl Options {
         }
 
         if self.hotshot_events.is_some() {
-            self.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)?;
+            self.init_and_spawn_hotshot_event_streaming_module(state, tasks)?;
         }
 
         tasks.spawn(
             "API server",
-            self.listen(self.http.port, app, Ver::instance()),
+            self.listen(self.http.port, app, SequencerApiVersion::instance()),
         );
         Ok((metrics, Box::new(ApiEventConsumer::from(ds))))
     }
@@ -377,10 +386,7 @@ impl Options {
     /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
     /// app. These modules only require a HotShot handle as state, and thus they work with any data
     /// source, so initialization is the same no matter what mode the service is running in.
-    fn init_hotshot_modules<N, P, S, Ver: StaticVersionType + 'static>(
-        &self,
-        app: &mut App<S, Error>,
-    ) -> anyhow::Result<()>
+    fn init_hotshot_modules<N, P, S>(&self, app: &mut App<S, Error>) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState + WriteState,
         P: SequencerPersistence,
@@ -392,10 +398,10 @@ impl Options {
             + HotShotConfigDataSource,
         N: ConnectedNetwork<PubKey>,
     {
-        let bind_version = Ver::instance();
+        let bind_version = SequencerApiVersion::instance();
         // Initialize submit API
         if self.submit.is_some() {
-            let submit_api = endpoints::submit::<_, _, _, Ver>()?;
+            let submit_api = endpoints::submit::<_, _, _, SequencerApiVersion>()?;
             app.register_module("submit", submit_api)?;
         }
 
@@ -420,12 +426,11 @@ impl Options {
     fn init_and_spawn_hotshot_event_streaming_module<
         N,
         P: SequencerPersistence,
-        Ver: StaticVersionType + 'static,
+        V: Versions + 'static,
     >(
         &self,
-        state: ApiState<N, P, Ver>,
+        state: ApiState<N, P, V>,
         tasks: &mut TaskList,
-        bind_version: Ver,
     ) -> anyhow::Result<()>
     where
         N: ConnectedNetwork<PubKey>,
@@ -442,30 +447,30 @@ impl Options {
             &hotshot_events_service::events::Options::default(),
         )?;
 
-        app.register_module::<_, Ver>("hotshot-events", hotshot_events_api)?;
+        app.register_module::<_, SequencerApiVersion>("hotshot-events", hotshot_events_api)?;
 
         tasks.spawn(
             "Hotshot Events Streaming API server",
             self.listen(
                 self.hotshot_events.unwrap().events_service_port,
                 app,
-                bind_version,
+                SequencerApiVersion::instance(),
             ),
         );
 
         Ok(())
     }
 
-    fn listen<S, E, Ver>(
+    fn listen<S, E, ApiVer>(
         &self,
         port: u16,
         app: App<S, E>,
-        bind_version: Ver,
+        bind_version: ApiVer,
     ) -> impl Future<Output = anyhow::Result<()>>
     where
         S: Send + Sync + 'static,
         E: Send + Sync + tide_disco::Error,
-        Ver: StaticVersionType + 'static,
+        ApiVer: StaticVersionType + 'static,
     {
         let max_connections = self.http.max_connections;
 
@@ -530,7 +535,7 @@ pub struct Config;
 #[derive(Parser, Clone, Debug, Default)]
 pub struct Query {
     /// Peers for fetching missing data for the query service.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PEERS", value_delimiter = ',')]
     pub peers: Vec<Url>,
 }
 

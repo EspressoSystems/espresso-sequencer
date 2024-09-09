@@ -542,7 +542,7 @@ services:
     profiles: [marketplace]
     environment:
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=true
-      - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
@@ -574,7 +574,7 @@ services:
     environment:
       - ESPRESSO_BUILDER_SERVER_PORT=$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=false
-      - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
@@ -692,7 +692,7 @@ services:
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
-      test: "pg_isready -U root && sleep 1 && pg_isready -U root"
+      test: "pg_isready -U root -d sequencer && sleep 1 && pg_isready -U root -d sequencer"
       interval: 5s
       timeout: 4s
       retries: 20
@@ -709,7 +709,7 @@ services:
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
-      test: "pg_isready -U root && sleep 1 && pg_isready -U root"
+      test: "pg_isready -U root -d sequencer && sleep 1 && pg_isready -U root -d sequencer"
       interval: 5s
       timeout: 4s
       retries: 20
@@ -726,7 +726,7 @@ services:
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
-      test: "pg_isready -U root && sleep 1 && pg_isready -U root"
+      test: "pg_isready -U root -d solver && sleep 1 && pg_isready -U root -d solver"
       interval: 5s
       timeout: 4s
       retries: 20
@@ -740,4 +740,14 @@ services:
       - NODE_VALIDATOR_URI=ws://localhost:$ESPRESSO_NODE_VALIDATOR_PORT/v0/
     depends_on:
       sequencer1:
+        condition: service_healthy
+
+  dev-rollup:
+    image: ghcr.io/espressosystems/espresso-sequencer/dev-rollup:main
+    command:
+      dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
+    environment:
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://marketplace-solver:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+    depends_on:
+      marketplace-solver:
         condition: service_healthy

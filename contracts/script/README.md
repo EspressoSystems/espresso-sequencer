@@ -126,9 +126,9 @@ forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderD
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
-$LIGHT_CLIENT_CONTRACT_ADDRESS \
-contracts/src/LightClient.sol:LightClient
-````
+$LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS \
+contracts/src/LightClient.sol:LightClient --watch
+```
 
 3. Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options
    and select the 'is this a proxy?' option. You should then be able to interact with the implementation contract via a
@@ -232,7 +232,7 @@ Solution: `export FOUNDRY_PROFILE=default`
 ## LightClient Contract Deployment
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -254,7 +254,7 @@ Change the $MNEMONIC in the .env file to the one of the admin
 To Deploy
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com\
@@ -297,7 +297,7 @@ forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDefen
 ## LightClient Contract Deployment
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -319,7 +319,7 @@ Change the $MNEMONIC in the .env file to the one of the admin
 To Deploy
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numInitValidators $stateHistoryRetentionPeriod \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com\
@@ -356,3 +356,4 @@ forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDefen
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --build-info true
 ```
+````

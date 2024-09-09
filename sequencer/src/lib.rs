@@ -15,7 +15,7 @@ use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::{
-    traits::EventConsumer, BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SequencerVersions,
+    traits::EventConsumer, BackoffParams, L1Client, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers::types::U256;
@@ -24,6 +24,7 @@ use futures::FutureExt;
 use genesis::L1Finalized;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
+use libp2p_networking::network::GossipConfig;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -67,7 +68,7 @@ use hotshot_types::{
 };
 pub use options::Options;
 use serde::{Deserialize, Serialize};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
@@ -89,6 +90,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Clone for Node<N, P> 
         *self
     }
 }
+
+pub type SequencerApiVersion = StaticVersion<0, 1>;
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<SeqTypes>
     for Node<N, P>
@@ -127,18 +130,18 @@ pub struct L1Params {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
+pub async fn init_node<P: PersistenceOptions, V: Versions>(
     genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence_opt: P,
     l1_params: L1Params,
-    bind_version: Ver,
+    seq_versions: V,
     event_consumer: impl EventConsumer + 'static,
     is_da: bool,
     identity: Identity,
     marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P::Persistence>>,
-) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, V>> {
     // Expose git information via status API.
     metrics
         .text_family(
@@ -234,7 +237,8 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         // If we were told to fetch the config from an already-started peer, do so.
         (None, Some(peers)) => {
             tracing::info!(?peers, "loading network config from peers");
-            let peers = StatePeers::<Ver>::from_urls(peers, network_params.catchup_backoff);
+            let peers =
+                StatePeers::<SequencerApiVersion>::from_urls(peers, network_params.catchup_backoff);
             let config = peers.fetch_config(my_config.clone()).await;
 
             tracing::info!(
@@ -273,10 +277,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         }
     };
 
-    if let Some(upgrade) = genesis
-        .upgrades
-        .get(&<SequencerVersions as Versions>::Upgrade::VERSION)
-    {
+    if let Some(upgrade) = genesis.upgrades.get(&V::Upgrade::VERSION) {
         upgrade.set_hotshot_config_parameters(&mut config.config);
     }
 
@@ -327,6 +328,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
+            GossipConfig::default(),
             network_params.libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair
@@ -394,7 +396,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
-            StatePeers::<Ver>::from_urls(
+            StatePeers::<SequencerApiVersion>::from_urls(
                 network_params.state_peers,
                 network_params.catchup_backoff,
             ),
@@ -402,7 +404,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         .await,
         node_id: node_index,
         upgrades: genesis.upgrades,
-        current_version: Ver::VERSION,
+        current_version: V::Base::VERSION,
     };
 
     let mut ctx = SequencerContext::init(
@@ -415,7 +417,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         genesis.stake_table.capacity,
         network_params.public_api_url,
         event_consumer,
-        bind_version,
+        seq_versions,
         marketplace_config,
     )
     .await?;
@@ -431,14 +433,16 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::{collections::HashMap, str::FromStr, time::Duration};
+    use std::{collections::HashMap, time::Duration};
 
+    use async_compatibility_layer::art::async_spawn;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
-        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, Leaf, MarketplaceVersion, MockSequencerVersions, Payload, PubKey,
+        SeqTypes, Transaction, Upgrade,
     };
     use futures::{
         future::join_all,
@@ -458,8 +462,17 @@ pub mod testing {
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
-        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        traits::{
+            block_contents::{vid_commitment, BlockHeader, EncodeBytes},
+            metrics::NoMetrics,
+            node_implementation::ConsensusTime,
+            stake_table::StakeTableScheme,
+        },
         ExecutionType, HotShotConfig, PeerConfig,
+    };
+    use marketplace_builder_core::{
+        builder_state::{BuilderState, BuiltFromProposedBlock},
+        service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
     };
     use portpicker::pick_unused_port;
     use vbs::version::Version;
@@ -468,6 +481,114 @@ pub mod testing {
     use crate::persistence::no_storage::{self, NoStorage};
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
+    const BUILDER_CHANNEL_CAPACITY_FOR_TEST: usize = 128;
+
+    struct MarketplaceBuilderImplementation {
+        hooks: Arc<NoHooks<SeqTypes>>,
+        senders: BroadcastSenders<SeqTypes>,
+    }
+
+    impl BuilderTask<SeqTypes> for MarketplaceBuilderImplementation {
+        fn start(
+            self: Box<Self>,
+            stream: Box<
+                dyn Stream<Item = hotshot::types::Event<SeqTypes>>
+                    + std::marker::Unpin
+                    + Send
+                    + 'static,
+            >,
+        ) {
+            async_spawn(async move {
+                let res = run_builder_service::<SeqTypes>(self.hooks, self.senders, stream).await;
+                tracing::error!(?res, "Testing marketplace builder service exited");
+            });
+        }
+    }
+
+    pub async fn run_marketplace_builder<const NUM_NODES: usize>(
+        port: Option<u16>,
+        instance_state: NodeState,
+        validated_state: ValidatedState,
+    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
+        let builder_key_pair = EthKeyPair::random();
+        let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
+
+        // This should never fail.
+        let url: Url = format!("http://localhost:{port}")
+            .parse()
+            .expect("Failed to parse builder URL");
+
+        let (senders, receivers) = marketplace_builder_core::service::broadcast_channels(
+            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
+        );
+
+        // builder api request channel
+        let (req_sender, req_receiver) =
+            async_broadcast::broadcast::<_>(BUILDER_CHANNEL_CAPACITY_FOR_TEST);
+
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
+                .expect("genesis payload construction failed");
+
+        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+
+        let vid_commitment = {
+            let payload_bytes = genesis_payload.encode();
+            vid_commitment(&payload_bytes, NUM_NODES)
+        };
+
+        // create the global state
+        let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
+            req_sender,
+            senders.transactions.clone(),
+            vid_commitment,
+            ViewNumber::genesis(),
+        );
+
+        let global_state = Arc::new(RwLock::new(global_state));
+
+        let leaf = Leaf::genesis(&validated_state, &instance_state).await;
+
+        let builder_state = BuilderState::<SeqTypes>::new(
+            BuiltFromProposedBlock {
+                view_number: ViewNumber::genesis(),
+                vid_commitment,
+                leaf_commit: leaf.commit(),
+                builder_commitment,
+            },
+            &receivers,
+            req_receiver,
+            Vec::new(), /* tx_queue */
+            Arc::clone(&global_state),
+            Duration::from_secs(60),
+            10,
+            Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
+        );
+
+        builder_state.event_loop();
+
+        let hooks = Arc::new(NoHooks(PhantomData));
+
+        // create the proxy global state it will server the builder apis
+        let app = ProxyGlobalState::new(
+            global_state.clone(),
+            Arc::clone(&hooks),
+            (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            Duration::from_secs(60),
+        )
+        .into_app()
+        .expect("Failed to create builder tide-disco app");
+
+        async_spawn(app.serve(url.clone(), MarketplaceVersion::instance()));
+
+        (
+            Box::new(MarketplaceBuilderImplementation { hooks, senders }),
+            url,
+        )
+    }
 
     pub async fn run_test_builder<const NUM_NODES: usize>(
         port: Option<u16>,
@@ -501,12 +622,18 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
+        marketplace_builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
     }
 
     impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
         pub fn builder_port(mut self, builder_port: Option<u16>) -> Self {
             self.builder_port = builder_port;
+            self
+        }
+
+        pub fn marketplace_builder_port(mut self, port: Option<u16>) -> Self {
+            self.marketplace_builder_port = port;
             self
         }
 
@@ -528,7 +655,7 @@ pub mod testing {
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
             if let Some(upgrade) = self
                 .upgrades
-                .get(&<SequencerVersions as Versions>::Upgrade::VERSION)
+                .get(&<MockSequencerVersions as Versions>::Upgrade::VERSION)
             {
                 upgrade.set_hotshot_config_parameters(&mut self.config)
             }
@@ -540,6 +667,7 @@ pub mod testing {
                 master_map: self.master_map,
                 l1_url: self.l1_url,
                 state_relay_url: self.state_relay_url,
+                marketplace_builder_port: self.marketplace_builder_port,
                 builder_port: self.builder_port,
                 upgrades: self.upgrades,
             }
@@ -615,6 +743,7 @@ pub mod testing {
                 l1_url: "http://localhost:8545".parse().unwrap(),
                 state_relay_url: None,
                 builder_port: None,
+                marketplace_builder_port: None,
                 upgrades: Default::default(),
             }
         }
@@ -629,6 +758,7 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
+        marketplace_builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
     }
 
@@ -645,6 +775,10 @@ pub mod testing {
             self.config.builder_urls = builder_urls;
         }
 
+        pub fn marketplace_builder_port(&self) -> Option<u16> {
+            self.marketplace_builder_port
+        }
+
         pub fn builder_port(&self) -> Option<u16> {
             self.builder_port
         }
@@ -657,10 +791,10 @@ pub mod testing {
             self.upgrades.clone()
         }
 
-        pub async fn init_nodes<Ver: StaticVersionType + 'static>(
+        pub async fn init_nodes<V: Versions>(
             &self,
-            bind_version: Ver,
-        ) -> Vec<SequencerContext<network::Memory, NoStorage, Ver>> {
+            bind_version: V,
+        ) -> Vec<SequencerContext<network::Memory, NoStorage, V>> {
             join_all((0..self.num_nodes()).map(|i| async move {
                 self.init_node(
                     i,
@@ -672,6 +806,11 @@ pub mod testing {
                     NullEventConsumer,
                     bind_version,
                     Default::default(),
+                    Url::parse(&format!(
+                        "http://localhost:{}",
+                        self.marketplace_builder_port.unwrap_or_default()
+                    ))
+                    .unwrap(),
                 )
                 .await
             }))
@@ -699,7 +838,7 @@ pub mod testing {
         }
 
         #[allow(clippy::too_many_arguments)]
-        pub async fn init_node<Ver: StaticVersionType + 'static, P: PersistenceOptions>(
+        pub async fn init_node<V: Versions, P: PersistenceOptions>(
             &self,
             i: usize,
             mut state: ValidatedState,
@@ -708,9 +847,10 @@ pub mod testing {
             metrics: &dyn Metrics,
             stake_table_capacity: u64,
             event_consumer: impl EventConsumer + 'static,
-            bind_version: Ver,
+            bind_version: V,
             upgrades: BTreeMap<Version, Upgrade>,
-        ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
+            marketplace_builder_url: Url,
+        ) -> SequencerContext<network::Memory, P::Persistence, V> {
             let mut config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
             let is_da = config.known_da_nodes.contains(my_peer_config);
@@ -744,8 +884,9 @@ pub mod testing {
                 state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
+                V::Base::VERSION,
             )
-            .with_current_version(Ver::version())
+            .with_current_version(V::Base::version())
             .with_genesis(state)
             .with_upgrades(upgrades);
 
@@ -772,10 +913,8 @@ pub mod testing {
                 event_consumer,
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
-                    auction_results_provider: Arc::new(SolverAuctionResultsProvider(
-                        Url::from_str("https://some.solver").unwrap(),
-                    )),
-                    fallback_builder_url: Url::from_str("https://some.builder").unwrap(),
+                    auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
+                    fallback_builder_url: marketplace_builder_url,
                 },
             )
             .await
@@ -825,7 +964,7 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use espresso_types::{Header, NamespaceId, Payload, Transaction};
+    use espresso_types::{Header, MockSequencerVersions, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
@@ -843,7 +982,6 @@ mod test {
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_test();
-        let ver = <SequencerVersions as Versions>::Base::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -856,7 +994,7 @@ mod test {
 
         config.set_builder_urls(vec1::vec1![builder_url]);
 
-        let handles = config.init_nodes(ver).await;
+        let handles = config.init_nodes(MockSequencerVersions::new()).await;
 
         let handle_0 = &handles[0];
 
@@ -885,7 +1023,6 @@ mod test {
         setup_test();
 
         let success_height = 30;
-        let ver = <SequencerVersions as Versions>::Base::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -897,7 +1034,7 @@ mod test {
         let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
 
         config.set_builder_urls(vec1::vec1![builder_url]);
-        let handles = config.init_nodes(ver).await;
+        let handles = config.init_nodes(MockSequencerVersions::new()).await;
 
         let handle_0 = &handles[0];
 

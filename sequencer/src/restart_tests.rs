@@ -7,7 +7,9 @@ use async_std::task::{sleep, spawn, JoinHandle};
 use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as BrokerConfig};
 use cdn_marshal::{Config as MarshalConfig, Marshal};
 use derivative::Derivative;
-use espresso_types::{traits::PersistenceOptions, PrivKey, PubKey, SeqTypes, SequencerVersions};
+use espresso_types::{
+    traits::PersistenceOptions, MockSequencerVersions, PrivKey, PubKey, SeqTypes,
+};
 use ethers::utils::{Anvil, AnvilInstance};
 use futures::{
     future::{join_all, try_join_all, BoxFuture, FutureExt},
@@ -21,10 +23,7 @@ use hotshot_orchestrator::{
 use hotshot_types::{
     event::{Event, EventType},
     light_client::StateKeyPair,
-    traits::{
-        node_implementation::{ConsensusTime, Versions},
-        signature_key::SignatureKey,
-    },
+    traits::{node_implementation::ConsensusTime, signature_key::SignatureKey},
 };
 use itertools::Itertools;
 use portpicker::pick_unused_port;
@@ -36,6 +35,7 @@ use sequencer::{
 use sequencer_utils::test_utils::setup_test;
 use std::{collections::HashSet, path::Path, time::Duration};
 use tempfile::TempDir;
+use vbs::version::Version;
 
 async fn test_restart_helper(network: (usize, usize), restart: (usize, usize), cdn: bool) {
     setup_test();
@@ -189,7 +189,7 @@ struct TestNode<S: TestableSequencerDataSource> {
         SequencerContext<
             network::Production,
             <S::Options as PersistenceOptions>::Persistence,
-            <SequencerVersions as Versions>::Base,
+            MockSequencerVersions,
         >,
     >,
     modules: Modules,
@@ -272,12 +272,23 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
             // with a backoff.
             let mut retries = 5;
             let mut delay = Duration::from_secs(1);
+            let genesis = Genesis {
+                chain_config: Default::default(),
+                stake_table: StakeTableConfig { capacity: 10 },
+                accounts: Default::default(),
+                l1_finalized: Default::default(),
+                header: Default::default(),
+                upgrades: Default::default(),
+                base_version: Version { major: 0, minor: 1 },
+                upgrade_version: Version { major: 0, minor: 2 },
+            };
             let ctx = loop {
                 match init_with_storage(
+                    genesis.clone(),
                     self.modules.clone(),
                     self.opt.clone(),
                     S::persistence_options(&self.storage),
-                    <SequencerVersions as Versions>::Base::instance(),
+                    MockSequencerVersions::new(),
                 )
                 .await
                 {
@@ -389,7 +400,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
 #[derivative(Debug)]
 struct TestNetwork {
     da_nodes: Vec<TestNode<api::sql::DataSource>>,
-    regular_nodes: Vec<TestNode<api::fs::DataSource>>,
+    regular_nodes: Vec<TestNode<api::sql::DataSource>>,
     tmp: TempDir,
     orchestrator_task: Option<JoinHandle<()>>,
     broker_task: Option<JoinHandle<()>>,
@@ -425,6 +436,8 @@ impl TestNetwork {
             l1_finalized: Default::default(),
             header: Default::default(),
             upgrades: Default::default(),
+            base_version: Version { major: 0, minor: 1 },
+            upgrade_version: Version { major: 0, minor: 2 },
         };
         genesis.to_file(&genesis_file).unwrap();
 
@@ -635,23 +648,7 @@ fn start_orchestrator(port: u16, nodes: &[NodeParams]) -> JoinHandle<()> {
 
     let mut config = NetworkConfig::<PubKey> {
         indexed_da: false,
-        libp2p_config: Some(Libp2pConfig {
-            bootstrap_nodes,
-            node_index: 0,
-            bootstrap_mesh_n_high: 4,
-            bootstrap_mesh_n_low: 4,
-            bootstrap_mesh_outbound_min: 4 / 2,
-            bootstrap_mesh_n: 4,
-            mesh_n_high: 4,
-            mesh_n_low: 4,
-            mesh_outbound_min: 4 / 2,
-            mesh_n: 4,
-            next_view_timeout: view_timeout.as_millis() as u64,
-            online_time: 10,
-            num_txn_per_round: 0,
-            server_mode: true,
-            builder_timeout,
-        }),
+        libp2p_config: Some(Libp2pConfig { bootstrap_nodes }),
         ..Default::default()
     };
     config.config.num_nodes_with_stake = num_nodes.try_into().unwrap();

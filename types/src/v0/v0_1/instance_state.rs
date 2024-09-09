@@ -8,7 +8,7 @@ use crate::{v0_3::ChainConfig, Timestamp};
 #[serde(rename_all = "snake_case")]
 pub enum UpgradeType {
     Fee { chain_config: ChainConfig },
-    Marketplace {},
+    Marketplace { chain_config: ChainConfig },
 }
 
 /// Represents an upgrade based on time (unix timestamp).

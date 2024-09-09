@@ -1,7 +1,10 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{traits::NullEventConsumer, SequencerVersions, SolverAuctionResultsProvider};
+use espresso_types::{
+    traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
+    SolverAuctionResultsProvider, V0_1,
+};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
@@ -19,47 +22,78 @@ async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     opt.logging.init();
 
-    let mut modules = opt.modules();
+    let modules = opt.modules();
     tracing::warn!(?modules, "sequencer starting up");
 
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
+
+    match (base, upgrade) {
+        (V0_1::VERSION, FeeVersion::VERSION) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<V0_1, FeeVersion>::new(),
+            )
+            .await
+        }
+        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+            )
+            .await
+        }
+        _ => panic!(
+            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
+        ),
+    }
+}
+
+async fn run<V>(
+    genesis: Genesis,
+    mut modules: Modules,
+    opt: Options,
+    versions: V,
+) -> anyhow::Result<()>
+where
+    V: Versions,
+{
     if let Some(storage) = modules.storage_fs.take() {
-        run_with_storage(
-            modules,
-            opt,
-            storage,
-            <SequencerVersions as Versions>::Base::instance(),
-        )
-        .await
+        run_with_storage(genesis, modules, opt, storage, versions).await
     } else if let Some(storage) = modules.storage_sql.take() {
-        run_with_storage(
-            modules,
-            opt,
-            storage,
-            <SequencerVersions as Versions>::Base::instance(),
-        )
-        .await
+        run_with_storage(genesis, modules, opt, storage, versions).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         run_with_storage(
+            genesis,
             modules,
             opt,
             persistence::fs::Options::default(),
-            <SequencerVersions as Versions>::Base::instance(),
+            versions,
         )
         .await
     }
 }
 
-async fn run_with_storage<S, Ver: StaticVersionType + 'static>(
+async fn run_with_storage<S, V>(
+    genesis: Genesis,
     modules: Modules,
     opt: Options,
     storage_opt: S,
-    bind_version: Ver,
+    versions: V,
 ) -> anyhow::Result<()>
 where
     S: DataSourceOptions,
+    V: Versions,
 {
-    let ctx = init_with_storage(modules, opt, storage_opt, bind_version).await?;
+    let ctx = init_with_storage(genesis, modules, opt, storage_opt, versions).await?;
 
     // Start doing consensus.
     ctx.start_consensus().await;
@@ -68,18 +102,17 @@ where
     Ok(())
 }
 
-async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
+async fn init_with_storage<S, V>(
+    genesis: Genesis,
     modules: Modules,
     opt: Options,
     storage_opt: S,
-    bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Production, S::Persistence, Ver>>
+    versions: V,
+) -> anyhow::Result<SequencerContext<network::Production, S::Persistence, V>>
 where
     S: DataSourceOptions,
+    V: Versions,
 {
-    let genesis = Genesis::from_file(&opt.genesis_file)?;
-    tracing::info!(?genesis, "genesis");
-
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
@@ -118,9 +151,11 @@ where
     };
 
     let marketplace_config = MarketplaceConfig {
-        auction_results_provider: Arc::new(SolverAuctionResultsProvider(
-            opt.auction_results_solver_url,
-        )),
+        auction_results_provider: Arc::new(SolverAuctionResultsProvider {
+            url: opt.auction_results_solver_url,
+            marketplace_path: opt.marketplace_solver_path,
+            results_path: opt.auction_results_path,
+        }),
         fallback_builder_url: opt.fallback_builder_url,
     };
 
@@ -158,27 +193,24 @@ where
             }
 
             http_opt
-                .serve(
-                    move |metrics, consumer| {
-                        async move {
-                            init_node(
-                                genesis,
-                                network_params,
-                                &*metrics,
-                                storage_opt,
-                                l1_params,
-                                bind_version,
-                                consumer,
-                                opt.is_da,
-                                opt.identity,
-                                marketplace_config,
-                            )
-                            .await
-                        }
-                        .boxed()
-                    },
-                    bind_version,
-                )
+                .serve(move |metrics, consumer| {
+                    async move {
+                        init_node(
+                            genesis,
+                            network_params,
+                            &*metrics,
+                            storage_opt,
+                            l1_params,
+                            versions,
+                            consumer,
+                            opt.is_da,
+                            opt.identity,
+                            marketplace_config,
+                        )
+                        .await
+                    }
+                    .boxed()
+                })
                 .await?
         }
         None => {
@@ -188,7 +220,7 @@ where
                 &NoMetrics,
                 storage_opt,
                 l1_params,
-                bind_version,
+                versions,
                 NullEventConsumer,
                 opt.is_da,
                 opt.identity,
@@ -209,17 +241,19 @@ mod test {
 
     use async_std::task::spawn;
 
-    use espresso_types::PubKey;
+    use espresso_types::{MockSequencerVersions, PubKey};
     use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
         genesis::StakeTableConfig,
         persistence::fs,
+        SequencerApiVersion,
     };
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::{error::ClientError, Client, Url};
     use tempfile::TempDir;
+    use vbs::version::Version;
 
     use super::*;
 
@@ -241,6 +275,8 @@ mod test {
             l1_finalized: Default::default(),
             header: Default::default(),
             upgrades: Default::default(),
+            base_version: Version { major: 0, minor: 1 },
+            upgrade_version: Version { major: 0, minor: 2 },
         };
         genesis.to_file(&genesis_file).unwrap();
 
@@ -265,10 +301,11 @@ mod test {
         tracing::info!(port, "starting sequencer");
         let task = spawn(async move {
             if let Err(err) = init_with_storage(
+                genesis,
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                <SequencerVersions as Versions>::Base::instance(),
+                MockSequencerVersions::new(),
             )
             .await
             {
@@ -280,7 +317,7 @@ mod test {
         // orchestrator.
         tracing::info!("waiting for API to start");
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
-        let client = Client::<ClientError, <SequencerVersions as Versions>::Base>::new(url.clone());
+        let client = Client::<ClientError, SequencerApiVersion>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
         client.get::<()>("healthcheck").send().await.unwrap();
 

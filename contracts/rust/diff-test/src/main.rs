@@ -2,33 +2,30 @@ use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
 use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-use ark_poly::{domain::radix2::Radix2EvaluationDomain, EvaluationDomain};
+use ark_poly::domain::radix2::Radix2EvaluationDomain;
+use ark_poly::EvaluationDomain;
 use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
 use clap::{Parser, ValueEnum};
 use diff_test_bn254::ParsedG2Point;
+
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
 };
 use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientState};
 use hotshot_state_prover::mock_ledger::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
 };
-use itertools::multiunzip;
 use jf_pcs::prelude::Commitment;
+use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
+use jf_plonk::proof_system::PlonkKzgSnark;
 use jf_plonk::{
-    proof_system::{
-        structs::{Proof, VerifyingKey},
-        PlonkKzgSnark,
-    },
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-use jf_signature::{
-    bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair, Signature},
-    constants::CS_ID_BLS_BN254,
-    schnorr::KeyPair as SchnorrKeyPair,
-};
+use jf_signature::bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair, Signature};
+use jf_signature::constants::CS_ID_BLS_BN254;
+use jf_signature::schnorr::KeyPair as SchnorrKeyPair;
 use sha3::Keccak256;
 
 #[derive(Parser)]
@@ -66,12 +63,8 @@ enum Action {
     PlonkConstants,
     /// Get jf_plonk::Verifier::compute_challenges()
     PlonkComputeChal,
-    /// Get jf_plonk::Verifier::aggregate_evaluations()
-    PlonkPrepareEval,
-    /// Get jf_plonk::Verifier::prepare_pcs_info()
-    PlonkPreparePcsInfo,
     /// Get jf_plonk::Verifier::batch_verify()
-    PlonkBatchVerify,
+    PlonkVerify,
     /// Get a random, dummy proof with correct format
     DummyProof,
     /// Test only logic
@@ -111,7 +104,6 @@ fn main() {
             let res = (
                 field_to_u256(domain.size_inv),
                 field_to_u256(domain.group_gen),
-                field_to_u256(domain.group_gen_inv),
             );
             println!("{}", res.encode_hex());
         }
@@ -137,7 +129,7 @@ fn main() {
 
             let log_size = cli.args[0].parse::<u32>().unwrap();
             let zeta = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[2]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
@@ -174,7 +166,7 @@ fn main() {
             let field = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
 
             let mut t: SolidityTranscript = t_parsed.into();
-            t.append_challenge::<Bn254>(&[], &field).unwrap();
+            t.append_field_elem::<Bn254>(&[], &field).unwrap();
             let res: ParsedTranscript = t.into();
             println!("{}", (res,).encode_hex());
         }
@@ -200,7 +192,7 @@ fn main() {
             let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
 
             let mut t: SolidityTranscript = t_parsed.into();
-            let chal = t.get_and_append_challenge::<Bn254>(&[]).unwrap();
+            let chal = t.get_challenge::<Bn254>(&[]).unwrap();
 
             let updated_t: ParsedTranscript = t.into();
             let res = (updated_t, field_to_u256(chal));
@@ -235,7 +227,7 @@ fn main() {
             let proof: Proof<Bn254> = proof_parsed.clone().into();
 
             let mut t: SolidityTranscript = t_parsed.into();
-            <SolidityTranscript as PlonkTranscript<Fr>>::append_proof_evaluations::<Bn254>(
+            <SolidityTranscript as PlonkTranscript<Fq>>::append_proof_evaluations::<Bn254>(
                 &mut t,
                 &proof.poly_evals,
             )
@@ -269,7 +261,7 @@ fn main() {
             }
 
             let vk = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
             let msg = {
@@ -288,110 +280,33 @@ fn main() {
                 .into();
             println!("{}", (chal,).encode_hex());
         }
-        Action::PlonkPrepareEval => {
-            if cli.args.len() != 3 {
-                panic!("Should provide arg1=proof, arg2=linPolyConstant, arg3=commScalars");
-            }
-
-            let proof: Proof<Bn254> = cli.args[0].parse::<ParsedPlonkProof>().unwrap().into();
-            let lin_poly_constant = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
-            let comm_scalars_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[2]).unwrap();
-            // NOTE: only take the last 10 scalars, the first 20 are linearization scalars
-            let comm_scalars: Vec<Fr> = comm_scalars_u256
-                .into_iter()
-                .skip(20)
-                .map(u256_to_field)
-                .collect();
-
-            let eval = Verifier::<Bn254>::aggregate_evaluations(
-                &lin_poly_constant,
-                &[proof.poly_evals],
-                &[None],
-                &comm_scalars,
-            )
-            .unwrap();
-            let res = field_to_u256(eval);
-            println!("{}", (res,).encode_hex());
-        }
-        Action::PlonkPreparePcsInfo => {
-            if cli.args.len() != 3 {
-                panic!("Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof");
-            }
-
-            let vk: VerifyingKey<Bn254> = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
-            let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
-            let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
-
-            let verifier = Verifier::<Bn254>::new(vk.domain_size).unwrap();
-            let pcs_info = verifier
-                .prepare_pcs_info::<SolidityTranscript>(
-                    &[&vk],
-                    &[&pi],
-                    &proof.into(),
-                    &Some(vec![]),
-                )
-                .unwrap();
-
-            let scalars_and_bases_prod: ParsedG1Point = pcs_info
-                .comm_scalars_and_bases
-                .multi_scalar_mul()
-                .into_affine()
-                .into();
-            let opening_proof: ParsedG1Point = pcs_info.opening_proof.0.into();
-            let shifted_opening_proof: ParsedG1Point = pcs_info.shifted_opening_proof.0.into();
-            let res = (
-                field_to_u256(pcs_info.u),
-                field_to_u256(pcs_info.eval_point),
-                field_to_u256(pcs_info.next_eval_point),
-                field_to_u256(pcs_info.eval),
-                scalars_and_bases_prod,
-                opening_proof,
-                shifted_opening_proof,
-            );
-            println!("{}", res.encode_hex());
-        }
-        Action::PlonkBatchVerify => {
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=numProof");
-            }
-
-            let num_proof = cli.args[0].parse::<u32>().unwrap();
-            let (proofs, vks, public_inputs, extra_msgs, _): (
-                Vec<Proof<Bn254>>,
-                Vec<VerifyingKey<Bn254>>,
-                Vec<Vec<Fr>>,
-                Vec<Option<Vec<u8>>>,
-                Vec<usize>,
-            ) = multiunzip(gen_plonk_proof_for_test(num_proof as usize));
+        Action::PlonkVerify => {
+            let (proof, vk, public_input, _, _): (
+                Proof<Bn254>,
+                VerifyingKey<Bn254>,
+                Vec<Fr>,
+                Option<Vec<u8>>, // won't use extraTranscriptMsg
+                usize,           // won't use circuit size
+            ) = gen_plonk_proof_for_test(1)[0].clone();
 
             // ensure they are correct params
-            let proofs_refs: Vec<&Proof<Bn254>> = proofs.iter().collect();
-            let vks_refs: Vec<&VerifyingKey<Bn254>> = vks.iter().collect();
-            let pi_refs: Vec<&[Fr]> = public_inputs
-                .iter()
-                .map(|pub_input| &pub_input[..])
-                .collect();
             assert!(PlonkKzgSnark::batch_verify::<SolidityTranscript>(
-                &vks_refs,
-                &pi_refs,
-                &proofs_refs,
-                &extra_msgs
+                &[&vk],
+                &[&public_input],
+                &[&proof],
+                &[None]
             )
             .is_ok());
 
-            let vks_parsed: Vec<ParsedVerifyingKey> = vks.into_iter().map(Into::into).collect();
-            let pis_parsed: Vec<Vec<U256>> = public_inputs
-                .into_iter()
-                .map(|pi| pi.into_iter().map(field_to_u256).collect())
-                .collect();
-            let proofs_parsed: Vec<ParsedPlonkProof> = proofs.into_iter().map(Into::into).collect();
-            let msgs_parsed: Vec<Bytes> = extra_msgs
-                .into_iter()
-                .map(|msg| msg.unwrap().into())
-                .collect();
+            let vk_parsed: ParsedVerifyingKey = vk.into();
+            let mut pi_parsed = [U256::default(); 8];
+            assert_eq!(public_input.len(), 8);
+            for (i, pi) in public_input.into_iter().enumerate() {
+                pi_parsed[i] = field_to_u256(pi);
+            }
+            let proof_parsed: ParsedPlonkProof = proof.into();
 
-            let res = (vks_parsed, pis_parsed, proofs_parsed, msgs_parsed);
+            let res = (vk_parsed, pi_parsed, proof_parsed);
             println!("{}", res.encode_hex());
         }
         Action::DummyProof => {
@@ -461,13 +376,12 @@ fn main() {
             println!("{}", (res.encode_hex()));
         }
         Action::MockGenesis => {
-            if cli.args.len() != 2 {
-                panic!("Should provide arg1=numBlockPerEpoch,arg2=numInitValidators");
+            if cli.args.len() != 1 {
+                panic!("Should provide arg1=numInitValidators");
             }
+            let num_init_validators = cli.args[0].parse::<u64>().unwrap();
 
-            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
-            let num_init_validators = cli.args[1].parse::<u64>().unwrap();
-            let pp = MockSystemParam::init(block_per_epoch);
+            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             let ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let (voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();
@@ -475,16 +389,15 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockConsecutiveFinalizedStates => {
-            if cli.args.len() != 4 {
-                panic!("Should provide arg1=numBlockPerEpoch,arg2=numInitValidators,arg3=numRegs,arg4=numExit");
+            if cli.args.len() != 3 {
+                panic!("Should provide arg1=numInitValidators,arg2=numRegs,arg3=numExit");
             }
+            let block_per_epoch = BLOCKS_PER_EPOCH;
+            let num_init_validators = cli.args[0].parse::<u64>().unwrap();
+            let num_reg = cli.args[1].parse::<u64>().unwrap();
+            let num_exit = cli.args[2].parse::<u64>().unwrap();
 
-            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
-            let num_init_validators = cli.args[1].parse::<u64>().unwrap();
-            let num_reg = cli.args[2].parse::<u64>().unwrap();
-            let num_exit = cli.args[3].parse::<u64>().unwrap();
-
-            let pp = MockSystemParam::init(block_per_epoch);
+            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             let mut ledger = MockLedger::init(pp, num_init_validators as usize);
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
@@ -514,19 +427,18 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockSkipBlocks => {
-            if cli.args.len() < 2 || cli.args.len() > 3 {
-                panic!("Should provide arg1=numBlockPerEpoch,arg2=numBlockSkipped,arg3(opt)=requireValidProof");
+            if cli.args.is_empty() || cli.args.len() > 2 {
+                panic!("Should provide arg1=numBlockSkipped,arg2(opt)=requireValidProof");
             }
 
-            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
-            let num_block_skipped = cli.args[1].parse::<u32>().unwrap();
-            let require_valid_proof: bool = if cli.args.len() == 3 {
-                cli.args[2].parse::<bool>().unwrap()
+            let num_block_skipped = cli.args[0].parse::<u32>().unwrap();
+            let require_valid_proof: bool = if cli.args.len() == 2 {
+                cli.args[1].parse::<bool>().unwrap()
             } else {
                 true
             };
 
-            let pp = MockSystemParam::init(block_per_epoch);
+            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             // random stake table update
@@ -548,12 +460,9 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockMissEndingBlock => {
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=numBlockPerEpoch");
-            }
-            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
+            let block_per_epoch = BLOCKS_PER_EPOCH;
 
-            let pp = MockSystemParam::init(block_per_epoch);
+            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             let mut new_states: Vec<ParsedLightClientState> = vec![];
@@ -578,12 +487,7 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::MockWrongStakeTable => {
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=numBlockPerEpoch");
-            }
-            let block_per_epoch = cli.args[0].parse::<u32>().unwrap();
-
-            let pp = MockSystemParam::init(block_per_epoch);
+            let pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
             let mut ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / 2);
 
             ledger.elapse_with_block();

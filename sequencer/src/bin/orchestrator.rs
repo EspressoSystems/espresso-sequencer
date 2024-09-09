@@ -67,7 +67,11 @@ struct Args {
 
     /// The number of nodes a Libp2p node should try to maintain
     /// a connection with at one time.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N",
+        default_value = "20"
+    )]
     libp2p_mesh_n: usize,
 
     /// Seed to use for generating node keys.
@@ -119,26 +123,13 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,
         indexed_da: false,
+        enable_registration_verification: false,
         ..Default::default()
     };
 
     // The Libp2p configuration
     let libp2p_config = Libp2pConfig {
         bootstrap_nodes: Vec::new(),
-        node_index: 0,
-        bootstrap_mesh_n_high: args.libp2p_mesh_n,
-        bootstrap_mesh_n_low: args.libp2p_mesh_n,
-        bootstrap_mesh_outbound_min: args.libp2p_mesh_n / 2,
-        bootstrap_mesh_n: args.libp2p_mesh_n,
-        mesh_n_high: args.libp2p_mesh_n,
-        mesh_n_low: args.libp2p_mesh_n,
-        mesh_outbound_min: args.libp2p_mesh_n / 2,
-        mesh_n: args.libp2p_mesh_n,
-        next_view_timeout: config.next_view_timeout,
-        online_time: 10,
-        num_txn_per_round: 0,
-        server_mode: false,
-        builder_timeout: args.builder_timeout,
     };
 
     config.config.num_nodes_with_stake = args.num_nodes;

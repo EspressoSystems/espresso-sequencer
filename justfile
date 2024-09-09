@@ -74,7 +74,7 @@ build-docker-images:
     scripts/build-docker-images
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$"
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$"
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
@@ -101,20 +101,21 @@ sol-test:
     forge test
 
 # Deploys the light client contract on Sepolia and call it for profiling purposes.
-NUM_BLOCKS_PER_EPOCH := "3"
 NUM_INIT_VALIDATORS := "5"
+MAX_HISTORY_SECONDS := "864000" # 10 days
 lc-contract-profiling-sepolia:
     @sh -c 'source ./.env.contracts'
     #!/usr/bin/env bash
     set -euxo pipefail
-    forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
+    forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod)" {{NUM_INIT_VALIDATORS}} {{MAX_HISTORY_SECONDS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
     LC_CONTRACT_ADDRESS=`cat contracts/broadcast/DeployLightClientTestScript.s.sol/11155111/runBench-latest.json | jq -r .receipts[-1].contractAddress`
     echo $LC_CONTRACT_ADDRESS
-    forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
+    forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numInitValidators, address lcContractAddress)" {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
 
-lc-contract-benchmark:
+gas-benchmarks:
     cargo build --bin diff-test --release
-    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
+    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench"
+    @[ -n "$(git diff --name-only .gas-snapshot)" ] && echo "⚠️ Uncommitted gas benchmarks, please stage them before committing." && exit 1 || exit 0
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.
@@ -134,4 +135,3 @@ download-srs:
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
- 

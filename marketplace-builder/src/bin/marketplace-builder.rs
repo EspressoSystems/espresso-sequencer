@@ -3,7 +3,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, NamespaceId, SequencerVersions,
+    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion,
+    NamespaceId, SequencerVersions, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -70,10 +71,6 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY")]
     pub event_channel_capacity: NonZeroUsize,
 
-    /// NETWORK INITIAL NODE COUNT
-    #[clap(short, long, env = "ESPRESSO_BUILDER_INIT_NODE_COUNT")]
-    node_count: NonZeroUsize,
-
     /// The amount of time a builder can wait before timing out a request to the API.
     #[clap(
         short,
@@ -107,7 +104,7 @@ struct NonPermissionedBuilderOptions {
     pub namespaces: Vec<u32>,
 
     /// Url we will use to communicate to solver
-    #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL")]
+    #[clap(long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     solver_url: Url,
 
     /// Bid amount in WEI.
@@ -126,8 +123,30 @@ async fn main() -> anyhow::Result<()> {
     setup_backtrace();
 
     let opt = NonPermissionedBuilderOptions::parse();
-    let genesis = Genesis::from_file(&opt.genesis_file)?;
 
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
+
+    match (base, upgrade) {
+        (V0_1::VERSION, FeeVersion::VERSION) => {
+            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
+        }
+        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+            run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
+        }
+        _ => panic!(
+            "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
+        ),
+    }
+}
+
+async fn run<V: Versions>(
+    genesis: Genesis,
+    opt: NonPermissionedBuilderOptions,
+) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
@@ -148,13 +167,8 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state = build_instance_state(
-        genesis.chain_config,
-        l1_params,
-        opt.state_peers,
-        <SequencerVersions as Versions>::Base::instance(),
-    )
-    .unwrap();
+    let instance_state =
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
 
     let base_fee = genesis.max_base_fee();
 
@@ -173,7 +187,6 @@ async fn main() -> anyhow::Result<()> {
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
-        opt.node_count,
         instance_state,
         validated_state,
         opt.hotshot_event_streaming_url,

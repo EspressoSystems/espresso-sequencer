@@ -4,6 +4,8 @@ use ark_std::str::FromStr;
 use diff_test_bn254::{field_to_u256, u256_to_field};
 use ethers::{
     abi::AbiDecode,
+    abi::Token,
+    abi::Tokenize,
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
@@ -131,5 +133,38 @@ impl From<ParsedLightClientState> for contract_bindings::light_client::LightClie
     fn from(s: ParsedLightClientState) -> Self {
         // exactly the same struct with same field types, safe to transmute
         unsafe { std::mem::transmute(s) }
+    }
+}
+
+/// `LightClientConstructorArgs` holds the arguments required to initialize a light client contract.
+pub struct LightClientConstructorArgs {
+    pub light_client_state: ParsedLightClientState,
+    pub max_history_seconds: u32,
+}
+
+impl LightClientConstructorArgs {
+    /// Creates a `LightClientConstructorArgs` instance with dummy genesis data.
+    ///
+    /// # Warning
+    /// NEVER use this for production, this is test only.
+    pub fn dummy_genesis() -> Self {
+        Self {
+            light_client_state: ParsedLightClientState::dummy_genesis(),
+            max_history_seconds: 864000,
+        }
+    }
+}
+
+impl Tokenize for LightClientConstructorArgs {
+    /// Converts the `LightClientConstructorArgs` into a vector of tokens.
+    /// the Tokenize trait is used to convert types into Ethereum-compatible ABI tokens
+    ///
+    /// This method is used to serialize the constructor arguments into an
+    /// Ethereum-compatible token that can be read by a smart contract.
+    fn into_tokens(self) -> Vec<Token> {
+        vec![
+            ethers::abi::Token::Tuple(self.light_client_state.into_tokens()),
+            ethers::abi::Token::Uint(U256::from(self.max_history_seconds)),
+        ]
     }
 }

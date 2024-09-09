@@ -28,7 +28,7 @@ impl SequencerDataSource for DataSource {
 
 impl CatchupDataSource for DataSource {}
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(test)]
 mod impl_testable_data_source {
     use tempfile::TempDir;
 

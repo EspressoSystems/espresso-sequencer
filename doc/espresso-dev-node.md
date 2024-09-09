@@ -111,6 +111,6 @@ curl -X POST "http://localhost:20000/api/set-hotshot-up" \
 
 Parameter
 
-| Name     | Type    | Required | Description                                                                                                     |
-| -------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| Name     | Type    | Required | Description                                                                                                          |
+| -------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
 | chain_id | integer | No       | chain id for which the height needs to be unfrozen. If not provided, the base L1 light client contract will be used. |

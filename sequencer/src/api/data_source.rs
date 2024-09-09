@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
 use anyhow::{bail, Context};
 use async_trait::async_trait;
@@ -21,12 +21,13 @@ use hotshot_query_service::{
     status::StatusDataSource,
 };
 use hotshot_types::{
-    data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
+    data::ViewNumber,
+    light_client::StateSignatureRequestBody,
+    traits::{network::ConnectedNetwork, node_implementation::Versions},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::Url;
-use vbs::version::StaticVersionType;
 use vec1::Vec1;
 
 use super::{
@@ -36,7 +37,7 @@ use super::{
 };
 use crate::{
     persistence::{self},
-    SeqTypes,
+    SeqTypes, SequencerApiVersion,
 };
 
 pub trait DataSourceOptions: PersistenceOptions {
@@ -84,9 +85,9 @@ pub trait SequencerDataSource:
 pub type Provider = AnyProvider<SeqTypes>;
 
 /// Create a provider for fetching missing data from a list of peer query services.
-pub fn provider<Ver: StaticVersionType + 'static>(
+pub fn provider<V: Versions>(
     peers: impl IntoIterator<Item = Url>,
-    bind_version: Ver,
+    bind_version: SequencerApiVersion,
 ) -> Provider {
     let mut provider = Provider::default();
     for peer in peers {
@@ -372,7 +373,7 @@ impl From<NetworkConfig<PubKey>> for PublicNetworkConfig {
             rounds: cfg.rounds,
             indexed_da: cfg.indexed_da,
             transactions_per_round: cfg.transactions_per_round,
-            manual_start_password: cfg.manual_start_password,
+            manual_start_password: Some("*****".into()),
             num_bootrap: cfg.num_bootrap,
             next_view_timeout: cfg.next_view_timeout,
             view_sync_timeout: cfg.view_sync_timeout,
@@ -431,6 +432,8 @@ impl PublicNetworkConfig {
             commit_sha: self.commit_sha,
             builder: self.builder,
             random_builder: self.random_builder,
+            public_keys: HashSet::new(),
+            enable_registration_verification: false,
         })
     }
 }

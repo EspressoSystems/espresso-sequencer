@@ -5,7 +5,7 @@ use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHea
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BuilderFee},
-        node_implementation::{NodeType, Versions},
+        node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
         BlockPayload, ValidatedState as _,
     },
@@ -24,12 +24,14 @@ use time::OffsetDateTime;
 use vbs::version::{StaticVersionType, Version};
 
 use crate::{
-    v0::header::{EitherOrVersion, VersionedHeader},
+    v0::{
+        header::{EitherOrVersion, VersionedHeader},
+        MarketplaceVersion,
+    },
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, SequencerVersions,
-    UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
@@ -425,7 +427,7 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            if version < <SequencerVersions as Versions>::Marketplace::version() {
+            if version < MarketplaceVersion::version() {
                 ensure!(
                     fee_account.validate_fee_signature(
                         fee_signature,
@@ -747,11 +749,11 @@ impl BlockHeader<SeqTypes> for Header {
 
         let mut validated_state = parent_state.clone();
 
-        let chain_config = if version > instance_state.current_version {
+        let chain_config = if version >= MarketplaceVersion::version() {
             match instance_state.upgrades.get(&version) {
                 Some(upgrade) => match upgrade.upgrade_type {
+                    UpgradeType::Marketplace { chain_config } => chain_config,
                     UpgradeType::Fee { chain_config } => chain_config,
-                    _ => Header::get_chain_config(&validated_state, instance_state).await,
                 },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }

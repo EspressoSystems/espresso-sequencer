@@ -416,8 +416,12 @@ impl SequencerPersistence for Persistence {
     async fn record_action(
         &mut self,
         view: ViewNumber,
-        _action: HotShotAction,
+        action: HotShotAction,
     ) -> anyhow::Result<()> {
+        // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
+        if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
+            return Ok(());
+        }
         self.replace(
             &self.voted_view_path(),
             |mut file| {

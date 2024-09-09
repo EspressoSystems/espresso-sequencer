@@ -1,5 +1,7 @@
 //! Update loop for query API state.
 
+use super::{data_source::SequencerDataSource, StorageState};
+use crate::SeqTypes;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use derivative::Derivative;
@@ -10,12 +12,8 @@ use espresso_types::{
 };
 use hotshot::types::Event;
 use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
-use hotshot_types::traits::network::ConnectedNetwork;
+use hotshot_types::traits::{network::ConnectedNetwork, node_implementation::Versions};
 use std::fmt::Debug;
-use vbs::version::StaticVersionType;
-
-use super::{data_source::SequencerDataSource, StorageState};
-use crate::SeqTypes;
 
 #[derive(Derivative, From)]
 #[derivative(Clone(bound = ""), Debug(bound = "D: Debug"))]
@@ -23,7 +21,7 @@ pub(crate) struct ApiEventConsumer<N, P, D, Ver>
 where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
-    Ver: StaticVersionType,
+    Ver: Versions,
 {
     inner: Arc<RwLock<StorageState<N, P, D, Ver>>>,
 }
@@ -34,7 +32,7 @@ where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     D: SequencerDataSource + Debug + Send + Sync,
-    Ver: StaticVersionType,
+    Ver: Versions,
 {
     async fn handle_event(&self, event: &Event<SeqTypes>) -> anyhow::Result<()> {
         let mut state = self.inner.write().await;
@@ -56,8 +54,8 @@ where
     }
 }
 
-async fn update_state<N, P, D, Ver: StaticVersionType>(
-    state: &mut StorageState<N, P, D, Ver>,
+async fn update_state<N, P, D, V: Versions>(
+    state: &mut StorageState<N, P, D, V>,
     event: &Event<SeqTypes>,
 ) -> anyhow::Result<()>
 where
