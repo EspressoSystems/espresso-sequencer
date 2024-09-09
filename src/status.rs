@@ -166,7 +166,7 @@ mod test {
 
         // Ask for the Prometheus data
         let res = reqwest_client
-            .get(&format!("{url}/metrics"))
+            .get(format!("{url}/metrics"))
             .send()
             .await
             .unwrap();
