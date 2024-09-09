@@ -170,7 +170,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
 
     function test_NoProverPermissionsRequired() external {
         //ensure that the permissioned prover mode is set
-        assert(lc.permissionedProverEnabled());
+        assert(lc.isPermissionedProverEnabled());
 
         //set permissioned flag to false
         vm.expectEmit(true, true, true, true);
@@ -179,7 +179,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         lc.disablePermissionedProverMode();
 
         //assert that the contract is not permissioned
-        assert(lc.permissionedProverEnabled() == false);
+        assert(lc.isPermissionedProverEnabled() == false);
 
         // assert that the prover address is zero address when the contract is not permissioned
         assertEq(lc.permissionedProver(), address(0));
@@ -208,7 +208,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     }
 
     function test_UpdatePermissionedProverWhenPermissionedProverModeEnabled() external {
-        assert(lc.permissionedProverEnabled());
+        assert(lc.isPermissionedProverEnabled());
         assertEq(lc.permissionedProver(), permissionedProver);
 
         address newProver = makeAddr("another prover");
@@ -226,7 +226,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
             // InvalidAddress()
         vm.assume(newProver != permissionedProver); //otherwise it would have reverted with
             // NoChangeRequired()
-        assert(lc.permissionedProverEnabled());
+        assert(lc.isPermissionedProverEnabled());
         assertEq(lc.permissionedProver(), permissionedProver);
 
         vm.expectEmit(true, true, true, true);
@@ -260,7 +260,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     }
 
     function test_RevertWhen_sameProverSentInUpdate() public {
-        assertEq(lc.permissionedProverEnabled(), true);
+        assertEq(lc.isPermissionedProverEnabled(), true);
         address currentProver = lc.permissionedProver();
         vm.prank(admin);
         vm.expectRevert(LC.NoChangeRequired.selector);
@@ -609,9 +609,9 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // get oldest and newest state commitment info
-        (, uint256 latestBlockTimestamp,) =
+        (, uint256 latestBlockTimestamp,,) =
             lc.stateHistoryCommitments(lc.getStateHistoryCount() - 1);
-        (, uint256 oldestBlockTimestamp,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
+        (, uint256 oldestBlockTimestamp,,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
         // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
         // history allowed
         assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
@@ -639,13 +639,13 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // get stale commitments and assert that it has been reset to zero
         for (i = 0; i < lc.stateHistoryFirstIndex(); i++) {
-            (, uint256 staleBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            (, uint256 staleBlockTimestamp,,) = lc.stateHistoryCommitments(i);
             assertEq(staleBlockTimestamp, 0);
         }
 
         // get the recent commitments and assert that the values are non-zero
         for (i = lc.stateHistoryFirstIndex(); i < lc.getStateHistoryCount(); i++) {
-            (, uint256 activeBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            (, uint256 activeBlockTimestamp,,) = lc.stateHistoryCommitments(i);
             assertNotEq(activeBlockTimestamp, 0);
         }
     }
@@ -682,9 +682,9 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // get oldest and newest state commitment info
-        (, uint256 latestBlockTimestamp,) =
+        (, uint256 latestBlockTimestamp,,) =
             lc.stateHistoryCommitments(lc.getStateHistoryCount() - 1);
-        (, uint256 oldestBlockTimestamp,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
+        (, uint256 oldestBlockTimestamp,,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
         // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
         // history allowed
 
@@ -713,13 +713,13 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // get stale commitments and assert that it has been reset to zero
         for (i = 0; i < lc.stateHistoryFirstIndex(); i++) {
-            (, uint256 staleBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            (, uint256 staleBlockTimestamp,,) = lc.stateHistoryCommitments(i);
             assertEq(staleBlockTimestamp, 0);
         }
 
         // get the recent commitments and assert that the values are non-zero
         for (i = lc.stateHistoryFirstIndex(); i < lc.getStateHistoryCount(); i++) {
-            (, uint256 activeBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            (, uint256 activeBlockTimestamp,,) = lc.stateHistoryCommitments(i);
             assertNotEq(activeBlockTimestamp, 0);
         }
     }
@@ -740,9 +740,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
         }
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -750,7 +747,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: blockNumberUpdates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -780,9 +778,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         blockNumberUpdates[3] = blockNumberUpdates[2] + DELAY_THRESHOLD + 5; // 18
         blockNumberUpdates[4] = blockNumberUpdates[3] + DELAY_THRESHOLD / 2; // 21
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -795,7 +790,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: blockNumberUpdates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -820,9 +816,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD + 5; //12
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -835,7 +828,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: updates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -855,9 +849,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -870,7 +861,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: updates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -893,9 +885,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -908,7 +897,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: updates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -939,9 +929,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -954,7 +941,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: updates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -980,9 +968,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -995,7 +980,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: updates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -1016,9 +1002,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -1031,7 +1014,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: updates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -1054,9 +1038,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
 
-        LC.HotShotCommitment memory hotShotCommitment =
-            LC.HotShotCommitment(newState.blockHeight, newState.blockCommRoot);
-
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
@@ -1069,7 +1050,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             stateHistoryCommitments[i] = LC.StateHistoryCommitment({
                 l1BlockHeight: updates[i],
                 l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotCommitment: hotShotCommitment
+                hotShotBlockHeight: newState.blockHeight,
+                hotShotBlockCommRoot: newState.blockCommRoot
             });
         }
 
@@ -1167,16 +1149,14 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         lc.newFinalizedState(newState, newProof);
 
         // Test for a smaller hotShotBlockHeight
-        BN254.ScalarField blockComm =
-            lc.getHotShotCommitment(newState.blockHeight - 1).blockCommRoot;
+        BN254.ScalarField blockComm = lc.getHotShotCommitment(newState.blockHeight - 1);
         assertEqBN254(blockComm, newState.blockCommRoot);
     }
 
     function test_revertWhenGetHotShotCommitmentInvalidHigh() public {
         // Get the highest HotShot blockheight recorded
         uint256 numCommitments = lc.getStateHistoryCount();
-        (,, LC.HotShotCommitment memory comm) = lc.stateHistoryCommitments(numCommitments - 1);
-        uint64 blockHeight = comm.blockHeight;
+        (,, uint64 blockHeight,) = lc.stateHistoryCommitments(numCommitments - 1);
         // Expect revert when attempting to retrieve a block height higher than the highest one
         // recorded
         vm.expectRevert(LC.InvalidHotShotBlockForCommitmentCheck.selector);

@@ -58,9 +58,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// permissioned prover mode
     address public permissionedProver;
 
-    /// @notice a flag that indicates when a permissioned provrer is needed
-    bool public permissionedProverEnabled;
-
     /// @notice Max number of seconds worth of state commitments to record based on this block
     /// timestamp
     uint32 public stateHistoryRetentionPeriod;
@@ -100,21 +97,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice Simplified HotShot commitment struct
-    /// @param blockHeight The block height of the latest finalized HotShot block
-    /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
-    struct HotShotCommitment {
-        uint64 blockHeight;
-        BN254.ScalarField blockCommRoot;
-    }
-
-    /// @notice Simplified HotShot commitment struct
     /// @param l1BlockHeight the block height of l1 when this state update was stored
     /// @param l1BlockTimestamp the block timestamp of l1 when this state update was stored
-    /// @param hotShotCommitment The HotShot commitment info of the latest finalized HotShot block
+    /// @param hotShotBlockHeight The block height of the latest finalized HotShot block
+    /// @param hotShotBlockCommRoot The merkle root of historical block commitments
+    /// (BN254::ScalarField)
     struct StateHistoryCommitment {
         uint64 l1BlockHeight;
         uint64 l1BlockTimestamp;
-        HotShotCommitment hotShotCommitment;
+        uint64 hotShotBlockHeight;
+        BN254.ScalarField hotShotBlockCommRoot;
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -240,7 +232,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.PlonkProof memory proof
     ) external virtual {
         //revert if we're in permissionedProver mode and the permissioned prover has not been set
-        if (permissionedProverEnabled && msg.sender != permissionedProver) {
+        if (isPermissionedProverEnabled() && msg.sender != permissionedProver) {
             revert ProverNotPermissioned();
         }
 
@@ -299,16 +291,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert NoChangeRequired();
         }
         permissionedProver = prover;
-        permissionedProverEnabled = true;
         emit PermissionedProverRequired(permissionedProver);
     }
 
     /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
     /// @dev if it was already disabled (permissioneProverMode == false), then revert with
     function disablePermissionedProverMode() public virtual onlyOwner {
-        if (permissionedProverEnabled) {
+        if (isPermissionedProverEnabled()) {
             permissionedProver = address(0);
-            permissionedProverEnabled = false;
             emit PermissionedProverNotRequired();
         } else {
             revert NoChangeRequired();
@@ -352,9 +342,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // add the L1 Block & HotShot commitment to the genesis state
         stateHistoryCommitments.push(
             StateHistoryCommitment(
-                blockNumber,
-                blockTimestamp,
-                HotShotCommitment(state.blockHeight, state.blockCommRoot)
+                blockNumber, blockTimestamp, state.blockHeight, state.blockCommRoot
             )
         );
     }
@@ -413,29 +401,27 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
     /// the provided HotShot height
     /// @param hotShotBlockHeight the HotShot block height
-    /// @return HotShotCommitment the HotShot commitment
+    /// @return hotShotBlockCommRoot the HotShot commitment root
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
         virtual
-        returns (HotShotCommitment memory)
+        returns (BN254.ScalarField hotShotBlockCommRoot)
     {
         uint256 commitmentsHeight = stateHistoryCommitments.length;
-        if (
-            hotShotBlockHeight
-                >= stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment.blockHeight
-        ) {
+        if (hotShotBlockHeight >= stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
+        {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
-            if (stateHistoryCommitments[i].hotShotCommitment.blockHeight > hotShotBlockHeight) {
-                return stateHistoryCommitments[i].hotShotCommitment;
+            if (stateHistoryCommitments[i].hotShotBlockHeight > hotShotBlockHeight) {
+                return stateHistoryCommitments[i].hotShotBlockCommRoot;
             }
         }
 
-        return stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment;
+        return stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockCommRoot;
     }
 
     /// @notice get the number of state history commitments
@@ -456,5 +442,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         stateHistoryRetentionPeriod = historySeconds;
+    }
+
+    /// @notice Check if permissioned prover is enabled
+    function isPermissionedProverEnabled() public view returns (bool) {
+        return (permissionedProver != address(0));
     }
 }

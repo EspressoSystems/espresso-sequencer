@@ -13,6 +13,7 @@ import { OwnableUpgradeable } from
     "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { BN254 } from "bn254/BN254.sol";
+import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 
 contract LightClientUpgradeToVxTest is Test {
     LCV1 public lcV1Proxy;
@@ -56,26 +57,39 @@ contract LightClientUpgradeToVxTest is Test {
         // field
         // of the upgraded contract is set to 0
         uint256 myNewField = 123;
-        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
+        uint256 extraField = 2;
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, extraField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
 
         LCV1.LightClientState memory expectedLightClientState =
             LCV1.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
 
-        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState =
-            LCV2.ExtendedLightClientState(0);
+        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState = LCV2
+            .ExtendedLightClientState(
+            stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot, extraField
+        );
 
+        // compare with the current version of the light client state
         (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
             lcV2Proxy.finalizedState();
         assertEq(viewNum, expectedLightClientState.viewNum);
         assertEq(blockHeight, expectedLightClientState.blockHeight);
         assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
 
+        // compare with the extended light client state
+        (
+            uint64 viewNumV2,
+            uint64 blockHeightV2,
+            BN254.ScalarField blockCommRootV2,
+            uint256 extraFieldV2
+        ) = lcV2Proxy.extendedFinalizedState();
+        assertEq(viewNumV2, expectedExtendedLightClientState.viewNum);
+        assertEq(blockHeightV2, expectedExtendedLightClientState.blockHeight);
         assertEq(
-            abi.encode(lcV2Proxy.getExtendedFinalizedState()),
-            abi.encode(expectedExtendedLightClientState)
+            abi.encode(blockCommRootV2), abi.encode(expectedExtendedLightClientState.blockCommRoot)
         );
+        assertEq(extraFieldV2, expectedExtendedLightClientState.extraField);
     }
 
     // test that the data remains the same after upgrading the implementation
@@ -84,30 +98,37 @@ contract LightClientUpgradeToVxTest is Test {
         // field
         // of the upgraded contract is set to 0
         uint256 myNewField = 123;
-        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
+        uint256 extraField = 2;
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, extraField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
 
         LCV1.LightClientState memory expectedLightClientState =
             LCV1.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
 
-        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState =
-            LCV2.ExtendedLightClientState(0);
+        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState = LCV2
+            .ExtendedLightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot, 2);
 
-        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
-            lcV2Proxy.finalizedState();
-        assertEq(viewNum, expectedLightClientState.viewNum);
-        assertEq(blockHeight, expectedLightClientState.blockHeight);
-        assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
+        (
+            uint64 viewNumV2,
+            uint64 blockHeightV2,
+            BN254.ScalarField blockCommRootV2,
+            uint256 extraFieldV2
+        ) = lcV2Proxy.extendedFinalizedState();
+        assertEq(viewNumV2, expectedLightClientState.viewNum);
+        assertEq(blockHeightV2, expectedLightClientState.blockHeight);
+        assertEq(abi.encode(blockCommRootV2), abi.encode(expectedLightClientState.blockCommRoot));
 
+        assertEq(viewNumV2, expectedExtendedLightClientState.viewNum);
+        assertEq(blockHeightV2, expectedExtendedLightClientState.blockHeight);
         assertEq(
-            abi.encode(lcV2Proxy.getExtendedFinalizedState()),
-            abi.encode(expectedExtendedLightClientState)
+            abi.encode(blockCommRootV2), abi.encode(expectedExtendedLightClientState.blockCommRoot)
         );
+        assertEq(extraFieldV2, expectedExtendedLightClientState.extraField);
 
         // expect a revert when we try to reinitialize
         vm.expectRevert(Initializable.InvalidInitialization.selector);
-        lcV2Proxy.initializeV2(5);
+        lcV2Proxy.initializeV2(5, 3);
     }
 
     // test that the data remains the same after upgrading the implementation
@@ -117,26 +138,40 @@ contract LightClientUpgradeToVxTest is Test {
         // of the upgraded contract is set to 0
         uint256 myNewField = 123;
         uint256 myNewFieldV3 = 456;
-        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
+        uint256 extraField = 2;
+
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, extraField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
 
         LCV1.LightClientState memory expectedLightClientState =
             LCV1.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
 
-        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState =
-            LCV2.ExtendedLightClientState(0);
+        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState = LCV2
+            .ExtendedLightClientState(
+            stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot, extraField
+        );
 
+        // compare with the current version of the light client state
         (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
             lcV2Proxy.finalizedState();
         assertEq(viewNum, expectedLightClientState.viewNum);
         assertEq(blockHeight, expectedLightClientState.blockHeight);
         assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
 
+        // compare with the extended light client state
+        (
+            uint64 viewNumV2,
+            uint64 blockHeightV2,
+            BN254.ScalarField blockCommRootV2,
+            uint256 extraFieldV2
+        ) = lcV2Proxy.extendedFinalizedState();
+        assertEq(viewNumV2, expectedExtendedLightClientState.viewNum);
+        assertEq(blockHeightV2, expectedExtendedLightClientState.blockHeight);
         assertEq(
-            abi.encode(lcV2Proxy.getExtendedFinalizedState()),
-            abi.encode(expectedExtendedLightClientState)
+            abi.encode(blockCommRootV2), abi.encode(expectedExtendedLightClientState.blockCommRoot)
         );
+        assertEq(extraFieldV2, expectedExtendedLightClientState.extraField);
 
         // upgrade to v3
         lcV3Proxy = LCV3(upgraderV3.run(proxy, myNewFieldV3, admin));
@@ -149,10 +184,19 @@ contract LightClientUpgradeToVxTest is Test {
         assertEq(blockHeight, expectedLightClientState.blockHeight);
         assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
 
+        // compare with the extended light client state
+        (
+            uint64 viewNumV3,
+            uint64 blockHeightV3,
+            BN254.ScalarField blockCommRootV3,
+            uint256 extraFieldV3
+        ) = lcV2Proxy.extendedFinalizedState();
+        assertEq(viewNumV3, expectedExtendedLightClientState.viewNum);
+        assertEq(blockHeightV3, expectedExtendedLightClientState.blockHeight);
         assertEq(
-            abi.encode(lcV3Proxy.getExtendedFinalizedState()),
-            abi.encode(expectedExtendedLightClientState)
+            abi.encode(blockCommRootV3), abi.encode(expectedExtendedLightClientState.blockCommRoot)
         );
+        assertEq(extraFieldV3, expectedExtendedLightClientState.extraField);
     }
 
     // test that the tx reverts if we try to reinitialize more than once
@@ -162,43 +206,12 @@ contract LightClientUpgradeToVxTest is Test {
         // of the upgraded contract is set to 0
         uint256 myNewField = 123;
         uint256 myNewFieldV3 = 456;
+        uint256 extraField = 2;
         // upgrade to v2 first
-        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
-
-        assertEq(lcV2Proxy.newField(), myNewField);
-
-        LCV1.LightClientState memory expectedLightClientState =
-            LCV1.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
-
-        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState =
-            LCV2.ExtendedLightClientState(0);
-
-        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
-            lcV2Proxy.finalizedState();
-        assertEq(viewNum, expectedLightClientState.viewNum);
-        assertEq(blockHeight, expectedLightClientState.blockHeight);
-        assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
-
-        assertEq(
-            abi.encode(lcV2Proxy.getExtendedFinalizedState()),
-            abi.encode(expectedExtendedLightClientState)
-        );
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, extraField, admin));
 
         // upgrade to v3
         lcV3Proxy = LCV3(upgraderV3.run(proxy, myNewFieldV3, admin));
-
-        assertEq(lcV3Proxy.newField(), myNewField);
-        assertEq(lcV3Proxy.anotherField(), myNewFieldV3);
-
-        (viewNum, blockHeight, blockCommRoot) = lcV3Proxy.finalizedState();
-        assertEq(viewNum, expectedLightClientState.viewNum);
-        assertEq(blockHeight, expectedLightClientState.blockHeight);
-        assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
-
-        assertEq(
-            abi.encode(lcV3Proxy.getExtendedFinalizedState()),
-            abi.encode(expectedExtendedLightClientState)
-        );
 
         // expect a revert when we try to reinitialize
         vm.expectRevert(Initializable.InvalidInitialization.selector);
@@ -213,7 +226,9 @@ contract LightClientUpgradeToVxTest is Test {
         assertEq(patch, 0);
 
         //upgrade box
-        lcV2Proxy = LCV2(upgraderV2.run(proxy, 123, admin));
+        uint256 newField = 123;
+        uint256 extraField = 2;
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, newField, extraField, admin));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
         (uint8 majorV2, uint8 minorV2, uint8 patchV2) = lcV2Proxy.getVersion();
         assertEq(majorV2, 2);
@@ -229,7 +244,9 @@ contract LightClientUpgradeToVxTest is Test {
             abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, attacker)
         );
 
-        lcV2Proxy = LCV2(upgraderV2.run(address(proxy), 123, attacker));
+        uint256 newField = 123;
+        uint256 extraField = 2;
+        lcV2Proxy = LCV2(upgraderV2.run(address(proxy), newField, extraField, attacker));
     }
 
     function testMaliciousUpgradeToV32Fails() public {

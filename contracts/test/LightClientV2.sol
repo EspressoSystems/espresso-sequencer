@@ -6,6 +6,8 @@ pragma experimental ABIEncoderV2;
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
 import { LightClient } from "../src/LightClient.sol";
+import { PlonkVerifier } from "../src/libraries/PlonkVerifier.sol";
+import { LightClientStateUpdateVK as VkLib } from "../src/libraries/LightClientStateUpdateVK.sol";
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
 /// authenticated ways.
@@ -16,11 +18,14 @@ contract LightClientV2 is LightClient {
     uint256 public newField;
 
     struct ExtendedLightClientState {
+        uint64 viewNum;
+        uint64 blockHeight;
+        BN254.ScalarField blockCommRoot;
         uint256 extraField;
     }
 
     /// @notice mapping to store the extended light client states in order to simplify upgrades
-    ExtendedLightClientState public extendedFinalzedState;
+    ExtendedLightClientState public extendedFinalizedState;
 
     /// @notice Initialize v2
     /// @param _newField   New field amount
@@ -30,8 +35,12 @@ contract LightClientV2 is LightClient {
     /// when the base implementation contract is initialized for the first time, the _initialized
     /// version
     /// is set to 1. Since this is the 2nd implementation, the next contract version is 2.
-    function initializeV2(uint256 _newField) external reinitializer(2) {
+    function initializeV2(uint256 _newField, uint256 _extraField) external reinitializer(2) {
         newField = _newField;
+        extendedFinalizedState.viewNum = finalizedState.viewNum;
+        extendedFinalizedState.blockHeight = finalizedState.blockHeight;
+        extendedFinalizedState.blockCommRoot = finalizedState.blockCommRoot;
+        extendedFinalizedState.extraField = _extraField;
     }
 
     /// @notice Use this to get the implementation contract version
@@ -52,9 +61,9 @@ contract LightClientV2 is LightClient {
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
     function newFinalizedState(
-        LightClientState memory newState,
+        ExtendedLightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
-    ) external virtual override {
+    ) external virtual {
         if (
             newState.viewNum <= finalizedState.viewNum
                 || newState.blockHeight <= finalizedState.blockHeight
@@ -74,20 +83,32 @@ contract LightClientV2 is LightClient {
         // because newState is in memory and states[finalizedState] is in storage, they have
         // different data handling mechanisms
         // and this each field needs to be assigned individually
-        finalizedState = newState;
 
-        extendedFinalzedState.extraField = 2;
+        extendedFinalizedState = newState;
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
 
-    /// @dev Simple getter function for the extended finalized state
-    function getExtendedFinalizedState()
-        public
-        view
-        virtual
-        returns (ExtendedLightClientState memory)
-    {
-        return extendedFinalzedState;
+    /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
+    /// used in inherited contracts.
+    function verifyProof(
+        ExtendedLightClientState memory state,
+        IPlonkVerifier.PlonkProof memory proof
+    ) internal virtual {
+        IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
+
+        // Prepare the public input
+        uint256[7] memory publicInput;
+        publicInput[0] = uint256(state.viewNum);
+        publicInput[1] = uint256(state.blockHeight);
+        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[3] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
+        publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
+        publicInput[6] = genesisStakeTableState.threshold;
+
+        if (!PlonkVerifier.verify(vk, publicInput, proof)) {
+            revert InvalidProof();
+        }
     }
 }
