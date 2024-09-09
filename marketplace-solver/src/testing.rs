@@ -129,7 +129,161 @@ mod test {
     use crate::{testing::MockSolver, SolverError};
 
     #[async_std::test]
-    async fn test_rollup_registration() {
+    async fn test_duplicate_rollup_registration() {
+        let mock_solver = MockSolver::init().await;
+        let solver_api = mock_solver.solver_api();
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
+
+        // Create a list of signature keys for rollup registration data
+        let mut signature_keys = Vec::new();
+
+        let private_key =
+            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+        let signature_key = BLSPubKey::from_private(&private_key);
+
+        let private_key =
+            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+        signature_keys.push(BLSPubKey::from_private(&private_key));
+
+        signature_keys.push(signature_key);
+
+        // Initialize a rollup registration with namespace id = 1
+        let reg_ns_1_body = RollupRegistrationBody {
+            namespace_id: 1_u64.into(),
+            reserve_url: Some(Url::from_str("http://localhost").unwrap()),
+            reserve_price: 200.into(),
+            active: true,
+            signature_keys,
+            text: "test".to_string(),
+            signature_key,
+        };
+
+        // Sign the registration body
+        let signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &private_key,
+            reg_ns_1_body.commit().as_ref(),
+        )
+        .expect("failed to sign");
+
+        let reg_ns_1 = RollupRegistration {
+            body: reg_ns_1_body.clone(),
+            signature,
+        };
+
+        // registering a rollup
+        let result: RollupRegistration = client
+            .post("register_rollup")
+            .body_json(&reg_ns_1)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        // Ensure the registration result matches the initial registration data
+        assert_eq!(reg_ns_1, result);
+
+        // Attempt to re-register the same rollup (should fail)
+        let err = client
+            .post::<RollupRegistration>("register_rollup")
+            .body_json(&reg_ns_1)
+            .unwrap()
+            .send()
+            .await
+            .unwrap_err();
+
+        // Ensure the error indicates the rollup with namespace id  = 1 already exists
+        match err {
+            SolverError::RollupAlreadyExists(id) if reg_ns_1.body.namespace_id == id => (),
+            _ => panic!("err {err:?}"),
+        }
+    }
+
+    #[async_std::test]
+    async fn test_rollup_registration_invalid_signature() {
+        let mock_solver = MockSolver::init().await;
+        let solver_api = mock_solver.solver_api();
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
+
+        // Create a list of signature keys for rollup registration data
+        let mut signature_keys = Vec::new();
+
+        let private_key =
+            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+        let signature_key = BLSPubKey::from_private(&private_key);
+
+        for _ in 0..10 {
+            let private_key =
+                <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+            signature_keys.push(BLSPubKey::from_private(&private_key))
+        }
+
+        signature_keys.push(signature_key);
+
+        // Initialize a rollup registration with namespace id = 1
+        let reg_ns_1_body = RollupRegistrationBody {
+            namespace_id: 1_u64.into(),
+            reserve_url: Some(Url::from_str("http://localhost").unwrap()),
+            reserve_price: 200.into(),
+            active: true,
+            signature_keys,
+            text: "test".to_string(),
+            signature_key,
+        };
+
+        // Sign the registration body
+        let signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &private_key,
+            reg_ns_1_body.commit().as_ref(),
+        )
+        .expect("failed to sign");
+
+        let reg_ns_1 = RollupRegistration {
+            body: reg_ns_1_body.clone(),
+            signature,
+        };
+
+        // registering a rollup
+        let _: RollupRegistration = client
+            .post("register_rollup")
+            .body_json(&reg_ns_1)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        // Attempt to register a new rollup with namespace id = 2 using an invalid signature
+        let mut reg_ns_2 = reg_ns_1.clone();
+        reg_ns_2.body.namespace_id = 2_u64.into();
+        // Generating an invalid signature by signing the body of namespace id = 1
+        let new_priv_key =
+            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+
+        let new_signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &new_priv_key,
+            reg_ns_1_body.clone().commit().as_ref(),
+        )
+        .expect("failed to sign");
+        reg_ns_2.signature = new_signature;
+
+        // This should fail due to an invalid signature
+        let err: SolverError = client
+            .post::<RollupRegistration>("register_rollup")
+            .body_json(&reg_ns_2)
+            .unwrap()
+            .send()
+            .await
+            .unwrap_err();
+
+        // Ensure the error indicates an invalid signature
+        match err {
+            SolverError::InvalidSignature(signature)
+                if reg_ns_2.signature.to_string() == signature => {}
+            _ => panic!("err {err:?}"),
+        }
+    }
+
+    #[async_std::test]
+    async fn test_update_registration() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
         let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
@@ -173,7 +327,7 @@ mod test {
         };
 
         // registering a rollup
-        let result: RollupRegistration = client
+        let _: RollupRegistration = client
             .post("register_rollup")
             .body_json(&reg_ns_1)
             .unwrap()
@@ -181,58 +335,9 @@ mod test {
             .await
             .unwrap();
 
-        // Ensure the registration result matches the initial registration data
-        assert_eq!(reg_ns_1, result);
-
-        // Attempt to re-register the same rollup (should fail)
-        let err = client
-            .post::<RollupRegistration>("register_rollup")
-            .body_json(&reg_ns_1)
-            .unwrap()
-            .send()
-            .await
-            .unwrap_err();
-
-        // Ensure the error indicates the rollup with namespace id  = 1 already exists
-        match err {
-            SolverError::RollupAlreadyExists(id) if reg_ns_1.body.namespace_id == id => (),
-            _ => panic!("err {err:?}"),
-        }
-
-        // Attempt to register a new rollup with namespace id = 2 using an invalid signature
-        let mut reg_ns_2 = reg_ns_1.clone();
-        reg_ns_2.body.namespace_id = 2_u64.into();
-        // Generating an invalid signature by signing the body of namespace id = 1
-        let new_priv_key =
-            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
-
-        let new_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-            &new_priv_key,
-            reg_ns_1_body.clone().commit().as_ref(),
-        )
-        .expect("failed to sign");
-        reg_ns_2.signature = new_signature;
-
-        // This should fail due to an invalid signature
-        let err: SolverError = client
-            .post::<RollupRegistration>("register_rollup")
-            .body_json(&reg_ns_2)
-            .unwrap()
-            .send()
-            .await
-            .unwrap_err();
-
-        // Ensure the error indicates an invalid signature
-        match err {
-            SolverError::InvalidSignature(signature)
-                if reg_ns_2.signature.to_string() == signature => {}
-            _ => panic!("err {err:?}"),
-        }
-
         // Test the update rollup endpoint
         // We will use the existing rollup registration with namespace id = 1
         // and update it by setting the `active`` status to false
-
         let update_body = RollupUpdatebody {
             namespace_id: 1_u64.into(),
             reserve_url: Skip,
@@ -268,7 +373,6 @@ mod test {
         assert_eq!(reg_ns_1, result);
 
         // Test `rollup_registrations` endpoint to get all the registered rollups
-
         // The result should contain the updated rollup registration data
         let result: Vec<RollupRegistration> =
             client.get("rollup_registrations").send().await.unwrap();
