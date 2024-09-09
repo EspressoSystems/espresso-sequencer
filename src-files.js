@@ -17,6 +17,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["gen_vk_contract",["",[],["main.rs"]]],\
 ["hotshot_contract_adapter",["",[],["jellyfish.rs","lib.rs","light_client.rs"]]],\
 ["hotshot_state_prover",["",[],["circuit.rs","lib.rs","mock_ledger.rs","service.rs","snark.rs"]]],\
+["keygen",["",[],["keygen.rs"]]],\
 ["marketplace_builder",["",[],["builder.rs","hooks.rs","lib.rs"]]],\
 ["marketplace_solver",["",[],["api.rs","database.rs","events.rs","lib.rs","options.rs","state.rs"]]],\
 ["nasty_client",["",[],["nasty-client.rs"]]],\
@@ -24,6 +25,8 @@ var srcIndex = new Map(JSON.parse('[\
 ["orchestrator",["",[],["orchestrator.rs"]]],\
 ["permissioned_builder",["",[],["permissioned-builder.rs"]]],\
 ["permissionless_builder",["",[],["permissionless-builder.rs"]]],\
+["pub_key",["",[],["pub-key.rs"]]],\
+["reset_storage",["",[],["reset-storage.rs"]]],\
 ["sequencer",["",[["api",[],["data_source.rs","endpoints.rs","fs.rs","options.rs","sql.rs","update.rs"]],["network",[],["cdn.rs","libp2p.rs","mod.rs"]],["persistence",[],["fs.rs","no_storage.rs","sql.rs"]],["state_signature",[],["relay_server.rs"]]],["api.rs","catchup.rs","context.rs","external_event_handler.rs","genesis.rs","hotshot_commitment.rs","lib.rs","options.rs","persistence.rs","state.rs","state_signature.rs"]]],\
 ["sequencer_utils",["",[],["deployer.rs","lib.rs","logging.rs","ser.rs","test_utils.rs"]]],\
 ["state_prover",["",[],["state-prover.rs"]]],\
