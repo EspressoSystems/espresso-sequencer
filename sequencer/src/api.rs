@@ -1635,7 +1635,7 @@ mod test {
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
                 dbg!(height, new_version_first_view);
-                if height >= new_version_first_view {
+                if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
                     }
