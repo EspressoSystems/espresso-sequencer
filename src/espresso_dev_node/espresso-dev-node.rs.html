@@ -1205,7 +1205,7 @@
 
     <span class="macro">tracing::info!</span>(<span class="string">"Hotshot config {config:?}"</span>);
 
-    <span class="kw">let </span>light_client_genesis = network.light_client_genesis();
+    <span class="kw">let </span>lc_genesis = network.light_client_genesis();
 
     <span class="kw">let </span>contracts = Contracts::new();
     <span class="kw">let </span><span class="kw-2">mut </span>light_client_addresses = <span class="macro">vec!</span>[];
@@ -1249,7 +1249,7 @@
             account_index,
             <span class="bool-val">true</span>,
             <span class="prelude-val">None</span>,
-            <span class="kw">async </span>{ <span class="prelude-val">Ok</span>(light_client_genesis.clone()) }.boxed(),
+            <span class="kw">async </span>{ <span class="prelude-val">Ok</span>(lc_genesis.clone()) }.boxed(),
             contracts.clone(),
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;

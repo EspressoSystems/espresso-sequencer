@@ -401,6 +401,11 @@
 <a href="#401" id="401">401</a>
 <a href="#402" id="402">402</a>
 <a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>clap::{builder::OsStr, Parser, ValueEnum};
@@ -417,7 +422,9 @@
 <span class="kw">use </span>derive_more::Display;
 <span class="kw">use </span>ethers::{prelude::<span class="kw-2">*</span>, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 <span class="kw">use </span>futures::future::{BoxFuture, FutureExt};
-<span class="kw">use </span>hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedLightClientState};
+<span class="kw">use </span>hotshot_contract_adapter::light_client::{
+    LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
+};
 <span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref};
 <span class="kw">use </span>url::Url;
 
@@ -704,13 +711,14 @@
     <span class="prelude-val">Ok</span>(contract.address())
 }
 
-<span class="kw">pub async fn </span>deploy(
+<span class="attr">#[allow(clippy::too_many_arguments)]
+</span><span class="kw">pub async fn </span>deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
     use_mock_contract: bool,
     only: <span class="prelude-ty">Option</span>&lt;Vec&lt;ContractGroup&gt;&gt;,
-    genesis: BoxFuture&lt;<span class="lifetime">'_</span>, anyhow::Result&lt;ParsedLightClientState&gt;&gt;,
+    genesis: BoxFuture&lt;<span class="lifetime">'_</span>, anyhow::Result&lt;(ParsedLightClientState, ParsedStakeTableState)&gt;&gt;,
     <span class="kw-2">mut </span>contracts: Contracts,
 ) -&gt; anyhow::Result&lt;Contracts&gt; {
     <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(l1url.to_string())<span class="question-mark">?</span>;
@@ -757,8 +765,10 @@
         </span>};
         <span class="kw">let </span>light_client = LightClient::new(lc_address, l1.clone());
 
+        <span class="kw">let </span>(genesis_lc, genesis_stake) = genesis.<span class="kw">await</span><span class="question-mark">?</span>.clone();
+
         <span class="kw">let </span>data = light_client
-            .initialize(genesis.<span class="kw">await</span><span class="question-mark">?</span>.into(), <span class="number">864000</span>, owner)
+            .initialize(genesis_lc.into(), genesis_stake.into(), <span class="number">864000</span>, owner)
             .calldata()
             .context(<span class="string">"calldata for initialize transaction not available"</span>)<span class="question-mark">?</span>;
         contracts

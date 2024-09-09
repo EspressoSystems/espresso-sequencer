@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["G1Point","HotShotCommitment","LightClientState","PlonkProof","VerifyingKey"]};
+window.SIDEBAR_ITEMS = {"struct":["G1Point","LightClientState","PlonkProof","StakeTableState","VerifyingKey"]};

@@ -607,6 +607,7 @@
 <a href="#607" id="607">607</a>
 <a href="#608" id="608">608</a>
 <a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
@@ -1076,6 +1077,7 @@
             state,
             validated_state,
             view,
+            highest_voted_view,
             saved_proposals,
             high_qc,
             undecided_leaves.into_values().collect(),

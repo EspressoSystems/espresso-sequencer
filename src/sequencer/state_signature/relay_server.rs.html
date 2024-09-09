@@ -362,7 +362,7 @@
         //     StatusCode::Unauthorized,
         //     "The posted key is not found in the stake table.".to_owned(),
         // ))?;
-        </span><span class="kw">let </span>state_msg: [FieldType; <span class="number">7</span>] = (<span class="kw-2">&amp;</span>state).into();
+        </span><span class="kw">let </span>state_msg: [FieldType; <span class="number">3</span>] = (<span class="kw-2">&amp;</span>state).into();
         <span class="kw">if </span>StateSignatureScheme::verify(<span class="kw-2">&amp;</span>(), <span class="kw-2">&amp;</span>key, state_msg, <span class="kw-2">&amp;</span>signature).is_err() {
             <span class="kw">return </span><span class="prelude-val">Err</span>(tide_disco::error::ServerError::catch_all(
                 StatusCode::BAD_REQUEST,

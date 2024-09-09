@@ -209,10 +209,6 @@
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
 <a href="#211" id="211">211</a>
-<a href="#212" id="212">212</a>
-<a href="#213" id="213">213</a>
-<a href="#214" id="214">214</a>
-<a href="#215" id="215">215</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utilities for generating and storing the most recent light client state signatures.
 
 </span><span class="kw">use </span>std::collections::{HashMap, VecDeque};
@@ -261,6 +257,7 @@
     </span>signatures: RwLock&lt;StateSignatureMemStorage&gt;,
 
     <span class="doccomment">/// Commitment for current fixed stake table
+    </span><span class="attr">#[allow(dead_code)] </span><span class="comment">// although not used today, might need it for dynamic stake table later
     </span>stake_table_comm: StakeTableCommitmentType,
 
     <span class="doccomment">/// The state relay server url
@@ -290,7 +287,7 @@
         <span class="kw">let </span><span class="prelude-val">Some</span>(LeafInfo { leaf, .. }) = leaf_chain.first() <span class="kw">else </span>{
             <span class="kw">return</span>;
         };
-        <span class="kw">match </span>form_light_client_state(leaf, <span class="kw-2">&amp;</span><span class="self">self</span>.stake_table_comm) {
+        <span class="kw">match </span>form_light_client_state(leaf) {
             <span class="prelude-val">Ok</span>(state) =&gt; {
                 <span class="kw">let </span>signature = <span class="self">self</span>.sign_new_state(<span class="kw-2">&amp;</span>state).<span class="kw">await</span>;
                 <span class="macro">tracing::debug!</span>(<span class="string">"New leaves decided. Latest block height: {}"</span>, leaf.height(),);
@@ -326,7 +323,7 @@
 
     <span class="doccomment">/// Sign the light client state at given height and store it.
     </span><span class="kw">async fn </span>sign_new_state(<span class="kw-2">&amp;</span><span class="self">self</span>, state: <span class="kw-2">&amp;</span>LightClientState) -&gt; StateSignature {
-        <span class="kw">let </span>msg: [CircuitField; <span class="number">7</span>] = state.into();
+        <span class="kw">let </span>msg: [CircuitField; <span class="number">3</span>] = state.into();
         <span class="kw">let </span>signature = StateSignatureScheme::sign(
             <span class="kw-2">&amp;</span>(),
             <span class="self">self</span>.key_pair.sign_key_ref(),
@@ -361,10 +358,7 @@
     <span class="prelude-val">Ok</span>(VariableLengthRescueCRHF::&lt;<span class="kw">_</span>, <span class="number">1</span>&gt;::evaluate(elem)<span class="question-mark">?</span>[<span class="number">0</span>])
 }
 
-<span class="kw">fn </span>form_light_client_state(
-    leaf: <span class="kw-2">&amp;</span>Leaf,
-    stake_table_comm: <span class="kw-2">&amp;</span>StakeTableCommitmentType,
-) -&gt; anyhow::Result&lt;LightClientState&gt; {
+<span class="kw">fn </span>form_light_client_state(leaf: <span class="kw-2">&amp;</span>Leaf) -&gt; anyhow::Result&lt;LightClientState&gt; {
     <span class="kw">let </span>header = leaf.block_header();
     <span class="kw">let </span><span class="kw-2">mut </span>block_comm_root_bytes = <span class="macro">vec!</span>[];
     header
@@ -379,8 +373,6 @@
         view_number: leaf.view_number().u64() <span class="kw">as </span>usize,
         block_height: leaf.height() <span class="kw">as </span>usize,
         block_comm_root: hash_bytes_to_field(<span class="kw-2">&amp;</span>block_comm_root_bytes)<span class="question-mark">?</span>,
-        fee_ledger_comm: hash_bytes_to_field(<span class="kw-2">&amp;</span>fee_ledger_comm_bytes)<span class="question-mark">?</span>,
-        stake_table_comm: <span class="kw-2">*</span>stake_table_comm,
     })
 }
 

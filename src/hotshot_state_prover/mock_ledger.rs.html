@@ -522,29 +522,6 @@
 <a href="#522" id="522">522</a>
 <a href="#523" id="523">523</a>
 <a href="#524" id="524">524</a>
-<a href="#525" id="525">525</a>
-<a href="#526" id="526">526</a>
-<a href="#527" id="527">527</a>
-<a href="#528" id="528">528</a>
-<a href="#529" id="529">529</a>
-<a href="#530" id="530">530</a>
-<a href="#531" id="531">531</a>
-<a href="#532" id="532">532</a>
-<a href="#533" id="533">533</a>
-<a href="#534" id="534">534</a>
-<a href="#535" id="535">535</a>
-<a href="#536" id="536">536</a>
-<a href="#537" id="537">537</a>
-<a href="#538" id="538">538</a>
-<a href="#539" id="539">539</a>
-<a href="#540" id="540">540</a>
-<a href="#541" id="541">541</a>
-<a href="#542" id="542">542</a>
-<a href="#543" id="543">543</a>
-<a href="#544" id="544">544</a>
-<a href="#545" id="545">545</a>
-<a href="#546" id="546">546</a>
-<a href="#547" id="547">547</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">use </span>anyhow::Result;
@@ -555,19 +532,17 @@
     rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
     UniformRand,
 };
-<span class="kw">use </span>ethers::{
-    abi,
-    abi::Token,
-    types::{H256, U256},
-    utils,
-};
+<span class="kw">use </span>ethers::types::U256;
 <span class="kw">use </span>hotshot_contract_adapter::{
-    jellyfish::{field_to_u256, open_key, u256_to_field},
-    light_client::ParsedLightClientState,
+    jellyfish::{open_key, u256_to_field},
+    light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
 <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
 <span class="kw">use </span>hotshot_types::{
-    light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
+    light_client::{
+        GenericLightClientState, GenericPublicInput, GenericStakeTableState, LightClientState,
+        StakeTableState,
+    },
     traits::stake_table::{SnapshotVersion, StakeTableScheme},
 };
 <span class="kw">use </span>itertools::izip;
@@ -595,23 +570,17 @@
 <span class="doccomment">/// Stake table capacity used for testing
 </span><span class="kw">pub const </span>STAKE_TABLE_CAPACITY: usize = <span class="number">10</span>;
 
-<span class="doccomment">/// Number of blocks per epoch for testing
-</span><span class="kw">pub const </span>BLOCKS_PER_EPOCH: u32 = <span class="number">3</span>;
-
 <span class="doccomment">/// Mock for system parameter of `MockLedger`
 </span><span class="kw">pub struct </span>MockSystemParam {
     <span class="doccomment">/// max capacity of stake table
     </span>st_cap: usize,
-    <span class="doccomment">/// number of blocks per epoch
-    </span>blk_per_epoch: u32,
 }
 
 <span class="kw">impl </span>MockSystemParam {
     <span class="doccomment">/// Init the system parameters (some fixed, some adjustable)
-    </span><span class="kw">pub fn </span>init(blk_per_epoch: u32) -&gt; <span class="self">Self </span>{
+    </span><span class="kw">pub fn </span>init() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             st_cap: STAKE_TABLE_CAPACITY,
-            blk_per_epoch,
         }
     }
 }
@@ -623,6 +592,7 @@
     <span class="kw">pub </span>rng: StdRng,
     epoch: u64,
     state: GenericLightClientState&lt;F&gt;,
+    stake_table_state: GenericStakeTableState&lt;F&gt;,
     <span class="kw">pub</span>(<span class="kw">crate</span>) st: StakeTable&lt;BLSVerKey, SchnorrVerKey, F&gt;,
     threshold: U256, <span class="comment">// quorum threshold for SnapShot::LastEpochStart
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) qc_keys: Vec&lt;BLSVerKey&gt;,
@@ -641,25 +611,33 @@
             key_archive.insert(qc_keys[i], state_keys[i].<span class="number">0</span>.clone());
         }
         <span class="kw">let </span>st = stake_table_for_testing(<span class="kw-2">&amp;</span>qc_keys, <span class="kw-2">&amp;</span>state_keys);
+        <span class="kw">let </span>(bls_key_comm, schnorr_key_comm, amount_comm) =
+            st.commitment(SnapshotVersion::LastEpochStart).unwrap();
         <span class="kw">let </span>threshold =
             one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
 
+        <span class="kw">let </span>stake_table_state = StakeTableState {
+            threshold: u256_to_field(threshold),
+            bls_key_comm,
+            schnorr_key_comm,
+            amount_comm,
+        };
+
         <span class="comment">// arbitrary commitment values as they don't affect logic being tested
         </span><span class="kw">let </span>block_comm_root = F::from(<span class="number">1234</span>);
-        <span class="kw">let </span>fee_ledger_comm = F::from(<span class="number">5678</span>);
 
         <span class="kw">let </span>genesis = LightClientState {
             view_number: <span class="number">0</span>,
             block_height: <span class="number">0</span>,
             block_comm_root,
-            fee_ledger_comm,
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
+
         <span class="self">Self </span>{
             pp,
             rng,
             epoch: <span class="number">0</span>,
             state: genesis,
+            stake_table_state,
             st,
             threshold,
             qc_keys,
@@ -671,9 +649,7 @@
     <span class="doccomment">/// Elapse a view with a new finalized block
     </span><span class="kw">pub fn </span>elapse_with_block(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="comment">// if the new block is the first block of an epoch, update epoch
-        </span><span class="kw">if </span><span class="self">self</span>.state.block_height != <span class="number">0
-            </span>&amp;&amp; <span class="self">self</span>.state.block_height % <span class="self">self</span>.pp.blk_per_epoch <span class="kw">as </span>usize == <span class="number">0
-        </span>{
+        </span><span class="kw">if </span><span class="self">self</span>.state.block_height != <span class="number">0 </span>{
             <span class="self">self</span>.epoch += <span class="number">1</span>;
             <span class="self">self</span>.st.advance();
             <span class="self">self</span>.threshold = one_honest_threshold(
@@ -684,12 +660,11 @@
         }
 
         <span class="kw">let </span>new_root = <span class="self">self</span>.new_dummy_comm();
-        <span class="kw">let </span>new_fee_ledger_comm = <span class="self">self</span>.new_dummy_comm();
+        <span class="comment">// let new_fee_ledger_comm = self.new_dummy_comm();
 
-        <span class="self">self</span>.state.view_number += <span class="number">1</span>;
+        </span><span class="self">self</span>.state.view_number += <span class="number">1</span>;
         <span class="self">self</span>.state.block_height += <span class="number">1</span>;
         <span class="self">self</span>.state.block_comm_root = new_root;
-        <span class="self">self</span>.state.fee_ledger_comm = new_fee_ledger_comm;
     }
 
     <span class="doccomment">/// Elapse a view without a new finalized block
@@ -737,26 +712,27 @@
         <span class="macro">assert!</span>(<span class="self">self</span>.qc_keys.len() == before_st_size + num_reg - num_exit);
     }
 
-    <span class="doccomment">/// Elapse an epoch with `num_reg` of new registration, `num_exit` of key deregistration
-    </span><span class="kw">pub fn </span>elapse_epoch(<span class="kw-2">&amp;mut </span><span class="self">self</span>, num_reg: usize, num_exit: usize) {
-        <span class="macro">assert!</span>(<span class="self">self</span>.qc_keys.len() + num_reg - num_exit &lt;= <span class="self">self</span>.pp.st_cap);
+    <span class="comment">// NOTE: uncomment when we add back epoch logic
+    // /// Elapse an epoch with `num_reg` of new registration, `num_exit` of key deregistration
+    // pub fn elapse_epoch(&amp;mut self, num_reg: usize, num_exit: usize) {
+    //     assert!(self.qc_keys.len() + num_reg - num_exit &lt;= self.pp.st_cap);
 
-        <span class="comment">// random number of notorized but not finalized block
-        </span><span class="kw">let </span>num_non_blk = <span class="self">self</span>.rng.gen_range(<span class="number">0</span>..<span class="number">10</span>);
-        <span class="kw">for _ in </span><span class="number">0</span>..num_non_blk {
-            <span class="self">self</span>.elapse_without_block();
-        }
+    //     // random number of notorized but not finalized block
+    //     let num_non_blk = self.rng.gen_range(0..10);
+    //     for _ in 0..num_non_blk {
+    //         self.elapse_without_block();
+    //     }
 
-        <span class="kw">for _ in </span><span class="number">0</span>..<span class="self">self</span>.pp.blk_per_epoch {
-            <span class="self">self</span>.elapse_with_block();
-        }
+    //     for _ in 0..self.pp.blk_per_epoch {
+    //         self.elapse_with_block();
+    //     }
 
-        <span class="self">self</span>.sync_stake_table(num_reg, num_exit);
-    }
+    //     self.sync_stake_table(num_reg, num_exit);
+    // }
 
-    <span class="doccomment">/// Return the light client state and proof of consensus on this finalized state
+    </span><span class="doccomment">/// Return the light client state and proof of consensus on this finalized state
     </span><span class="kw">pub fn </span>gen_state_proof(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; (GenericPublicInput&lt;F&gt;, Proof) {
-        <span class="kw">let </span>state_msg: [F; <span class="number">7</span>] = <span class="self">self</span>.state.clone().into();
+        <span class="kw">let </span>state_msg: [F; <span class="number">3</span>] = <span class="self">self</span>.state.clone().into();
 
         <span class="kw">let </span>st: Vec&lt;(BLSVerKey, U256, SchnorrVerKey)&gt; = <span class="self">self
             </span>.st
@@ -825,26 +801,29 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>sigs,
             <span class="kw-2">&amp;</span><span class="self">self</span>.state,
-            <span class="kw-2">&amp;</span><span class="self">self</span>.threshold,
+            <span class="kw-2">&amp;</span><span class="self">self</span>.stake_table_state,
             STAKE_TABLE_CAPACITY,
         )
         .expect(<span class="string">"Fail to generate state proof"</span>);
+
         (pi, proof)
     }
 
     <span class="doccomment">/// a malicious attack, generating a fake stake table full of adversarial stakers
     /// adv-controlled stakers signed the state and replace the stake table commitment with that of the fake one
     /// in an attempt to hijack the correct stake table.
-    </span><span class="kw">pub fn </span>gen_state_proof_with_fake_stakers(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; (GenericPublicInput&lt;F&gt;, Proof) {
-        <span class="kw">let </span><span class="kw-2">mut </span>new_state = <span class="self">self</span>.state.clone();
+    </span><span class="kw">pub fn </span>gen_state_proof_with_fake_stakers(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+    ) -&gt; (GenericPublicInput&lt;F&gt;, Proof, GenericStakeTableState&lt;F&gt;) {
+        <span class="kw">let </span>new_state = <span class="self">self</span>.state.clone();
 
         <span class="kw">let </span>(adv_qc_keys, adv_state_keys) =
             key_pairs_for_testing(STAKE_TABLE_CAPACITY, <span class="kw-2">&amp;mut </span><span class="self">self</span>.rng);
         <span class="kw">let </span>adv_st = stake_table_for_testing(<span class="kw-2">&amp;</span>adv_qc_keys, <span class="kw-2">&amp;</span>adv_state_keys);
 
         <span class="comment">// replace new state with adversarial stake table commitment
-        </span>new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
-        <span class="kw">let </span>state_msg: [F; <span class="number">7</span>] = new_state.clone().into();
+        // new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
+        </span><span class="kw">let </span>state_msg: [F; <span class="number">3</span>] = new_state.clone().into();
 
         <span class="comment">// every fake stakers sign on the adverarial new state
         </span><span class="kw">let </span>bit_vec = <span class="macro">vec!</span>[<span class="bool-val">true</span>; STAKE_TABLE_CAPACITY];
@@ -883,55 +862,30 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>sigs,
             <span class="kw-2">&amp;</span>new_state,
-            <span class="kw-2">&amp;</span><span class="self">self</span>.threshold, <span class="comment">// it's fine to use the old threshold
-            </span>STAKE_TABLE_CAPACITY,
+            <span class="kw-2">&amp;</span><span class="self">self</span>.stake_table_state,
+            STAKE_TABLE_CAPACITY,
         )
         .expect(<span class="string">"Fail to generate state proof"</span>);
 
-        (pi, proof)
+        <span class="kw">let </span>(bls_key_comm, schnorr_key_comm, amount_comm) =
+            adv_st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+        <span class="kw">let </span>stake_table = StakeTableState {
+            threshold: u256_to_field(<span class="self">self</span>.threshold),
+            bls_key_comm,
+            schnorr_key_comm,
+            amount_comm,
+        };
+
+        (pi, proof, stake_table)
     }
     <span class="doccomment">/// Returns the `LightClientState` for solidity
     </span><span class="kw">pub fn </span>get_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ParsedLightClientState {
-        <span class="comment">// The ugly conversion due to slight difference of `LightClientState` in solidity containing `threshold`
-        </span><span class="kw">let </span>pi = <span class="macro">vec!</span>[
-            u256_to_field(<span class="self">self</span>.threshold),
-            F::from(<span class="self">self</span>.state.view_number <span class="kw">as </span>u64),
-            F::from(<span class="self">self</span>.state.block_height <span class="kw">as </span>u64),
-            <span class="self">self</span>.state.block_comm_root,
-            <span class="self">self</span>.state.fee_ledger_comm,
-            <span class="self">self</span>.state.stake_table_comm.<span class="number">0</span>,
-            <span class="self">self</span>.state.stake_table_comm.<span class="number">1</span>,
-            <span class="self">self</span>.state.stake_table_comm.<span class="number">2</span>,
-        ];
-        <span class="kw">let </span>pi: GenericPublicInput&lt;F&gt; = pi.into();
-        pi.into()
+        <span class="self">self</span>.state.clone().into()
     }
 
-    <span class="doccomment">/// Returns the (bytes32 votingStakeTableComm, bytes32 frozenStakeTableComm) used in contract
-    </span><span class="kw">pub fn </span>get_stake_table_comms(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (H256, H256) {
-        <span class="kw">let </span>(bls_key_comm, schnorr_key_comm, amount_comm) =
-            <span class="self">self</span>.st.commitment(SnapshotVersion::EpochStart).unwrap();
-        <span class="kw">let </span>frozen_st_comm = utils::keccak256(
-            abi::encode_packed(<span class="kw-2">&amp;</span>[
-                Token::Uint(field_to_u256(bls_key_comm)),
-                Token::Uint(field_to_u256(schnorr_key_comm)),
-                Token::Uint(field_to_u256(amount_comm)),
-            ])
-            .unwrap(),
-        );
-
-        <span class="kw">let </span>(bls_key_comm, schnorr_key_comm, amount_comm) =
-            <span class="self">self</span>.st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-        <span class="kw">let </span>voting_st_comm = utils::keccak256(
-            abi::encode_packed(<span class="kw-2">&amp;</span>[
-                Token::Uint(field_to_u256(bls_key_comm)),
-                Token::Uint(field_to_u256(schnorr_key_comm)),
-                Token::Uint(field_to_u256(amount_comm)),
-            ])
-            .unwrap(),
-        );
-
-        (voting_st_comm.into(), frozen_st_comm.into())
+    <span class="doccomment">/// Returns the `StakeTableState` in solidity
+    </span><span class="kw">pub fn </span>get_stake_table_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ParsedStakeTableState {
+        <span class="self">self</span>.stake_table_state.into()
     }
 
     <span class="comment">// return a dummy commitment value
@@ -1069,8 +1023,8 @@
         (cs.witness(b[<span class="number">1</span>])<span class="question-mark">? </span>+ cs.witness(a[<span class="number">0</span>])<span class="question-mark">?</span>) * (cs.witness(b[<span class="number">1</span>])<span class="question-mark">? </span>- cs.witness(a[<span class="number">0</span>])<span class="question-mark">?</span>),
     )<span class="question-mark">?</span>;
 
-    <span class="comment">// Create other public variables so that the number of public inputs is 8
-    </span><span class="kw">for </span>_i <span class="kw">in </span><span class="number">0</span>..<span class="number">5 </span>{
+    <span class="comment">// Create other public variables so that the number of public inputs is 7
+    </span><span class="kw">for </span>_i <span class="kw">in </span><span class="number">0</span>..<span class="number">4 </span>{
         cs.create_public_variable(F::from(<span class="number">0u64</span>))<span class="question-mark">?</span>;
     }
 

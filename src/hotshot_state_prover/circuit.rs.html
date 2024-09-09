@@ -541,57 +541,16 @@
 <a href="#541" id="541">541</a>
 <a href="#542" id="542">542</a>
 <a href="#543" id="543">543</a>
-<a href="#544" id="544">544</a>
-<a href="#545" id="545">545</a>
-<a href="#546" id="546">546</a>
-<a href="#547" id="547">547</a>
-<a href="#548" id="548">548</a>
-<a href="#549" id="549">549</a>
-<a href="#550" id="550">550</a>
-<a href="#551" id="551">551</a>
-<a href="#552" id="552">552</a>
-<a href="#553" id="553">553</a>
-<a href="#554" id="554">554</a>
-<a href="#555" id="555">555</a>
-<a href="#556" id="556">556</a>
-<a href="#557" id="557">557</a>
-<a href="#558" id="558">558</a>
-<a href="#559" id="559">559</a>
-<a href="#560" id="560">560</a>
-<a href="#561" id="561">561</a>
-<a href="#562" id="562">562</a>
-<a href="#563" id="563">563</a>
-<a href="#564" id="564">564</a>
-<a href="#565" id="565">565</a>
-<a href="#566" id="566">566</a>
-<a href="#567" id="567">567</a>
-<a href="#568" id="568">568</a>
-<a href="#569" id="569">569</a>
-<a href="#570" id="570">570</a>
-<a href="#571" id="571">571</a>
-<a href="#572" id="572">572</a>
-<a href="#573" id="573">573</a>
-<a href="#574" id="574">574</a>
-<a href="#575" id="575">575</a>
-<a href="#576" id="576">576</a>
-<a href="#577" id="577">577</a>
-<a href="#578" id="578">578</a>
-<a href="#579" id="579">579</a>
-<a href="#580" id="580">580</a>
-<a href="#581" id="581">581</a>
-<a href="#582" id="582">582</a>
-<a href="#583" id="583">583</a>
-<a href="#584" id="584">584</a>
-<a href="#585" id="585">585</a>
-<a href="#586" id="586">586</a>
-<a href="#587" id="587">587</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Circuit implementation for verifying light client state update
 
 </span><span class="kw">use </span>ark_ec::twisted_edwards::TECurveConfig;
 <span class="kw">use </span>ark_ff::PrimeField;
 <span class="kw">use </span>ark_std::borrow::Borrow;
 <span class="kw">use </span>ethers::types::U256;
-<span class="kw">use </span>hotshot_types::light_client::{GenericLightClientState, GenericPublicInput};
+<span class="kw">use </span>hotshot_contract_adapter::light_client::{ParsedLightClientState, ParsedStakeTableState};
+<span class="kw">use </span>hotshot_types::light_client::{
+    GenericLightClientState, GenericPublicInput, GenericStakeTableState,
+};
 <span class="kw">use </span>jf_plonk::PlonkError;
 <span class="kw">use </span>jf_relation::{BoolVar, Circuit, CircuitError, PlonkCircuit, Variable};
 <span class="kw">use </span>jf_rescue::{gadgets::RescueNativeGadget, RescueParameter};
@@ -620,25 +579,39 @@
 /// The stake table commitment is a triple `(qc_keys_comm, state_keys_comm, stake_amount_comm)`.
 /// Variable for a stake table commitment
 </span><span class="attr">#[derive(Clone, Debug)]
-</span><span class="kw">pub struct </span>StakeTableCommVar {
+</span><span class="kw">pub struct </span>StakeTableVar {
     <span class="doccomment">/// Commitment for QC verification keys
     </span><span class="kw">pub </span>qc_keys_comm: Variable,
     <span class="doccomment">/// Commitment for state verification keys
     </span><span class="kw">pub </span>state_keys_comm: Variable,
     <span class="doccomment">/// Commitment for stake amount
     </span><span class="kw">pub </span>stake_amount_comm: Variable,
+    <span class="doccomment">/// Threshold for quorum signatures
+    </span><span class="kw">pub </span>threshold: Variable,
+}
+
+<span class="kw">impl </span>StakeTableVar {
+    <span class="doccomment">/// # Errors
+    /// if unable to create any of the public variables
+    </span><span class="kw">pub fn </span>new&lt;F: PrimeField&gt;(
+        circuit: <span class="kw-2">&amp;mut </span>PlonkCircuit&lt;F&gt;,
+        st: <span class="kw-2">&amp;</span>GenericStakeTableState&lt;F&gt;,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, CircuitError&gt; {
+        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+            qc_keys_comm: circuit.create_public_variable(st.bls_key_comm)<span class="question-mark">?</span>,
+            state_keys_comm: circuit.create_public_variable(st.schnorr_key_comm)<span class="question-mark">?</span>,
+            stake_amount_comm: circuit.create_public_variable(st.amount_comm)<span class="question-mark">?</span>,
+            threshold: circuit.create_public_variable(st.threshold)<span class="question-mark">?</span>,
+        })
+    }
 }
 
 <span class="doccomment">/// Light client state Variable
 </span><span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>LightClientStateVar {
-    <span class="doccomment">/// Private list holding all variables
-    ///  `vars[0]`: view number
-    ///  `vars[1]`: block height
-    ///  `vars[2]`: block commitment root
-    ///  `vars[3]`: fee ledger commitment
-    ///  `vars[4-6]`: stake table commitment
-    </span>vars: [Variable; <span class="number">7</span>],
+    <span class="kw">pub</span>(<span class="kw">crate</span>) view_num: Variable,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) block_height: Variable,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) block_comm_root: Variable,
 }
 
 <span class="kw">impl </span>LightClientStateVar {
@@ -648,59 +621,11 @@
         circuit: <span class="kw-2">&amp;mut </span>PlonkCircuit&lt;F&gt;,
         state: <span class="kw-2">&amp;</span>GenericLightClientState&lt;F&gt;,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, CircuitError&gt; {
-        <span class="kw">let </span>view_number_f = F::from(state.view_number <span class="kw">as </span>u64);
-        <span class="kw">let </span>block_height_f = F::from(state.block_height <span class="kw">as </span>u64);
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-            vars: [
-                circuit.create_public_variable(view_number_f)<span class="question-mark">?</span>,
-                circuit.create_public_variable(block_height_f)<span class="question-mark">?</span>,
-                circuit.create_public_variable(state.block_comm_root)<span class="question-mark">?</span>,
-                circuit.create_public_variable(state.fee_ledger_comm)<span class="question-mark">?</span>,
-                circuit.create_public_variable(state.stake_table_comm.<span class="number">0</span>)<span class="question-mark">?</span>,
-                circuit.create_public_variable(state.stake_table_comm.<span class="number">1</span>)<span class="question-mark">?</span>,
-                circuit.create_public_variable(state.stake_table_comm.<span class="number">2</span>)<span class="question-mark">?</span>,
-            ],
+            view_num: circuit.create_public_variable(F::from(state.view_number <span class="kw">as </span>u64))<span class="question-mark">?</span>,
+            block_height: circuit.create_public_variable(F::from(state.block_height <span class="kw">as </span>u64))<span class="question-mark">?</span>,
+            block_comm_root: circuit.create_public_variable(state.block_comm_root)<span class="question-mark">?</span>,
         })
-    }
-
-    <span class="doccomment">/// Returns the view number
-    </span><span class="attr">#[must_use]
-    </span><span class="kw">pub fn </span>view_number(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Variable {
-        <span class="self">self</span>.vars[<span class="number">0</span>]
-    }
-
-    <span class="doccomment">/// Returns the block height
-    </span><span class="attr">#[must_use]
-    </span><span class="kw">pub fn </span>block_height(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Variable {
-        <span class="self">self</span>.vars[<span class="number">1</span>]
-    }
-
-    <span class="doccomment">/// Returns the Merkle root of the block commitments
-    </span><span class="attr">#[must_use]
-    </span><span class="kw">pub fn </span>block_comm_root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Variable {
-        <span class="self">self</span>.vars[<span class="number">2</span>]
-    }
-
-    <span class="doccomment">/// Returns the commitment of the fee ledger
-    </span><span class="attr">#[must_use]
-    </span><span class="kw">pub fn </span>fee_ledger_comm(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Variable {
-        <span class="self">self</span>.vars[<span class="number">3</span>]
-    }
-
-    <span class="doccomment">/// Returns the commitment of the associated stake table
-    </span><span class="attr">#[must_use]
-    </span><span class="kw">pub fn </span>stake_table_comm(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; StakeTableCommVar {
-        StakeTableCommVar {
-            qc_keys_comm: <span class="self">self</span>.vars[<span class="number">4</span>],
-            state_keys_comm: <span class="self">self</span>.vars[<span class="number">5</span>],
-            stake_amount_comm: <span class="self">self</span>.vars[<span class="number">6</span>],
-        }
-    }
-}
-
-<span class="kw">impl </span>AsRef&lt;[Variable]&gt; <span class="kw">for </span>LightClientStateVar {
-    <span class="kw">fn </span>as_ref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Variable] {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.vars
     }
 }
 
@@ -708,8 +633,8 @@
 /// - a list of stake table entries (`Vec&lt;(SchnorrVerKey, Amount)&gt;`)
 /// - a bit vector indicates the signers
 /// - a list of schnorr signatures of the updated states (`Vec&lt;SchnorrSignature&gt;`), default if the node doesn't sign the state
-/// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
-/// - a quorum threshold
+/// - updated light client state (`(view_number, block_height, block_comm_root)`)
+/// - the static stake table state (containing 3 commitments to the 3 columns of the stake table and a threshold)
 ///
 /// Lengths of input vectors should not exceed the `stake_table_capacity`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `stake_table_capacity`.
@@ -729,7 +654,7 @@
     signer_bit_vec: BitIter,
     signatures: SigIter,
     lightclient_state: <span class="kw-2">&amp;</span>GenericLightClientState&lt;F&gt;,
-    threshold: <span class="kw-2">&amp;</span>U256,
+    stake_table_state: <span class="kw-2">&amp;</span>GenericStakeTableState&lt;F&gt;,
     stake_table_capacity: usize,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(PlonkCircuit&lt;F&gt;, GenericPublicInput&lt;F&gt;), PlonkError&gt;
 <span class="kw">where
@@ -832,23 +757,9 @@
             .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, CircuitError&gt;&gt;()<span class="question-mark">?</span>,
     );
 
-    <span class="kw">let </span>threshold = u256_to_field::&lt;F&gt;(threshold);
-    <span class="kw">let </span>threshold_pub_var = circuit.create_public_variable(threshold)<span class="question-mark">?</span>;
-
-    <span class="kw">let </span>lightclient_state_pub_var = LightClientStateVar::new(<span class="kw-2">&amp;mut </span>circuit, lightclient_state)<span class="question-mark">?</span>;
-
-    <span class="kw">let </span>view_number_f = F::from(lightclient_state.view_number <span class="kw">as </span>u64);
-    <span class="kw">let </span>block_height_f = F::from(lightclient_state.block_height <span class="kw">as </span>u64);
-    <span class="kw">let </span>public_inputs = <span class="macro">vec!</span>[
-        threshold,
-        view_number_f,
-        block_height_f,
-        lightclient_state.block_comm_root,
-        lightclient_state.fee_ledger_comm,
-        lightclient_state.stake_table_comm.<span class="number">0</span>,
-        lightclient_state.stake_table_comm.<span class="number">1</span>,
-        lightclient_state.stake_table_comm.<span class="number">2</span>,
-    ];
+    <span class="comment">// public inputs
+    </span><span class="kw">let </span>lightclient_state_pub_var = LightClientStateVar::new(<span class="kw-2">&amp;mut </span>circuit, lightclient_state)<span class="question-mark">?</span>;
+    <span class="kw">let </span>stake_table_state_pub_var = StakeTableVar::new(<span class="kw-2">&amp;mut </span>circuit, stake_table_state)<span class="question-mark">?</span>;
 
     <span class="comment">// Checking whether the accumulated weight exceeds the quorum threshold
     </span><span class="kw">let </span><span class="kw-2">mut </span>signed_amount_var = (<span class="number">0</span>..stake_table_capacity / <span class="number">2</span>)
@@ -872,7 +783,7 @@
         )<span class="question-mark">?</span>);
     }
     <span class="kw">let </span>acc_amount_var = circuit.sum(<span class="kw-2">&amp;</span>signed_amount_var)<span class="question-mark">?</span>;
-    circuit.enforce_leq(threshold_pub_var, acc_amount_var)<span class="question-mark">?</span>;
+    circuit.enforce_leq(stake_table_state_pub_var.threshold, acc_amount_var)<span class="question-mark">?</span>;
 
     <span class="comment">// checking the commitment for the list of schnorr keys
     </span><span class="kw">let </span>state_ver_key_preimage_vars = stake_table_var
@@ -886,7 +797,7 @@
     )<span class="question-mark">?</span>[<span class="number">0</span>];
     circuit.enforce_equal(
         state_ver_key_comm,
-        lightclient_state_pub_var.stake_table_comm().state_keys_comm,
+        stake_table_state_pub_var.state_keys_comm,
     )<span class="question-mark">?</span>;
 
     <span class="comment">// checking the commitment for the list of stake amounts
@@ -901,9 +812,7 @@
     )<span class="question-mark">?</span>[<span class="number">0</span>];
     circuit.enforce_equal(
         stake_amount_comm,
-        lightclient_state_pub_var
-            .stake_table_comm()
-            .stake_amount_comm,
+        stake_table_state_pub_var.stake_amount_comm,
     )<span class="question-mark">?</span>;
 
     <span class="comment">// checking all signatures
@@ -914,7 +823,11 @@
             SignatureGadget::&lt;<span class="kw">_</span>, P&gt;::check_signature_validity(
                 <span class="kw-2">&amp;mut </span>circuit,
                 <span class="kw-2">&amp;</span>entry.state_ver_key,
-                lightclient_state_pub_var.as_ref(),
+                <span class="kw-2">&amp;</span>[
+                    lightclient_state_pub_var.view_num,
+                    lightclient_state_pub_var.block_height,
+                    lightclient_state_pub_var.block_comm_root,
+                ],
                 <span class="kw-2">&amp;</span>sig,
             )
         })
@@ -931,7 +844,10 @@
     circuit.enforce_true(sig_ver_result.<span class="number">0</span>)<span class="question-mark">?</span>;
 
     circuit.finalize_for_arithmetization()<span class="question-mark">?</span>;
-    <span class="prelude-val">Ok</span>((circuit, public_inputs.into()))
+    <span class="prelude-val">Ok</span>((
+        circuit,
+        GenericPublicInput::new(lightclient_state.clone(), <span class="kw-2">*</span>stake_table_state),
+    ))
 }
 
 <span class="doccomment">/// Internal function to build a dummy circuit
@@ -942,19 +858,15 @@
     </span>F: RescueParameter,
     P: TECurveConfig&lt;BaseField = F&gt;,
 {
-    <span class="kw">let </span>lightclient_state = GenericLightClientState {
-        view_number: <span class="number">0</span>,
-        block_height: <span class="number">0</span>,
-        block_comm_root: F::default(),
-        fee_ledger_comm: F::default(),
-        stake_table_comm: (F::default(), F::default(), F::default()),
-    };
+    <span class="kw">let </span>lightclient_state = ParsedLightClientState::dummy_genesis().into();
+    <span class="kw">let </span>stake_table_state = ParsedStakeTableState::dummy_genesis().into();
+
     build::&lt;F, P, <span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>&gt;(
         <span class="kw-2">&amp;</span>[],
         <span class="kw-2">&amp;</span>[],
         <span class="kw-2">&amp;</span>[],
         <span class="kw-2">&amp;</span>lightclient_state,
-        <span class="kw-2">&amp;</span>U256::zero(),
+        <span class="kw-2">&amp;</span>stake_table_state,
         stake_table_capacity,
     )
 }
@@ -962,7 +874,7 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
     <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig <span class="kw">as </span>Config;
-    <span class="kw">use </span>ethers::types::U256;
+    <span class="kw">use </span>hotshot_types::light_client::LightClientState;
     <span class="kw">use </span>hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
     <span class="kw">use </span>jf_crhf::CRHF;
     <span class="kw">use </span>jf_relation::Circuit;
@@ -973,8 +885,10 @@
     };
     <span class="kw">use </span>jf_utils::test_rng;
 
-    <span class="kw">use super</span>::{build, GenericLightClientState};
-    <span class="kw">use </span><span class="kw">crate</span>::test_utils::{key_pairs_for_testing, stake_table_for_testing};
+    <span class="kw">use </span><span class="kw">super</span>::build;
+    <span class="kw">use </span><span class="kw">crate</span>::test_utils::{
+        genesis_stake_table_state, key_pairs_for_testing, stake_table_for_testing,
+    };
 
     <span class="kw">type </span>F = ark_ed_on_bn254::Fq;
     <span class="kw">const </span>ST_CAPACITY: usize = <span class="number">20</span>;
@@ -987,6 +901,7 @@
 
         <span class="kw">let </span>(qc_keys, state_keys) = key_pairs_for_testing(num_validators, <span class="kw-2">&amp;mut </span>prng);
         <span class="kw">let </span>st = stake_table_for_testing(ST_CAPACITY, <span class="kw-2">&amp;</span>qc_keys, <span class="kw-2">&amp;</span>state_keys);
+        <span class="kw">let </span>st_state = genesis_stake_table_state(<span class="kw-2">&amp;</span>st);
 
         <span class="kw">let </span>entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
@@ -997,18 +912,13 @@
         <span class="kw">let </span>block_comm_root =
             VariableLengthRescueCRHF::&lt;F, <span class="number">1</span>&gt;::evaluate(<span class="macro">vec!</span>[F::from(<span class="number">1u32</span>), F::from(<span class="number">2u32</span>)]).unwrap()
                 [<span class="number">0</span>];
-        <span class="kw">let </span>fee_ledger_comm =
-            VariableLengthRescueCRHF::&lt;F, <span class="number">1</span>&gt;::evaluate(<span class="macro">vec!</span>[F::from(<span class="number">3u32</span>), F::from(<span class="number">5u32</span>)]).unwrap()
-                [<span class="number">0</span>];
 
-        <span class="kw">let </span>lightclient_state = GenericLightClientState {
+        <span class="kw">let </span>lightclient_state = LightClientState {
             view_number: <span class="number">100</span>,
             block_height: <span class="number">73</span>,
             block_comm_root,
-            fee_ledger_comm,
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
-        <span class="kw">let </span>state_msg: [F; <span class="number">7</span>] = lightclient_state.clone().into();
+        <span class="kw">let </span>state_msg: [F; <span class="number">3</span>] = lightclient_state.clone().into();
 
         <span class="kw">let </span>sigs = state_keys
             .iter()
@@ -1041,7 +951,7 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>bit_masked_sigs,
             <span class="kw-2">&amp;</span>lightclient_state,
-            <span class="kw-2">&amp;</span>U256::from(<span class="number">26u32</span>),
+            <span class="kw-2">&amp;</span>st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -1049,12 +959,15 @@
             .check_circuit_satisfiability(public_inputs.as_ref())
             .is_ok());
 
+        <span class="comment">// lower threshold should also pass
+        </span><span class="kw">let </span><span class="kw-2">mut </span>good_st_state = st_state;
+        good_st_state.threshold = F::from(<span class="number">10u32</span>);
         <span class="kw">let </span>(circuit, public_inputs) = build(
             <span class="kw-2">&amp;</span>entries,
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>bit_masked_sigs,
             <span class="kw-2">&amp;</span>lightclient_state,
-            <span class="kw-2">&amp;</span>U256::from(<span class="number">10u32</span>),
+            <span class="kw-2">&amp;</span>good_st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -1069,7 +982,7 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>bit_masked_sigs,
             <span class="kw-2">&amp;</span>lightclient_state,
-            <span class="kw-2">&amp;</span>U256::from(<span class="number">26u32</span>),
+            <span class="kw-2">&amp;</span>st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -1078,9 +991,8 @@
             .is_err());
 
         <span class="comment">// bad path: total weight doesn't meet the threshold
-        // bit vector with total weight 23
         </span><span class="kw">let </span>bad_bit_vec = [
-            <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>,
+            <span class="bool-val">false</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="bool-val">false</span>, <span class="bool-val">false</span>,
         ];
         <span class="kw">let </span>bad_bit_masked_sigs = bad_bit_vec
             .iter()
@@ -1103,7 +1015,7 @@
             <span class="kw-2">&amp;</span>bad_bit_vec,
             <span class="kw-2">&amp;</span>bad_bit_masked_sigs,
             <span class="kw-2">&amp;</span>lightclient_state,
-            <span class="kw-2">&amp;</span>U256::from(<span class="number">25u32</span>),
+            <span class="kw-2">&amp;</span>st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -1112,9 +1024,9 @@
             .is_err());
 
         <span class="comment">// bad path: bad stake table commitment
-        </span><span class="kw">let </span><span class="kw-2">mut </span>bad_lightclient_state = lightclient_state.clone();
-        bad_lightclient_state.stake_table_comm.<span class="number">1 </span>= F::default();
-        <span class="kw">let </span>bad_state_msg: [F; <span class="number">7</span>] = bad_lightclient_state.clone().into();
+        </span><span class="kw">let </span>bad_lightclient_state = lightclient_state.clone();
+        <span class="comment">// bad_lightclient_state.stake_table_comm.1 = F::default();
+        </span><span class="kw">let </span>bad_state_msg: [F; <span class="number">3</span>] = bad_lightclient_state.clone().into();
         <span class="kw">let </span>sig_for_bad_state = state_keys
             .iter()
             .map(|(key, <span class="kw">_</span>)| {
@@ -1127,7 +1039,7 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>sig_for_bad_state,
             <span class="kw-2">&amp;</span>bad_lightclient_state,
-            <span class="kw-2">&amp;</span>U256::from(<span class="number">26u32</span>),
+            <span class="kw-2">&amp;</span>st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -1136,10 +1048,10 @@
             .is_err());
 
         <span class="comment">// bad path: incorrect signatures
-        </span><span class="kw">let </span><span class="kw-2">mut </span>wrong_light_client_state = lightclient_state.clone();
+        </span><span class="kw">let </span>wrong_light_client_state = lightclient_state.clone();
         <span class="comment">// state with a different qc key commitment
-        </span>wrong_light_client_state.stake_table_comm.<span class="number">0 </span>= F::default();
-        <span class="kw">let </span>wrong_state_msg: [F; <span class="number">7</span>] = wrong_light_client_state.into();
+        // wrong_light_client_state.stake_table_comm.0 = F::default();
+        </span><span class="kw">let </span>wrong_state_msg: [F; <span class="number">3</span>] = wrong_light_client_state.into();
         <span class="kw">let </span>wrong_sigs = state_keys
             .iter()
             .map(|(key, <span class="kw">_</span>)| {
@@ -1152,7 +1064,7 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>wrong_sigs,
             <span class="kw-2">&amp;</span>lightclient_state,
-            <span class="kw-2">&amp;</span>U256::from(<span class="number">26u32</span>),
+            <span class="kw-2">&amp;</span>st_state,
             ST_CAPACITY,
         )
         .unwrap();
@@ -1166,7 +1078,7 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>bit_masked_sigs,
             <span class="kw-2">&amp;</span>lightclient_state,
-            <span class="kw-2">&amp;</span>U256::from(<span class="number">26u32</span>),
+            <span class="kw-2">&amp;</span>st_state,
             <span class="number">9
         </span>)
         .is_err());

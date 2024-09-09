@@ -2179,7 +2179,7 @@
         stream::StreamExt,
     };
     <span class="kw">use </span>hotshot::types::{Event, EventType};
-    <span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
+    <span class="kw">use </span>hotshot_contract_adapter::light_client::{ParsedLightClientState, ParsedStakeTableState};
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -2422,7 +2422,7 @@
             }
         }
 
-        <span class="kw">pub fn </span>light_client_genesis(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ParsedLightClientState {
+        <span class="kw">pub fn </span>light_client_genesis(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (ParsedLightClientState, ParsedStakeTableState) {
             <span class="kw">let </span>st = <span class="self">self</span>.cfg.stake_table();
             light_client_genesis_from_stake_table(st).unwrap()
         }

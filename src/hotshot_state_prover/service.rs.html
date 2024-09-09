@@ -761,6 +761,15 @@
 <a href="#761" id="761">761</a>
 <a href="#762" id="762">762</a>
 <a href="#763" id="763">763</a>
+<a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
+<a href="#766" id="766">766</a>
+<a href="#767" id="767">767</a>
+<a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -785,13 +794,13 @@
 };
 <span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_contract_adapter::{
-    jellyfish::{u256_to_field, ParsedPlonkProof},
-    light_client::ParsedLightClientState,
+    jellyfish::{field_to_u256, ParsedPlonkProof},
+    light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
 <span class="kw">use </span>hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
 <span class="kw">use </span>hotshot_types::{
     light_client::{
-        CircuitField, GenericPublicInput, LightClientState, PublicInput, StateSignaturesBundle,
+        CircuitField, LightClientState, PublicInput, StakeTableState, StateSignaturesBundle,
         StateVerKey,
     },
     signature_key::BLSPubKey,
@@ -813,8 +822,6 @@
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="kw">use </span><span class="kw">crate</span>::snark::{generate_state_update_proof, Proof, ProvingKey};
-
-<span class="kw">type </span>F = ark_ed_on_bn254::Fq;
 
 <span class="doccomment">/// A wallet with local signer and connected to network via http
 </span><span class="kw">pub type </span>SignerWallet = SignerMiddleware&lt;Provider&lt;Http&gt;, LocalWallet&gt;;
@@ -931,10 +938,11 @@
     <span class="prelude-val">Ok</span>(st)
 }
 
-<span class="kw">pub async fn </span>light_client_genesis(
+<span class="doccomment">/// Returns both genesis light client state and stake table state
+</span><span class="kw">pub async fn </span>light_client_genesis(
     sequencer_url: <span class="kw-2">&amp;</span>Url,
     stake_table_capacity: usize,
-) -&gt; anyhow::Result&lt;ParsedLightClientState&gt; {
+) -&gt; anyhow::Result&lt;(ParsedLightClientState, ParsedStakeTableState)&gt; {
     <span class="kw">let </span>st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
         .<span class="kw">await
         </span>.with_context(|| <span class="string">"Failed to initialize stake table"</span>)<span class="question-mark">?</span>;
@@ -944,23 +952,25 @@
 <span class="attr">#[inline]
 </span><span class="kw">pub fn </span>light_client_genesis_from_stake_table(
     st: StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;,
-) -&gt; anyhow::Result&lt;ParsedLightClientState&gt; {
+) -&gt; anyhow::Result&lt;(ParsedLightClientState, ParsedStakeTableState)&gt; {
     <span class="kw">let </span>(bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect(<span class="string">"Commitment computation shouldn't fail."</span>);
     <span class="kw">let </span>threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)<span class="question-mark">?</span>);
-    <span class="kw">let </span>pi = <span class="macro">vec!</span>[
-        u256_to_field(threshold),
-        F::from(<span class="number">0_u64</span>), <span class="comment">// Arbitrary value for view number
-        </span>F::from(<span class="number">0_u64</span>), <span class="comment">// Arbitrary value for block height
-        </span>F::from(<span class="number">0_u64</span>), <span class="comment">// Arbitrary value for state commitment
-        </span>F::from(<span class="number">0_u64</span>), <span class="comment">// Arbitrary value for fee ledger commitment
-        </span>bls_comm,
-        schnorr_comm,
-        stake_comm,
-    ];
-    <span class="kw">let </span>pi: GenericPublicInput&lt;F&gt; = pi.into();
-    <span class="prelude-val">Ok</span>(pi.into())
+
+    <span class="prelude-val">Ok</span>((
+        ParsedLightClientState {
+            view_num: <span class="number">0</span>,
+            block_height: <span class="number">0</span>,
+            block_comm_root: U256::from(<span class="number">0u32</span>),
+        },
+        ParsedStakeTableState {
+            bls_key_comm: field_to_u256(bls_comm),
+            schnorr_key_comm: field_to_u256(schnorr_comm),
+            amount_comm: field_to_u256(stake_comm),
+            threshold,
+        },
+    ))
 }
 
 <span class="kw">pub fn </span>load_proving_key(stake_table_capacity: usize) -&gt; ProvingKey {
@@ -1028,18 +1038,27 @@
     provider: Url,
     key: SigningKey,
     light_client_address: Address,
-) -&gt; <span class="prelude-ty">Result</span>&lt;LightClientState, ProverError&gt; {
+) -&gt; <span class="prelude-ty">Result</span>&lt;(LightClientState, StakeTableState), ProverError&gt; {
     <span class="kw">let </span>contract = prepare_contract(provider, key, light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
-    <span class="kw">let </span>state: ParsedLightClientState = <span class="kw">match </span>contract.get_finalized_state().call().<span class="kw">await </span>{
+    <span class="kw">let </span>state: ParsedLightClientState = <span class="kw">match </span>contract.finalized_state().call().<span class="kw">await </span>{
         <span class="prelude-val">Ok</span>(s) =&gt; s.into(),
         <span class="prelude-val">Err</span>(e) =&gt; {
             <span class="macro">tracing::error!</span>(<span class="string">"unable to read finalized_state from contract: {}"</span>, e);
             <span class="kw">return </span><span class="prelude-val">Err</span>(ProverError::ContractError(e.into()));
         }
     };
-    <span class="kw">let </span>state: LightClientState = state.into();
+    <span class="kw">let </span>st_state: ParsedStakeTableState = <span class="kw">match </span>contract.genesis_stake_table_state().call().<span class="kw">await </span>{
+        <span class="prelude-val">Ok</span>(s) =&gt; s.into(),
+        <span class="prelude-val">Err</span>(e) =&gt; {
+            <span class="macro">tracing::error!</span>(
+                <span class="string">"unable to read genesis_stake_table_state from contract: {}"</span>,
+                e
+            );
+            <span class="kw">return </span><span class="prelude-val">Err</span>(ProverError::ContractError(e.into()));
+        }
+    };
 
-    <span class="prelude-val">Ok</span>(state)
+    <span class="prelude-val">Ok</span>((state.into(), st_state.into()))
 }
 
 <span class="doccomment">/// submit the latest finalized state along with a proof to the L1 LightClient contract
@@ -1089,7 +1108,7 @@
     <span class="kw">let </span>bundle = fetch_latest_state(relay_server_client).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="macro">tracing::info!</span>(<span class="string">"Bundle accumulated weight: {}"</span>, bundle.accumulated_weight);
     <span class="macro">tracing::info!</span>(<span class="string">"Latest HotShot block height: {}"</span>, bundle.state.block_height);
-    <span class="kw">let </span>old_state =
+    <span class="kw">let </span>(old_state, st_state) =
         read_contract_state(provider.clone(), key.clone(), light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="macro">tracing::info!</span>(
         <span class="string">"Current HotShot block height on contract: {}"</span>,
@@ -1102,8 +1121,6 @@
     <span class="macro">tracing::debug!</span>(<span class="string">"Old state: {old_state:?}"</span>);
     <span class="macro">tracing::debug!</span>(<span class="string">"New state: {:?}"</span>, bundle.state);
 
-    <span class="kw">let </span>threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)<span class="question-mark">?</span>);
-    <span class="macro">tracing::info!</span>(<span class="string">"Threshold before syncing state: {}"</span>, threshold);
     <span class="kw">let </span>entries = st
         .try_iter(SnapshotVersion::LastEpochStart)
         .unwrap()
@@ -1115,7 +1132,7 @@
     entries.iter().enumerate().for_each(|(i, (key, stake))| {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(sig) = bundle.signatures.get(key) {
             <span class="comment">// Check if the signature is valid
-            </span><span class="kw">let </span>state_msg: [FieldType; <span class="number">7</span>] = (<span class="kw-2">&amp;</span>bundle.state).into();
+            </span><span class="kw">let </span>state_msg: [FieldType; <span class="number">3</span>] = (<span class="kw-2">&amp;</span>bundle.state).into();
             <span class="kw">if </span>key.verify(<span class="kw-2">&amp;</span>state_msg, sig, CS_ID_SCHNORR).is_ok() {
                 signer_bit_vec[i] = <span class="bool-val">true</span>;
                 signatures[i] = sig.clone();
@@ -1124,7 +1141,7 @@
         }
     });
 
-    <span class="kw">if </span>accumulated_weight &lt; threshold {
+    <span class="kw">if </span>accumulated_weight &lt; field_to_u256(st_state.threshold) {
         <span class="kw">return </span><span class="prelude-val">Err</span>(ProverError::InvalidState(
             <span class="string">"The signers' total weight doesn't reach the threshold."</span>.to_string(),
         ));
@@ -1142,7 +1159,7 @@
             signer_bit_vec,
             signatures,
             <span class="kw-2">&amp;</span>bundle.state,
-            <span class="kw-2">&amp;</span>threshold,
+            <span class="kw-2">&amp;</span>st_state,
             stake_table_capacity,
         )
     })
@@ -1296,11 +1313,10 @@
 
     <span class="kw">use </span>anyhow::Result;
     <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig;
-    <span class="kw">use </span>ethers::{
-        abi::AbiEncode,
-        utils::{Anvil, AnvilInstance},
+    <span class="kw">use </span>ethers::utils::{Anvil, AnvilInstance};
+    <span class="kw">use </span>hotshot_contract_adapter::light_client::{
+        LightClientConstructorArgs, ParsedStakeTableState,
     };
-    <span class="kw">use </span>hotshot_contract_adapter::light_client::LightClientConstructorArgs;
     <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
     <span class="kw">use </span>hotshot_types::light_client::StateSignKey;
     <span class="kw">use </span>jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
@@ -1311,7 +1327,6 @@
     <span class="kw">use </span><span class="kw">crate</span>::mock_ledger::{MockLedger, MockSystemParam};
 
     <span class="kw">const </span>STAKE_TABLE_CAPACITY_FOR_TEST: usize = <span class="number">10</span>;
-    <span class="kw">const </span>BLOCKS_PER_EPOCH: u32 = <span class="number">10</span>;
     <span class="kw">const </span>MAX_HISTORY_SECONDS: u32 = <span class="number">864000</span>;
 
     <span class="kw">const </span>NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / <span class="number">2</span>) <span class="kw">as </span>u32;
@@ -1322,46 +1337,38 @@
     </span><span class="attr">#[allow(clippy::type_complexity)]
     </span><span class="kw">fn </span>init_ledger_for_test() -&gt; (
         ParsedLightClientState,
+        ParsedStakeTableState,
         Vec&lt;BLSPubKey&gt;,
         Vec&lt;(StateSignKey, StateVerKey)&gt;,
         StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;,
     ) {
-        <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+        <span class="kw">let </span>pp = MockSystemParam::init();
         <span class="kw">let </span>ledger = MockLedger::init(pp, NUM_INIT_VALIDATORS <span class="kw">as </span>usize);
 
         <span class="kw">let </span>genesis = ledger.get_state();
+        <span class="kw">let </span>stake_genesis = ledger.get_stake_table_state();
+
         <span class="kw">let </span>qc_keys = ledger.qc_keys;
         <span class="kw">let </span>state_keys = ledger.state_keys;
         <span class="kw">let </span>st = ledger.st;
 
         <span class="macro">eprintln!</span>(
-            <span class="string">"Genesis: view_num: {}, block_height: {}, block_comm_root: {}, fee_ledger_comm: {}\
-             bls_key_comm: {:x?},\
-             schnorr_key_comm: {:x?},\
-             amount_comm: {:x?},\
-             threshold: {}"</span>,
-            genesis.view_num,
-            genesis.block_height,
-            genesis.block_comm_root,
-            genesis.fee_ledger_comm,
-            genesis.bls_key_comm.encode_hex(),
-            genesis.schnorr_key_comm.encode_hex(),
-            genesis.amount_comm.encode_hex(),
-            genesis.threshold,
+            <span class="string">"Genesis: view_num: {}, block_height: {}, block_comm_root: {}"</span>,
+            genesis.view_num, genesis.block_height, genesis.block_comm_root,
         );
-        (genesis, qc_keys, state_keys, st)
+        (genesis, stake_genesis, qc_keys, state_keys, st)
     }
 
     <span class="comment">// everybody signs, then generate a proof
     </span><span class="kw">fn </span>gen_state_proof(
-        old_state: <span class="kw-2">&amp;</span>ParsedLightClientState,
         new_state: ParsedLightClientState,
+        genesis_stake_state: <span class="kw-2">&amp;</span>ParsedStakeTableState,
         state_keypairs: <span class="kw-2">&amp;</span>[(StateSignKey, StateVerKey)],
         st: <span class="kw-2">&amp;</span>StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;,
     ) -&gt; (PublicInput, Proof) {
         <span class="kw">let </span><span class="kw-2">mut </span>rng = test_rng();
 
-        <span class="kw">let </span>new_state_msg: [CircuitField; <span class="number">7</span>] = {
+        <span class="kw">let </span>new_state_msg: [CircuitField; <span class="number">3</span>] = {
             <span class="comment">// sorry for the complicated .into() conversion chain, might improve in the future
             </span><span class="kw">let </span>pi_msg: LightClientState = new_state.clone().into();
             pi_msg.into()
@@ -1402,7 +1409,7 @@
             <span class="kw-2">&amp;</span>bit_vec,
             <span class="kw-2">&amp;</span>sigs,
             <span class="kw-2">&amp;</span>new_state.into(),
-            <span class="kw-2">&amp;</span>old_state.threshold,
+            <span class="kw-2">&amp;</span>genesis_stake_state.clone().into(),
             STAKE_TABLE_CAPACITY_FOR_TEST,
         )
         .expect(<span class="string">"Fail to generate state proof"</span>);
@@ -1415,6 +1422,7 @@
     </span><span class="kw">async fn </span>deploy_contract_for_test(
         anvil: <span class="kw-2">&amp;</span>AnvilInstance,
         genesis: ParsedLightClientState,
+        stake_genesis: ParsedStakeTableState,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;SignerWallet&gt;, LightClient&lt;SignerWallet&gt;)&gt; {
         <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(anvil.endpoint())<span class="question-mark">?</span>;
         <span class="kw">let </span>signer = Wallet::from(anvil.keys()[<span class="number">0</span>].clone())
@@ -1423,6 +1431,7 @@
 
         <span class="kw">let </span>genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
             light_client_state: genesis,
+            stake_table_state: stake_genesis,
             max_history_seconds: MAX_HISTORY_SECONDS,
         };
 
@@ -1469,21 +1478,29 @@
         setup_test();
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>dummy_genesis = ParsedLightClientState::dummy_genesis();
-        <span class="kw">let </span>(_wallet, contract) = deploy_contract_for_test(<span class="kw-2">&amp;</span>anvil, dummy_genesis.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+        <span class="kw">let </span>(_wallet, contract) =
+            deploy_contract_for_test(<span class="kw-2">&amp;</span>anvil, dummy_genesis.clone(), dummy_stake_genesis.clone())
+                .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="comment">// now test if we can read from the contract
-        </span><span class="kw">let </span>genesis: ParsedLightClientState = contract.get_genesis_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        </span><span class="kw">let </span>genesis: ParsedLightClientState = contract.genesis_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
         <span class="macro">assert_eq!</span>(genesis, dummy_genesis);
+
+        <span class="kw">let </span>stake_genesis: ParsedStakeTableState =
+            contract.genesis_stake_table_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        <span class="macro">assert_eq!</span>(stake_genesis, dummy_stake_genesis);
 
         <span class="kw">let </span><span class="kw-2">mut </span>config = StateProverConfig::default();
         config.update_l1_info(<span class="kw-2">&amp;</span>anvil, contract.address());
-        <span class="kw">let </span>state = <span class="kw">super</span>::read_contract_state(
+        <span class="kw">let </span>(state, st_state) = <span class="kw">super</span>::read_contract_state(
             config.provider,
             config.signing_key,
             config.light_client_address,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="macro">assert_eq!</span>(state, genesis.into());
+        <span class="macro">assert_eq!</span>(st_state, stake_genesis.into());
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -1492,21 +1509,22 @@
     </span><span class="kw">async fn </span>test_submit_state_and_proof() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         setup_test();
 
-        <span class="kw">let </span>(genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
+        <span class="kw">let </span>(genesis, stake_genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 
         <span class="kw">let </span>anvil = Anvil::new().spawn();
-        <span class="kw">let </span>(_wallet, contract) = deploy_contract_for_test(<span class="kw-2">&amp;</span>anvil, genesis.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>(_wallet, contract) =
+            deploy_contract_for_test(<span class="kw-2">&amp;</span>anvil, genesis.clone(), stake_genesis.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>config = StateProverConfig::default();
         config.update_l1_info(<span class="kw-2">&amp;</span>anvil, contract.address());
 
-        <span class="kw">let </span>genesis_l1: ParsedLightClientState = contract.get_genesis_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        <span class="kw">let </span>genesis_l1: ParsedLightClientState = contract.genesis_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
         <span class="macro">assert_eq!</span>(genesis_l1, genesis, <span class="string">"mismatched genesis, aborting tests"</span>);
 
         <span class="kw">let </span><span class="kw-2">mut </span>new_state = genesis.clone();
         new_state.view_num = <span class="number">5</span>;
         new_state.block_height = <span class="number">1</span>;
 
-        <span class="kw">let </span>(pi, proof) = gen_state_proof(<span class="kw-2">&amp;</span>genesis, new_state.clone(), <span class="kw-2">&amp;</span>state_keys, <span class="kw-2">&amp;</span>st);
+        <span class="kw">let </span>(pi, proof) = gen_state_proof(new_state.clone(), <span class="kw-2">&amp;</span>stake_genesis, <span class="kw-2">&amp;</span>state_keys, <span class="kw-2">&amp;</span>st);
         <span class="macro">tracing::info!</span>(<span class="string">"Successfully generated proof for new state."</span>);
 
         <span class="kw">super</span>::submit_state_and_proof(
@@ -1519,7 +1537,7 @@
         .<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="macro">tracing::info!</span>(<span class="string">"Successfully submitted new finalized state to L1."</span>);
         <span class="comment">// test if new state is updated in l1
-        </span><span class="kw">let </span>finalized_l1: ParsedLightClientState = contract.get_finalized_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        </span><span class="kw">let </span>finalized_l1: ParsedLightClientState = contract.finalized_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
         <span class="macro">assert_eq!</span>(finalized_l1, new_state);
         <span class="prelude-val">Ok</span>(())
     }

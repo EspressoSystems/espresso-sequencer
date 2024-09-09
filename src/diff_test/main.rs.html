@@ -489,59 +489,6 @@
 <a href="#489" id="489">489</a>
 <a href="#490" id="490">490</a>
 <a href="#491" id="491">491</a>
-<a href="#492" id="492">492</a>
-<a href="#493" id="493">493</a>
-<a href="#494" id="494">494</a>
-<a href="#495" id="495">495</a>
-<a href="#496" id="496">496</a>
-<a href="#497" id="497">497</a>
-<a href="#498" id="498">498</a>
-<a href="#499" id="499">499</a>
-<a href="#500" id="500">500</a>
-<a href="#501" id="501">501</a>
-<a href="#502" id="502">502</a>
-<a href="#503" id="503">503</a>
-<a href="#504" id="504">504</a>
-<a href="#505" id="505">505</a>
-<a href="#506" id="506">506</a>
-<a href="#507" id="507">507</a>
-<a href="#508" id="508">508</a>
-<a href="#509" id="509">509</a>
-<a href="#510" id="510">510</a>
-<a href="#511" id="511">511</a>
-<a href="#512" id="512">512</a>
-<a href="#513" id="513">513</a>
-<a href="#514" id="514">514</a>
-<a href="#515" id="515">515</a>
-<a href="#516" id="516">516</a>
-<a href="#517" id="517">517</a>
-<a href="#518" id="518">518</a>
-<a href="#519" id="519">519</a>
-<a href="#520" id="520">520</a>
-<a href="#521" id="521">521</a>
-<a href="#522" id="522">522</a>
-<a href="#523" id="523">523</a>
-<a href="#524" id="524">524</a>
-<a href="#525" id="525">525</a>
-<a href="#526" id="526">526</a>
-<a href="#527" id="527">527</a>
-<a href="#528" id="528">528</a>
-<a href="#529" id="529">529</a>
-<a href="#530" id="530">530</a>
-<a href="#531" id="531">531</a>
-<a href="#532" id="532">532</a>
-<a href="#533" id="533">533</a>
-<a href="#534" id="534">534</a>
-<a href="#535" id="535">535</a>
-<a href="#536" id="536">536</a>
-<a href="#537" id="537">537</a>
-<a href="#538" id="538">538</a>
-<a href="#539" id="539">539</a>
-<a href="#540" id="540">540</a>
-<a href="#541" id="541">541</a>
-<a href="#542" id="542">542</a>
-<a href="#543" id="543">543</a>
-<a href="#544" id="544">544</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 <span class="kw">use </span>ark_ec::{AffineRepr, CurveGroup};
 <span class="kw">use </span>ark_ed_on_bn254::{EdwardsConfig <span class="kw">as </span>EdOnBn254Config, Fq <span class="kw">as </span>FqEd254};
@@ -558,7 +505,7 @@
 };
 <span class="kw">use </span>hotshot_contract_adapter::{jellyfish::<span class="kw-2">*</span>, light_client::ParsedLightClientState};
 <span class="kw">use </span>hotshot_state_prover::mock_ledger::{
-    gen_plonk_proof_for_test, MockLedger, MockSystemParam, BLOCKS_PER_EPOCH, STAKE_TABLE_CAPACITY,
+    gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
 };
 <span class="kw">use </span>jf_pcs::prelude::Commitment;
 <span class="kw">use </span>jf_plonk::proof_system::structs::{Proof, VerifyingKey};
@@ -627,10 +574,6 @@
     </span>MockConsecutiveFinalizedStates,
     <span class="doccomment">/// Get a light client state that skipped a few blocks
     </span>MockSkipBlocks,
-    <span class="doccomment">/// Get light client states when missing ending block of an epoch
-    </span>MockMissEndingBlock,
-    <span class="doccomment">/// Get a malicious state update with a wrong stake table
-    </span>MockWrongStakeTable,
 }
 
 <span class="attr">#[allow(clippy::type_complexity)]
@@ -673,7 +616,7 @@
 
             <span class="kw">let </span>log_size = cli.args[<span class="number">0</span>].parse::&lt;u32&gt;().unwrap();
             <span class="kw">let </span>zeta = u256_to_field::&lt;Fr&gt;(cli.args[<span class="number">1</span>].parse::&lt;U256&gt;().unwrap());
-            <span class="kw">let </span>pi_u256: [U256; <span class="number">8</span>] = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">2</span>]).unwrap();
+            <span class="kw">let </span>pi_u256: [U256; <span class="number">7</span>] = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">2</span>]).unwrap();
             <span class="kw">let </span>pi: Vec&lt;Fr&gt; = pi_u256.into_iter().map(u256_to_field).collect();
 
             <span class="kw">let </span>verifier = Verifier::&lt;Bn254&gt;::new(<span class="number">2u32</span>.pow(log_size) <span class="kw">as </span>usize).unwrap();
@@ -805,7 +748,7 @@
             }
 
             <span class="kw">let </span>vk = cli.args[<span class="number">0</span>].parse::&lt;ParsedVerifyingKey&gt;().unwrap().into();
-            <span class="kw">let </span>pi_u256: [U256; <span class="number">8</span>] = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">1</span>]).unwrap();
+            <span class="kw">let </span>pi_u256: [U256; <span class="number">7</span>] = AbiDecode::decode_hex(<span class="kw-2">&amp;</span>cli.args[<span class="number">1</span>]).unwrap();
             <span class="kw">let </span>pi: Vec&lt;Fr&gt; = pi_u256.into_iter().map(u256_to_field).collect();
             <span class="kw">let </span>proof: Proof&lt;Bn254&gt; = cli.args[<span class="number">2</span>].parse::&lt;ParsedPlonkProof&gt;().unwrap().into();
             <span class="kw">let </span>msg = {
@@ -843,8 +786,8 @@
             .is_ok());
 
             <span class="kw">let </span>vk_parsed: ParsedVerifyingKey = vk.into();
-            <span class="kw">let </span><span class="kw-2">mut </span>pi_parsed = [U256::default(); <span class="number">8</span>];
-            <span class="macro">assert_eq!</span>(public_input.len(), <span class="number">8</span>);
+            <span class="kw">let </span><span class="kw-2">mut </span>pi_parsed = [U256::default(); <span class="number">7</span>];
+            <span class="macro">assert_eq!</span>(public_input.len(), <span class="number">7</span>);
             <span class="kw">for </span>(i, pi) <span class="kw">in </span>public_input.into_iter().enumerate() {
                 pi_parsed[i] = field_to_u256(pi);
             }
@@ -925,33 +868,25 @@
             }
             <span class="kw">let </span>num_init_validators = cli.args[<span class="number">0</span>].parse::&lt;u64&gt;().unwrap();
 
-            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            <span class="kw">let </span>pp = MockSystemParam::init();
             <span class="kw">let </span>ledger = MockLedger::init(pp, num_init_validators <span class="kw">as </span>usize);
 
-            <span class="kw">let </span>(voting_st_comm, frozen_st_comm) = ledger.get_stake_table_comms();
-            <span class="kw">let </span>res = (ledger.get_state(), voting_st_comm, frozen_st_comm);
+            <span class="kw">let </span>res = (ledger.get_state(), ledger.get_stake_table_state());
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
         }
         Action::MockConsecutiveFinalizedStates =&gt; {
-            <span class="kw">if </span>cli.args.len() != <span class="number">3 </span>{
-                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numInitValidators,arg2=numRegs,arg3=numExit"</span>);
+            <span class="kw">if </span>cli.args.len() != <span class="number">1 </span>{
+                <span class="macro">panic!</span>(<span class="string">"Should provide arg1=numInitValidators"</span>);
             }
-            <span class="kw">let </span>block_per_epoch = BLOCKS_PER_EPOCH;
             <span class="kw">let </span>num_init_validators = cli.args[<span class="number">0</span>].parse::&lt;u64&gt;().unwrap();
-            <span class="kw">let </span>num_reg = cli.args[<span class="number">1</span>].parse::&lt;u64&gt;().unwrap();
-            <span class="kw">let </span>num_exit = cli.args[<span class="number">2</span>].parse::&lt;u64&gt;().unwrap();
 
-            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            <span class="kw">let </span>pp = MockSystemParam::init();
             <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, num_init_validators <span class="kw">as </span>usize);
 
             <span class="kw">let </span><span class="kw-2">mut </span>new_states: Vec&lt;ParsedLightClientState&gt; = <span class="macro">vec!</span>[];
             <span class="kw">let </span><span class="kw-2">mut </span>proofs: Vec&lt;ParsedPlonkProof&gt; = <span class="macro">vec!</span>[];
-            <span class="kw">for </span>i <span class="kw">in </span><span class="number">1</span>..block_per_epoch + <span class="number">2 </span>{
-                <span class="comment">// only update stake table at the last block, as it would only take effect in next epoch anyway.
-                </span><span class="kw">if </span>i == block_per_epoch {
-                    ledger.sync_stake_table(num_reg <span class="kw">as </span>usize, num_exit <span class="kw">as </span>usize);
-                }
 
+            <span class="kw">for _ in </span><span class="number">1</span>..<span class="number">4 </span>{
                 <span class="comment">// random number of notorized but not finalized block
                 </span><span class="kw">if </span>ledger.rng.gen_bool(<span class="number">0.5</span>) {
                     <span class="kw">let </span>num_non_blk = ledger.rng.gen_range(<span class="number">0</span>..<span class="number">5</span>);
@@ -982,65 +917,24 @@
                 <span class="bool-val">true
             </span>};
 
-            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
+            <span class="kw">let </span>pp = MockSystemParam::init();
             <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / <span class="number">2</span>);
 
-            <span class="comment">// random stake table update
-            </span>ledger.sync_stake_table(<span class="number">4</span>, <span class="number">3</span>);
             <span class="kw">for _ in </span><span class="number">0</span>..num_block_skipped {
                 ledger.elapse_with_block();
             }
 
             <span class="kw">let </span>res = <span class="kw">if </span>require_valid_proof {
-                <span class="kw">let </span>(pi, proof) = ledger.gen_state_proof();
-                <span class="kw">let </span>pi_parsed: ParsedLightClientState = pi.into();
+                <span class="kw">let </span>(state, proof) = ledger.gen_state_proof();
+                <span class="kw">let </span>state_parsed: ParsedLightClientState = state.into();
                 <span class="kw">let </span>proof_parsed: ParsedPlonkProof = proof.into();
-                (pi_parsed, proof_parsed)
+                (state_parsed, proof_parsed)
             } <span class="kw">else </span>{
-                <span class="kw">let </span>pi_parsed = ledger.get_state();
+                <span class="kw">let </span>state_parsed = ledger.get_state();
                 <span class="kw">let </span>proof_parsed = ParsedPlonkProof::dummy(<span class="kw-2">&amp;mut </span>ledger.rng);
-                (pi_parsed, proof_parsed)
+                (state_parsed, proof_parsed)
             };
             <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
-        }
-        Action::MockMissEndingBlock =&gt; {
-            <span class="kw">let </span>block_per_epoch = BLOCKS_PER_EPOCH;
-
-            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
-            <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / <span class="number">2</span>);
-
-            <span class="kw">let </span><span class="kw-2">mut </span>new_states: Vec&lt;ParsedLightClientState&gt; = <span class="macro">vec!</span>[];
-            <span class="kw">let </span><span class="kw-2">mut </span>proofs: Vec&lt;ParsedPlonkProof&gt; = <span class="macro">vec!</span>[];
-
-            ledger.elapse_with_block();
-            <span class="comment">// first block in epoch 1
-            </span><span class="kw">let </span>(pi, proof) = ledger.gen_state_proof();
-            new_states.push(pi.into());
-            proofs.push(proof.into());
-
-            <span class="comment">// skipping all remaining blocks in epoch 1, including the last/ending block
-            </span><span class="kw">for _ in </span><span class="number">2</span>..block_per_epoch + <span class="number">1 </span>{
-                ledger.elapse_with_block();
-            }
-            <span class="comment">// first block in epoch 2
-            </span>ledger.elapse_with_block();
-            new_states.push(ledger.get_state());
-            proofs.push(ParsedPlonkProof::dummy(<span class="kw-2">&amp;mut </span>ledger.rng)); <span class="comment">// we don't need correct proof here
-
-            </span><span class="kw">let </span>res = (new_states, proofs);
-            <span class="macro">println!</span>(<span class="string">"{}"</span>, res.encode_hex());
-        }
-        Action::MockWrongStakeTable =&gt; {
-            <span class="kw">let </span>pp = MockSystemParam::init(BLOCKS_PER_EPOCH);
-            <span class="kw">let </span><span class="kw-2">mut </span>ledger = MockLedger::init(pp, STAKE_TABLE_CAPACITY / <span class="number">2</span>);
-
-            ledger.elapse_with_block();
-            <span class="kw">let </span>(pi, proof) = ledger.gen_state_proof_with_fake_stakers();
-
-            <span class="kw">let </span>new_state: ParsedLightClientState = pi.into();
-            <span class="kw">let </span>proof: ParsedPlonkProof = proof.into();
-
-            <span class="macro">println!</span>(<span class="string">"{}"</span>, (new_state, proof).encode_hex());
         }
         Action::GenBLSHashes =&gt; {
             <span class="kw">if </span>cli.args.len() != <span class="number">1 </span>{
