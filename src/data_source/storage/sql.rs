@@ -1072,13 +1072,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage
-            .client
-            .lock()
-            .await
-            .batch_execute("VACUUM")
-            .await
-            .unwrap();
+        storage.client.lock().await.vacuum().await.unwrap();
         // Pruned height should be none
         assert!(pruned_height.is_none());
 
@@ -1099,13 +1093,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage
-            .client
-            .lock()
-            .await
-            .batch_execute("VACUUM")
-            .await
-            .unwrap();
+        storage.client.lock().await.vacuum().await.unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
@@ -1178,13 +1166,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage
-            .client
-            .lock()
-            .await
-            .batch_execute("VACUUM")
-            .await
-            .unwrap();
+        storage.client.lock().await.vacuum().await.unwrap();
 
         // Pruned height should be none
         assert!(pruned_height.is_none());
@@ -1208,13 +1190,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage
-            .client
-            .lock()
-            .await
-            .batch_execute("VACUUM")
-            .await
-            .unwrap();
+        storage.client.lock().await.vacuum().await.unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());

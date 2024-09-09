@@ -99,6 +99,13 @@ impl Connection {
         self.client.batch_execute("ROLLBACK").await?;
         Ok(())
     }
+
+    #[cfg(test)]
+    pub(super) async fn vacuum(&mut self) -> anyhow::Result<()> {
+        self.acquire().await?;
+        self.batch_execute("VACUUM").await?;
+        Ok(())
+    }
 }
 
 /// An atomic SQL transaction.
