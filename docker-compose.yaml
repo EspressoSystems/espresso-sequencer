@@ -268,7 +268,7 @@ services:
         condition: service_completed_successfully
 
   sequencer1:
-    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    image: sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
@@ -374,7 +374,7 @@ services:
         condition: service_completed_successfully
 
   sequencer3:
-    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    image: sequencer:depoff
     ports:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- http -- catchup -- status
@@ -423,7 +423,7 @@ services:
         condition: service_completed_successfully
 
   sequencer4:
-    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    image: sequencer:depoff
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- http -- catchup -- status
