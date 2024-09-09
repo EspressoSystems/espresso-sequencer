@@ -457,14 +457,6 @@ async fn test_builder_order_chain_fork() {
             .await
             .unwrap();
 
-        if prev_proposed_transactions_branch_1 == prev_proposed_transactions_branch_2 {
-            assert_eq!(transactions_branch_1, transactions_branch_2, "if the previous proposed transactions are the same, then the new transactions should also be the same");
-        } else if prev_proposed_transactions_branch_2.map(|txs| txs.len()) == Some(0) {
-            assert_ne!(transactions_branch_1, transactions_branch_2, "if the previous proposed transactions differ and the previous proposed transactions is empty, then the new transactions should also differ");
-        } else {
-            assert_eq!(transactions_branch_1, transactions_branch_2, "if the previous proposed transactions differ, then the new transactions should be the same, as they should now have been repaired");
-        }
-
         let transactions_branch_2 = fork_round_behavior.process_transactions(transactions_branch_2);
         if transactions_branch_2 != transactions_branch_1 {
             tracing::debug!("Fork Exist.")

@@ -173,6 +173,111 @@ pub struct BuilderState<TYPES: NodeType> {
 }
 
 impl<TYPES: NodeType> BuilderState<TYPES> {
+    /// [am_i_the_best_builder_state_to_extend] is a utility method that
+    /// attempts to determine the best [BuilderState] to extend from, given a
+    /// [QuorumProposal].
+    ///
+    /// In an ideal case the [BuilderState] whose recorded view and
+    /// vid_commitment that match the [QuorumProposal]'s justify_qc should be
+    /// the best fit.  However, if there is no exact match, then the best fit
+    /// is the [BuilderState] with the largest view number smaller than the
+    /// [QuorumProposal]'s view number.
+    ///
+    /// If there are no [BuilderState]s with a view number smaller than the
+    /// [QuorumProposal]'s view number, then the best fit is the only
+    /// [BuilderState] active.
+    async fn am_i_the_best_builder_state_to_extend(
+        &self,
+        quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
+    ) -> bool {
+        let justify_qc = &quorum_proposal.data.justify_qc;
+        let parent_view_number = justify_qc.view_number;
+        let parent_commitment = quorum_proposal.data.block_header.payload_commitment();
+
+        if quorum_proposal.data.view_number == self.built_from_proposed_block.view_number {
+            // We are being asked to extend ourselves.  This is likely a
+            // spawning initial condition or a test condition.
+            return false;
+        }
+
+        if parent_view_number == self.built_from_proposed_block.view_number
+            && parent_commitment == self.built_from_proposed_block.vid_commitment
+        {
+            // This is us exactly, so we should be the best one to extend.
+            return true;
+        }
+
+        let desired_builder_state_id = BuilderStateId::<TYPES> {
+            parent_commitment,
+            parent_view: parent_view_number,
+        };
+
+        // Alright, we weren't the immediate best fit, let's see if there's a better fit out there.
+
+        let global_state_read_lock = self.global_state.read_arc().await;
+
+        if global_state_read_lock
+            .spawned_builder_states
+            .contains_key(&desired_builder_state_id)
+        {
+            // There is an exact match that isn't us, so we should not extend,
+            // and we should wait for that match to extend instead.
+            return false;
+        }
+
+        // There is no exact match that we are aware of.  This ultimately means
+        // that we do not have visibility on the previously extended
+        // [BuilderState].
+        //
+        // It would be best if we could determine which was the best one to
+        // extend from, but there's a very real possibility that we just do
+        // not have any previous [BuilderState]s to extend from.  This would
+        // mean that we should extend from the oldest [BuilderState] that we
+        // have locally in order to ensure that we don't drop any transactions
+        // that we believe may be pending with other calls that have been made.
+
+        let leaf = Leaf::<TYPES>::from_quorum_proposal(&quorum_proposal.data);
+        if self.built_from_proposed_block.leaf_commit == leaf.commit() {
+            // We are the oldest [BuilderState] that we have locally, so we
+            // should extend from ourselves.
+            return true;
+        }
+
+        // At this point we don't have any way to inspecting the other
+        // [BuilderState]'s `build_from_proposed_block` values to determine
+        // if another [BuilderState] will be extending from the same parent.
+        // So we'll do some other checks to see if we can make some safe
+        // assumptions.
+
+        let maximum_stored_view_number_smaller_than_quorum_proposal = global_state_read_lock
+            .spawned_builder_states
+            .keys()
+            .map(|builder_state_id| *builder_state_id.parent_view)
+            .filter(|view_number| view_number < &quorum_proposal.data.view_number)
+            .max();
+
+        if let Some(maximum_stored_view_number_smaller_than_quorum_proposal) =
+            maximum_stored_view_number_smaller_than_quorum_proposal
+        {
+            // If we are the maximum stored view number smaller than the quorum
+            // proposal's view number, then we are the best fit.
+            return maximum_stored_view_number_smaller_than_quorum_proposal
+                == self.built_from_proposed_block.view_number.u64();
+        }
+
+        // If there are no stored view numbers smaller than the quorum proposal
+        // Are we the only builder state?
+        if global_state_read_lock.spawned_builder_states.len() == 1 {
+            return true;
+        }
+
+        // This implies that there are only larger [BuilderState]s active than
+        // the one we are.  This is weird, it implies that some sort of time
+        // travel has occurred view-wise.  It is unclear what to do in this
+        // situation.
+
+        true
+    }
     /// processing the DA proposal
     #[tracing::instrument(skip_all, name = "process da proposal",
                                     fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
@@ -215,9 +320,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                     self.quorum_proposal_payload_commit_to_quorum_proposal
                         .remove(&(da_msg.builder_commitment.clone(), da_msg.view_number));
 
-                    let (req_sender, req_receiver) = broadcast(self.req_receiver.capacity());
-                    self.clone_with_receiver(req_receiver)
-                        .spawn_clone(da_msg, quorum_proposal, req_sender)
+                    self.spawn_clone_that_extends_self(da_msg, quorum_proposal)
                         .await;
                 } else {
                     tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
@@ -246,43 +349,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // To handle both cases, we can have the highest view number builder state running
         // and only doing the insertion if and only if intended builder state for a particulat view is not present
         // check the presence of quorum_proposal.data.view_number-1 in the spawned_builder_states list
-        if qc_msg.proposal.data.justify_qc.view_number != self.built_from_proposed_block.view_number
-        {
-            tracing::debug!(
-                "View number {:?} from justify qc does not match for builder {:?}",
-                qc_msg.proposal.data.justify_qc.view_number,
-                self.built_from_proposed_block
-            );
-            if !self
-                .global_state
-                .read_arc()
-                .await
-                .should_view_handle_other_proposals(
-                    &self.built_from_proposed_block.view_number,
-                    &qc_msg.proposal.data.justify_qc.view_number,
-                )
-            {
-                tracing::debug!(
-                    "Builder {:?} is not currently bootstrapping.",
-                    self.built_from_proposed_block
-                );
-                // if we have the matching da proposal, we now know we don't need to keep it.
-                self.da_proposal_payload_commit_to_da_proposal.remove(&(
-                    qc_msg
-                        .proposal
-                        .data
-                        .block_header
-                        .builder_commitment()
-                        .clone(),
-                    qc_msg.proposal.data.view_number,
-                ));
-                return;
-            }
-            tracing::debug!(
-                "Builder {:?} handling proposal as bootstrap.",
-                self.built_from_proposed_block
-            );
-        }
         let quorum_proposal = &qc_msg.proposal;
         let view_number = quorum_proposal.data.view_number;
         let payload_builder_commitment = quorum_proposal.data.block_header.builder_commitment();
@@ -314,9 +380,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                         view_number
                     );
 
-                    let (req_sender, req_receiver) = broadcast(self.req_receiver.capacity());
-                    self.clone_with_receiver(req_receiver)
-                        .spawn_clone(da_proposal_info, quorum_proposal.clone(), req_sender)
+                    self.spawn_clone_that_extends_self(da_proposal_info, quorum_proposal.clone())
                         .await;
                 } else {
                     tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
@@ -327,6 +391,46 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         } else {
             tracing::debug!("Payload commitment already exists in the quorum_proposal_payload_commit_to_quorum_proposal hashmap, so ignoring it");
         }
+    }
+
+    /// [spawn_a_clone_that_extends_self] is a helper function that is used by
+    /// both [process_da_proposal] and [process_quorum_proposal] to spawn a
+    /// new [BuilderState] that extends from the current [BuilderState].
+    ///
+    /// This helper function also adds additional checks in order to ensure
+    /// that the [BuilderState] that is being spawned is the best fit for the
+    /// [QuorumProposal] that is being extended from.
+    async fn spawn_clone_that_extends_self(
+        &mut self,
+        da_proposal_info: Arc<DaProposalMessage<TYPES>>,
+        quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
+    ) {
+        if !self
+            .am_i_the_best_builder_state_to_extend(quorum_proposal.clone())
+            .await
+        {
+            tracing::debug!(
+                "{} is not the best fit for forking, {}@{}, so ignoring the QC proposal, and leaving it to another BuilderState",
+                self.built_from_proposed_block,
+                quorum_proposal.data.block_header.payload_commitment(),
+                quorum_proposal.data.view_number.u64(),
+            );
+            return;
+        }
+
+        let (req_sender, req_receiver) = broadcast(self.req_receiver.capacity());
+
+        tracing::debug!(
+            "extending BuilderState with a clone from {} with new proposal {}@{}",
+            self.built_from_proposed_block,
+            quorum_proposal.data.block_header.payload_commitment(),
+            quorum_proposal.data.view_number.u64()
+        );
+
+        // We literally fork ourselves
+        self.clone_with_receiver(req_receiver)
+            .spawn_clone(da_proposal_info, quorum_proposal.clone(), req_sender)
+            .await;
     }
 
     /// processing the decide event
@@ -371,14 +475,39 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
         req_sender: BroadcastSender<MessageType<TYPES>>,
     ) {
-        self.built_from_proposed_block.view_number = quorum_proposal.data.view_number;
-        self.built_from_proposed_block.vid_commitment =
-            quorum_proposal.data.block_header.payload_commitment();
-        self.built_from_proposed_block.builder_commitment =
-            quorum_proposal.data.block_header.builder_commitment();
         let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
 
-        self.built_from_proposed_block.leaf_commit = leaf.commit();
+        // We replace our built_from_proposed_block with information from the
+        // quorum proposal.  This is identifying the block that this specific
+        // instance of [BuilderState] is attempting to build for.
+        self.built_from_proposed_block = BuiltFromProposedBlock {
+            view_number: quorum_proposal.data.view_number,
+            vid_commitment: quorum_proposal.data.block_header.payload_commitment(),
+            leaf_commit: leaf.commit(),
+            builder_commitment: quorum_proposal.data.block_header.builder_commitment(),
+        };
+
+        let builder_state_id = BuilderStateId {
+            parent_commitment: self.built_from_proposed_block.vid_commitment,
+            parent_view: self.built_from_proposed_block.view_number,
+        };
+
+        {
+            // Let's ensure that we don't already have one of these BuilderStates
+            // running already.
+
+            let global_state_read_lock = self.global_state.read_arc().await;
+            if global_state_read_lock
+                .spawned_builder_states
+                .contains_key(&builder_state_id)
+            {
+                tracing::warn!(
+                    "Aborting spawn_clone, builder state already exists in spawned_builder_states: {:?}",
+                    builder_state_id
+                );
+                return;
+            }
+        }
 
         for tx in da_proposal_info.txn_commitments.iter() {
             self.txns_in_queue.remove(tx);
@@ -389,14 +518,13 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.tx_queue
             .retain(|tx| self.txns_in_queue.contains(&tx.commit));
 
-        // register the spawned builder state to spawned_builder_states in the global state
-        self.global_state.write_arc().await.register_builder_state(
-            BuilderStateId {
-                parent_commitment: self.built_from_proposed_block.vid_commitment,
-                parent_view: self.built_from_proposed_block.view_number,
-            },
-            req_sender,
-        );
+        // register the spawned builder state to spawned_builder_states in the
+        // global state We register this new child within the global_state, so
+        // that it can be looked up via the [BuilderStateId] in the future.
+        self.global_state
+            .write_arc()
+            .await
+            .register_builder_state(builder_state_id, req_sender);
 
         self.event_loop();
     }
