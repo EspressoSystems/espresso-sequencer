@@ -12,7 +12,7 @@ import { UtilsScript } from "./Utils.s.sol";
 
 /// @notice Deploys an upgradeable Fee Contract using the OpenZeppelin Upgrades plugin.
 contract DeployFeeContractScript is Script {
-    string internal contractName = "FeeContract.sol";
+    string internal contractName = vm.envString("FEE_CONTRACT_ORIGINAL_NAME");
 
     /// @dev Deploys both the proxy and the implementation contract.
     /// The proxy admin is set as the owner of the contract upon deployment.
@@ -44,7 +44,7 @@ contract DeployFeeContractScript is Script {
 /// @notice Upgrades the fee contract first by deploying the new implementation
 /// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 contract UpgradeFeeContractScript is Script {
-    string internal originalContractName = "FeeContract.sol";
+    string internal originalContractName = vm.envString("FEE_CONTRACT_ORIGINAL_NAME");
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
 
     /// @dev This function first deploys the new implementation contract using the deployer wallet.
@@ -99,7 +99,7 @@ contract UpgradeFeeContractScript is Script {
 /// the deployment environment details are set in OpenZeppelin Defender which is
 /// identified via the Defender Key and Secret in the environment file
 contract DeployFeeContractWithDefenderScript is Script {
-    string internal contractName = "FeeContract.sol";
+    string internal contractName = vm.envString("FEE_CONTRACT_ORIGINAL_NAME");
     UtilsScript internal utils = new UtilsScript();
     uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
 
@@ -149,7 +149,7 @@ contract DeployFeeContractWithDefenderScript is Script {
 /// the deployment environment details are set in OpenZeppelin Defender which is
 /// identified via the Defender Key and Secret in the environment file
 contract UpgradeFeeContractWithDefenderScript is Script {
-    string internal originalContractName = "FeeContract.sol";
+    string internal originalContractName = vm.envString("FEE_CONTRACT_ORIGINAL_NAME");
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
     uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
     UtilsScript internal utils = new UtilsScript();

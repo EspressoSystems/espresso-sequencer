@@ -15,7 +15,7 @@ import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy
 
 /// @notice Deploy the upgradeable light client contract using the OpenZeppelin Upgrades plugin.
 contract DeployLightClientScript is Script {
-    string public contractName = "LightClient.sol";
+    string public contractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
 
     /// @dev Deploys both the proxy and the implementation contract.
     /// The proxy admin is set as the owner of the contract upon deployment.
@@ -64,7 +64,7 @@ contract DeployLightClientScript is Script {
 /// @notice Upgrades the light client contract first by deploying the new implementation
 /// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 contract LightClientContractUpgradeScript is Script {
-    string internal originalContractName = "LightClient.sol";
+    string internal originalContractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
     string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
 
     /// @dev First the new implementation contract is deployed via the deployer wallet.
@@ -118,7 +118,7 @@ contract LightClientContractUpgradeScript is Script {
 /// @dev this is used when upgrading to the same base contract file which is being actively modified
 /// before mainnet
 contract UpgradeLightClientContractWithSameContractScript is Script {
-    string internal originalContractName = "LightClient.sol";
+    string internal originalContractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
     string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
 
     function run() public returns (address implementationAddress, bytes memory result) {
@@ -168,7 +168,7 @@ contract UpgradeLightClientContractWithSameContractScript is Script {
 /// the deployment environment details are set in OpenZeppelin Defender which is
 /// identified via the Defender Key and Secret in the environment file
 contract DeployLightClientDefenderScript is Script {
-    string public contractName = "LightClient.sol";
+    string public contractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
     UtilsScript public utils = new UtilsScript();
     uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
 
@@ -242,12 +242,13 @@ contract DeployLightClientDefenderScript is Script {
 /// identified via the Defender Key and Secret in the environment file
 
 contract UpgradeLightClientWithDefenderScript is Script {
-    string public originalContractName = "LightClient.sol";
-    string public upgradeContractName = vm.envString("LIGHT_CLIENT_UPGRADE_NAME");
+    string public originalContractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
+    string public upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
     uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
     UtilsScript public utils = new UtilsScript();
 
-    /// @dev it depends on the `LIGHT_CLIENT_UPGRADE_NAME` in the environment file to determine
+    /// @dev it depends on the `LIGHT_CLIENT_CONTRACT_UPGRADE_NAME` in the environment file to
+    /// determine
     /// which implementation it's being upgraded to
     /// When this function is run, a transaction to deploy the new implementation is submitted to
     /// Defender

@@ -143,10 +143,11 @@ Client contract have to be upgraded and should use the new PlonkVerifier contrac
 ```bash
    source .env.contracts && \
    forge clean && \
-   forge script contracts/script/LightClient.s.sol:DeployLightClientScript $NUM_INIT_VALIDATORS $SAFE_MULTISIG_ADDRESS \
+   forge script contracts/script/LightClient.s.sol:DeployLightClientScript $NUM_INIT_VALIDATORS $STATE_HISTORY_RETENTION_PERIOD $SAFE_MULTISIG_ADDRESS \
    --sig 'run(uint32, uint32, address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
+   --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS \
    --build-info true \
    --legacy \
    --broadcast
@@ -248,6 +249,7 @@ forge clean && \
 forge script contracts/script/LightClient.s.sol:LightClientContractUpgradeScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS \
 --build-info true \
 --legacy \
 --broadcast
@@ -298,7 +300,7 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientContractWithout
 ### 2. Upgrade the LightClient Contract
 
 ```bash
-forge script contracts/script/LightClient.s.sol:UpgradeLightClientWithoutMultisigAdminScript $mostRecentlyDeployedProxy \
+forge script contracts/script/LightClient.s.sol:UpgradeLightClientWithoutMultisigAdminScript $LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS \
 --sig 'run(address)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -324,7 +326,7 @@ select the `is this a proxy?` option. You should then be able to interact with t
 
 ## Deploy the Plonk Verifier Library
 
-### With OpenZepplinn Defender
+### With OpenZepplin Defender
 
 The Plonk Verifier contract is not upgradeable and deploying we deploy with defender as part of our workflow so that we
 can also deploy it with a multisig wallet. Each time modifications are made to the Plonk Verifier, contracts that depend
