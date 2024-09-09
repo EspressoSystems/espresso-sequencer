@@ -17,6 +17,15 @@ RUN chmod +x /bin/sequencer
 COPY target/$TARGETARCH/release/utils /bin/utils
 RUN chmod +x /bin/utils
 
+COPY target/$TARGETARCH/release/reset-storage /bin/reset-storage
+RUN chmod +x /bin/reset-storage
+
+COPY target/$TARGETARCH/release/keygen /bin/keygen
+RUN chmod +x /bin/keygen
+
+COPY target/$TARGETARCH/release/pub-key /bin/pub-key
+RUN chmod +x /bin/pub-key
+
 # Install genesis files for all supported configurations. The desired configuration can be chosen by
 # setting `ESPRESSO_SEQUENCER_GENESIS_FILE`.
 COPY data/genesis /genesis
