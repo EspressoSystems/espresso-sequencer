@@ -170,7 +170,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
 
     function test_NoProverPermissionsRequired() external {
         //ensure that the permissioned prover mode is set
-        assert(lc.permissionedProverEnabled());
+        assert(lc.isPermissionedProverEnabled());
 
         //set permissioned flag to false
         vm.expectEmit(true, true, true, true);
@@ -179,7 +179,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
         lc.disablePermissionedProverMode();
 
         //assert that the contract is not permissioned
-        assert(lc.permissionedProverEnabled() == false);
+        assert(lc.isPermissionedProverEnabled() == false);
 
         // assert that the prover address is zero address when the contract is not permissioned
         assertEq(lc.permissionedProver(), address(0));
@@ -208,7 +208,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     }
 
     function test_UpdatePermissionedProverWhenPermissionedProverModeEnabled() external {
-        assert(lc.permissionedProverEnabled());
+        assert(lc.isPermissionedProverEnabled());
         assertEq(lc.permissionedProver(), permissionedProver);
 
         address newProver = makeAddr("another prover");
@@ -226,7 +226,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
             // InvalidAddress()
         vm.assume(newProver != permissionedProver); //otherwise it would have reverted with
             // NoChangeRequired()
-        assert(lc.permissionedProverEnabled());
+        assert(lc.isPermissionedProverEnabled());
         assertEq(lc.permissionedProver(), permissionedProver);
 
         vm.expectEmit(true, true, true, true);
@@ -260,7 +260,7 @@ contract LightClient_permissionedProver_Test is LightClientCommonTest {
     }
 
     function test_RevertWhen_sameProverSentInUpdate() public {
-        assertEq(lc.permissionedProverEnabled(), true);
+        assertEq(lc.isPermissionedProverEnabled(), true);
         address currentProver = lc.permissionedProver();
         vm.prank(admin);
         vm.expectRevert(LC.NoChangeRequired.selector);
@@ -1156,8 +1156,7 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
     function test_revertWhenGetHotShotCommitmentInvalidHigh() public {
         // Get the highest HotShot blockheight recorded
         uint256 numCommitments = lc.getStateHistoryCount();
-        (,, uint64 blockHeight, BN254.ScalarField comm) =
-            lc.stateHistoryCommitments(numCommitments - 1);
+        (,, uint64 blockHeight,) = lc.stateHistoryCommitments(numCommitments - 1);
         // Expect revert when attempting to retrieve a block height higher than the highest one
         // recorded
         vm.expectRevert(LC.InvalidHotShotBlockForCommitmentCheck.selector);

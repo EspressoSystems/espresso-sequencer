@@ -58,9 +58,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// permissioned prover mode
     address public permissionedProver;
 
-    /// @notice a flag that indicates when a permissioned provrer is needed
-    bool public permissionedProverEnabled;
-
     /// @notice Max number of seconds worth of state commitments to record based on this block
     /// timestamp
     uint32 public stateHistoryRetentionPeriod;
@@ -235,7 +232,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.PlonkProof memory proof
     ) external virtual {
         //revert if we're in permissionedProver mode and the permissioned prover has not been set
-        if (permissionedProverEnabled && msg.sender != permissionedProver) {
+        if (isPermissionedProverEnabled() && msg.sender != permissionedProver) {
             revert ProverNotPermissioned();
         }
 
@@ -294,16 +291,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert NoChangeRequired();
         }
         permissionedProver = prover;
-        permissionedProverEnabled = true;
         emit PermissionedProverRequired(permissionedProver);
     }
 
     /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
     /// @dev if it was already disabled (permissioneProverMode == false), then revert with
     function disablePermissionedProverMode() public virtual onlyOwner {
-        if (permissionedProverEnabled) {
+        if (isPermissionedProverEnabled()) {
             permissionedProver = address(0);
-            permissionedProverEnabled = false;
             emit PermissionedProverNotRequired();
         } else {
             revert NoChangeRequired();
@@ -447,5 +442,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         stateHistoryRetentionPeriod = historySeconds;
+    }
+
+    /// @notice Check if permissioned prover is enabled
+    function isPermissionedProverEnabled() public view returns (bool) {
+        return (permissionedProver != address(0));
     }
 }

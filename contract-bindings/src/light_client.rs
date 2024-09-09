@@ -272,6 +272,22 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("isPermissionedProverEnabled"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("isPermissionedProverEnabled",),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Bool,
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("bool"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("lagOverEscapeHatchThreshold"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("lagOverEscapeHatchThreshold",),
@@ -424,22 +440,6 @@ pub mod light_client {
                             kind: ::ethers::core::abi::ethabi::ParamType::Address,
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned("address"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("permissionedProverEnabled"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("permissionedProverEnabled",),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Bool,
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("bool"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -1035,6 +1035,14 @@ pub mod light_client {
                 )
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `isPermissionedProverEnabled` (0x826e41fc) function
+        pub fn is_permissioned_prover_enabled(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, bool> {
+            self.0
+                .method_hash([130, 110, 65, 252], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `lagOverEscapeHatchThreshold` (0xe0303301) function
         pub fn lag_over_escape_hatch_threshold(
             &self,
@@ -1069,14 +1077,6 @@ pub mod light_client {
         ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::Address> {
             self.0
                 .method_hash([49, 61, 247, 177], ())
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `permissionedProverEnabled` (0xbd32519a) function
-        pub fn permissioned_prover_enabled(
-            &self,
-        ) -> ::ethers::contract::builders::ContractCall<M, bool> {
-            self.0
-                .method_hash([189, 50, 81, 154], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `proxiableUUID` (0x52d1902d) function
@@ -2337,6 +2337,24 @@ pub mod light_client {
         pub state_history_retention_period: u32,
         pub owner: ::ethers::core::types::Address,
     }
+    ///Container type for all input parameters for the `isPermissionedProverEnabled` function with signature `isPermissionedProverEnabled()` and selector `0x826e41fc`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(
+        name = "isPermissionedProverEnabled",
+        abi = "isPermissionedProverEnabled()"
+    )]
+    pub struct IsPermissionedProverEnabledCall;
     ///Container type for all input parameters for the `lagOverEscapeHatchThreshold` function with signature `lagOverEscapeHatchThreshold(uint256,uint256)` and selector `0xe0303301`
     #[derive(
         Clone,
@@ -2404,24 +2422,6 @@ pub mod light_client {
     )]
     #[ethcall(name = "permissionedProver", abi = "permissionedProver()")]
     pub struct PermissionedProverCall;
-    ///Container type for all input parameters for the `permissionedProverEnabled` function with signature `permissionedProverEnabled()` and selector `0xbd32519a`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(
-        name = "permissionedProverEnabled",
-        abi = "permissionedProverEnabled()"
-    )]
-    pub struct PermissionedProverEnabledCall;
     ///Container type for all input parameters for the `proxiableUUID` function with signature `proxiableUUID()` and selector `0x52d1902d`
     #[derive(
         Clone,
@@ -2587,11 +2587,11 @@ pub mod light_client {
         GetStateHistoryCount(GetStateHistoryCountCall),
         GetVersion(GetVersionCall),
         Initialize(InitializeCall),
+        IsPermissionedProverEnabled(IsPermissionedProverEnabledCall),
         LagOverEscapeHatchThreshold(LagOverEscapeHatchThresholdCall),
         NewFinalizedState(NewFinalizedStateCall),
         Owner(OwnerCall),
         PermissionedProver(PermissionedProverCall),
-        PermissionedProverEnabled(PermissionedProverEnabledCall),
         ProxiableUUID(ProxiableUUIDCall),
         RenounceOwnership(RenounceOwnershipCall),
         SetPermissionedProver(SetPermissionedProverCall),
@@ -2648,6 +2648,11 @@ pub mod light_client {
                 return Ok(Self::Initialize(decoded));
             }
             if let Ok(decoded) =
+                <IsPermissionedProverEnabledCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::IsPermissionedProverEnabled(decoded));
+            }
+            if let Ok(decoded) =
                 <LagOverEscapeHatchThresholdCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::LagOverEscapeHatchThreshold(decoded));
@@ -2664,11 +2669,6 @@ pub mod light_client {
                 <PermissionedProverCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::PermissionedProver(decoded));
-            }
-            if let Ok(decoded) =
-                <PermissionedProverEnabledCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::PermissionedProverEnabled(decoded));
             }
             if let Ok(decoded) = <ProxiableUUIDCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
@@ -2739,15 +2739,15 @@ pub mod light_client {
                 }
                 Self::GetVersion(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Initialize(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::IsPermissionedProverEnabled(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::LagOverEscapeHatchThreshold(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::NewFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Owner(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::PermissionedProver(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::PermissionedProverEnabled(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::ProxiableUUID(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -2786,11 +2786,11 @@ pub mod light_client {
                 Self::GetStateHistoryCount(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetVersion(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Initialize(element) => ::core::fmt::Display::fmt(element, f),
+                Self::IsPermissionedProverEnabled(element) => ::core::fmt::Display::fmt(element, f),
                 Self::LagOverEscapeHatchThreshold(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Owner(element) => ::core::fmt::Display::fmt(element, f),
                 Self::PermissionedProver(element) => ::core::fmt::Display::fmt(element, f),
-                Self::PermissionedProverEnabled(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ProxiableUUID(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RenounceOwnership(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetPermissionedProver(element) => ::core::fmt::Display::fmt(element, f),
@@ -2850,6 +2850,11 @@ pub mod light_client {
             Self::Initialize(value)
         }
     }
+    impl ::core::convert::From<IsPermissionedProverEnabledCall> for LightClientCalls {
+        fn from(value: IsPermissionedProverEnabledCall) -> Self {
+            Self::IsPermissionedProverEnabled(value)
+        }
+    }
     impl ::core::convert::From<LagOverEscapeHatchThresholdCall> for LightClientCalls {
         fn from(value: LagOverEscapeHatchThresholdCall) -> Self {
             Self::LagOverEscapeHatchThreshold(value)
@@ -2868,11 +2873,6 @@ pub mod light_client {
     impl ::core::convert::From<PermissionedProverCall> for LightClientCalls {
         fn from(value: PermissionedProverCall) -> Self {
             Self::PermissionedProver(value)
-        }
-    }
-    impl ::core::convert::From<PermissionedProverEnabledCall> for LightClientCalls {
-        fn from(value: PermissionedProverEnabledCall) -> Self {
-            Self::PermissionedProverEnabled(value)
         }
     }
     impl ::core::convert::From<ProxiableUUIDCall> for LightClientCalls {
@@ -3037,6 +3037,20 @@ pub mod light_client {
         pub minor_version: u8,
         pub patch_version: u8,
     }
+    ///Container type for all return fields from the `isPermissionedProverEnabled` function with signature `isPermissionedProverEnabled()` and selector `0x826e41fc`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct IsPermissionedProverEnabledReturn(pub bool);
     ///Container type for all return fields from the `lagOverEscapeHatchThreshold` function with signature `lagOverEscapeHatchThreshold(uint256,uint256)` and selector `0xe0303301`
     #[derive(
         Clone,
@@ -3079,20 +3093,6 @@ pub mod light_client {
         Hash,
     )]
     pub struct PermissionedProverReturn(pub ::ethers::core::types::Address);
-    ///Container type for all return fields from the `permissionedProverEnabled` function with signature `permissionedProverEnabled()` and selector `0xbd32519a`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct PermissionedProverEnabledReturn(pub bool);
     ///Container type for all return fields from the `proxiableUUID` function with signature `proxiableUUID()` and selector `0x52d1902d`
     #[derive(
         Clone,
