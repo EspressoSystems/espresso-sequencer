@@ -14,7 +14,7 @@ library PolynomialEval {
     struct EvalDomain {
         uint256 logSize; // log_2(self.size)
         uint256 sizeInv; // Inverse of the size in the field
-        uint256[8] elements; // 1, g, g^2, ..., g^7
+        uint256[7] elements; // 1, g, g^2, ..., g^6
     }
 
     /// @dev stores vanishing poly, lagrange at 1, and Public input poly
@@ -40,8 +40,7 @@ library PolynomialEval {
                     0x86812a00ac43ea801669c640171203c41a496671bfbc065ac8db24d52cf31e5,
                     0x2d965651cdd9e4811f4e51b80ddca8a8b4a93ee17420aae6adaa01c2617c6e85,
                     0x12597a56c2e438620b9041b98992ae0d4e705b780057bf7766a2767cece16e1d,
-                    0x2d94117cd17bcf1290fd67c01155dd40807857dff4a5a0b4dc67befa8aa34fd,
-                    0x15ee2475bee517c4ee05e51fa1ee7312a8373a0b13db8c51baf04cb2e99bd2bd
+                    0x2d94117cd17bcf1290fd67c01155dd40807857dff4a5a0b4dc67befa8aa34fd
                 ]
             );
         } else if (domainSize == 1048576) {
@@ -55,8 +54,7 @@ library PolynomialEval {
                     0x2087ea2cd664278608fb0ebdb820907f598502c81b6690c185e2bf15cb935f42,
                     0x19ddbcaf3a8d46c15c0176fbb5b95e4dc57088ff13f4d1bd84c6bfa57dcdc0e0,
                     0x5a2c85cfc591789605cae818e37dd4161eef9aa666bec6fe4288d09e6d23418,
-                    0x11f70e5363258ff4f0d716a653e1dc41f1c64484d7f4b6e219d6377614a3905c,
-                    0x29e84143f5870d4776a92df8da8c6c9303d59088f37ba85f40cf6fd14265b4bc
+                    0x11f70e5363258ff4f0d716a653e1dc41f1c64484d7f4b6e219d6377614a3905c
                 ]
             );
         }
@@ -72,8 +70,7 @@ library PolynomialEval {
                     0x1277ae6415f0ef18f2ba5fb162c39eb7311f386e2d26d64401f4a25da77c253b,
                     0x2b337de1c8c14f22ec9b9e2f96afef3652627366f8170a0a948dad4ac1bd5e80,
                     0x2fbd4dd2976be55d1a163aa9820fb88dfac5ddce77e1872e90632027327a5ebe,
-                    0x107aab49e65a67f9da9cd2abf78be38bd9dc1d5db39f81de36bcfa5b4b039043,
-                    0xe14b6364a47e9c4284a9f80a5fc41cd212b0d4dbf8a5703770a40a9a343990
+                    0x107aab49e65a67f9da9cd2abf78be38bd9dc1d5db39f81de36bcfa5b4b039043
                 ]
             );
         } else {
@@ -144,7 +141,7 @@ library PolynomialEval {
     /// @dev Evaluate public input polynomial at point `zeta`.
     function evaluatePiPoly(
         EvalDomain memory self,
-        uint256[8] memory pi,
+        uint256[7] memory pi,
         uint256 zeta,
         uint256 vanishingPolyEval
     ) internal view returns (uint256 res) {
@@ -152,7 +149,7 @@ library PolynomialEval {
 
         if (vanishingPolyEval == 0) {
             uint256 group = 1;
-            for (uint256 i = 0; i < 8; i++) {
+            for (uint256 i = 0; i < 7; i++) {
                 if (zeta == group) {
                     return pi[i];
                 }
@@ -193,7 +190,7 @@ library PolynomialEval {
         // n(n - 1) to 3n
         //
         // credit: @shresthagrawal and @jakovmitrovski from CommonPrefix
-        uint256[8] memory suffix;
+        uint256[7] memory suffix;
 
         // Assume we have [a, b, c, d] where a = zeta - g^0, b = zeta - g^1, ...
         //
@@ -201,15 +198,15 @@ library PolynomialEval {
         // suffix[length - 1] = 1
         // suffix = [dcb, dc, d, 1]
         assembly {
-            let suffixPtr := add(suffix, mul(7, 0x20))
-            let localDomainElementsPtr := add(mload(add(self, 0x40)), mul(7, 0x20))
+            let suffixPtr := add(suffix, mul(6, 0x20))
+            let localDomainElementsPtr := add(mload(add(self, 0x40)), mul(6, 0x20))
             let currentElementSuffix := 1
 
             // Last element of suffix is set to 1
             mstore(suffixPtr, currentElementSuffix)
 
             // Calculate prefix and suffix products
-            for { let i := 1 } lt(i, 8) { i := add(i, 1) } {
+            for { let i := 1 } lt(i, 7) { i := add(i, 1) } {
                 // move suffix pointer
                 suffixPtr := sub(suffixPtr, 0x20)
 
@@ -235,7 +232,7 @@ library PolynomialEval {
 
             // Compute the sum term \sum_{i=0}^{length} currentElementPrefix * suffix[i] * pi[i] *
             // g^i
-            for { let i := 0 } lt(i, 8) { i := add(i, 1) } {
+            for { let i := 0 } lt(i, 7) { i := add(i, 1) } {
                 // sum += currentElementPrefix * suffix[i] * pi[i] * g^i
                 let currentTerm :=
                     mulmod(
@@ -275,7 +272,7 @@ library PolynomialEval {
     }
 
     /// @dev compute the EvalData for a given domain and a challenge zeta
-    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[8] memory publicInput)
+    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[7] memory publicInput)
         internal
         view
         returns (EvalData memory evalData)

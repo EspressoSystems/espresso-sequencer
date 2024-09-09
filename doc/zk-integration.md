@@ -147,21 +147,22 @@ contract RollupContract {
 ## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso light client contract
 
 For this integration, Espresso consensus verification is delegated to the Espresso light client contract. In practice
-the rollup contract will be given a Merkle root of all Espresso block commitments up to now[^1] and feed it to the 
-circuit. Still additional gadgets need to be introduced in order to implement the derivation pipeline logic consisting 
+the rollup contract will be given a Merkle root of all Espresso block commitments up to now[^1] and feed it to the
+circuit. Still additional gadgets need to be introduced in order to implement the derivation pipeline logic consisting
 at a high level of:
 
-- Collecting all the Espresso blocks since last update, along with proofs of membership for their commitments in 
-  the given Merkle root.
-- Filtering each of these Espresso blocks to gather all the transactions belonging to the rollups. 
+- Collecting all the Espresso blocks since last update, along with proofs of membership for their commitments in the
+  given Merkle root.
+- Filtering each of these Espresso blocks to gather all the transactions belonging to the rollups.
 - Establishing some equivalence between the commitment to the rollup transactions used in the zkVM and those same
   transactions obtained after namespace filtering.
 
-![image](zk-rollup-circuit-no-espresso-consensus.svg) **Figure 2:** Rollup circuit with additional gadgets _Espresso Derivation_. Private inputs of the circuit are written in uppercase and bold font.
+![image](zk-rollup-circuit-no-espresso-consensus.svg) **Figure 2:** Rollup circuit with additional gadgets _Espresso
+Derivation_. Private inputs of the circuit are written in uppercase and bold font.
 
 The circuit depicted in Figure 2 operates as follows:
 
-- The _Espresso Derivation_ gadget receives as public inputs a `blk_cm_root` which is the Merkle root of all finalized 
+- The _Espresso Derivation_ gadget receives as public inputs a `blk_cm_root` which is the Merkle root of all finalized
   Espresso block commitments up to now, and a commitment of transactions `cm_txs_rollup` that is used by _zkVM_ gadget.
   With witnesses of all transactions to the rollup `ROLLUP_TXS` and proofs that they are complete and correctly filtered
   from finalized Espresso blocks since last update `TXS_NAMESPACE_PROOFS`, it checks that:
@@ -205,16 +206,16 @@ contract RollupContract1 is RollupContract {
 
 ## Integration 2: Verify Espresso consensus inside the rollup circuit
 
-![image](zk-rollup-circuit.svg) **Figure 3:** Rollup circuit with additional gadgets _Espresso Consensus_ and 
-_Espresso Derivation_. Private inputs of the circuit are written in uppercase and bold font.
+![image](zk-rollup-circuit.svg) **Figure 3:** Rollup circuit with additional gadgets _Espresso Consensus_ and _Espresso
+Derivation_. Private inputs of the circuit are written in uppercase and bold font.
 
 The circuit depicted in Figure 3 operates as follows:
 
-- The _Espresso Consensus_ gadget checks the Merkle root of Espresso block commitments `blk_cm_root` using the 
+- The _Espresso Consensus_ gadget checks the Merkle root of Espresso block commitments `blk_cm_root` using the
   multi-signature `STATE_SIGS` obtained by the HotShot replicas. To achieve this goal, it is required to obtain the
-  stake table from the previous HotShot epoch `STAKE_TABLE_ENTRIES` as witness, containing the list of public keys 
-  with their respective stake. It can be linked to some old blocks from last epoch committed in the `blk_cm_root` via 
-  the witness `STAKE_TABLE_OPENINGS`. Finally, note that the first `blk_cm_root` value needs to be read from the light
+  stake table from the previous HotShot epoch `STAKE_TABLE_ENTRIES` as witness, containing the list of public keys with
+  their respective stake. It can be linked to some old blocks from last epoch committed in the `blk_cm_root` via the
+  witness `STAKE_TABLE_OPENINGS`. Finally, note that the first `blk_cm_root` value needs to be read from the light
   client contract. Afterward, no dependency on the light client contract is needed.
 - The other gadgets are the same as in Integration 1.
 
@@ -248,6 +249,4 @@ contract RollupContract2 is RollupContract {
     Note that the rollup state is updated at a much lower frequency (in the order of minutes / hours) than the Espresso
     state (in the order of seconds).
 
-
-[^2]:
-    Soon to be published.
+[^2]: Soon to be published.

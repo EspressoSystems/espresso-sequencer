@@ -41,37 +41,22 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === System Parameters ===
     //
-    /// @notice genesis block commitment index
-    uint32 internal genesisState;
-
-    /// @notice Finalized HotShot's light client state index
-    uint32 internal finalizedState;
-
     // === Storage ===
     //
-    /// @notice The commitment of the stake table used in current voting
-    bytes32 public votingStakeTableCommitment;
+    /// @notice genesis stake commitment
+    StakeTableState public genesisStakeTableState;
 
-    /// @notice The quorum threshold for the stake table used in current voting
-    uint256 public votingThreshold;
+    /// @notice genesis block commitment
+    LightClientState public genesisState;
 
-    /// @notice The commitment of the stake table frozen for change
-    bytes32 public frozenStakeTableCommitment;
-
-    /// @notice The quorum threshold for the frozen stake table
-    uint256 public frozenThreshold;
-
-    /// @notice mapping to store light client states in order to simplify upgrades
-    mapping(uint32 index => LightClientState value) public states;
+    /// @notice Finalized HotShot's light client state
+    LightClientState public finalizedState;
 
     /// @notice the address of the prover that can call the newFinalizedState function when the
     /// contract is
     /// in permissioned prover mode. This address is address(0) when the contract is not in the
     /// permissioned prover mode
     address public permissionedProver;
-
-    /// @notice a flag that indicates when a permissioned provrer is needed
-    bool public permissionedProverEnabled;
 
     /// @notice Max number of seconds worth of state commitments to record based on this block
     /// timestamp
@@ -93,38 +78,35 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param viewNum The latest view number of the finalized HotShot chain
     /// @param blockHeight The block height of the latest finalized block
     /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
-    /// @param feeLedgerComm The commitment to the fee ledger state (type: BN254::ScalarField)
-    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake table
-    /// @param stakeTableSchnorrKeyComm The commitment to the SchnorrVerKey column of the table
-    /// @param stakeTableAmountComm The commitment to the stake amount column of the stake table
-    /// @param threshold The (stake-weighted) quorum threshold for a QC to be considered as valid
     struct LightClientState {
         uint64 viewNum;
         uint64 blockHeight;
         BN254.ScalarField blockCommRoot;
-        BN254.ScalarField feeLedgerComm;
-        BN254.ScalarField stakeTableBlsKeyComm;
-        BN254.ScalarField stakeTableSchnorrKeyComm;
-        BN254.ScalarField stakeTableAmountComm;
-        uint256 threshold;
     }
 
-    /// @notice Simplified HotShot commitment struct
-    /// @param blockHeight The block height of the latest finalized HotShot block
-    /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
-    struct HotShotCommitment {
-        uint64 blockHeight;
-        BN254.ScalarField blockCommRoot;
+    /// @notice The finalized HotShot Stake state (as the digest of the entire HotShot state)
+    /// @param threshold The (stake-weighted) quorum threshold for a QC to be considered as valid
+    /// @param blsKeyComm The commitment to the BlsVerKey column of the stake table
+    /// @param schnorrKeyComm The commitment to the SchnorrVerKey column of the table
+    /// @param amountComm The commitment to the stake amount column of the stake table
+    struct StakeTableState {
+        uint256 threshold;
+        BN254.ScalarField blsKeyComm;
+        BN254.ScalarField schnorrKeyComm;
+        BN254.ScalarField amountComm;
     }
 
     /// @notice Simplified HotShot commitment struct
     /// @param l1BlockHeight the block height of l1 when this state update was stored
     /// @param l1BlockTimestamp the block timestamp of l1 when this state update was stored
-    /// @param hotShotCommitment The HotShot commitment info of the latest finalized HotShot block
+    /// @param hotShotBlockHeight The block height of the latest finalized HotShot block
+    /// @param hotShotBlockCommRoot The merkle root of historical block commitments
+    /// (BN254::ScalarField)
     struct StateHistoryCommitment {
         uint64 l1BlockHeight;
         uint64 l1BlockTimestamp;
-        HotShotCommitment hotShotCommitment;
+        uint64 hotShotBlockHeight;
+        BN254.ScalarField hotShotBlockCommRoot;
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -170,14 +152,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
+        StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod,
         address owner
     ) public initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
-        genesisState = 0;
-        finalizedState = 1;
-        _initializeState(_genesis, _stateHistoryRetentionPeriod);
+        _initializeState(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -201,34 +182,32 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param _genesis The initial state of the light client
+    /// @param _genesisStakeTableState The initial stake state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
     /// history
-    function _initializeState(LightClientState memory _genesis, uint32 _stateHistoryRetentionPeriod)
-        internal
-    {
+    function _initializeState(
+        LightClientState memory _genesis,
+        StakeTableState memory _genesisStakeTableState,
+        uint32 _stateHistoryRetentionPeriod
+    ) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
         // feeLedgerComm can be zero, if we optionally support fee ledger yet.
         if (
             _genesis.viewNum != 0 || _genesis.blockHeight != 0
-                || BN254.ScalarField.unwrap(_genesis.stakeTableBlsKeyComm) == 0
-                || BN254.ScalarField.unwrap(_genesis.stakeTableSchnorrKeyComm) == 0
-                || BN254.ScalarField.unwrap(_genesis.stakeTableAmountComm) == 0
-                || _genesis.threshold == 0
+                || BN254.ScalarField.unwrap(_genesisStakeTableState.blsKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesisStakeTableState.schnorrKeyComm) == 0
+                || BN254.ScalarField.unwrap(_genesisStakeTableState.amountComm) == 0
+                || _genesisStakeTableState.threshold == 0
         ) {
             revert InvalidArgs();
         }
-        states[genesisState] = _genesis;
-        states[finalizedState] = _genesis;
+        genesisState = _genesis;
+        genesisStakeTableState = _genesisStakeTableState;
+        finalizedState = _genesis;
 
         stateHistoryRetentionPeriod = _stateHistoryRetentionPeriod;
-
-        bytes32 initStakeTableComm = computeStakeTableComm(_genesis);
-        votingStakeTableCommitment = initStakeTableComm;
-        votingThreshold = _genesis.threshold;
-        frozenStakeTableCommitment = initStakeTableComm;
-        frozenThreshold = _genesis.threshold;
 
         updateStateHistory(uint64(block.number), uint64(block.timestamp), _genesis);
     }
@@ -253,43 +232,28 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.PlonkProof memory proof
     ) external virtual {
         //revert if we're in permissionedProver mode and the permissioned prover has not been set
-        if (permissionedProverEnabled && msg.sender != permissionedProver) {
+        if (isPermissionedProverEnabled() && msg.sender != permissionedProver) {
             revert ProverNotPermissioned();
         }
 
         if (
-            newState.viewNum <= getFinalizedState().viewNum
-                || newState.blockHeight <= getFinalizedState().blockHeight
+            newState.viewNum <= finalizedState.viewNum
+                || newState.blockHeight <= finalizedState.blockHeight
         ) {
             revert OutdatedState();
         }
-
         // format validity check
         BN254.validateScalarField(newState.blockCommRoot);
-        BN254.validateScalarField(newState.feeLedgerComm);
-        BN254.validateScalarField(newState.stakeTableBlsKeyComm);
-        BN254.validateScalarField(newState.stakeTableSchnorrKeyComm);
-        BN254.validateScalarField(newState.stakeTableAmountComm);
 
         // check plonk proof
         verifyProof(newState, proof);
 
         // upon successful verification, update the latest finalized state
-        states[finalizedState] = newState;
+        finalizedState = newState;
 
         updateStateHistory(uint64(block.number), uint64(block.timestamp), newState);
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
-    }
-
-    /// @dev Simple getter function for the genesis state
-    function getGenesisState() public view virtual returns (LightClientState memory) {
-        return states[genesisState];
-    }
-
-    /// @dev Simple getter function for the finalized state
-    function getFinalizedState() public view virtual returns (LightClientState memory) {
-        return states[finalizedState];
     }
 
     /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
@@ -301,35 +265,18 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
-        uint256[8] memory publicInput;
-        publicInput[0] = votingThreshold;
-        publicInput[1] = uint256(state.viewNum);
-        publicInput[2] = uint256(state.blockHeight);
-        publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
+        uint256[7] memory publicInput;
+        publicInput[0] = uint256(state.viewNum);
+        publicInput[1] = uint256(state.blockHeight);
+        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[3] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
+        publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
+        publicInput[6] = genesisStakeTableState.threshold;
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
-    }
-
-    /// @notice Given the light client state, compute the short commitment of the stake table
-    function computeStakeTableComm(LightClientState memory state)
-        public
-        pure
-        virtual
-        returns (bytes32)
-    {
-        return keccak256(
-            abi.encodePacked(
-                state.stakeTableBlsKeyComm,
-                state.stakeTableSchnorrKeyComm,
-                state.stakeTableAmountComm
-            )
-        );
     }
 
     /// @notice set the permissionedProverMode to true and set the permissionedProver to the
@@ -344,16 +291,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert NoChangeRequired();
         }
         permissionedProver = prover;
-        permissionedProverEnabled = true;
         emit PermissionedProverRequired(permissionedProver);
     }
 
     /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
     /// @dev if it was already disabled (permissioneProverMode == false), then revert with
     function disablePermissionedProverMode() public virtual onlyOwner {
-        if (permissionedProverEnabled) {
+        if (isPermissionedProverEnabled()) {
             permissionedProver = address(0);
-            permissionedProverEnabled = false;
             emit PermissionedProverNotRequired();
         } else {
             revert NoChangeRequired();
@@ -397,9 +342,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // add the L1 Block & HotShot commitment to the genesis state
         stateHistoryCommitments.push(
             StateHistoryCommitment(
-                blockNumber,
-                blockTimestamp,
-                HotShotCommitment(state.blockHeight, state.blockCommRoot)
+                blockNumber, blockTimestamp, state.blockHeight, state.blockCommRoot
             )
         );
     }
@@ -458,29 +401,27 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
     /// the provided HotShot height
     /// @param hotShotBlockHeight the HotShot block height
-    /// @return HotShotCommitment the HotShot commitment
+    /// @return hotShotBlockCommRoot the HotShot commitment root
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
         virtual
-        returns (HotShotCommitment memory)
+        returns (BN254.ScalarField hotShotBlockCommRoot)
     {
         uint256 commitmentsHeight = stateHistoryCommitments.length;
-        if (
-            hotShotBlockHeight
-                >= stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment.blockHeight
-        ) {
+        if (hotShotBlockHeight >= stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
+        {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
-            if (stateHistoryCommitments[i].hotShotCommitment.blockHeight > hotShotBlockHeight) {
-                return stateHistoryCommitments[i].hotShotCommitment;
+            if (stateHistoryCommitments[i].hotShotBlockHeight > hotShotBlockHeight) {
+                return stateHistoryCommitments[i].hotShotBlockCommRoot;
             }
         }
 
-        return stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment;
+        return stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockCommRoot;
     }
 
     /// @notice get the number of state history commitments
@@ -501,5 +442,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         stateHistoryRetentionPeriod = historySeconds;
+    }
+
+    /// @notice Check if permissioned prover is enabled
+    function isPermissionedProverEnabled() public view returns (bool) {
+        return (permissionedProver != address(0));
     }
 }

@@ -20,10 +20,10 @@ contract DeployLightClientTestScript is Script {
         cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
-        return deployContract(state, stateHistoryRetentionPeriod, owner);
+        return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
     }
 
     function runBench(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod)
@@ -44,18 +44,24 @@ contract DeployLightClientTestScript is Script {
         return (lcTestProxy, admin, state);
     }
 
-    function runDemo(uint32 stateHistoryRetentionPeriod, address owner)
-        external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
-        string[] memory cmds = new string[](1);
-        cmds[0] = "gen-demo-genesis";
+    // function runDemo(uint32 stateHistoryRetentionPeriod, address owner)
+    //     external
+    //     returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+    // {
+    //     string[] memory cmds = new string[](1);
+    //     cmds[0] = "gen-demo-genesis";
 
-        bytes memory result = vm.ffi(cmds);
-        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+    //     bytes memory result = vm.ffi(cmds);
+    //     LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
+    //     LC.StakeTableState memory stakeState = LC.StakeTableState(
+    //         state.threshold,
+    //         state.stakeTableBlsKeyComm,
+    //         state.stakeTableSchnorrKeyComm,
+    //         state.stakeTableAmountComm
+    //     );
 
-        return deployContract(state, stateHistoryRetentionPeriod, owner);
-    }
+    //     return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
+    // }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
@@ -63,17 +69,19 @@ contract DeployLightClientTestScript is Script {
     /// @return the light client state
     function deployContract(
         LC.LightClientState memory state,
+        LC.StakeTableState memory stakeState,
         uint32 stateHistoryRetentionPeriod,
         address owner
     ) public returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         vm.startBroadcast(owner);
 
-        LCMock lightClientContract = new LCMock(state, stateHistoryRetentionPeriod);
+        LCMock lightClientContract = new LCMock(state, stakeState, stateHistoryRetentionPeriod);
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
+            "initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address)",
             state,
+            stakeState,
             stateHistoryRetentionPeriod,
             owner
         );
