@@ -279,7 +279,7 @@ impl<'a, Types, T, State, const ARITY: usize> UpdateStateData<Types, State, ARIT
 where
     Types: NodeType,
     State: MerklizedState<Types, ARITY>,
-    T: UpdateStateData<Types, State, ARITY> + Send + Sync + 'static,
+    T: UpdateStateData<Types, State, ARITY> + Send + Sync,
 {
     async fn set_last_state_height(&mut self, height: usize) -> anyhow::Result<()> {
         self.inner.set_last_state_height(height).await
