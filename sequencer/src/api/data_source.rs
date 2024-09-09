@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
 use anyhow::{bail, Context};
 use async_trait::async_trait;
@@ -432,6 +432,8 @@ impl PublicNetworkConfig {
             commit_sha: self.commit_sha,
             builder: self.builder,
             random_builder: self.random_builder,
+            public_keys: HashSet::new(),
+            enable_registration_verification: false,
         })
     }
 }
