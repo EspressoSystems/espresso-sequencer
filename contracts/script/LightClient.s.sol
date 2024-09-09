@@ -21,26 +21,25 @@ contract DeployLightClientScript is Script {
     /// The proxy admin is set as the owner of the contract upon deployment.
     /// The `owner` parameter should be the address of the multisig wallet to ensure proper
     /// ownership management.
-    /// @param numBlocksPerEpoch the number of blocks per epoch
     /// @param numInitValidators number of the validators initially
     /// @param owner The address that will be set as the owner of the proxy (typically a multisig
     /// wallet).
-    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address owner)
+    function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
         public
         returns (
             address proxyAddress,
             address implementationAddress,
-            LC.LightClientState memory state
+            LC.LightClientState memory lightClientState
         )
     {
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(numInitValidators));
+        cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (state,,) = abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
         // get the deployer info from the environment and start broadcast as the deployer
         string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
@@ -49,7 +48,8 @@ contract DeployLightClientScript is Script {
         vm.startBroadcast(admin);
 
         proxyAddress = Upgrades.deployUUPSProxy(
-            contractName, abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch, owner))
+            contractName,
+            abi.encodeCall(LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, owner))
         );
 
         // Get the implementation address
@@ -176,22 +176,21 @@ contract DeployLightClientDefenderScript is Script {
     /// Defender
     /// This transaction must be signed via OpenZeppelin Defender's UI and once it completes
     /// another transaction is available to sign for the deployment of the proxy
-    function run()
+    function run(uint32 stateHistoryRetentionPeriod)
         public
-        returns (address proxy, address multisig, LC.LightClientState memory state)
+        returns (address proxy, address multisig, LC.LightClientState memory lightClientState)
     {
         // TODO for a production deployment provide the right genesis state and value
-        uint32 numBlocksPerEpoch = 5;
         uint32 numInitValidators = 1;
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
         cmds[3] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (state,,) = abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
         ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
         multisig = upgradeApprovalProcess.via;
@@ -211,7 +210,11 @@ contract DeployLightClientDefenderScript is Script {
         opts.defender.salt = bytes32(abi.encodePacked(contractSalt));
 
         proxy = Upgrades.deployUUPSProxy(
-            contractName, abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch, multisig)), opts
+            contractName,
+            abi.encodeCall(
+                LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, multisig)
+            ),
+            opts
         );
 
         //generate the file path, file output and write to the file
@@ -301,46 +304,46 @@ contract UpgradeLightClientWithDefenderScript is Script {
 /// @notice Deploys the upgradable light client contract
 /// the admin is not a multisig wallet but is the same as the associated mnemonic
 /// used in staging deployments only
-contract DeployLightClientContractWithoutMultiSigScript is Script {
-    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
+contract DeployLightClientContractScript is Script {
+    function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod)
         external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+        returns (
+            address payable proxyAddress,
+            address admin,
+            LC.LightClientState memory,
+            LC.StakeTableState memory
+        )
     {
         // TODO for a production deployment provide the right genesis state and value
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(numInitValidators));
+        cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
-        return deployContract(state, numBlocksPerEpoch);
-    }
-
-    function runDemo(uint32 numBlocksPerEpoch)
-        external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
-        string[] memory cmds = new string[](1);
-        cmds[0] = "gen-demo-genesis";
-
-        bytes memory result = vm.ffi(cmds);
-        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
-
-        return deployContract(state, numBlocksPerEpoch);
+        return deployContract(state, stakeState, stateHistoryRetentionPeriod);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
 
-    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
+    function deployContract(
+        LC.LightClientState memory state,
+        LC.StakeTableState memory stakeState,
+        uint32 stateHistoryRetentionPeriod
+    )
         private
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+        returns (
+            address payable proxyAddress,
+            address admin,
+            LC.LightClientState memory,
+            LC.StakeTableState memory
+        )
     {
         // get the deployer info from the environment and start broadcast as the deployer
         string memory seedPhrase = vm.envString("MNEMONIC");
@@ -352,9 +355,10 @@ contract DeployLightClientContractWithoutMultiSigScript is Script {
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
+            "initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address)",
             state,
-            numBlocksPerEpoch,
+            stakeState,
+            stateHistoryRetentionPeriod,
             admin
         );
 
@@ -364,7 +368,7 @@ contract DeployLightClientContractWithoutMultiSigScript is Script {
 
         proxyAddress = payable(address(proxy));
 
-        return (proxyAddress, admin, state);
+        return (proxyAddress, admin, state, stakeState);
     }
 }
 

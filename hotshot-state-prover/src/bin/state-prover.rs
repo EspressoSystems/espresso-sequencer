@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use espresso_types::{parse_duration, BaseVersion};
+use espresso_types::parse_duration;
 use ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
@@ -11,7 +11,7 @@ use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 use sequencer_utils::logging;
 use url::Url;
-use vbs::version::StaticVersionType;
+use vbs::version::StaticVersion;
 
 #[derive(Parser)]
 struct Args {
@@ -113,12 +113,12 @@ async fn main() {
 
     if args.daemon {
         // Launching the prover service daemon
-        if let Err(err) = run_prover_service(config, BaseVersion::instance()).await {
+        if let Err(err) = run_prover_service(config, StaticVersion::<0, 1> {}).await {
             tracing::error!("Error running prover service: {:?}", err);
         };
     } else {
         // Run light client state update once
-        if let Err(err) = run_prover_once(config, BaseVersion::instance()).await {
+        if let Err(err) = run_prover_once(config, StaticVersion::<0, 1> {}).await {
             tracing::error!("Error running prover once: {:?}", err);
         };
     }

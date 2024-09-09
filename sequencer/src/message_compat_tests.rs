@@ -17,7 +17,7 @@
 use std::path::Path;
 
 use committable::Committable;
-use espresso_types::{BaseVersion, Leaf, NodeState, PubKey, ValidatedState};
+use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::{
@@ -45,13 +45,13 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
-use vbs::{version::Version, BinarySerializer};
+use vbs::{
+    version::{StaticVersion, StaticVersionType, Version},
+    BinarySerializer,
+};
 
-type Serializer = vbs::Serializer<BaseVersion>;
-
-#[async_std::test]
 #[cfg(feature = "testing")]
-async fn test_message_compat() {
+async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{Payload, SeqTypes, Transaction};
     use hotshot_types::traits::network::Topic;
 
@@ -72,7 +72,11 @@ async fn test_message_compat() {
         old_version_last_view: ViewNumber::genesis(),
         new_version_first_view: ViewNumber::genesis(),
     };
-    let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+    let leaf = Leaf::genesis(
+        &ValidatedState::default(),
+        &NodeState::mock().with_current_version(Ver::VERSION),
+    )
+    .await;
     let block_header = leaf.block_header().clone();
     let transaction = Transaction::new(1_u32.into(), vec![1, 2, 3]);
     let (payload, metadata) = Payload::from_transactions(
@@ -111,20 +115,20 @@ async fn test_message_compat() {
                     &NodeState::mock(),
                 )
                 .await,
-                upgrade_certificate: Some(UpgradeCertificate {
-                    data: upgrade_data.clone(),
-                    vote_commitment: upgrade_data.commit(),
-                    view_number: ViewNumber::genesis(),
-                    signatures: Default::default(),
-                    _pd: Default::default(),
-                }),
-                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate {
-                    data: timeout_data.clone(),
-                    vote_commitment: timeout_data.commit(),
-                    view_number: ViewNumber::genesis(),
-                    signatures: Default::default(),
-                    _pd: Default::default(),
-                })),
+                upgrade_certificate: Some(UpgradeCertificate::new(
+                    upgrade_data.clone(),
+                    upgrade_data.commit(),
+                    ViewNumber::genesis(),
+                    Default::default(),
+                    Default::default(),
+                )),
+                proposal_certificate: Some(ViewChangeEvidence::Timeout(TimeoutCertificate::new(
+                    timeout_data.clone(),
+                    timeout_data.commit(),
+                    ViewNumber::genesis(),
+                    Default::default(),
+                    Default::default(),
+                ))),
             },
             signature: signature.clone(),
             _pd: Default::default(),
@@ -151,27 +155,27 @@ async fn test_message_compat() {
             data: view_sync_finalize_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        GeneralConsensusMessage::ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate2 {
-            data: view_sync_pre_commit_data.clone(),
-            vote_commitment: view_sync_pre_commit_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
-        GeneralConsensusMessage::ViewSyncCommitCertificate(ViewSyncCommitCertificate2 {
-            data: view_sync_commit_data.clone(),
-            vote_commitment: view_sync_commit_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
-        GeneralConsensusMessage::ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2 {
-            data: view_sync_finalize_data.clone(),
-            vote_commitment: view_sync_finalize_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
+        GeneralConsensusMessage::ViewSyncPreCommitCertificate(ViewSyncPreCommitCertificate2::new(
+            view_sync_pre_commit_data.clone(),
+            view_sync_pre_commit_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
+        GeneralConsensusMessage::ViewSyncCommitCertificate(ViewSyncCommitCertificate2::new(
+            view_sync_commit_data.clone(),
+            view_sync_commit_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
+        GeneralConsensusMessage::ViewSyncFinalizeCertificate(ViewSyncFinalizeCertificate2::new(
+            view_sync_finalize_data.clone(),
+            view_sync_finalize_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
         GeneralConsensusMessage::TimeoutVote(TimeoutVote {
             signature: (sender, signature.clone()),
             data: timeout_data,
@@ -206,13 +210,13 @@ async fn test_message_compat() {
             data: da_data.clone(),
             view_number: ViewNumber::genesis(),
         }),
-        DaConsensusMessage::DaCertificate(DaCertificate {
-            data: da_data.clone(),
-            vote_commitment: da_data.commit(),
-            view_number: ViewNumber::genesis(),
-            signatures: Default::default(),
-            _pd: Default::default(),
-        }),
+        DaConsensusMessage::DaCertificate(DaCertificate::new(
+            da_data.clone(),
+            da_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        )),
         DaConsensusMessage::VidDisperseMsg(Proposal {
             data: VidDisperseShare::from_vid_disperse(VidDisperse::from_membership(
                 ViewNumber::genesis(),
@@ -239,8 +243,11 @@ async fn test_message_compat() {
         .map(|kind| Message { kind, sender })
         .collect::<Vec<Message<SeqTypes>>>();
 
+    let version_sub_dir = format!("v{}", Ver::VERSION.minor);
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
+    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../data")
+        .join(version_sub_dir);
     let expected_bytes = std::fs::read(data_dir.join("messages.json")).unwrap();
     let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
 
@@ -278,7 +285,7 @@ async fn test_message_compat() {
     // Ensure the current serialization implementation generates the same binary output as the
     // committed reference.
     let expected = std::fs::read(data_dir.join("messages.bin")).unwrap();
-    let actual = Serializer::serialize(&messages).unwrap();
+    let actual = vbs::Serializer::<Ver>::serialize(&messages).unwrap();
     if actual != expected {
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
@@ -300,6 +307,20 @@ async fn test_message_compat() {
     }
 
     // Ensure the current `Message` type can be parsed from the committed reference binary.
-    let parsed: Vec<Message<SeqTypes>> = Serializer::deserialize(&expected).unwrap();
+    let parsed: Vec<Message<SeqTypes>> = vbs::Serializer::<Ver>::deserialize(&expected).unwrap();
     assert_eq!(parsed, messages);
+}
+
+#[async_std::test]
+async fn test_v1_message_compat() {
+    test_message_compat(StaticVersion::<0, 1> {}).await;
+}
+
+#[async_std::test]
+async fn test_v2_message_compat() {
+    test_message_compat(StaticVersion::<0, 2> {}).await;
+}
+#[async_std::test]
+async fn test_v3_message_compat() {
+    test_message_compat(StaticVersion::<0, 3> {}).await;
 }

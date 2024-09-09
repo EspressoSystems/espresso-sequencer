@@ -22,7 +22,7 @@ use crate::SeqTypes;
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
-type HotShotClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
+type HotShotClient<ApiVer> = surf_disco::Client<hotshot_query_service::Error, ApiVer>;
 
 #[derive(Clone, Debug)]
 pub struct CommitmentTaskOptions {
@@ -62,9 +62,9 @@ pub struct CommitmentTaskOptions {
 }
 
 /// main logic for the commitment task, which sync the latest blocks from HotShot to L1 contracts
-pub async fn run_hotshot_commitment_task<Ver: StaticVersionType>(opt: &CommitmentTaskOptions) {
+pub async fn run_hotshot_commitment_task<ApiVer: StaticVersionType>(opt: &CommitmentTaskOptions) {
     // init a client connecting to HotShot query service
-    let hotshot = HotShotClient::<Ver>::builder(
+    let hotshot = HotShotClient::<ApiVer>::builder(
         opt.query_service_url
             .clone()
             .expect("query service URL must be specified"),
@@ -87,8 +87,8 @@ pub async fn run_hotshot_commitment_task<Ver: StaticVersionType>(opt: &Commitmen
     sequence(hotshot, contract, opt.delay).await;
 }
 
-async fn sequence<Ver: StaticVersionType>(
-    hotshot: HotShotClient<Ver>,
+async fn sequence<ApiVer: StaticVersionType>(
+    hotshot: HotShotClient<ApiVer>,
     contract: HotShot<Signer>,
     delay: Option<Duration>,
 ) {
@@ -147,7 +147,7 @@ trait HotShotDataSource {
 }
 
 #[async_trait]
-impl<Ver: StaticVersionType> HotShotDataSource for HotShotClient<Ver> {
+impl<ApiVer: StaticVersionType> HotShotDataSource for HotShotClient<ApiVer> {
     type Error = hotshot_query_service::Error;
 
     async fn block_height(&self) -> Result<u64, Self::Error> {

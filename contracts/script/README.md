@@ -9,7 +9,7 @@
    In the home folder of this repo, start a nix shell by entering `nix-shell` in the terminal.
 3. **Compile Contracts (if necessary)** If the contracts have never been compiled, run `forge build`.
 4. **Set Environment Variables**  
-   Set the values for `NUM_BLOCKS_PER_EPOCH` and `NUM_INIT_VALIDATORS` in the `.env.contracts` file.
+   Set the values for `STATE_HISTORY_RETENTION_PERIOD` and `NUM_INIT_VALIDATORS` in the `.env.contracts` file.
 
 ### If Using OpenZeppelin Defender
 
@@ -143,7 +143,7 @@ Client contract have to be upgraded and should use the new PlonkVerifier contrac
 ```bash
    source .env.contracts && \
    forge clean && \
-   forge script contracts/script/LightClient.s.sol:DeployLightClientScript $NUM_BLOCKS_PER_EPOCH $NUM_INIT_VALIDATORS $SAFE_MULTISIG_ADDRESS \
+   forge script contracts/script/LightClient.s.sol:DeployLightClientScript $NUM_INIT_VALIDATORS $SAFE_MULTISIG_ADDRESS \
    --sig 'run(uint32, uint32, address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
@@ -159,7 +159,8 @@ Client contract have to be upgraded and should use the new PlonkVerifier contrac
 ```bash
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/LightClient.s.sol:DeployLightClientDefenderScript \
+forge script contracts/script/LightClient.s.sol:DeployLightClientDefenderScript $STATE_HISTORY_RETENTION_PERIOD \
+--sig 'run(uint32)' \
 --ffi --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
 --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
@@ -171,8 +172,8 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientDefenderScript 
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
-$LIGHT_CLIENT_CONTRACT_ADDRESS \
-contracts/src/LightClient.sol:LightClient
+$LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS \
+contracts/src/LightClient.sol:LightClient --watch
 ```
 
 ### 3. Inform Etherscan about your proxy
@@ -288,7 +289,7 @@ file.
 ### 1. Deploy the LightClient Contract
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractWithoutMultiSigScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractWithoutMultiSigScript $NUM_INIT_VALIDATORS $STATE_HISTORY_RETENTION_PERIOD \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -303,8 +304,8 @@ forge script contracts/script/LightClient.s.sol:UpgradeLightClientWithoutMultisi
 --rpc-url https://ethereum-sepolia.publicnode.com
 ```
 
-_Note_: the `$mnemonicOffset` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is the
-first address in that wallet. Otherwise, please specify the correct `$mnemonicOffset`
+_Note_: the `$MNEMONIC_OFFSET` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is the
+first address in that wallet. Otherwise, please specify the correct `$MNEMONIC_OFFSET`
 
 ### 3. Verify the Contract
 

@@ -1,4 +1,4 @@
-use super::{state::ValidatedState, BaseVersion};
+use super::{state::ValidatedState, MarketplaceVersion};
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
@@ -279,7 +279,7 @@ impl HasUrls for SolverAuctionResults {
     }
 }
 
-type SurfClient = surf_disco::Client<ServerError, BaseVersion>;
+type SurfClient = surf_disco::Client<ServerError, MarketplaceVersion>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 /// Auction Results provider holding the Url of the solver in order to fetch auction results.

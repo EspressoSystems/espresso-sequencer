@@ -7,10 +7,13 @@ use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
     message::MessageKind,
-    traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
+    traits::{
+        network::{BroadcastDelay, ConnectedNetwork, Topic},
+        node_implementation::Versions,
+    },
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 use url::Url;
 
 /// An external message that can be sent to or received from a node
@@ -33,7 +36,7 @@ pub struct RollCallInfo {
 }
 
 /// The external event handler state
-pub struct ExternalEventHandler {
+pub struct ExternalEventHandler<V: Versions> {
     // The `RollCallInfo` of the node (used in the roll call response)
     pub roll_call_info: RollCallInfo,
 
@@ -45,6 +48,8 @@ pub struct ExternalEventHandler {
 
     // The outbound message queue
     pub outbound_message_sender: Sender<OutboundMessage>,
+
+    _pd: PhantomData<V>,
 }
 
 // The different types of outbound messages (broadcast or direct)
@@ -54,7 +59,7 @@ pub enum OutboundMessage {
     Broadcast(Vec<u8>),
 }
 
-impl ExternalEventHandler {
+impl<V: Versions> ExternalEventHandler<V> {
     /// Creates a new `ExternalEventHandler` with the given network and roll call info
     pub async fn new<N: ConnectedNetwork<PubKey>>(
         network: Arc<N>,
@@ -90,6 +95,7 @@ impl ExternalEventHandler {
             public_key,
             _tasks: tasks,
             outbound_message_sender,
+            _pd: Default::default(),
         })
     }
 

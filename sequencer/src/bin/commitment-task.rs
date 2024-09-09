@@ -2,10 +2,13 @@ use std::{io, time::Duration};
 
 use async_std::task::spawn;
 use clap::Parser;
-use espresso_types::{parse_duration, BaseVersion};
+use espresso_types::parse_duration;
 use ethers::prelude::*;
 use futures::FutureExt;
-use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
+use sequencer::{
+    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+    SequencerApiVersion,
+};
 use sequencer_utils::logging;
 use tide_disco::{error::ServerError, Api};
 use url::Url;
@@ -65,7 +68,7 @@ async fn main() {
     opt.logging.init();
 
     if let Some(port) = opt.port {
-        start_http_server(port, opt.hotshot_address, BaseVersion::instance()).unwrap();
+        start_http_server(port, opt.hotshot_address, SequencerApiVersion::instance()).unwrap();
     }
 
     let hotshot_contract_options = CommitmentTaskOptions {
@@ -79,19 +82,19 @@ async fn main() {
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
-    run_hotshot_commitment_task::<BaseVersion>(&hotshot_contract_options).await;
+    run_hotshot_commitment_task::<SequencerApiVersion>(&hotshot_contract_options).await;
 }
 
-fn start_http_server<Ver: StaticVersionType + 'static>(
+fn start_http_server<ApiVer: StaticVersionType + 'static>(
     port: u16,
     hotshot_address: Address,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> io::Result<()> {
     let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
+    let mut api = Api::<(), ServerError, ApiVer>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("gethotshotcontract", move |_, _| {
@@ -108,8 +111,8 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
 
 #[cfg(test)]
 mod test {
-    use espresso_types::BaseVersion;
     use portpicker::pick_unused_port;
+    use sequencer::SequencerApiVersion;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use vbs::version::StaticVersionType;
@@ -124,10 +127,10 @@ mod test {
         let expected_addr = "0xED15E1FE0789c524398137a066ceb2EF9884E5D8"
             .parse::<Address>()
             .unwrap();
-        start_http_server(port, expected_addr, BaseVersion::instance())
+        start_http_server(port, expected_addr, SequencerApiVersion::instance())
             .expect("Failed to start the server");
 
-        let client: Client<ServerError, BaseVersion> =
+        let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 

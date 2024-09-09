@@ -11,12 +11,15 @@ contract UpgradeLightClientScript is Script {
     /// @param mostRecentlyDeployedProxy address of deployed proxy
     /// @return address of the proxy
     /// TODO get the most recent deployment from the devops tooling
-    function run(address mostRecentlyDeployedProxy, uint256 newField, address admin)
-        external
-        returns (address)
-    {
+    function run(
+        address mostRecentlyDeployedProxy,
+        uint256 newField,
+        uint256 extraField,
+        address admin
+    ) external returns (address) {
         vm.startBroadcast(admin);
-        address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()), newField);
+        address proxy =
+            upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()), newField, extraField);
         vm.stopBroadcast();
         return proxy;
     }
@@ -27,13 +30,17 @@ contract UpgradeLightClientScript is Script {
     /// @param proxyAddress address of proxy
     /// @param newLightClient address of new implementation
     /// @return address of the proxy
-    function upgradeLightClient(address proxyAddress, address newLightClient, uint256 newField)
-        public
-        returns (address)
-    {
+    function upgradeLightClient(
+        address proxyAddress,
+        address newLightClient,
+        uint256 newField,
+        uint256 extraField
+    ) public returns (address) {
         LC proxy = LC(proxyAddress); //make the function call on the previous implementation
 
-        proxy.upgradeToAndCall(newLightClient, abi.encodeCall(LCV2.initializeV2, newField)); //proxy
+        proxy.upgradeToAndCall(
+            newLightClient, abi.encodeCall(LCV2.initializeV2, (newField, extraField))
+        ); //proxy
             // address now points to the new
             // implementation
         return address(proxy);

@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, BaseVersion};
+use espresso_types::{parse_duration, MockSequencerVersions};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -25,6 +25,7 @@ use sequencer::{
     persistence,
     state_signature::relay_server::run_relay_server,
     testing::TestConfigBuilder,
+    SequencerApiVersion,
 };
 use sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
@@ -187,14 +188,14 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config, BaseVersion::instance()).await;
+    let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
 
     tracing::info!("Hotshot config {config:?}");
 
-    let light_client_genesis = network.light_client_genesis();
+    let lc_genesis = network.light_client_genesis();
 
     let contracts = Contracts::new();
     let mut light_client_addresses = vec![];
@@ -238,7 +239,7 @@ async fn main() -> anyhow::Result<()> {
             account_index,
             true,
             None,
-            async { Ok(light_client_genesis.clone()) }.boxed(),
+            async { Ok(lc_genesis.clone()) }.boxed(),
             contracts.clone(),
         )
         .await?;
@@ -285,7 +286,7 @@ async fn main() -> anyhow::Result<()> {
 
         let prover_handle = spawn(run_prover_service_with_stake_table(
             prover_config,
-            BaseVersion::instance(),
+            SequencerApiVersion::instance(),
             Arc::new(st.clone()),
         ));
         handles.push(prover_handle);
@@ -298,7 +299,7 @@ async fn main() -> anyhow::Result<()> {
             format!("http://0.0.0.0:{relay_server_port}")
                 .parse()
                 .unwrap(),
-            BaseVersion::instance(),
+            SequencerApiVersion::instance(),
         )
         .await;
 
@@ -337,7 +338,7 @@ async fn main() -> anyhow::Result<()> {
         dev_node_port,
         mock_contracts,
         dev_info,
-        BaseVersion::instance(),
+        SequencerApiVersion::instance(),
     ));
     handles.push(dev_node_handle);
 
@@ -366,18 +367,18 @@ impl<S: Signer + Clone + 'static> ReadState for ApiState<S> {
     }
 }
 
-async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone + 'static>(
+async fn run_dev_node_server<ApiVer: StaticVersionType + 'static, S: Signer + Clone + 'static>(
     port: u16,
     contracts: BTreeMap<u64, LightClientMock<SignerMiddleware<Provider<Http>, S>>>,
     dev_info: DevInfo,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> anyhow::Result<()> {
     let mut app = tide_disco::App::<_, ServerError>::with_state(ApiState(contracts));
     let toml =
         toml::from_str::<toml::value::Value>(include_str!("../../api/espresso_dev_node.toml"))
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<_, ServerError, Ver>::new(toml)
+    let mut api = Api::<_, ServerError, ApiVer>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     api.get("devinfo", move |_, _| {
         let info = dev_info.clone();
@@ -387,7 +388,7 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
     .at("sethotshotdown", move |req, state: &ApiState<S>| {
         async move {
             let body = req
-                .body_auto::<SetHotshotDownReqBody, Ver>(Ver::instance())
+                .body_auto::<SetHotshotDownReqBody, ApiVer>(ApiVer::instance())
                 .map_err(ServerError::from_request_error)?;
 
             // if chain id is not provided, primary L1 light client is used
@@ -422,7 +423,7 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
     .at("sethotshotup", move |req, state| {
         async move {
             let chain_id = req
-                .body_auto::<Option<SetHotshotUpReqBody>, Ver>(Ver::instance())
+                .body_auto::<Option<SetHotshotUpReqBody>, ApiVer>(ApiVer::instance())
                 .map_err(ServerError::from_request_error)?
                 .map(|b| b.chain_id);
 
@@ -500,7 +501,7 @@ mod tests {
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
-    use espresso_types::{BaseVersion, BlockMerkleTree, Header, SeqTypes, Transaction};
+    use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
@@ -510,7 +511,7 @@ mod tests {
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use rand::Rng;
-    use sequencer::api::endpoints::NamespaceProofQueryData;
+    use sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
     use sequencer_utils::{init_signer, test_utils::setup_test, Anvil, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
@@ -577,7 +578,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, BaseVersion> =
+        let api_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -751,7 +752,7 @@ mod tests {
             }
         }
 
-        let dev_node_client: Client<ServerError, BaseVersion> =
+        let dev_node_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 
@@ -895,7 +896,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, BaseVersion> =
+        let api_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -910,7 +911,7 @@ mod tests {
             .await
             .unwrap();
 
-        let dev_node_client: Client<ServerError, BaseVersion> =
+        let dev_node_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 

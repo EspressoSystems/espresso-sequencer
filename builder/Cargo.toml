@@ -11,13 +11,12 @@ libp2p = ["sequencer/libp2p"]
 
 [dependencies]
 anyhow = { workspace = true }
-async-broadcast = "0.7.0"
+async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = "2.2"
 async-std = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
-cld = { workspace = true }
 committable = { workspace = true }
 dotenvy = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
@@ -35,6 +34,7 @@ hotshot-types = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true, features = ["bls"] }
 libp2p = { workspace = true }
+libp2p-networking = { workspace = true }
 portpicker = { workspace = true }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }

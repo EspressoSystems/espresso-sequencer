@@ -3,8 +3,7 @@ pragma solidity ^0.8.20;
 import { Script } from "forge-std/Script.sol";
 
 import { Defender, ApprovalProcessResponse } from "openzeppelin-foundry-upgrades/Defender.sol";
-import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
-import { PlonkVerifier as PV } from "../src/libraries/PlonkVerifier.sol";
+import { Options, Upgrades } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
 /// @notice Deployed the PlonkVerifier library Contract using OpenZeppelin Defender.

@@ -437,10 +437,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
         // starting in a view in which we had already voted before the restart, and prevents
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
-        let mut view = max(highest_voted_view, leaf.view_number());
-        if view != ViewNumber::genesis() {
-            view += 1;
-        }
+        let view = max(highest_voted_view, leaf.view_number());
 
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
@@ -470,6 +467,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             state,
             validated_state,
             view,
+            highest_voted_view,
             saved_proposals,
             high_qc,
             undecided_leaves.into_values().collect(),

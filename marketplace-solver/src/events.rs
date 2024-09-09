@@ -2,20 +2,22 @@ use std::{pin::Pin, sync::Arc};
 
 use anyhow::Context;
 use async_std::sync::RwLock;
-use espresso_types::{BaseVersion, SeqTypes};
+use espresso_types::SeqTypes;
 use futures::{Stream, StreamExt as _};
 use hotshot::types::Event;
 use hotshot_events_service::{events, events_source::StartupInfo};
 use surf_disco::Client;
 use tide_disco::Url;
+use vbs::version::StaticVersion;
 
 use crate::state::GlobalState;
 
-pub struct EventsServiceClient(Client<events::Error, BaseVersion>);
+// TODO (ab): Change
+pub struct EventsServiceClient(Client<events::Error, StaticVersion<0, 1>>);
 
 impl EventsServiceClient {
     pub async fn new(url: Url) -> Self {
-        let client = Client::<events::Error, BaseVersion>::new(url.clone());
+        let client = Client::new(url.clone());
 
         client.connect(None).await;
 
@@ -50,13 +52,13 @@ pub async fn handle_events(
     while let Some(event) = stream.next().await {
         let event = event?;
 
-        tracing::info!("received event {:?}", event.event);
+        tracing::debug!("received event {:?}", event.event);
 
         // TODO ED: Remove this lint later
         #[allow(clippy::single_match)]
         match event.event {
             hotshot::types::EventType::ViewFinished { view_number } => {
-                tracing::info!("received view finished event {view_number:?}")
+                tracing::debug!("received view finished event {view_number:?}")
             }
             _ => (),
         }

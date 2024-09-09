@@ -9,26 +9,25 @@ import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy
 import { LightClientV2 as LCV2 } from "../LightClientV2.sol";
 
 contract DeployLightClientTestScript is Script {
-    function run(uint32 numBlocksPerEpoch, uint64 numInitValidators, address owner)
+    function run(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
         // TODO for a production deployment provide the right genesis state and value
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(numInitValidators));
+        cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
-        return deployContract(state, numBlocksPerEpoch, owner);
+        return deployContract(state, stakeState, stateHistoryRetentionPeriod, owner);
     }
 
-    function runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)
+    function runBench(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod)
         external
         returns (address payable, address, LC.LightClientState memory)
     {
@@ -37,25 +36,13 @@ contract DeployLightClientTestScript is Script {
         LC.LightClientState memory state;
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
-        (lcTestProxy, admin, state) = this.run(numBlocksPerEpoch, numInitValidators, admin);
+        (lcTestProxy, admin, state) =
+            this.run(numInitValidators, stateHistoryRetentionPeriod, admin);
         LCMock lc = LCMock(lcTestProxy);
         vm.prank(admin);
         lc.setPermissionedProver(admin);
 
         return (lcTestProxy, admin, state);
-    }
-
-    function runDemo(uint32 numBlocksPerEpoch, address owner)
-        external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
-        string[] memory cmds = new string[](1);
-        cmds[0] = "gen-demo-genesis";
-
-        bytes memory result = vm.ffi(cmds);
-        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
-
-        return deployContract(state, numBlocksPerEpoch, owner);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
@@ -64,18 +51,20 @@ contract DeployLightClientTestScript is Script {
     /// @return the light client state
     function deployContract(
         LC.LightClientState memory state,
-        uint32 numBlocksPerEpoch,
+        LC.StakeTableState memory stakeState,
+        uint32 stateHistoryRetentionPeriod,
         address owner
     ) public returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         vm.startBroadcast(owner);
 
-        LCMock lightClientContract = new LCMock(state, numBlocksPerEpoch);
+        LCMock lightClientContract = new LCMock(state, stakeState, stateHistoryRetentionPeriod);
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
+            "initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address)",
             state,
-            numBlocksPerEpoch,
+            stakeState,
+            stateHistoryRetentionPeriod,
             owner
         );
 
@@ -93,45 +82,45 @@ contract DeployLightClientTestScript is Script {
 /// the admin is not a multisig wallet but is the same as the associated mnemonic
 /// used in staging deployments only
 contract DeployLightClientContractWithoutMultiSigScript is Script {
-    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
+    function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod)
         external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+        returns (
+            address payable proxyAddress,
+            address admin,
+            LC.LightClientState memory,
+            LC.StakeTableState memory
+        )
     {
         // TODO for a production deployment provide the right genesis state and value
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(numInitValidators));
+        cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state,,) =
-            abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeTableState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
-        return deployContract(state, numBlocksPerEpoch);
-    }
-
-    function runDemo(uint32 numBlocksPerEpoch)
-        external
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
-        string[] memory cmds = new string[](1);
-        cmds[0] = "gen-demo-genesis";
-
-        bytes memory result = vm.ffi(cmds);
-        LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
-
-        return deployContract(state, numBlocksPerEpoch);
+        return deployContract(state, stakeTableState, stateHistoryRetentionPeriod);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
 
-    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
+    function deployContract(
+        LC.LightClientState memory state,
+        LC.StakeTableState memory stakeTableState,
+        uint32 stateHistoryRetentionPeriod
+    )
         private
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
+        returns (
+            address payable proxyAddress,
+            address admin,
+            LC.LightClientState memory,
+            LC.StakeTableState memory
+        )
     {
         // get the deployer info from the environment and start broadcast as the deployer
         string memory seedPhrase = vm.envString("MNEMONIC");
@@ -143,9 +132,10 @@ contract DeployLightClientContractWithoutMultiSigScript is Script {
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
+            "initialize((uint64,uint64,uint256),(uint256,uint256,uint256,uint256),uint32,address)",
             state,
-            numBlocksPerEpoch,
+            stakeTableState,
+            stateHistoryRetentionPeriod,
             admin
         );
 
@@ -155,7 +145,7 @@ contract DeployLightClientContractWithoutMultiSigScript is Script {
 
         proxyAddress = payable(address(proxy));
 
-        return (proxyAddress, admin, state);
+        return (proxyAddress, admin, state, stakeTableState);
     }
 }
 
