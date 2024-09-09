@@ -134,18 +134,19 @@ mod test {
         let solver_api = mock_solver.solver_api();
         let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
-        // Create a list of signature keys for rollup registration data
-        let mut signature_keys = Vec::new();
-
         let private_key =
             <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
         let signature_key = BLSPubKey::from_private(&private_key);
 
-        let private_key =
-            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
-        signature_keys.push(BLSPubKey::from_private(&private_key));
+        // Create a list of signature keys for rollup registration data
+        // including the signature key which signed the registration body
+        let mut signature_keys = vec![signature_key];
 
-        signature_keys.push(signature_key);
+        for _ in 0..10 {
+            let private_key =
+                <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+            signature_keys.push(BLSPubKey::from_private(&private_key))
+        }
 
         // Initialize a rollup registration with namespace id = 1
         let reg_ns_1_body = RollupRegistrationBody {
@@ -204,20 +205,19 @@ mod test {
         let solver_api = mock_solver.solver_api();
         let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
-        // Create a list of signature keys for rollup registration data
-        let mut signature_keys = Vec::new();
-
         let private_key =
             <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
         let signature_key = BLSPubKey::from_private(&private_key);
+
+        // Create a list of signature keys for rollup registration data
+        // including the signature key which signed the registration body
+        let mut signature_keys = vec![signature_key];
 
         for _ in 0..10 {
             let private_key =
                 <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
             signature_keys.push(BLSPubKey::from_private(&private_key))
         }
-
-        signature_keys.push(signature_key);
 
         // Initialize a rollup registration with namespace id = 1
         let reg_ns_1_body = RollupRegistrationBody {
@@ -288,20 +288,19 @@ mod test {
         let solver_api = mock_solver.solver_api();
         let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(solver_api);
 
-        // Create a list of signature keys for rollup registration data
-        let mut signature_keys = Vec::new();
-
         let private_key =
             <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
         let signature_key = BLSPubKey::from_private(&private_key);
+
+        // Create a list of signature keys for rollup registration data
+        // including the signature key which signed the registration body
+        let mut signature_keys = vec![signature_key];
 
         for _ in 0..10 {
             let private_key =
                 <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
             signature_keys.push(BLSPubKey::from_private(&private_key))
         }
-
-        signature_keys.push(signature_key);
 
         // Initialize a rollup registration with namespace id = 1
         let reg_ns_1_body = RollupRegistrationBody {
