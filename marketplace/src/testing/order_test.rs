@@ -480,7 +480,8 @@ async fn test_builder_order_chain_fork() {
         transaction_history_branch_2.extend(transactions_branch_2);
     }
 
-    // This will fail if no fork has occurred
+    // With a fork, the transaction history should match once all transactions
+    // have been processed.
     assert_eq!(
         transaction_history_branch_1, transaction_history_branch_2,
         "even with a fork, the transaction history branches should match"
