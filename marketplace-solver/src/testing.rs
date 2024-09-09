@@ -405,7 +405,8 @@ mod test {
         // Ensure the registration result matches the initial registration data
         assert_eq!(reg_ns_1, result);
 
-        let signature_key = signature_keys.remove(10);
+        let signature_key = BLSPubKey::from_private(&private_key);
+        signature_keys.retain(|&key| key != signature_key);
 
         // We update the rollup but the signature key in the body is not from the signature keys list so this should fail
         let update_body = RollupUpdatebody {
