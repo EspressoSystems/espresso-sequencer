@@ -1527,7 +1527,7 @@ mod test {
             stop_proposing_view: 10,
         });
 
-        let upgrade_type = UpgradeType::Fee {
+        let upgrade_type = UpgradeType::Marketplace {
             chain_config: ChainConfig {
                 max_block_size: 400.into(),
                 base_fee: 2.into(),
