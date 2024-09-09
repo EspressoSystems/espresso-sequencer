@@ -1119,6 +1119,7 @@ mod test {
         ValidatorConfig,
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
+    use options::Config;
     use portpicker::pick_unused_port;
     use sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
     use surf_disco::Client;
@@ -1816,5 +1817,44 @@ mod test {
             ))
             .unwrap()
         );
+    }
+
+    #[async_std::test]
+    async fn test_api_get_version() {
+        setup_test();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url: surf_disco::Url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError, StaticVersion<0, 1>> = Client::new(url.clone());
+
+        let options = Options::with_port(port).config(Config);
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        client.connect(None).await;
+
+        let env = client.get::<String>("/v0/config/env").send().await.unwrap();
+
+        dbg!(env);
+
+        let version = client
+            .get::<String>("/v0/config/api_version")
+            .send()
+            .await
+            .unwrap();
+        dbg!(version);
+
+        let chain_config = client
+            .get::<ChainConfig>("/v0/config/chain_config")
+            .send()
+            .await
+            .unwrap();
+
+        dbg!(chain_config);
     }
 }
