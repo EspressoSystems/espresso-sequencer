@@ -134,7 +134,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             config.num_nodes_without_stake,
         )));
 
-        let persistence = Arc::new(RwLock::new(persistence));
+        let persistence = Arc::new(persistence);
 
         let handle = SystemContext::init(
             config.my_own_validator_config.public_key,
@@ -178,7 +178,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     /// Constructor
     fn new(
         handle: Consensus<N, P, V>,
-        persistence: Arc<RwLock<P>>,
+        persistence: Arc<P>,
         state_signer: StateSigner<SequencerApiVersion>,
         external_event_handler: ExternalEventHandler<V>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
@@ -331,7 +331,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
 
 async fn handle_events<V: Versions>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
-    persistence: Arc<RwLock<impl SequencerPersistence>>,
+    persistence: Arc<impl SequencerPersistence>,
     state_signer: Arc<StateSigner<SequencerApiVersion>>,
     external_event_handler: ExternalEventHandler<V>,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
@@ -339,11 +339,9 @@ async fn handle_events<V: Versions>(
     while let Some(event) = events.next().await {
         tracing::debug!(?event, "consensus event");
 
-        {
-            let mut p = persistence.write().await;
-            // Store latest consensus state.
-            p.handle_event(&event).await;
-        }
+        // Store latest consensus state.
+        persistence.handle_event(&event).await;
+
         // Generate state signature.
         state_signer.handle_event(&event).await;
 

@@ -117,7 +117,7 @@ impl Persistence {
     /// The final replacement of the original file is atomic; that is, `path` will be modified only
     /// if the entire update succeeds.
     fn replace(
-        &mut self,
+        &self,
         path: &Path,
         pred: impl FnOnce(File) -> anyhow::Result<bool>,
         write: impl FnOnce(File) -> anyhow::Result<()>,
@@ -170,13 +170,13 @@ impl SequencerPersistence for Persistence {
         Ok(Some(config))
     }
 
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
         let path = self.config_path();
         tracing::info!("saving config to {}", path.display());
         Ok(cfg.to_file(path.display().to_string())?)
     }
 
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
         let view_number = view.u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
@@ -217,7 +217,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn save_anchor_leaf(
-        &mut self,
+        &self,
         leaf: &Leaf,
         qc: &QuorumCertificate<SeqTypes>,
     ) -> anyhow::Result<()> {
@@ -327,7 +327,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn append_vid(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
@@ -352,7 +352,7 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn append_da(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
@@ -376,11 +376,7 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(
-        &mut self,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -> anyhow::Result<()> {
+    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
@@ -405,7 +401,7 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn update_undecided_state(
-        &mut self,
+        &self,
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
@@ -428,7 +424,7 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn append_quorum_proposal(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
