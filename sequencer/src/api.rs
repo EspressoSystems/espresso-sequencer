@@ -1513,28 +1513,35 @@ mod test {
     //     .await;
     // }
 
-    // #[async_std::test]
-    // async fn test_marketplace_upgrade_view_based() {
-    //     setup_test();
+    #[async_std::test]
+    async fn test_marketplace_upgrade_view_based() {
+        setup_test();
 
-    //     test_upgrade_helper(
-    //         UpgradeMode::View(ViewBasedUpgrade {
-    //             start_voting_view: None,
-    //             stop_voting_view: None,
-    //             start_proposing_view: 1,
-    //             stop_proposing_view: 10,
-    //         }),
-    //         UpgradeType::Marketplace {
-    //             chain_config: ChainConfig {
-    //                 max_block_size: 400.into(),
-    //                 base_fee: 2.into(),
-    //                 bid_recipient: Some(FeeAccount::default()),
-    //                 ..Default::default()
-    //             },
-    //         },
-    //     )
-    //     .await;
-    // }
+        let mut upgrades = std::collections::BTreeMap::new();
+        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+
+        let mode = UpgradeMode::View(ViewBasedUpgrade {
+            start_voting_view: None,
+            stop_voting_view: None,
+            start_proposing_view: 1,
+            stop_proposing_view: 10,
+        });
+
+        let upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: 400.into(),
+                base_fee: 2.into(),
+                bid_recipient: Some(Default::default()),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            <MySequencerVersions as Versions>::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
+    }
 
     async fn test_upgrade_helper<MockSeqVersions: Versions>(
         upgrades: BTreeMap<Version, Upgrade>,
@@ -1544,8 +1551,11 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
 
-        let v = <MockSeqVersions as Versions>::Upgrade::VERSION;
-        let chain_config_upgrade = upgrades.get(&v).unwrap().upgrade_type.data();
+        let chain_config_upgrade = upgrades
+            .get(&<MockSeqVersions as Versions>::Upgrade::VERSION)
+            .unwrap()
+            .upgrade_type
+            .data();
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
@@ -1580,7 +1590,6 @@ mod test {
         // voting and finally the actual upgrade.
         let new_version_first_view = loop {
             let event = events.next().await.unwrap();
-
             match event.event {
                 EventType::UpgradeProposal { proposal, .. } => {
                     let upgrade = proposal.data.upgrade_proposal;
