@@ -47,7 +47,7 @@ use async_trait::async_trait;
 use bit_vec::BitVec;
 use committable::Committable;
 use derivative::Derivative;
-use derive_more::From;
+use derive_more::{Deref, DerefMut, From};
 use futures::{
     future::Future,
     stream::{BoxStream, StreamExt, TryStreamExt},
@@ -63,16 +63,57 @@ use std::{
     time::Duration,
 };
 
+#[derive(Debug, Deref, DerefMut)]
+pub(super) struct Connection {
+    #[deref]
+    #[deref_mut]
+    client: Client,
+    revert_queued: bool,
+}
+
+impl From<Client> for Connection {
+    fn from(client: Client) -> Self {
+        Self {
+            client,
+            revert_queued: false,
+        }
+    }
+}
+
+impl Connection {
+    async fn acquire(&mut self) -> anyhow::Result<()> {
+        if self.revert_queued {
+            // If a revert was queued when this connection was released in a synchronous context,
+            // execute it now that we are in an async context.
+            self.revert().await?;
+            self.revert_queued = false;
+        }
+        Ok(())
+    }
+
+    fn queue_revert(&mut self) {
+        self.revert_queued = true;
+    }
+
+    async fn revert(&mut self) -> anyhow::Result<()> {
+        self.client.batch_execute("ROLLBACK").await?;
+        Ok(())
+    }
+}
+
 /// An atomic SQL transaction.
 #[derive(Derivative, From)]
 #[derivative(Debug)]
 pub struct Transaction<'a> {
-    inner: MutexGuard<'a, Client>,
+    inner: MutexGuard<'a, Connection>,
     committed: bool,
 }
 
 impl<'a> Transaction<'a> {
-    pub(super) async fn read(inner: MutexGuard<'a, Client>) -> anyhow::Result<ReadOnly<Self>> {
+    pub(super) async fn read(
+        mut inner: MutexGuard<'a, Connection>,
+    ) -> anyhow::Result<ReadOnly<Self>> {
+        inner.acquire().await?;
         inner
             .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY DEFERRABLE")
             .await?;
@@ -83,7 +124,8 @@ impl<'a> Transaction<'a> {
         .into())
     }
 
-    pub(super) async fn write(inner: MutexGuard<'a, Client>) -> anyhow::Result<Self> {
+    pub(super) async fn write(mut inner: MutexGuard<'a, Connection>) -> anyhow::Result<Self> {
+        inner.acquire().await?;
         inner
             .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
             .await?;
@@ -100,9 +142,9 @@ impl<'a> update::Transaction for Transaction<'a> {
         self.committed = true;
         Ok(())
     }
-    fn revert(self) -> impl Future + Send {
+    fn revert(mut self) -> impl Future + Send {
         async move {
-            self.inner.batch_execute("ROLLBACK").await.unwrap();
+            self.inner.revert().await.unwrap();
         }
     }
 }
@@ -110,7 +152,12 @@ impl<'a> update::Transaction for Transaction<'a> {
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
         if !self.committed {
-            async_std::task::block_on(self.inner.batch_execute("ROLLBACK")).unwrap();
+            // Since `drop` is synchronous, we can't execute the asynchronous revert process here,
+            // at least not without blocking the current thread (which may be an async executor
+            // thread, blocking other unrelated futures and causing deadlocks). Instead, we will
+            // simply queue the transaction to be reverted the next time this connection is invoked
+            // in an async context.
+            self.inner.queue_revert();
         }
     }
 }

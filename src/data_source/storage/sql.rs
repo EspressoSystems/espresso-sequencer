@@ -36,6 +36,8 @@ use tokio_postgres::{config::Host, tls::TlsConnect, Client, NoTls};
 mod query;
 mod transaction;
 
+use self::transaction::Connection;
+
 pub use anyhow::Error;
 // This needs to be reexported so that we can reference it by absolute path relative to this crate
 // in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
@@ -325,13 +327,13 @@ impl Config {
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
 #[derive(Debug)]
 pub struct SqlStorage {
-    client: Mutex<Client>,
+    client: Mutex<Connection>,
     _client_task: BackgroundTask,
     // We use a separate client for mutable access (database transactions). This allows runtime
     // serialization of mutable operations while immutable operations can proceed in parallel, which
     // mimics the lose concurrency semantics provided by Postgres. Eventually we will have a
     // transaction pool which allows even multiple transactions to happen in parallel.
-    tx_client: Mutex<Client>,
+    tx_client: Mutex<Connection>,
     _tx_client_task: BackgroundTask,
     pruner_cfg: Option<PrunerCfg>,
 }
@@ -423,9 +425,9 @@ impl SqlStorage {
             .await?;
 
         Ok(Self {
-            client: Mutex::new(client),
+            client: Mutex::new(client.into()),
             _client_task: client_task,
-            tx_client: Mutex::new(tx_client),
+            tx_client: Mutex::new(tx_client.into()),
             _tx_client_task: tx_client_task,
             pruner_cfg: config.pruner_cfg,
         })
