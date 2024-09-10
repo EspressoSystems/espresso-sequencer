@@ -658,6 +658,7 @@ fn start_orchestrator(port: u16, nodes: &[NodeParams]) -> JoinHandle<()> {
     config.config.known_nodes_without_stake = vec![];
     config.config.next_view_timeout = view_timeout.as_millis() as u64;
     config.config.builder_timeout = builder_timeout;
+    config.enable_registration_verification = false;
 
     let bind = format!("http://0.0.0.0:{port}").parse().unwrap();
     spawn(async move {
