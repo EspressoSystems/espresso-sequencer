@@ -1551,6 +1551,38 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
+    #[async_std::test]
+    async fn test_marketplace_upgrade_time_based() {
+        setup_test();
+
+        let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
+
+        let mut upgrades = std::collections::BTreeMap::new();
+        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+
+        let mode = UpgradeMode::Time(TimeBasedUpgrade {
+            start_proposing_time: Timestamp::from_integer(now).unwrap(),
+            stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
+            start_voting_time: None,
+            stop_voting_time: None,
+        });
+
+        let upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: 400.into(),
+                base_fee: 2.into(),
+                bid_recipient: Some(Default::default()),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            <MySequencerVersions as Versions>::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
+    }
+
     async fn test_upgrade_helper<MockSeqVersions: Versions>(
         upgrades: BTreeMap<Version, Upgrade>,
         bind_version: MockSeqVersions,
