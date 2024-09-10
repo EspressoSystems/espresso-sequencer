@@ -660,7 +660,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                     }
                 }
                 None => {
-                    tracing::warn!("No response to send");
+                    tracing::debug!("No response to send");
                 }
             }
         } else {
