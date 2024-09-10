@@ -602,7 +602,7 @@
         <span class="kw">let </span>db = <span class="self">self</span>.database();
 
         <span class="kw">let </span>rows: Vec&lt;RollupRegistrationResult&gt; =
-            sqlx::query_as(<span class="string">"SELECT * from rollup_registrations;"</span>)
+            sqlx::query_as(<span class="string">"SELECT * from rollup_registrations ORDER BY namespace_id;"</span>)
                 .fetch_all(db)
                 .<span class="kw">await
                 </span>.map_err(SolverError::from)<span class="question-mark">?</span>;
