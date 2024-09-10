@@ -54,18 +54,18 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74", features = ["dependency-tasks"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.74" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.47" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.47" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.46" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", branch = "jp/fifty-fifty" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", branch = "jp/fifty-fifty" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "jp/fifty-fifty" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.56" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "jp/fifty-fifty" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74", features = ["dependency-tasks"] }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
 libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }

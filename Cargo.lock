@@ -4146,7 +4146,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.47"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.47#526782bbe1b04d76c0b931b00cd266017089c20b"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=jp/fifty-fifty#1af23f067c174265bdb5abd44299be6a707244e7"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4202,7 +4202,7 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.40"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.46#90502054552d5d1563920b21d45e9a2b235335b4"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=jp/fifty-fifty#90502054552d5d1563920b21d45e9a2b235335b4"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4321,7 +4321,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.53"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.56#90e628fb7043608731e2e23c32ad6dee3c090602"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=jp/fifty-fifty#d3a5e830e08c662d7af976f03154929fc25d914d"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -6182,7 +6182,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.1.47"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.47#526782bbe1b04d76c0b931b00cd266017089c20b"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=jp/fifty-fifty#1af23f067c174265bdb5abd44299be6a707244e7"
 dependencies = [
  "anyhow",
  "async-broadcast",
