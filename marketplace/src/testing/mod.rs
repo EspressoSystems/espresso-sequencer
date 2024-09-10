@@ -171,7 +171,7 @@ async fn calc_proposal_msg(
             SimpleCertificate::<TestTypes, QuorumData<TestTypes>, SuccessThreshold>::new(
                 quorum_data.clone(),
                 quorum_data.commit(),
-                ViewNumber::new(round as u64),
+                prev_proposal.view_number,
                 prev_justify_qc.signatures.clone(),
                 PhantomData,
             )
