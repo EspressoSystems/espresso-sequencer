@@ -28,7 +28,7 @@ use crate::{
         BuildBlockInfo, DaProposalMessage, DecideMessage, MessageType, QuorumProposalMessage,
         RequestMessage, ResponseMessage, TransactionSource,
     },
-    utils::{BlockId, BuilderStateId},
+    utils::{BlockId, BuilderStateId, BuiltFromProposedBlock},
 };
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{InactiveReceiver, Sender as BroadcastSender, TrySendError};
@@ -104,7 +104,13 @@ pub struct GlobalState<TYPES: NodeType> {
     pub blocks: lru::LruCache<BlockId<TYPES>, BlockInfo<TYPES>>,
 
     // registered builder states
-    pub spawned_builder_states: HashMap<BuilderStateId<TYPES>, BroadcastSender<MessageType<TYPES>>>,
+    pub spawned_builder_states: HashMap<
+        BuilderStateId<TYPES>,
+        (
+            Option<BuiltFromProposedBlock<TYPES>>,
+            BroadcastSender<MessageType<TYPES>>,
+        ),
+    >,
 
     // builder state -> last built block , it is used to respond the client
     // if the req channel times out during get_available_blocks
@@ -134,7 +140,7 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
             parent_commitment: bootstrapped_builder_state_id,
             parent_view: bootstrapped_view_num,
         };
-        spawned_builder_states.insert(bootstrap_id.clone(), bootstrap_sender.clone());
+        spawned_builder_states.insert(bootstrap_id.clone(), (None, bootstrap_sender.clone()));
         GlobalState {
             blocks: lru::LruCache::new(NonZeroUsize::new(256).unwrap()),
             spawned_builder_states,
@@ -148,11 +154,14 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
     pub fn register_builder_state(
         &mut self,
         parent_id: BuilderStateId<TYPES>,
+        built_from_proposed_block: BuiltFromProposedBlock<TYPES>,
         request_sender: BroadcastSender<MessageType<TYPES>>,
     ) {
         // register the builder state
-        self.spawned_builder_states
-            .insert(parent_id.clone(), request_sender);
+        self.spawned_builder_states.insert(
+            parent_id.clone(),
+            (Some(built_from_proposed_block), request_sender),
+        );
 
         // keep track of the max view number
         if parent_id.parent_view > self.highest_view_num_builder_id.parent_view {
@@ -219,9 +228,9 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
         &self,
         key: &BuilderStateId<TYPES>,
     ) -> Result<&BroadcastSender<MessageType<TYPES>>, BuildError> {
-        if let Some(channel) = self.spawned_builder_states.get(key) {
+        if let Some(id_and_sender) = self.spawned_builder_states.get(key) {
             tracing::info!("Got matching builder for parent {}", key);
-            Ok(channel)
+            Ok(&id_and_sender.1)
         } else {
             tracing::warn!(
                 "failed to recover builder for parent {}, using higest view num builder with {}",
@@ -231,6 +240,7 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
             // get the sender for the highest view number builder
             self.spawned_builder_states
                 .get(&self.highest_view_num_builder_id)
+                .map(|(_, sender)| sender)
                 .ok_or_else(|| BuildError::Error {
                     message: "No builder state found".to_string(),
                 })
@@ -353,7 +363,7 @@ where
                 return Err(BuildError::NotFound);
             };
 
-            let Some(sender) = self
+            let Some(id_and_sender) = self
                 .global_state
                 .read_arc()
                 .await
@@ -399,7 +409,8 @@ where
                 response_channel: response_sender,
             };
 
-            sender
+            id_and_sender
+                .1
                 .broadcast(MessageType::RequestMessage(request))
                 .await
                 .map_err(|err| {

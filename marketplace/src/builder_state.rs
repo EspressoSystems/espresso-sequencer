@@ -504,10 +504,11 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // register the spawned builder state to spawned_builder_states in the
         // global state We register this new child within the global_state, so
         // that it can be looked up via the [BuilderStateId] in the future.
-        self.global_state
-            .write_arc()
-            .await
-            .register_builder_state(builder_state_id, req_sender);
+        self.global_state.write_arc().await.register_builder_state(
+            builder_state_id,
+            self.built_from_proposed_block.clone(),
+            req_sender,
+        );
 
         self.event_loop();
     }

@@ -92,6 +92,7 @@ async fn test_builder() {
             .spawned_builder_states
             .get(&req_msg.1)
             .expect("Failed to get channel for matching builder")
+            .1
             .broadcast(req_msg.2.clone())
             .await
             .unwrap();
