@@ -1584,7 +1584,7 @@ mod test {
             .network_config(
                 TestConfigBuilder::default()
                     .l1_url(l1)
-                    .upgrades(upgrades)
+                    .upgrades::<MockSeqVersions>(upgrades)
                     .build(),
             )
             .build();

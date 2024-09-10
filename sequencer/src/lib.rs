@@ -640,11 +640,9 @@ pub mod testing {
             self
         }
 
-        pub fn upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
-            for key in upgrades.keys() {
-                let upgrade = upgrades.get(key).unwrap();
-                upgrade.set_hotshot_config_parameters(&mut self.config)
-            }
+        pub fn upgrades<V: Versions>(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+            let upgrade = upgrades.get(&<V as Versions>::Upgrade::VERSION).unwrap();
+            upgrade.set_hotshot_config_parameters(&mut self.config);
             self.upgrades = upgrades;
             self
         }
