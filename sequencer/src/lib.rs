@@ -434,8 +434,8 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, Leaf, MarketplaceVersion, MockSequencerVersions, Payload, PubKey,
-        SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
+        Upgrade,
     };
     use futures::{
         future::join_all,
