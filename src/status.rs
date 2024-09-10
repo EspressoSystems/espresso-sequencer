@@ -116,7 +116,7 @@ mod test {
             mocks::MockBase,
             setup_test, sleep,
         },
-        Error,
+        ApiState, Error,
     };
     use async_std::sync::RwLock;
     use futures::FutureExt;
@@ -138,7 +138,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "status",
             define_api(&Default::default(), MockBase::instance()).unwrap(),

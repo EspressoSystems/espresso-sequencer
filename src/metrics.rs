@@ -44,8 +44,8 @@ impl From<prometheus::Error> for MetricsError {
 
 /// A Prometheus-based implementation of a [Metrics](metrics::Metrics) registry.
 ///
-/// [PrometheusMetrics] provides a collection of metrics including [Counter], [Gauge], [Histogram],
-/// and [Label]. These metrics can be created and associated with a [PrometheusMetrics] collection
+/// [PrometheusMetrics] provides a collection of metrics including [Counter], [Gauge], and
+/// [Histogram]. These metrics can be created and associated with a [PrometheusMetrics] collection
 /// and then used as handles for updating and populating. The [PrometheusMetrics] registry can then
 /// be used to collect all of the associated metrics and export them in the Prometheus text format.
 ///

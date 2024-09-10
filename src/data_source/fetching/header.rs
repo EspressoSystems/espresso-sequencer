@@ -14,15 +14,15 @@
 
 use super::{
     block::fetch_block_with_header, leaf::fetch_leaf_with_callbacks,
-    vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher, NotifyStorage, ResultExt,
+    vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher, ResultExt,
 };
 use crate::{
-    availability::{BlockId, QueryablePayload},
-    data_source::storage::AvailabilityStorage,
+    availability::{BlockId, QueryablePayload, UpdateAvailabilityData},
+    data_source::{storage::AvailabilityStorage, update::VersionedDataSource},
     Header, Payload,
 };
 use anyhow::Context;
-use async_std::sync::{Arc, RwLockReadGuard};
+use async_std::sync::Arc;
 use derivative::Derivative;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::cmp::Ordering;
@@ -74,7 +74,8 @@ impl<Types, S, P> HeaderCallback<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     fn fetcher(&self) -> Arc<Fetcher<Types, S, P>> {
@@ -105,13 +106,14 @@ where
 }
 
 pub(super) async fn fetch_header_and_then<Types, S, P>(
-    storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+    tx: &impl AvailabilityStorage<Types>,
     req: BlockId<Types>,
     callback: HeaderCallback<Types, S, P>,
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     // Check if at least the header is available in local storage. If it is, we benefit two ways:
@@ -122,8 +124,7 @@ pub(super) async fn fetch_header_and_then<Types, S, P>(
     //    be able to provide certain data. For example, the HotShot DA committee members may be able
     //    to provide paylaods, but not full blocks. Or, in the case where VID recovery is needed,
     //    the VID common data may be available but the full block may not exist anywhere.
-    if let Some(header) = storage
-        .storage
+    if let Some(header) = tx
         .get_header(req)
         .await
         .context(format!("loading header for block {req}"))

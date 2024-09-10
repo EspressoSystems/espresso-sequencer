@@ -26,15 +26,16 @@ use crate::{
             QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
         },
     },
-    data_source::VersionedDataSource,
+    data_source::{update, VersionedDataSource},
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
     ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
+use async_std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use committable::Committable;
-use futures::future::{self, BoxFuture, FutureExt};
+use futures::future::Future;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
@@ -42,19 +43,18 @@ use std::collections::{
     hash_map::{Entry, HashMap},
     BTreeMap,
 };
-use std::convert::Infallible;
 use std::hash::Hash;
-use std::ops::{Bound, RangeBounds};
+use std::ops::{Bound, Deref, RangeBounds};
 use std::path::Path;
 
 const CACHED_LEAVES_COUNT: usize = 100;
 const CACHED_BLOCKS_COUNT: usize = 100;
 const CACHED_VID_COMMON_COUNT: usize = 100;
 
-/// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
 #[derive(custom_debug::Debug)]
-pub struct FileSystemStorage<Types: NodeType>
+pub struct FileSystemStorageInner<Types>
 where
+    Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
 {
     index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
@@ -71,19 +71,61 @@ where
     vid_storage: LedgerLog<(VidCommonQueryData<Types>, Option<VidShare>)>,
 }
 
+impl<Types> FileSystemStorageInner<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    fn get_block_index(&self, id: BlockId<Types>) -> QueryResult<usize> {
+        match id {
+            BlockId::Number(n) => Ok(n),
+            BlockId::Hash(h) => {
+                Ok(*self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize)
+            }
+            BlockId::PayloadHash(h) => {
+                Ok(*self.index_by_payload_hash.get(&h).context(NotFoundSnafu)? as usize)
+            }
+        }
+    }
+
+    fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+        self.block_storage
+            .iter()
+            .nth(self.get_block_index(id)?)
+            .context(NotFoundSnafu)?
+            .context(MissingSnafu)
+    }
+
+    fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+        self.get_block(id).map(|block| block.header)
+    }
+
+    fn get_block_range<R>(&self, range: R) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_iter(self.block_storage.iter(), range).collect())
+    }
+}
+
+/// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
+#[derive(Debug)]
+pub struct FileSystemStorage<Types: NodeType>
+where
+    Payload<Types>: QueryablePayload<Types>,
+{
+    inner: RwLock<FileSystemStorageInner<Types>>,
+}
+
 impl<Types: NodeType> PrunerConfig for FileSystemStorage<Types> where
     Payload<Types>: QueryablePayload<Types>
 {
 }
-impl<Types: NodeType> PrunedHeightStorage for FileSystemStorage<Types>
+impl<Types: NodeType> PruneStorage for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    type Error = Infallible;
-}
-impl<Types: NodeType> PruneStorage for FileSystemStorage<Types> where
-    Payload<Types>: QueryablePayload<Types>
-{
+    type Pruner = ();
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>
@@ -99,8 +141,8 @@ where
     pub async fn create(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::create(path, "hotshot_data_source")?;
         loader.retain_archives(1);
-        let mut data_source = Self::create_with_store(&mut loader).await?;
-        data_source.top_storage = Some(AtomicStore::open(loader)?);
+        let data_source = Self::create_with_store(&mut loader).await?;
+        data_source.inner.write().await.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
 
@@ -112,8 +154,8 @@ where
     pub async fn open(path: &Path) -> Result<Self, PersistenceError> {
         let mut loader = AtomicStoreLoader::load(path, "hotshot_data_source")?;
         loader.retain_archives(1);
-        let mut data_source = Self::open_with_store(&mut loader).await?;
-        data_source.top_storage = Some(AtomicStore::open(loader)?);
+        let data_source = Self::open_with_store(&mut loader).await?;
+        data_source.inner.write().await.top_storage = Some(AtomicStore::open(loader)?);
         Ok(data_source)
     }
 
@@ -129,17 +171,19 @@ where
         loader: &mut AtomicStoreLoader,
     ) -> Result<Self, PersistenceError> {
         Ok(Self {
-            index_by_leaf_hash: Default::default(),
-            index_by_block_hash: Default::default(),
-            index_by_payload_hash: Default::default(),
-            index_by_txn_hash: Default::default(),
-            index_by_time: Default::default(),
-            num_transactions: 0,
-            payload_size: 0,
-            top_storage: None,
-            leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
-            block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
-            vid_storage: LedgerLog::create(loader, "vid_common", CACHED_VID_COMMON_COUNT)?,
+            inner: RwLock::new(FileSystemStorageInner {
+                index_by_leaf_hash: Default::default(),
+                index_by_block_hash: Default::default(),
+                index_by_payload_hash: Default::default(),
+                index_by_txn_hash: Default::default(),
+                index_by_time: Default::default(),
+                num_transactions: 0,
+                payload_size: 0,
+                top_storage: None,
+                leaf_storage: LedgerLog::create(loader, "leaves", CACHED_LEAVES_COUNT)?,
+                block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
+                vid_storage: LedgerLog::create(loader, "vid_common", CACHED_VID_COMMON_COUNT)?,
+            }),
         })
     }
 
@@ -197,65 +241,103 @@ where
         }
 
         Ok(Self {
-            index_by_leaf_hash,
-            index_by_block_hash,
-            index_by_payload_hash,
-            index_by_txn_hash,
-            index_by_time,
-            num_transactions,
-            payload_size,
-            leaf_storage,
-            block_storage,
-            vid_storage,
-            top_storage: None,
+            inner: RwLock::new(FileSystemStorageInner {
+                index_by_leaf_hash,
+                index_by_block_hash,
+                index_by_payload_hash,
+                index_by_txn_hash,
+                index_by_time,
+                num_transactions,
+                payload_size,
+                leaf_storage,
+                block_storage,
+                vid_storage,
+                top_storage: None,
+            }),
         })
     }
 
     /// Advance the version of the persistent store without committing changes to persistent state.
-    pub fn skip_version(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.skip_version()?;
-        self.block_storage.skip_version()?;
-        self.vid_storage.skip_version()?;
-        if let Some(store) = &mut self.top_storage {
+    pub async fn skip_version(&self) -> Result<(), PersistenceError> {
+        let mut inner = self.inner.write().await;
+        inner.leaf_storage.skip_version()?;
+        inner.block_storage.skip_version()?;
+        inner.vid_storage.skip_version()?;
+        if let Some(store) = &mut inner.top_storage {
+            store.commit_version()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct Transaction<T> {
+    inner: T,
+}
+
+impl<'a, Types> update::Transaction
+    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    async fn commit(mut self) -> anyhow::Result<()> {
+        self.inner.leaf_storage.commit_version().await?;
+        self.inner.block_storage.commit_version().await?;
+        self.inner.vid_storage.commit_version().await?;
+        if let Some(store) = &mut self.inner.top_storage {
             store.commit_version()?;
         }
         Ok(())
     }
 
-    fn get_block_index(&self, id: BlockId<Types>) -> QueryResult<usize> {
-        match id {
-            BlockId::Number(n) => Ok(n),
-            BlockId::Hash(h) => {
-                Ok(*self.index_by_block_hash.get(&h).context(NotFoundSnafu)? as usize)
-            }
-            BlockId::PayloadHash(h) => {
-                Ok(*self.index_by_payload_hash.get(&h).context(NotFoundSnafu)? as usize)
-            }
+    fn revert(mut self) -> impl Future + Send {
+        async move {
+            self.inner.leaf_storage.revert_version().unwrap();
+            self.inner.block_storage.revert_version().unwrap();
+            self.inner.vid_storage.revert_version().unwrap();
         }
     }
 }
 
-#[async_trait]
+impl<'a, Types> update::Transaction
+    for Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    async fn commit(self) -> anyhow::Result<()> {
+        // Nothing to commit for a read-only transaction.
+        Ok(())
+    }
+
+    fn revert(self) -> impl Future + Send {
+        // Nothing to revert for a read-only transaction.
+        async {}
+    }
+}
+
 impl<Types: NodeType> VersionedDataSource for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    type Error = PersistenceError;
+    type Transaction<'a> = Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
+    where
+        Self: 'a;
+    type ReadOnly<'a> = Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
+    where
+        Self: 'a;
 
-    async fn commit(&mut self) -> Result<(), PersistenceError> {
-        self.leaf_storage.commit_version().await?;
-        self.block_storage.commit_version().await?;
-        self.vid_storage.commit_version().await?;
-        if let Some(store) = &mut self.top_storage {
-            store.commit_version()?;
-        }
-        Ok(())
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        Ok(Transaction {
+            inner: self.inner.write().await,
+        })
     }
 
-    async fn revert(&mut self) {
-        self.leaf_storage.revert_version().unwrap();
-        self.block_storage.revert_version().unwrap();
-        self.vid_storage.revert_version().unwrap();
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
+        Ok(Transaction {
+            inner: self.inner.read().await,
+        })
     }
 }
 
@@ -301,17 +383,24 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType> AvailabilityStorage<Types> for FileSystemStorage<Types>
+impl<Types, T> AvailabilityStorage<Types> for Transaction<T>
 where
+    Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
+    T: Deref<Target = FileSystemStorageInner<Types>> + Send + Sync,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let n = match id {
             LeafId::Number(n) => n,
-            LeafId::Hash(h) => *self.index_by_leaf_hash.get(&h).context(NotFoundSnafu)? as usize,
+            LeafId::Hash(h) => *self
+                .inner
+                .index_by_leaf_hash
+                .get(&h)
+                .context(NotFoundSnafu)? as usize,
         };
-        self.leaf_storage
+        self.inner
+            .leaf_storage
             .iter()
             .nth(n)
             .context(NotFoundSnafu)?
@@ -319,15 +408,11 @@ where
     }
 
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-        self.block_storage
-            .iter()
-            .nth(self.get_block_index(id)?)
-            .context(NotFoundSnafu)?
-            .context(MissingSnafu)
+        self.inner.get_block(id)
     }
 
     async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
-        self.get_block(id).await.map(|block| block.header)
+        self.inner.get_header(id)
     }
 
     async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
@@ -336,9 +421,10 @@ where
 
     async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
         Ok(self
+            .inner
             .vid_storage
             .iter()
-            .nth(self.get_block_index(id)?)
+            .nth(self.inner.get_block_index(id)?)
             .context(NotFoundSnafu)?
             .context(MissingSnafu)?
             .0)
@@ -351,7 +437,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Ok(range_iter(self.leaf_storage.iter(), range).collect())
+        Ok(range_iter(self.inner.leaf_storage.iter(), range).collect())
     }
 
     async fn get_block_range<R>(
@@ -361,7 +447,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Ok(range_iter(self.block_storage.iter(), range).collect())
+        self.inner.get_block_range(range)
     }
 
     async fn get_payload_range<R>(
@@ -371,7 +457,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Ok(range_iter(self.block_storage.iter(), range)
+        Ok(range_iter(self.inner.block_storage.iter(), range)
             .map(|res| res.map(PayloadQueryData::from))
             .collect())
     }
@@ -383,7 +469,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Ok(range_iter(self.vid_storage.iter(), range)
+        Ok(range_iter(self.inner.vid_storage.iter(), range)
             .map(|res| res.map(|(common, _)| common))
             .collect())
     }
@@ -392,8 +478,12 @@ where
         &self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<TransactionQueryData<Types>> {
-        let height = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
-        let block = self.get_block((*height as usize).into()).await?;
+        let height = self
+            .inner
+            .index_by_txn_hash
+            .get(&hash)
+            .context(NotFoundSnafu)?;
+        let block = self.inner.get_block((*height as usize).into())?;
         TransactionQueryData::with_hash(&block, hash).context(ErrorSnafu {
             message: format!(
                 "transaction index inconsistent: block {height} contains no transaction {hash}"
@@ -403,46 +493,54 @@ where
 }
 
 #[async_trait]
-impl<Types: NodeType> UpdateAvailabilityData<Types> for FileSystemStorage<Types>
+impl<'a, Types: NodeType> UpdateAvailabilityData<Types>
+    for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
 where
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
 {
-    type Error = PersistenceError;
-
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        self.leaf_storage
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
+        self.inner
+            .leaf_storage
             .insert(leaf.height() as usize, leaf.clone())?;
-        self.index_by_leaf_hash.insert(leaf.hash(), leaf.height());
+        self.inner
+            .index_by_leaf_hash
+            .insert(leaf.hash(), leaf.height());
         update_index_by_hash(
-            &mut self.index_by_block_hash,
+            &mut self.inner.index_by_block_hash,
             leaf.block_hash(),
             leaf.height(),
         );
         update_index_by_hash(
-            &mut self.index_by_payload_hash,
+            &mut self.inner.index_by_payload_hash,
             leaf.payload_hash(),
             leaf.height(),
         );
-        self.index_by_time
+        self.inner
+            .index_by_time
             .entry(leaf.header().timestamp())
             .or_default()
             .push(leaf.height());
         Ok(())
     }
 
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
         if !self
+            .inner
             .block_storage
             .insert(block.height() as usize, block.clone())?
         {
             // The block was already present.
             return Ok(());
         }
-        self.num_transactions += block.len();
-        self.payload_size += block.size() as usize;
+        self.inner.num_transactions += block.len();
+        self.inner.payload_size += block.size() as usize;
         for (_, txn) in block.enumerate() {
-            update_index_by_hash(&mut self.index_by_txn_hash, txn.commit(), block.height());
+            update_index_by_hash(
+                &mut self.inner.index_by_txn_hash,
+                txn.commit(),
+                block.height(),
+            );
         }
         Ok(())
     }
@@ -451,8 +549,9 @@ where
         &mut self,
         common: VidCommonQueryData<Types>,
         share: Option<VidShare>,
-    ) -> Result<(), Self::Error> {
-        self.vid_storage
+    ) -> anyhow::Result<()> {
+        self.inner
+            .vid_storage
             .insert(common.height() as usize, (common, share))?;
         Ok(())
     }
@@ -477,57 +576,60 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 }
 
 #[async_trait]
-impl<Types: NodeType> NodeDataSource<Types> for FileSystemStorage<Types>
+impl<Types, T> NodeDataSource<Types> for Transaction<T>
 where
+    Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
+    T: Deref<Target = FileSystemStorageInner<Types>> + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
-        Ok(self.leaf_storage.iter().len())
+        Ok(self.inner.leaf_storage.iter().len())
     }
 
     async fn count_transactions(&self) -> QueryResult<usize> {
-        Ok(self.num_transactions)
+        Ok(self.inner.num_transactions)
     }
 
     async fn payload_size(&self) -> QueryResult<usize> {
-        Ok(self.payload_size)
+        Ok(self.inner.payload_size)
     }
 
     async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        self.vid_storage
+        self.inner
+            .vid_storage
             .iter()
-            .nth(self.get_block_index(id.into())?)
+            .nth(self.inner.get_block_index(id.into())?)
             .context(NotFoundSnafu)?
             .context(MissingSnafu)?
             .1
             .context(MissingSnafu)
     }
 
-    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
-        let height = self.leaf_storage.iter().len();
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        let height = self.inner.leaf_storage.iter().len();
 
-        // The number of missing VID common is just the number of completely missing VID entries,
-        // since every entry we have is guaranteed to have the common data.
-        let missing_vid = self.vid_storage.missing(height);
-        // Missing shares includes the completely missing VID entries, plus any entry which is _not_
-        // messing but which has a null share.
+        // The number of missing VID common is just the number of completely missing VID
+        // entries, since every entry we have is guaranteed to have the common data.
+        let missing_vid = self.inner.vid_storage.missing(height);
+        // Missing shares includes the completely missing VID entries, plus any entry which
+        // is _not_ messing but which has a null share.
         let null_vid_shares: usize = self
+            .inner
             .vid_storage
             .iter()
             .map(|res| if matches!(res, Some((_, None))) { 1 } else { 0 })
             .sum();
-        future::ready(Ok(SyncStatus {
-            missing_blocks: self.block_storage.missing(height),
-            missing_leaves: self.leaf_storage.missing(height),
+        Ok(SyncStatus {
+            missing_blocks: self.inner.block_storage.missing(height),
+            missing_leaves: self.inner.leaf_storage.missing(height),
             missing_vid_common: missing_vid,
             missing_vid_shares: missing_vid + null_vid_shares,
             pruned_height: None,
-        }))
-        .boxed()
+        })
     }
 
     async fn get_header_window(
@@ -537,20 +639,21 @@ where
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         let first_block = match start.into() {
             WindowStart::Height(h) => h,
-            WindowStart::Hash(h) => self.get_header(h.into()).await?.block_number(),
+            WindowStart::Hash(h) => self.inner.get_header(h.into())?.block_number(),
             WindowStart::Time(t) => {
-                // Find the minimum timestamp which is at least `t`, and all the blocks with that
-                // timestamp.
+                // Find the minimum timestamp which is at least `t`, and all the blocks with
+                // that timestamp.
                 let blocks = self
+                    .inner
                     .index_by_time
                     .range(t..)
                     .next()
                     .context(NotFoundSnafu)?
                     .1;
-                // Multiple blocks can have the same timestamp (when truncated to seconds); we want
-                // the first one. It is an invariant that any timestamp which has an entry in
-                // `index_by_time` has a non-empty list associated with it, so this indexing is
-                // safe.
+                // Multiple blocks can have the same timestamp (when truncated to seconds);
+                // we want the first one. It is an invariant that any timestamp which has an
+                // entry in `index_by_time` has a non-empty list associated with it, so this
+                // indexing is safe.
                 blocks[0]
             }
         } as usize;
@@ -559,12 +662,12 @@ where
 
         // Include the block just before the start of the window, if there is one.
         if first_block > 0 {
-            res.prev = Some(self.get_header((first_block - 1).into()).await?);
+            res.prev = Some(self.inner.get_header((first_block - 1).into())?);
         }
 
-        // Add blocks to the window, starting from `first_block`, until we reach the end of the
-        // requested time window.
-        for block in self.get_block_range(first_block..).await? {
+        // Add blocks to the window, starting from `first_block`, until we reach the end of
+        // the requested time window.
+        for block in self.inner.get_block_range(first_block..)? {
             let header = block?.header().clone();
             if header.timestamp() >= end {
                 res.next = Some(header);
@@ -576,3 +679,5 @@ where
         Ok(res)
     }
 }
+
+impl<T> PrunedHeightStorage for Transaction<T> {}

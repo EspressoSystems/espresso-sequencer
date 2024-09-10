@@ -14,23 +14,20 @@
 
 use super::{
     fetching,
-    storage::sql::{self, Client, SqlStorage},
+    storage::sql::{self, SqlStorage},
     AvailabilityProvider, FetchingDataSource,
 };
 pub use crate::include_migrations;
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
-    Header, Payload, QueryResult,
+    Header, Payload,
 };
 pub use anyhow::Error;
-use async_std::sync::Arc;
-use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 pub use refinery::Migration;
-use std::borrow::Cow;
 pub use tokio_postgres as postgres;
 
-pub use sql::{Config, Query, Transaction};
+pub use sql::{Config, Transaction};
 
 pub type Builder<Types, Provider> = fetching::Builder<Types, SqlStorage, Provider>;
 
@@ -179,17 +176,8 @@ impl Config {
 /// # Synchronization
 ///
 /// [`SqlDataSource`] implements [`VersionedDataSource`](super::VersionedDataSource), which means
-/// changes are not applied to the underlying database with every operation. Instead, outstanding
-/// changes are batched and applied all at once, atomically, whenever
-/// [`commit`](super::VersionedDataSource::commit) is called. Outstanding, uncommitted changes can
-/// also be rolled back completely using [`revert`](super::VersionedDataSource::revert).
-///
-/// Internally, the data source maintains an open [`Transaction`] whenever there are outstanding
-/// changes, and commits the transaction on [`commit`](super::VersionedDataSource::commit). The
-/// underlying database transaction can be accessed directly via [`transaction`](Self::transaction),
-/// which makes it possible to compose application-specific database updates atomically with updates
-/// made by the [`SqlDataSource`] itself. This is useful for [extension and
-/// composition](#extension-and-composition).
+/// changes are applied to the underlying database via transactions. [`Transaction`] maps exactly to
+/// a transaction in the underling RDBMS, and inherits the underlying concurrency semantics.
 ///
 /// # Extension and Composition
 ///
@@ -225,16 +213,12 @@ impl Config {
 /// [extension guide](crate#extension).
 ///
 /// If the new application-specific state should live in the SQL database itself, the implementation
-/// is more involved, but still possible. Follow the steps for
-/// [custom migrations](#custom-migrations) to modify the database schema to account for the new
-/// data you want to store. You can then access this data through the [`SqlDataSource`] using
-/// [`query`](Self::query) to run a custom read-only SQL query or [`transaction`](Self::transaction)
-/// to execute a custom atomic mutation of the database. If you use
-/// [`transaction`](Self::transaction), be sure to call
-/// [`commit`](super::VersionedDataSource::commit) when you are ready to persist your changes.
-///
-/// You will typically use [`query`](Self::query) to read custom data in API endpoint handlers and
-/// [`transaction`](Self::transaction) to populate custom data in your web server's update loop.
+/// is more involved, but still possible. Follow the steps for [custom
+/// migrations](#custom-migrations) to modify the database schema to account for the new data you
+/// want to store. You can then access this data through the [`SqlDataSource`] using
+/// [`read`](super::VersionedDataSource::read) to run a custom read-only SQL query or
+/// [`write`](super::VersionedDataSource::write) to execute a custom atomic mutation of the
+/// database.
 ///
 /// ## Composition
 ///
@@ -243,21 +227,22 @@ impl Config {
 /// states, as described in the [composition guide](crate#composition). If the additional modules
 /// have data that should live in the same database as the [`SqlDataSource`] data, you can follow
 /// the steps in [custom migrations](#custom-migrations) to accomodate this. When modifying that
-/// data, you can use [`transaction`](Self::transaction) to atomically synchronize updates to the
-/// other modules' data with updates to the [`SqlDataSource`]. If the additional data is completely
-/// independent of HotShot query service data and does not need to be synchronized, you can also
-/// connect to the database directly to make updates.
+/// data, you can use a [`Transaction`] to atomically synchronize updates to the other modules' data
+/// with updates to the [`SqlDataSource`]. If the additional data is completely independent of
+/// HotShot query service data and does not need to be synchronized, you can also connect to the
+/// database directly to make updates.
 ///
 /// In the following example, we compose HotShot query service modules with other application-
-/// specific modules, synchronizing updates using [`transaction`](Self::transaction).
+/// specific modules, synchronizing updates using SQL transactions via
+/// [`write`](super::VersionedDataSource::write).
 ///
 /// ```
-/// # use async_std::{sync::{Arc, RwLock}, task::spawn};
+/// # use async_std::{sync::Arc, task::spawn};
 /// # use futures::StreamExt;
 /// # use hotshot::types::SystemContextHandle;
 /// # use hotshot_query_service::Error;
 /// # use hotshot_query_service::data_source::{
-/// #   sql::Config, SqlDataSource, UpdateDataSource, VersionedDataSource,
+/// #   sql::Config, Transaction, SqlDataSource, UpdateDataSource, VersionedDataSource,
 /// # };
 /// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::{
@@ -274,32 +259,32 @@ impl Config {
 /// async fn init_server<Ver: StaticVersionType + 'static>(
 ///     config: Config,
 ///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl, AppVersions>,
-/// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
-///     let mut hotshot_qs = config.connect(NoFetching).await.map_err(Error::internal)?;
+/// ) -> anyhow::Result<App<Arc<AppState>, Error>> {
+///     let mut hotshot_qs = config.connect(NoFetching).await?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
-///     let tx = hotshot_qs.transaction().await.map_err(Error::internal)?;
+///     let tx = hotshot_qs.write().await?;
 ///     // ...
+///     tx.commit().await?;
 ///
-///     let state = Arc::new(RwLock::new(AppState {
+///     let state = Arc::new(AppState {
 ///         hotshot_qs,
 ///         // additional state for other modules
-///     }));
+///     });
 ///     let mut app = App::with_state(state.clone());
 ///     // Register API modules.
 ///
 ///     spawn(async move {
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
-///             let mut state = state.write().await;
-///             UpdateDataSource::<AppTypes>::update(&mut state.hotshot_qs, &event)
+///             let mut tx = state.hotshot_qs.write().await.unwrap();
+///             UpdateDataSource::<AppTypes>::update(&mut tx, &event)
 ///                 .await
 ///                 .unwrap();
-///             // Update other modules' states based on `event`. Use `hotshot_qs` to include
-///             // database updates in the same atomic transaction as `hotshot_qs.update`.
-///             let tx = state.hotshot_qs.transaction().await.unwrap();
+///             // Update other modules' states based on `event`. Use `tx` to include database
+///             // updates in the same atomic transaction as `update`.
 ///
 ///             // Commit all outstanding changes to the entire state at the same time.
-///             state.hotshot_qs.commit().await.unwrap();
+///             tx.commit().await.unwrap();
 ///         }
 ///     });
 ///
@@ -325,46 +310,15 @@ where
     }
 }
 
-impl<Types, P> SqlDataSource<Types, P>
-where
-    Types: NodeType,
-{
-    /// Access the transaction which is accumulating all uncommitted changes to the data source.
-    ///
-    /// This can be used to manually group database modifications to custom state atomically with
-    /// modifications made through the [`SqlDataSource`].
-    ///
-    /// If there is no currently open transaction, a new transaction will be opened. No changes
-    /// made through the transaction objeect returned by this method will be persisted until
-    /// [`commit`](super::VersionedDataSource::commit) is called.
-    pub async fn transaction(&mut self) -> QueryResult<Transaction<'_>> {
-        Ok(self
-            .storage_mut()
-            .await
-            .transaction()
-            .await?
-            .change_lifetime())
-    }
-}
-
-#[async_trait]
-impl<Types, P: Send + Sync> Query for SqlDataSource<Types, P>
-where
-    Types: NodeType,
-{
-    async fn client(&self) -> Cow<Arc<Client>> {
-        Cow::Owned(self.storage().await.client().await.into_owned())
-    }
-}
-
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     use super::*;
     use crate::{
-        data_source::{UpdateDataSource, VersionedDataSource},
+        data_source::{Transaction, UpdateDataSource, VersionedDataSource},
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
+    use async_trait::async_trait;
     use hotshot::types::Event;
 
     pub use sql::testing::TmpDb;
@@ -392,9 +346,10 @@ pub mod testing {
                 .unwrap()
         }
 
-        async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            self.update(event).await.unwrap();
-            self.commit().await.unwrap();
+        async fn handle_event(&self, event: &Event<MockTypes>) {
+            let mut tx = self.write().await.unwrap();
+            tx.update(event).await.unwrap();
+            tx.commit().await.unwrap();
         }
     }
 }
@@ -419,7 +374,7 @@ mod test {
         availability::{
             AvailabilityDataSource, LeafQueryData, UpdateAvailabilityData, VidCommonQueryData,
         },
-        data_source::VersionedDataSource,
+        data_source::{Transaction, VersionedDataSource},
         fetching::provider::NoFetching,
         node::NodeDataSource,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
@@ -437,7 +392,7 @@ mod test {
         setup_test();
 
         let storage = D::create(0).await;
-        let mut ds = <D as DataSourceLifeCycle>::connect(&storage).await;
+        let ds = <D as DataSourceLifeCycle>::connect(&storage).await;
 
         // Generate some test VID data.
         let disperse = vid_scheme(2).disperse([]).unwrap();
@@ -449,19 +404,24 @@ mod test {
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
-        ds.insert_leaf(leaf).await.unwrap();
-        ds.insert_vid(common.clone(), None).await.unwrap();
-        ds.commit().await.unwrap();
+        let mut tx = ds.write().await.unwrap();
+        tx.insert_leaf(leaf).await.unwrap();
+        tx.insert_vid(common.clone(), None).await.unwrap();
+        tx.commit().await.unwrap();
 
         assert_eq!(ds.get_vid_common(0).await.await, common);
-        ds.vid_share(0).await.unwrap_err();
+        ds.read().await.unwrap().vid_share(0).await.unwrap_err();
 
         // Re-insert the common data with the share.
-        ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
+        let mut tx = ds.write().await.unwrap();
+        tx.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
             .await
             .unwrap();
-        ds.commit().await.unwrap();
+        tx.commit().await.unwrap();
         assert_eq!(ds.get_vid_common(0).await.await, common);
-        assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
+        assert_eq!(
+            ds.read().await.unwrap().vid_share(0).await.unwrap(),
+            disperse.shares[0]
+        );
     }
 }

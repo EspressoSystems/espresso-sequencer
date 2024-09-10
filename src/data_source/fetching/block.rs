@@ -14,13 +14,14 @@
 
 use super::{
     header::{fetch_header_and_then, HeaderCallback},
-    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, NotifyStorage, RangedFetchable,
+    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, NotifyStorage,
+    RangedFetchable,
 };
 use crate::{
     availability::{
         BlockId, BlockQueryData, PayloadQueryData, QueryablePayload, UpdateAvailabilityData,
     },
-    data_source::{storage::AvailabilityStorage, VersionedDataSource},
+    data_source::{storage::AvailabilityStorage, update::Transaction, VersionedDataSource},
     fetching::{
         self,
         request::{self, PayloadRequest},
@@ -29,7 +30,7 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryResult,
 };
-use async_std::sync::{Arc, RwLockReadGuard};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
@@ -43,9 +44,9 @@ impl<Types> FetchRequest for BlockId<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
+    fn might_exist(self, heights: Heights) -> bool {
         if let BlockId::Number(n) = self {
-            n < block_height && pruned_height.map_or(true, |ph| n > ph)
+            heights.might_exist(n as u64)
         } else {
             true
         }
@@ -68,15 +69,12 @@ where
         }
     }
 
-    async fn passive_fetch<S>(
-        storage: &NotifyStorage<Types, S>,
+    async fn passive_fetch(
+        notifiers: &Notifiers<Types>,
         req: Self::Request,
-    ) -> BoxFuture<'static, Option<Self>>
-    where
-        S: AvailabilityStorage<Types>,
-    {
-        storage
-            .block_notifier
+    ) -> BoxFuture<'static, Option<Self>> {
+        notifiers
+            .block
             .wait_for(move |block| block.satisfies(req))
             .await
             .into_future()
@@ -84,21 +82,29 @@ where
     }
 
     async fn active_fetch<S, P>(
+        tx: &impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
     ) where
-        S: AvailabilityStorage<Types> + 'static,
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
-        fetch_header_and_then(storage, req, HeaderCallback::Payload { fetcher }).await
+        fetch_header_and_then(
+            tx,
+            req,
+            HeaderCallback::Payload {
+                fetcher: fetcher.clone(),
+            },
+        )
+        .await
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.storage.get_block(req).await
+        storage.get_block(req).await
     }
 }
 
@@ -110,15 +116,12 @@ where
 {
     type RangedRequest = BlockId<Types>;
 
-    async fn load_range<S, R>(
-        storage: &NotifyStorage<Types, S>,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.storage.get_block_range(range).await
+        storage.get_block_range(range).await
     }
 }
 
@@ -128,7 +131,8 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     // Now that we have the header, we only need to retrieve the payload.
@@ -148,16 +152,18 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
 }
 
 async fn store_block<Types, S>(
-    storage: &mut NotifyStorage<Types, S>,
+    storage: &NotifyStorage<Types, S>,
     block: BlockQueryData<Types>,
 ) -> anyhow::Result<()>
 where
     Types: NodeType,
-    S: UpdateAvailabilityData<Types> + VersionedDataSource,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
 {
-    storage.insert_block(block).await?;
-    storage.commit().await?;
-    Ok(())
+    let mut tx = storage.write().await?;
+    tx.insert_block(block).await?;
+    tx.commit().await
 }
 
 #[async_trait]
@@ -176,15 +182,12 @@ where
         }
     }
 
-    async fn passive_fetch<S>(
-        storage: &NotifyStorage<Types, S>,
+    async fn passive_fetch(
+        notifiers: &Notifiers<Types>,
         req: Self::Request,
-    ) -> BoxFuture<'static, Option<Self>>
-    where
-        S: AvailabilityStorage<Types>,
-    {
-        storage
-            .block_notifier
+    ) -> BoxFuture<'static, Option<Self>> {
+        notifiers
+            .block
             .wait_for(move |block| block.satisfies(req))
             .await
             .into_future()
@@ -193,24 +196,25 @@ where
     }
 
     async fn active_fetch<S, P>(
+        tx: &impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
     ) where
-        S: AvailabilityStorage<Types> + 'static,
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
         // the payload, we just fetch the whole block (which may end up fetching only the payload,
         // if that's all that's needed to complete the block).
-        BlockQueryData::active_fetch(fetcher, storage, req).await
+        BlockQueryData::active_fetch(tx, fetcher, req).await
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.storage.get_payload(req).await
+        storage.get_payload(req).await
     }
 }
 
@@ -222,15 +226,12 @@ where
 {
     type RangedRequest = BlockId<Types>;
 
-    async fn load_range<S, R>(
-        storage: &NotifyStorage<Types, S>,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.storage.get_payload_range(range).await
+        storage.get_payload_range(range).await
     }
 }
 
@@ -265,7 +266,8 @@ impl<Types: NodeType, S, P> PartialOrd for PayloadCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<Payload<Types>> for PayloadCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types>,
+    S: 'static + VersionedDataSource,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, payload: Payload<Types>) {
@@ -274,17 +276,10 @@ where
         let height = block.height();
 
         // Store the block in local storage, so we can avoid fetching it in the future.
-        {
-            let mut storage = self.fetcher.storage.write().await;
-            if let Err(err) = store_block(&mut *storage, block).await {
-                // Rollback the transaction if insert fails
-                // This prevents subsequent queries from failing, as they would be part of the same transaction block.
-                storage.revert().await;
-                // It is unfortunate if this fails, but we can still proceed by returning
-                // the block that we fetched, keeping it in memory. Simply log the error and
-                // move on.
-                tracing::warn!("failed to store fetched block {height}: {err}");
-            }
+        if let Err(err) = store_block(&self.fetcher.storage, block).await {
+            // It is unfortunate if this fails, but we can still proceed by returning the block that
+            // we fetched, keeping it in memory. Simply log the error and move on.
+            tracing::warn!("failed to store fetched block {height}: {err}");
         }
     }
 }

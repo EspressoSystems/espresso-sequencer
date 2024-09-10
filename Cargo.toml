@@ -98,9 +98,9 @@ toml = "0.8"
 tracing = "0.1"
 trait-variant = "0.1"
 typenum = "1"
+url = "2"
 vbs = "0.1"
 vec1 = "1.12"
-url = "2"
 
 # Dependencies enabled by feature "file-system-data-source".
 atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.4", optional = true }

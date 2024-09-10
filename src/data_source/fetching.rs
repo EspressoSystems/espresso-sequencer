@@ -74,8 +74,10 @@
 //! fetched [proactively](#proactive-fetching).
 
 use super::{
-    notifier::Notifier,
-    storage::{pruning::PruneStorage, AvailabilityStorage, ExplorerStorage},
+    storage::{
+        pruning::{PruneStorage, PrunedHeightStorage},
+        AvailabilityStorage, ExplorerStorage,
+    },
     VersionedDataSource,
 };
 use crate::{
@@ -88,24 +90,19 @@ use crate::{
     fetching::{self, request, Provider},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
-        UpdateStateData,
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
     task::BackgroundTask,
     types::HeightIndexed,
-    Header, Payload, QueryResult, Transaction, VidShare,
+    Header, Payload, QueryError, QueryResult, VidShare,
 };
 use anyhow::Context;
 use async_lock::Semaphore;
-use async_std::{
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-    task::sleep,
-};
+use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
 use derivative::Derivative;
-use derive_more::From;
 use futures::{
     future::{self, join_all, BoxFuture, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
@@ -116,7 +113,7 @@ use std::{
     cmp::min,
     fmt::{Debug, Display},
     marker::PhantomData,
-    ops::{Bound, Deref, DerefMut, Range, RangeBounds},
+    ops::{Bound, Range, RangeBounds},
     time::Duration,
 };
 use tracing::Instrument;
@@ -124,13 +121,18 @@ use tracing::Instrument;
 mod block;
 mod header;
 mod leaf;
+mod notify_storage;
 mod transaction;
 mod vid;
 
-use block::PayloadFetcher;
-use leaf::LeafFetcher;
-use transaction::TransactionRequest;
-use vid::{VidCommonFetcher, VidCommonRequest};
+use self::{
+    block::PayloadFetcher,
+    leaf::LeafFetcher,
+    notify_storage::{Heights, Notifiers, NotifyStorage},
+    transaction::TransactionRequest,
+    vid::{VidCommonFetcher, VidCommonRequest},
+};
+pub use notify_storage::Transaction;
 
 /// Builder for [`FetchingDataSource`] with configuration.
 pub struct Builder<Types, S, P> {
@@ -289,7 +291,10 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
+    S: PruneStorage + VersionedDataSource + 'static,
+    for<'a> S::ReadOnly<'a>:
+        PrunedHeightStorage + NodeDataSource<Types> + AvailabilityStorage<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     /// Build a [`FetchingDataSource`] with these options.
@@ -346,11 +351,11 @@ impl<Types, S, P> Pruner<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: PruneStorage + Send + Sync + 'static,
     P: AvailabilityProvider<Types>,
 {
     async fn new(fetcher: Arc<Fetcher<Types, S, P>>) -> Self {
-        let cfg = fetcher.storage.read().await.storage.get_pruning_config();
+        let cfg = fetcher.storage.get_pruning_config();
         let Some(cfg) = cfg else {
             return Self {
                 handle: None,
@@ -361,28 +366,7 @@ where
         let future = async move {
             for i in 1.. {
                 tracing::warn!("starting pruner run {i} ");
-                // We loop until the whole run pruner run is complete
-                // This allows write lock to be released after each batch delete
-                loop {
-                    let mut storage = fetcher.storage.write().await;
-
-                    match storage.storage.prune().await {
-                        Ok(Some(height)) => {
-                            storage.pruned_height = Some(height);
-                            tracing::warn!("Pruned to height {height}");
-                        }
-                        Ok(None) => {
-                            tracing::warn!("pruner run {i} complete.");
-                            break;
-                        }
-                        Err(e) => {
-                            tracing::error!("pruner run {i} failed: {e:?}");
-                            storage.revert().await;
-                            break;
-                        }
-                    }
-                }
-
+                fetcher.storage.prune().await;
                 sleep(cfg.interval()).await;
             }
         };
@@ -401,7 +385,10 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + PruneStorage + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::ReadOnly<'a>:
+        PrunedHeightStorage + NodeDataSource<Types> + AvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     /// Build a [`FetchingDataSource`] with the given `storage` and `provider`.
@@ -445,65 +432,12 @@ where
     }
 }
 
-#[derive(From)]
-pub struct StorageReadGuard<'a, Types, S>
+impl<Types, S, P> AsRef<S> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
 {
-    inner: RwLockReadGuard<'a, NotifyStorage<Types, S>>,
-}
-
-impl<'a, Types, S> Deref for StorageReadGuard<'a, Types, S>
-where
-    Types: NodeType,
-{
-    type Target = S;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner.storage
-    }
-}
-
-#[derive(From)]
-pub struct StorageWriteGuard<'a, Types, S>
-where
-    Types: NodeType,
-{
-    inner: RwLockWriteGuard<'a, NotifyStorage<Types, S>>,
-}
-
-impl<'a, Types, S> Deref for StorageWriteGuard<'a, Types, S>
-where
-    Types: NodeType,
-{
-    type Target = S;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner.storage
-    }
-}
-
-impl<'a, Types, S> DerefMut for StorageWriteGuard<'a, Types, S>
-where
-    Types: NodeType,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner.storage
-    }
-}
-
-impl<Types, S, P> FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-{
-    /// Obtain direct, read-only access to the underlying local storage.
-    pub async fn storage(&self) -> StorageReadGuard<Types, S> {
-        self.fetcher.storage.read().await.into()
-    }
-
-    /// Obtain direct, mutable access the underlying local storage.
-    pub async fn storage_mut(&self) -> StorageWriteGuard<Types, S> {
-        self.fetcher.storage.write().await.into()
+    fn as_ref(&self) -> &S {
+        self.fetcher.storage.as_ref()
     }
 }
 
@@ -511,11 +445,15 @@ where
 impl<Types, S, P> StatusDataSource for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    S: NodeDataSource<Types> + Send + Sync,
+    S: VersionedDataSource + Send + Sync + 'static,
+    for<'a> S::ReadOnly<'a>: NodeDataSource<Types>,
     P: Send + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
-        NodeDataSource::block_height(self).await
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.block_height().await
     }
 
     fn metrics(&self) -> &PrometheusMetrics {
@@ -528,7 +466,10 @@ impl<Types, S, P> AvailabilityDataSource<Types> for FetchingDataSource<Types, S,
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::ReadOnly<'a>:
+        PrunedHeightStorage + AvailabilityStorage<Types> + NodeDataSource<Types>,
     P: AvailabilityProvider<Types>,
 {
     type LeafRange<R> = BoxStream<'static, Fetch<LeafQueryData<Types>>>
@@ -608,240 +549,25 @@ where
     }
 }
 
-#[async_trait]
-impl<Types, State, S, P, const ARITY: usize> UpdateStateData<Types, State, ARITY>
-    for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    State: MerklizedState<Types, ARITY>,
-    S: UpdateStateData<Types, State, ARITY> + Send + Sync + 'static,
-    P: AvailabilityProvider<Types>,
-{
-    async fn insert_merkle_nodes(
-        &mut self,
-        path: MerkleProof<State::Entry, State::Key, State::T, ARITY>,
-        traversal_path: Vec<usize>,
-        block_number: u64,
-    ) -> QueryResult<()> {
-        self.fetcher
-            .storage
-            .write()
-            .await
-            .storage
-            .insert_merkle_nodes(path, traversal_path, block_number)
-            .await
-    }
-}
-
-#[async_trait]
-impl<Types, S, State, P, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
-    for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    S: MerklizedStateDataSource<Types, State, ARITY> + Send + Sync + 'static,
-    P: AvailabilityProvider<Types>,
-    State: MerklizedState<Types, ARITY> + 'static,
-    <State as MerkleTreeScheme>::Commitment: Send,
-{
-    async fn get_path(
-        &self,
-        snapshot: Snapshot<Types, State, ARITY>,
-        key: State::Key,
-    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
-        self.fetcher
-            .storage
-            .read()
-            .await
-            .storage
-            .get_path(snapshot, key)
-            .await
-    }
-}
-
-#[async_trait]
-impl<Types, S, P> MerklizedStateHeightPersistence for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    S: MerklizedStateHeightPersistence + Send + Sync,
-    P: Send + Sync,
-{
-    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
-        self.fetcher
-            .storage
-            .write()
-            .await
-            .storage
-            .set_last_state_height(height)
-            .await
-    }
-    async fn get_last_state_height(&self) -> QueryResult<usize> {
-        self.fetcher
-            .storage
-            .read()
-            .await
-            .storage
-            .get_last_state_height()
-            .await
-    }
-}
-#[async_trait]
-impl<Types, S, P> UpdateAvailabilityData<Types> for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    S: UpdateAvailabilityData<Types> + Send + Sync,
-    P: Send + Sync,
-{
-    type Error = S::Error;
-
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
-        self.fetcher.storage.write().await.insert_leaf(leaf).await
-    }
-
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
-        self.fetcher.storage.write().await.insert_block(block).await
-    }
-
-    async fn insert_vid(
-        &mut self,
-        common: VidCommonQueryData<Types>,
-        share: Option<VidShare>,
-    ) -> Result<(), Self::Error> {
-        self.fetcher
-            .storage
-            .write()
-            .await
-            .insert_vid(common, share)
-            .await
-    }
-}
-
-#[async_trait]
-impl<Types, S, P> NodeDataSource<Types> for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    S: NodeDataSource<Types> + Send + Sync,
-    P: Send + Sync,
-{
-    async fn block_height(&self) -> QueryResult<usize> {
-        Ok(self.fetcher.storage.read().await.height as usize)
-    }
-
-    async fn count_transactions(&self) -> QueryResult<usize> {
-        self.storage().await.count_transactions().await
-    }
-
-    async fn payload_size(&self) -> QueryResult<usize> {
-        self.storage().await.payload_size().await
-    }
-
-    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
-    where
-        ID: Into<BlockId<Types>> + Send + Sync,
-    {
-        self.storage().await.vid_share(id).await
-    }
-
-    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
-        self.storage().await.sync_status().await
-    }
-
-    async fn get_header_window(
-        &self,
-        start: impl Into<WindowStart<Types>> + Send + Sync,
-        end: u64,
-    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
-        self.storage().await.get_header_window(start, end).await
-    }
-}
-
-#[async_trait]
 impl<Types, S, P> VersionedDataSource for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
     S: VersionedDataSource + Send + Sync,
     P: Send + Sync,
 {
-    type Error = S::Error;
+    type Transaction<'a> = Transaction<'a, Types, S::Transaction<'a>>
+    where
+        Self: 'a;
+    type ReadOnly<'a> = Transaction<'a, Types, S::ReadOnly<'a>>
+    where
+        Self: 'a;
 
-    async fn commit(&mut self) -> Result<(), Self::Error> {
-        self.fetcher.storage.write().await.commit().await
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        self.fetcher.write().await
     }
 
-    async fn revert(&mut self) {
-        self.fetcher.storage.write().await.revert().await
-    }
-}
-
-#[async_trait]
-impl<Types, S, P> ExplorerStorage<Types> for FetchingDataSource<Types, S, P>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
-    Transaction<Types>: explorer::traits::ExplorerTransaction,
-    S: ExplorerStorage<Types> + Send + Sync,
-    P: Send + Sync,
-{
-    async fn get_block_summaries(
-        &self,
-        request: explorer::query_data::GetBlockSummariesRequest<Types>,
-    ) -> Result<
-        Vec<explorer::query_data::BlockSummary<Types>>,
-        explorer::query_data::GetBlockSummariesError,
-    > {
-        self.storage().await.get_block_summaries(request).await
-    }
-
-    async fn get_block_detail(
-        &self,
-        request: explorer::query_data::BlockIdentifier<Types>,
-    ) -> Result<explorer::query_data::BlockDetail<Types>, explorer::query_data::GetBlockDetailError>
-    {
-        self.storage().await.get_block_detail(request).await
-    }
-
-    async fn get_transaction_summaries(
-        &self,
-        request: explorer::query_data::GetTransactionSummariesRequest<Types>,
-    ) -> Result<
-        Vec<explorer::query_data::TransactionSummary<Types>>,
-        explorer::query_data::GetTransactionSummariesError,
-    > {
-        self.storage()
-            .await
-            .get_transaction_summaries(request)
-            .await
-    }
-
-    async fn get_transaction_detail(
-        &self,
-        request: explorer::query_data::TransactionIdentifier<Types>,
-    ) -> Result<
-        explorer::query_data::TransactionDetailResponse<Types>,
-        explorer::query_data::GetTransactionDetailError,
-    > {
-        self.storage().await.get_transaction_detail(request).await
-    }
-
-    async fn get_explorer_summary(
-        &self,
-    ) -> Result<
-        explorer::query_data::ExplorerSummary<Types>,
-        explorer::query_data::GetExplorerSummaryError,
-    > {
-        self.storage().await.get_explorer_summary().await
-    }
-
-    async fn get_search_results(
-        &self,
-        query: String,
-    ) -> Result<
-        explorer::query_data::SearchResult<Types>,
-        explorer::query_data::GetSearchResultsError,
-    > {
-        self.storage().await.get_search_results(query).await
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
+        self.fetcher.read().await
     }
 }
 
@@ -851,7 +577,7 @@ struct Fetcher<Types, S, P>
 where
     Types: NodeType,
 {
-    storage: RwLock<NotifyStorage<Types, S>>,
+    storage: NotifyStorage<Types, S>,
     provider: Arc<P>,
     payload_fetcher: Arc<PayloadFetcher<Types, S, P>>,
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
@@ -863,76 +589,33 @@ where
     chunk_fetch_delay: Duration,
 }
 
-#[derive(Debug)]
-struct NotifyStorage<Types, S>
+impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
 where
     Types: NodeType,
+    S: VersionedDataSource + Send + Sync,
+    P: Send + Sync,
 {
-    storage: S,
-    height: u64,
-    // The block height at the last commit, which we will roll back to on `revert`.
-    committed_height: u64,
-    pruned_height: Option<u64>,
-    block_notifier: Notifier<BlockQueryData<Types>>,
-    leaf_notifier: Notifier<LeafQueryData<Types>>,
-    vid_common_notifier: Notifier<VidCommonQueryData<Types>>,
-}
+    type Transaction<'a> = Transaction<'a, Types, S::Transaction<'a>>
+    where
+        Self: 'a;
+    type ReadOnly<'a> = Transaction<'a, Types, S::ReadOnly<'a>>
+    where
+        Self: 'a;
 
-impl<Types, S> NotifyStorage<Types, S>
-where
-    Types: NodeType,
-    S: UpdateAvailabilityData<Types>,
-{
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), S::Error> {
-        self.leaf_notifier.notify(&leaf);
-        if leaf.height() + 1 > self.height {
-            self.height = leaf.height() + 1;
-        }
-        self.storage.insert_leaf(leaf).await
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        self.storage.write().await
     }
 
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), S::Error> {
-        self.block_notifier.notify(&block);
-        if block.height() + 1 > self.height {
-            self.height = block.height() + 1;
-        }
-        self.storage.insert_block(block).await
-    }
-
-    async fn insert_vid(
-        &mut self,
-        common: VidCommonQueryData<Types>,
-        share: Option<VidShare>,
-    ) -> Result<(), S::Error> {
-        self.vid_common_notifier.notify(&common);
-        if common.height() + 1 > self.height {
-            self.height = common.height() + 1;
-        }
-        self.storage.insert_vid(common, share).await
-    }
-}
-
-impl<Types, S> NotifyStorage<Types, S>
-where
-    Types: NodeType,
-    S: VersionedDataSource,
-{
-    async fn commit(&mut self) -> Result<(), S::Error> {
-        self.storage.commit().await?;
-        self.committed_height = self.height;
-        Ok(())
-    }
-
-    async fn revert(&mut self) {
-        self.storage.revert().await;
-        self.height = self.committed_height;
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
+        self.storage.read().await
     }
 }
 
 impl<Types, S, P> Fetcher<Types, S, P>
 where
     Types: NodeType,
-    S: NodeDataSource<Types> + PruneStorage + Sync + Send,
+    S: VersionedDataSource + Sync,
+    for<'a> S::ReadOnly<'a>: NodeDataSource<Types> + PrunedHeightStorage,
 {
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let mut payload_fetcher = fetching::Fetcher::default();
@@ -952,18 +635,8 @@ where
             vid_common_fetcher = vid_common_fetcher.with_rate_limit(permit);
         }
 
-        let height = builder.storage.block_height().await? as u64;
-        let pruned_height = builder.storage.load_pruned_height().await?;
         Ok(Self {
-            storage: RwLock::new(NotifyStorage {
-                height,
-                committed_height: height,
-                pruned_height,
-                storage: builder.storage,
-                block_notifier: Notifier::new(),
-                leaf_notifier: Notifier::new(),
-                vid_common_notifier: Notifier::new(),
-            }),
+            storage: NotifyStorage::new(builder.storage),
             provider: Arc::new(builder.provider),
             payload_fetcher: Arc::new(payload_fetcher),
             leaf_fetcher: Arc::new(leaf_fetcher),
@@ -979,7 +652,10 @@ impl<Types, S, P> Fetcher<Types, S, P>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::ReadOnly<'a>:
+        AvailabilityStorage<Types> + PrunedHeightStorage + NodeDataSource<Types>,
     P: AvailabilityProvider<Types>,
 {
     async fn get<T, R>(self: &Arc<Self>, req: R) -> Fetch<T>
@@ -988,24 +664,23 @@ where
         R: Into<T::Request> + Send,
     {
         let req = req.into();
-        // Hold a read lock on `storage` while we run `ok_or_fetch`. This means that no
-        // notifications are sent in between checking local storage and triggering a fetch if
-        // necessary, since sending notifications requires a write lock. Hence, we will not miss a
-        // notification.
-        let storage = self.storage.read().await;
-        let pruned_height = storage.pruned_height.map(|h| h as usize);
+        // Subscribe to notifications while we run `ok_or_fetch`. This means we won't miss any
+        // notifications sent in between checking local storage and triggering a fetch if necessary.
+        let passive = T::passive_fetch(self.storage.notifiers(), req).await;
 
-        // Fall back to fetching early and quietly if it is impossible for the object to exist.
-        if !req.might_exist(storage.height as usize, pruned_height) {
-            tracing::debug!(
-                "not loading object {req:?} that cannot exist at height {}",
-                storage.height
-            );
-            self.fetch(&storage, req).await
-        } else {
-            self.ok_or_fetch(&storage, req, T::load(&storage, req).await)
-                .await
-        }
+        let tx = match self.read().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::warn!(
+                    ?req,
+                    "unable to start transaction to load object, falling back to fetching: {err:#}"
+                );
+                return self.fetch(None, passive, req).await;
+            }
+        };
+
+        self.ok_or_fetch(Some(&tx), passive, req, T::load(&tx, req).await)
+            .await
     }
 
     /// Get a range of objects from local storage or a provider.
@@ -1079,27 +754,33 @@ where
     where
         T: RangedFetchable<Types>,
     {
-        let storage = self.storage.read().await;
-        let pruned_height = storage.pruned_height.map(|h| h as usize);
-        // We can avoid touching storage if it is not possible for any entry in the entire range to
-        // exist given the current block height. In this case, we know storage would return an empty
-        // range.
-        let ts = if chunk
-            .clone()
-            .any(|i| T::Request::from(i).might_exist(storage.height as usize, pruned_height))
-        {
-            T::load_range(&storage, chunk.clone())
-                .await
-                .context(format!("when fetching items in range {chunk:?}"))
-                .ok_or_trace()
-                .unwrap_or_default()
-        } else {
-            tracing::debug!(
-                "not loading chunk {chunk:?} which cannot exist at block height {}",
-                storage.height
-            );
-            vec![]
+        // Subscribe to notifications first. This means we won't miss any notifications sent in
+        // between checking local storage and triggering a fetch if necessary.
+        let mut passive = join_all(
+            chunk
+                .clone()
+                .map(|i| T::passive_fetch(self.storage.notifiers(), i.into())),
+        )
+        .await;
+
+        let (tx, ts) = match self.read().await {
+            Ok(tx) => {
+                let ts = T::load_range(&tx, chunk.clone())
+                    .await
+                    .context(format!("when fetching items in range {chunk:?}"))
+                    .ok_or_trace()
+                    .unwrap_or_default();
+                (Some(tx), ts)
+            }
+            Err(err) => {
+                tracing::warn!(
+                    ?chunk,
+                    "unable to open transaction to read chunk, falling back to fetching: {err:#}"
+                );
+                (None, vec![])
+            }
         };
+
         // Log and discard error information; we want a list of Option where None indicates an
         // object that needs to be fetched. Note that we don't use `FetchRequest::might_exist` to
         // silence the logs here when an object is missing that is not expected to exist at all.
@@ -1116,14 +797,22 @@ where
                     "item {} in chunk not available, will be fetched",
                     fetches.len()
                 );
-                fetches.push(self.fetch(&storage, chunk.start + fetches.len()).boxed());
+                fetches.push(
+                    self.fetch(tx.as_ref(), passive.remove(0), chunk.start + fetches.len())
+                        .boxed(),
+                );
             }
-            // `t` itself is already available, we don't have to trigger a fetch for it.
+            // `t` itself is already available, we don't have to trigger a fetch for it. Remove (and
+            // drop without awaiting) the passive fetch we preemptively started.
+            drop(passive.remove(0));
             fetches.push(future::ready(Fetch::Ready(t)).boxed());
         }
         // Fetch missing objects from the end of the range.
         while fetches.len() < chunk.len() {
-            fetches.push(self.fetch(&storage, chunk.start + fetches.len()).boxed());
+            fetches.push(
+                self.fetch(tx.as_ref(), passive.remove(0), chunk.start + fetches.len())
+                    .boxed(),
+            );
         }
 
         // We `join_all` here because we want this iterator to be evaluated eagerly for two reasons:
@@ -1139,7 +828,8 @@ where
 
     async fn ok_or_fetch<R, T>(
         self: &Arc<Self>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        tx: Option<&<Self as VersionedDataSource>::ReadOnly<'_>>,
+        passive: PassiveFetch<T>,
         req: R,
         res: QueryResult<T>,
     ) -> Fetch<T>
@@ -1149,7 +839,8 @@ where
     {
         let req = req.into();
         self.some_or_fetch(
-            storage,
+            tx,
+            passive,
             req,
             res.context(format!("req: {req:?}")).ok_or_trace(),
         )
@@ -1158,7 +849,8 @@ where
 
     async fn some_or_fetch<R, T>(
         self: &Arc<Self>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        tx: Option<&<Self as VersionedDataSource>::ReadOnly<'_>>,
+        passive: PassiveFetch<T>,
         req: R,
         res: Option<T>,
     ) -> Fetch<T>
@@ -1168,13 +860,14 @@ where
     {
         match res {
             Some(t) => Fetch::Ready(t),
-            None => self.fetch(storage, req).await,
+            None => self.fetch(tx, passive, req).await,
         }
     }
 
     async fn fetch<R, T>(
         self: &Arc<Self>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
+        tx: Option<&<Self as VersionedDataSource>::ReadOnly<'_>>,
+        passive: PassiveFetch<T>,
         req: R,
     ) -> Fetch<T>
     where
@@ -1185,62 +878,42 @@ where
         tracing::debug!("fetching resource {req:?}");
 
         // Subscribe to notifications so we are alerted when we get the resource.
-        let fut = T::passive_fetch(&**storage, req)
-            .await
-            .then(move |opt| async move {
-                match opt {
-                    Some(t) => t,
-                    None => {
-                        // If `passive_fetch` returns `None`, it means the notifier was dropped
-                        // without ever sending a notification. In this case, the correct behavior
-                        // is actually to block forever (unless the `Fetch` itself is dropped),
-                        // since the semantics of `Fetch` are to never fail. This is analogous to
-                        // fetching an object which doesn't actually exist: the `Fetch` will never
-                        // return.
-                        //
-                        // However, for ease of debugging, and since this is never expected to
-                        // happen in normal usage, we panic instead. This should only happen in two
-                        // cases:
-                        // * The server was shut down (dropping the notifier) without cleaning up
-                        //   some background tasks. This will not affect runtime behavior, but
-                        //   should be fixed if it happens.
-                        // * There is a very unexpected runtime bug resulting in the notifier being
-                        //   dropped. If this happens, things are very broken in any case, and it is
-                        //   better to panic loudly than simply block forever.
-                        panic!("notifier dropped without satisfying request {req:?}");
-                    }
+        let fut = passive.then(move |opt| async move {
+            match opt {
+                Some(t) => t,
+                None => {
+                    // If `passive_fetch` returns `None`, it means the notifier was dropped without
+                    // ever sending a notification. In this case, the correct behavior is actually
+                    // to block forever (unless the `Fetch` itself is dropped), since the semantics
+                    // of `Fetch` are to never fail. This is analogous to fetching an object which
+                    // doesn't actually exist: the `Fetch` will never return.
+                    //
+                    // However, for ease of debugging, and since this is never expected to happen in
+                    // normal usage, we panic instead. This should only happen in two cases:
+                    // * The server was shut down (dropping the notifier) without cleaning up some
+                    //   background tasks. This will not affect runtime behavior, but should be
+                    //   fixed if it happens.
+                    // * There is a very unexpected runtime bug resulting in the notifier being
+                    //   dropped. If this happens, things are very broken in any case, and it is
+                    //   better to panic loudly than simply block forever.
+                    panic!("notifier dropped without satisfying request {req:?}");
                 }
-            });
+            }
+        });
 
         // Trigger an active fetch from a remote provider if possible.
-        //
-        // We pass in the lock we have on `storage`, so that `active_fetch` is allowed to read from
-        // storage without needing to recursively acquire a read lock. This is important because
-        // `active_fetch` sometimes needs to read from storage in order to decide whether it is
-        // appropriate to spawn an active fetching task.
-        //
-        // Ordinarily, taking a read-only lock recursively from the same task would be fine,
-        // but because async_std::RwLock is "write-preferring" (attempts to acquire a read lock
-        // block if there are concurrent attempts to acquire a write lock) we can have the following
-        // deadlock:
-        // * This task acquires `storage` in the caller of this function
-        // * Another task completes a fetch and attempts to acquire a write lock on storage to save
-        //   the fetched resource. This blocks since we have a read lock.
-        // * This task (in `active_fetch`) attempts to acquire a read lock on storage. This blocks
-        //   due to the concurrent request for a write lock. However as long as we are blocked, we
-        //   can never release the _original_ read lock we had on `storage`, and so we can never
-        //   unblock the task waiting for a write lock, which in turn means we can never become
-        //   unblocked ourselves.
-
-        let pruned_height = storage.pruned_height.map(|h| h as usize);
-
-        if req.might_exist(storage.height as usize, pruned_height) {
-            T::active_fetch(self.clone(), storage, req).await;
+        if let Some(tx) = tx {
+            if let Some(heights) = tx.heights().await.ok_or_trace() {
+                if req.might_exist(heights) {
+                    T::active_fetch(tx, self.clone(), req).await;
+                } else {
+                    tracing::debug!("not fetching object {req:?} that cannot exist at {heights:?}");
+                }
+            } else {
+                tracing::warn!("failed to load heights; cannot definitively say object might exist; will skip active fetch");
+            }
         } else {
-            tracing::debug!(
-                "not fetching object {req:?} that cannot exist at height {}",
-                storage.height
-            );
+            tracing::warn!(?req, "unable to open transaction; will skip active fetch");
         }
 
         // Wait for the object to arrive.
@@ -1265,16 +938,41 @@ where
             let major = i % major_interval == major_offset % major_interval;
             let span = tracing::warn_span!("proactive scan", i, major, prev_height);
             async {
-                let (minimum_block_height, block_height) = {
-                    let storage = self.storage.read().await;
-                    // Get the pruned height or default to 0 if it is not set.
-                    // We will start looking for missing blocks from the pruned height.
-                    let pruned_height = storage.pruned_height.unwrap_or(0) as usize;
-                    // Get the block height; we will look for any missing blocks up to
-                    // `block_height`.
-                    let block_height = storage.height as usize;
-                    (pruned_height, block_height)
+                let mut backoff = minor_interval;
+                let max_backoff = Duration::from_secs(60);
+
+                // We can't start the scan until we know the current block height and pruned height,
+                // so we know which blocks to scan. Thus we retry until this succeeds.
+                let heights = loop {
+                    let tx = match self.read().await {
+                        Ok(tx) => tx,
+                        Err(err) => {
+                            tracing::error!(
+                                ?backoff,
+                                "unable to start transaction for scan: {err:#}"
+                            );
+                            sleep(backoff).await;
+                            backoff = min(2 * backoff, max_backoff);
+                            continue;
+                        }
+                    };
+                    let heights = match tx.heights().await {
+                        Ok(heights) => heights,
+                        Err(err) => {
+                            tracing::error!(?backoff, "unable to load heights: {err:#}");
+                            sleep(backoff).await;
+                            backoff = min(2 * backoff, max_backoff);
+                            continue;
+                        }
+                    };
+                    break heights;
                 };
+
+                // Get the pruned height or default to 0 if it is not set. We will start looking for
+                // missing blocks from the pruned height.
+                let minimum_block_height = heights.pruned_height.unwrap_or(0) as usize;
+                // Get the block height; we will look for any missing blocks up to `block_height`.
+                let block_height = heights.height as usize;
 
                 // In a major scan, we fetch all blocks between 0 and `block_height`. In minor scans
                 // (much more frequent) we fetch blocks that are missing since the last scan.
@@ -1325,6 +1023,191 @@ where
     }
 }
 
+#[async_trait]
+impl<Types, S, P, State, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
+    for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    S: VersionedDataSource,
+    for<'a> S::ReadOnly<'a>: MerklizedStateDataSource<Types, State, ARITY> + Send + Sync,
+    P: Send + Sync,
+    State: MerklizedState<Types, ARITY> + 'static,
+    <State as MerkleTreeScheme>::Commitment: Send,
+{
+    async fn get_path(
+        &self,
+        snapshot: Snapshot<Types, State, ARITY>,
+        key: State::Key,
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_path(snapshot, key).await
+    }
+}
+
+#[async_trait]
+impl<Types, S, P> MerklizedStateHeightPersistence for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource,
+    for<'a> S::ReadOnly<'a>: MerklizedStateHeightPersistence + Send + Sync,
+    P: Send + Sync,
+{
+    async fn get_last_state_height(&self) -> QueryResult<usize> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_last_state_height().await
+    }
+}
+
+#[async_trait]
+impl<Types, S, P> NodeDataSource<Types> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    S: VersionedDataSource + 'static,
+    for<'a> S::ReadOnly<'a>: NodeDataSource<Types> + Sync,
+    P: Send + Sync,
+{
+    async fn block_height(&self) -> QueryResult<usize> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.block_height().await
+    }
+
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.count_transactions().await
+    }
+
+    async fn payload_size(&self) -> QueryResult<usize> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.payload_size().await
+    }
+
+    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.vid_share(id).await
+    }
+
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.sync_status().await
+    }
+
+    async fn get_header_window(
+        &self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_header_window(start, end).await
+    }
+}
+
+#[async_trait]
+impl<Types, S, P> ExplorerStorage<Types> for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
+    crate::Transaction<Types>: explorer::traits::ExplorerTransaction,
+    S: VersionedDataSource,
+    for<'a> S::ReadOnly<'a>: ExplorerStorage<Types> + Send + Sync,
+    P: Send + Sync,
+{
+    async fn get_block_summaries(
+        &self,
+        request: explorer::query_data::GetBlockSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::query_data::BlockSummary<Types>>,
+        explorer::query_data::GetBlockSummariesError,
+    > {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_block_summaries(request).await
+    }
+
+    async fn get_block_detail(
+        &self,
+        request: explorer::query_data::BlockIdentifier<Types>,
+    ) -> Result<explorer::query_data::BlockDetail<Types>, explorer::query_data::GetBlockDetailError>
+    {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_block_detail(request).await
+    }
+
+    async fn get_transaction_summaries(
+        &self,
+        request: explorer::query_data::GetTransactionSummariesRequest<Types>,
+    ) -> Result<
+        Vec<explorer::query_data::TransactionSummary<Types>>,
+        explorer::query_data::GetTransactionSummariesError,
+    > {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_transaction_summaries(request).await
+    }
+
+    async fn get_transaction_detail(
+        &self,
+        request: explorer::query_data::TransactionIdentifier<Types>,
+    ) -> Result<
+        explorer::query_data::TransactionDetailResponse<Types>,
+        explorer::query_data::GetTransactionDetailError,
+    > {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_transaction_detail(request).await
+    }
+
+    async fn get_explorer_summary(
+        &self,
+    ) -> Result<
+        explorer::query_data::ExplorerSummary<Types>,
+        explorer::query_data::GetExplorerSummaryError,
+    > {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_explorer_summary().await
+    }
+
+    async fn get_search_results(
+        &self,
+        query: String,
+    ) -> Result<
+        explorer::query_data::SearchResult<Types>,
+        explorer::query_data::GetSearchResultsError,
+    > {
+        let tx = self.read().await.map_err(|err| QueryError::Error {
+            message: err.to_string(),
+        })?;
+        tx.get_search_results(query).await
+    }
+}
+
 /// A provider which can be used as a fetcher by the availability service.
 pub trait AvailabilityProvider<Types: NodeType>:
     Provider<Types, request::LeafRequest>
@@ -1354,7 +1237,7 @@ trait FetchRequest: Copy + Debug + Send + Sync + 'static {
     ///
     /// This method is conservative: it returns `true` if it cannot tell whether the given object
     /// could exist or not.
-    fn might_exist(self, _block_height: usize, _pruned_height: Option<usize>) -> bool {
+    fn might_exist(self, _heights: Heights) -> bool {
         true
     }
 }
@@ -1394,29 +1277,27 @@ where
     /// receive it passively, since we will eventually receive all blocks and leaves that are ever
     /// produced. Active fetching merely helps us receive certain objects sooner.
     async fn active_fetch<S, P>(
+        tx: &impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
     ) where
-        S: AvailabilityStorage<Types> + 'static,
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>;
 
     /// Wait for someone else to fetch the object.
-    async fn passive_fetch<S>(
-        storage: &NotifyStorage<Types, S>,
-        req: Self::Request,
-    ) -> BoxFuture<'static, Option<Self>>
-    where
-        S: AvailabilityStorage<Types>;
+    async fn passive_fetch(notifiers: &Notifiers<Types>, req: Self::Request) -> PassiveFetch<Self>;
 
     /// Load an object from local storage.
     ///
     /// This function assumes `req.might_exist()` has already been checked before calling it, and so
     /// may do unnecessary work if the caller does not ensure this.
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>;
 }
+
+type PassiveFetch<T> = BoxFuture<'static, Option<T>>;
 
 #[async_trait]
 trait RangedFetchable<Types>: Fetchable<Types, Request = Self::RangedRequest> + HeightIndexed
@@ -1427,10 +1308,7 @@ where
     type RangedRequest: FetchRequest + From<usize> + Send;
 
     /// Load a range of these objects from local storage.
-    async fn load_range<S, R>(
-        storage: &NotifyStorage<Types, S>,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static;

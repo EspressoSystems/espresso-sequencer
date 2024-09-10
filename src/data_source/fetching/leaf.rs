@@ -13,17 +13,17 @@
 //! [`Fetchable`] implementation for [`LeafQueryData`].
 
 use super::{
-    header::HeaderCallback, AvailabilityProvider, FetchRequest, Fetchable, Fetcher, NotifyStorage,
-    RangedFetchable,
+    header::HeaderCallback, AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights,
+    Notifiers, NotifyStorage, RangedFetchable,
 };
 use crate::{
     availability::{LeafId, LeafQueryData, QueryablePayload, UpdateAvailabilityData},
-    data_source::{storage::AvailabilityStorage, VersionedDataSource},
+    data_source::{storage::AvailabilityStorage, update::Transaction, VersionedDataSource},
     fetching::{self, request, Callback},
     types::HeightIndexed,
     Payload, QueryResult,
 };
-use async_std::sync::{Arc, RwLockReadGuard};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
@@ -38,9 +38,9 @@ impl<Types> FetchRequest for LeafId<Types>
 where
     Types: NodeType,
 {
-    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
+    fn might_exist(self, heights: Heights) -> bool {
         if let LeafId::Number(n) = self {
-            n < block_height && pruned_height.map_or(true, |ph| n > ph)
+            heights.might_exist(n as u64)
         } else {
             true
         }
@@ -62,15 +62,12 @@ where
         }
     }
 
-    async fn passive_fetch<S>(
-        storage: &NotifyStorage<Types, S>,
+    async fn passive_fetch(
+        notifiers: &Notifiers<Types>,
         req: Self::Request,
-    ) -> BoxFuture<'static, Option<Self>>
-    where
-        S: AvailabilityStorage<Types>,
-    {
-        storage
-            .leaf_notifier
+    ) -> BoxFuture<'static, Option<Self>> {
+        notifiers
+            .leaf
             .wait_for(move |leaf| leaf.satisfies(req))
             .await
             .into_future()
@@ -78,21 +75,22 @@ where
     }
 
     async fn active_fetch<S, P>(
+        _tx: &impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
-        _storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
     ) where
-        S: AvailabilityStorage<Types> + 'static,
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
         fetch_leaf_with_callbacks(fetcher, req, None)
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.storage.get_leaf(req).await
+        storage.get_leaf(req).await
     }
 }
 
@@ -103,7 +101,8 @@ pub(super) fn fetch_leaf_with_callbacks<Types, S, P, I>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
     I: IntoIterator<Item = LeafCallback<Types, S, P>> + Send + 'static,
     I::IntoIter: Send,
@@ -127,15 +126,18 @@ pub(super) fn fetch_leaf_with_callbacks<Types, S, P, I>(
 }
 
 async fn store_leaf<Types, S>(
-    storage: &mut NotifyStorage<Types, S>,
+    storage: &NotifyStorage<Types, S>,
     leaf: LeafQueryData<Types>,
 ) -> anyhow::Result<()>
 where
     Types: NodeType,
-    S: UpdateAvailabilityData<Types> + VersionedDataSource,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
 {
-    storage.insert_leaf(leaf).await?;
-    storage.commit().await?;
+    let mut tx = storage.write().await?;
+    tx.insert_leaf(leaf).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -147,15 +149,12 @@ where
 {
     type RangedRequest = LeafId<Types>;
 
-    async fn load_range<S, R>(
-        storage: &NotifyStorage<Types, S>,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.storage.get_leaf_range(range).await
+        storage.get_leaf_range(range).await
     }
 }
 
@@ -206,7 +205,8 @@ impl<Types: NodeType, S, P> PartialOrd for LeafCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<LeafQueryData<Types>> for LeafCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, leaf: LeafQueryData<Types>) {
@@ -214,11 +214,7 @@ where
             Self::Leaf { fetcher } => {
                 let height = leaf.height();
                 tracing::info!("fetched leaf {height}");
-                let mut storage = fetcher.storage.write().await;
-                if let Err(err) = store_leaf(&mut *storage, leaf).await {
-                    // Rollback the transaction if insert fails
-                    // This prevents subsequent queries from failing, as they would be part of the same transaction block.
-                    storage.revert().await;
+                if let Err(err) = store_leaf(&fetcher.storage, leaf).await {
                     // It is unfortunate if this fails, but we can still proceed by
                     // returning the leaf that we fetched, keeping it in memory.
                     // Simply log the error and move on.

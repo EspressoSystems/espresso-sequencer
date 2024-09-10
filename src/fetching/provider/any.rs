@@ -204,7 +204,7 @@ mod test {
     use super::*;
     use crate::{
         availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
-        data_source::{storage::sql::testing::TmpDb, VersionedDataSource},
+        data_source::{storage::sql::testing::TmpDb, Transaction, VersionedDataSource},
         fetching::provider::{NoFetching, QueryServiceProvider},
         task::BackgroundTask,
         testing::{
@@ -213,7 +213,7 @@ mod test {
             setup_test,
         },
         types::HeightIndexed,
-        Error,
+        ApiState, Error,
     };
     use futures::stream::StreamExt;
     use portpicker::pick_unused_port;
@@ -231,7 +231,7 @@ mod test {
 
         // Start a web server that the non-consensus node can use to fetch blocks.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(&Default::default(), MockBase::instance()).unwrap(),
@@ -251,25 +251,25 @@ mod test {
                     format!("http://localhost:{port}").parse().unwrap(),
                     MockBase::instance(),
                 ));
-        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+        let data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
         network.start().await;
 
         // Wait until the block height reaches 4. This gives us the genesis block, one additional
         // block at the end, and then one block each for fetching a leaf and a payload.
-        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = network.data_source().subscribe_leaves(1).await;
         let leaves = leaves.take(3).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
         let test_payload = &leaves[1];
 
         // Give the node a leaf after the range of interest so it learns about the correct block
         // height.
-        data_source
-            .insert_leaf(leaves.last().cloned().unwrap())
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
-        data_source.commit().await.unwrap();
+        tx.commit().await.unwrap();
 
         tracing::info!("requesting leaf from multiple providers");
         let leaf = data_source

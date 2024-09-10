@@ -12,13 +12,15 @@
 
 //! Transaction fetching.
 
-use super::{AvailabilityProvider, FetchRequest, Fetchable, Fetcher, NotifyStorage};
+use super::{AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers};
 use crate::{
-    availability::{QueryablePayload, TransactionHash, TransactionQueryData},
-    data_source::storage::AvailabilityStorage,
+    availability::{
+        QueryablePayload, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
+    },
+    data_source::{storage::AvailabilityStorage, update::VersionedDataSource},
     Payload, QueryResult,
 };
-use async_std::sync::{Arc, RwLockReadGuard};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
@@ -41,17 +43,14 @@ where
         req.0 == self.hash()
     }
 
-    async fn passive_fetch<S>(
-        storage: &NotifyStorage<Types, S>,
+    async fn passive_fetch(
+        notifications: &Notifiers<Types>,
         req: Self::Request,
-    ) -> BoxFuture<'static, Option<Self>>
-    where
-        S: AvailabilityStorage<Types>,
-    {
+    ) -> BoxFuture<'static, Option<Self>> {
         // Any block might satisfy the request; we won't know until we receive a new payload and
         // check if it contains the desired transaction.
-        let wait_block = storage
-            .block_notifier
+        let wait_block = notifications
+            .block
             .wait_for(move |block| block.transaction_by_hash(req.0).is_some())
             .await;
 
@@ -63,11 +62,12 @@ where
     }
 
     async fn active_fetch<S, P>(
+        _tx: &impl AvailabilityStorage<Types>,
         _fetcher: Arc<Fetcher<Types, S, P>>,
-        _storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
         req: Self::Request,
     ) where
-        S: AvailabilityStorage<Types> + 'static,
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
         // We don't actively fetch transactions, because without a satisfying block payload, we have
@@ -76,10 +76,10 @@ where
         tracing::debug!("not fetching unknown transaction {req:?}");
     }
 
-    async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.storage.get_transaction(req.0).await
+        storage.get_transaction(req.0).await
     }
 }

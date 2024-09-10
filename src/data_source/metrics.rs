@@ -100,7 +100,7 @@ mod impl_testable_data_source {
             }
         }
 
-        async fn handle_event(&mut self, _event: &Event<MockTypes>) {}
+        async fn handle_event(&self, _event: &Event<MockTypes>) {}
     }
 }
 

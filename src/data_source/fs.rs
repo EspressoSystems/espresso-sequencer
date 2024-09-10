@@ -21,13 +21,20 @@ use atomic_store::AtomicStoreLoader;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::path::Path;
 
+pub use super::storage::fs::Transaction;
+
 /// A data source for the APIs provided in this crate, backed by the local file system.
 ///
 /// Synchronization and atomicity of persisted data structures are provided via [`atomic_store`].
-/// The methods [`commit`](super::VersionedDataSource::commit),
-/// [`revert`](super::VersionedDataSource::revert), and [`skip_version`](Self::skip_version) of this
-/// type can be used to control synchronization in the underlying
-/// [`AtomicStore`](atomic_store::AtomicStore).
+/// The methods [`commit`](super::Transaction::commit), [`revert`](super::Transaction::revert), and
+/// [`skip_version`](Self::skip_version) of this type and its associated [`Transaction`] type can be
+/// used to control synchronization in the underlying [`AtomicStore`](atomic_store::AtomicStore).
+///
+/// Note that because [`AtomicStore`](atomic_store::AtomicStore) only allows changes to be made to
+/// the underlying store, a [`Transaction`] takes full control of the whole store, and does not
+/// permit concurrent readers or other transactions while in flight. This is enfored internally via
+/// a global `RwLock`, and is a significant downside of this storage implementation, compared to the
+/// more relaxed concurrency semantics of a SQL implementation.
 ///
 /// # Extension and Composition
 ///
@@ -79,8 +86,7 @@ use std::path::Path;
 /// [`create_with_store`](Self::create_with_store) or [`open_with_store`](Self::open_with_store),
 /// you become responsible for ensuring that calls to
 /// [`AtomicStore::commit_version`](atomic_store::AtomicStore::commit_version) alternate with calls
-/// to [`commit`](super::VersionedDataSource::commit) or
-/// [`revert`](super::VersionedDataSource::revert).
+/// to [`commit`](super::Transaction::commit) or [`skip_version`](Self::skip_version).
 ///
 /// In the following example, we compose HotShot query service modules with other application-
 /// specific modules, using a single top-level [`AtomicStore`](atomic_store::AtomicStore) to
@@ -93,7 +99,7 @@ use std::path::Path;
 /// # use hotshot::types::SystemContextHandle;
 /// # use hotshot_query_service::Error;
 /// # use hotshot_query_service::data_source::{
-/// #   FileSystemDataSource, UpdateDataSource, VersionedDataSource,
+/// #   FileSystemDataSource, Transaction, UpdateDataSource, VersionedDataSource,
 /// # };
 /// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::{
@@ -113,15 +119,13 @@ use std::path::Path;
 /// async fn init_server<Ver: StaticVersionType + 'static>(
 ///     storage_path: &Path,
 ///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl, AppVersions>,
-/// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
-///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
-///         .map_err(Error::internal)?;
+/// ) -> anyhow::Result<App<Arc<RwLock<AppState>>, Error>> {
+///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app")?; // or `open`
 ///     let hotshot_qs = FileSystemDataSource::create_with_store(&mut loader, NoFetching)
-///         .await
-///         .map_err(Error::internal)?;
+///         .await?;
 ///     // Initialize storage for other modules using the same loader.
 ///
-///     let store = AtomicStore::open(loader).map_err(Error::internal)?;
+///     let store = AtomicStore::open(loader)?;
 ///     let state = Arc::new(RwLock::new(AppState {
 ///         store,
 ///         hotshot_qs,
@@ -134,10 +138,11 @@ use std::path::Path;
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
-///             state.hotshot_qs.update(&event).await.unwrap();
+///             let mut tx = state.hotshot_qs.write().await.unwrap();
+///             tx.update(&event).await.unwrap();
 ///             // Update other modules' states based on `event`.
 ///
-///             state.hotshot_qs.commit().await.unwrap();
+///             tx.commit().await.unwrap();
 ///             // Commit or skip versions for other modules' storage.
 ///             state.store.commit_version().unwrap();
 ///         }
@@ -160,7 +165,7 @@ where
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
     pub async fn create(path: &Path, provider: P) -> anyhow::Result<Self> {
-        FetchingDataSource::builder(FileSystemStorage::create(path).await?, provider)
+        FileSystemDataSource::builder(FileSystemStorage::create(path).await?, provider)
             .build()
             .await
     }
@@ -171,7 +176,7 @@ where
     ///
     /// The [FileSystemDataSource] will manage its own persistence synchronization.
     pub async fn open(path: &Path, provider: P) -> anyhow::Result<Self> {
-        FetchingDataSource::builder(FileSystemStorage::open(path).await?, provider)
+        FileSystemDataSource::builder(FileSystemStorage::open(path).await?, provider)
             .build()
             .await
     }
@@ -188,7 +193,7 @@ where
         loader: &mut AtomicStoreLoader,
         provider: P,
     ) -> anyhow::Result<Self> {
-        FetchingDataSource::builder(
+        FileSystemDataSource::builder(
             FileSystemStorage::create_with_store(loader).await?,
             provider,
         )
@@ -208,7 +213,7 @@ where
         loader: &mut AtomicStoreLoader,
         provider: P,
     ) -> anyhow::Result<Self> {
-        FetchingDataSource::builder(FileSystemStorage::open_with_store(loader).await?, provider)
+        FileSystemDataSource::builder(FileSystemStorage::open_with_store(loader).await?, provider)
             .build()
             .await
     }
@@ -220,11 +225,10 @@ where
     /// to persist some changes to other modules whose state is managed by the same
     /// [AtomicStore](atomic_store::AtomicStore). In order to call
     /// [AtomicStore::commit_version](atomic_store::AtomicStore::commit_version), the version of
-    /// this [FileSystemDataSource] must be advanced, either by
-    /// [commit](super::VersionedDataSource::commit) or, if there are no outstanding changes,
-    /// [skip_version](Self::skip_version).
-    pub async fn skip_version(&mut self) -> anyhow::Result<()> {
-        self.storage_mut().await.skip_version()?;
+    /// this [FileSystemDataSource] must be advanced, either by [commit](super::Transaction::commit)
+    /// or, if there are no outstanding changes, [skip_version](Self::skip_version).
+    pub async fn skip_version(&self) -> anyhow::Result<()> {
+        self.as_ref().skip_version().await?;
         Ok(())
     }
 }
@@ -233,7 +237,7 @@ where
 mod impl_testable_data_source {
     use super::*;
     use crate::{
-        data_source::{UpdateDataSource, VersionedDataSource},
+        data_source::{Transaction, UpdateDataSource, VersionedDataSource},
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use async_trait::async_trait;
@@ -262,9 +266,10 @@ mod impl_testable_data_source {
                 .unwrap()
         }
 
-        async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            self.update(event).await.unwrap();
-            self.commit().await.unwrap();
+        async fn handle_event(&self, event: &Event<MockTypes>) {
+            let mut tx = self.write().await.unwrap();
+            tx.update(event).await.unwrap();
+            tx.commit().await.unwrap();
         }
     }
 }

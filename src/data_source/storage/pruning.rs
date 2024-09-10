@@ -10,9 +10,10 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
+use crate::data_source::ReadOnly;
 use anyhow::bail;
 use async_trait::async_trait;
-use std::{error::Error, fmt::Debug, time::Duration};
+use std::{fmt::Debug, time::Duration};
 
 #[derive(Clone, Debug)]
 pub struct PrunerCfg {
@@ -25,24 +26,32 @@ pub struct PrunerCfg {
 }
 
 #[async_trait]
-pub trait PruneStorage: PrunerConfig + PrunedHeightStorage {
-    async fn get_disk_usage(&self) -> Result<u64, Self::Error> {
+pub trait PruneStorage: PrunerConfig {
+    type Pruner: Default + Send;
+
+    async fn get_disk_usage(&self) -> anyhow::Result<u64> {
         Ok(0)
     }
 
-    async fn prune(&mut self) -> Result<Option<u64>, Self::Error> {
+    async fn prune(&self, _pruner: &mut Self::Pruner) -> anyhow::Result<Option<u64>> {
         Ok(None)
     }
 }
 
 #[async_trait]
 pub trait PrunedHeightStorage {
-    type Error: Error + Debug + Send + Sync + 'static;
-    async fn save_pruned_height(&mut self, _height: u64) -> Result<(), Self::Error> {
-        Ok(())
-    }
-    async fn load_pruned_height(&self) -> Result<Option<u64>, Self::Error> {
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
         Ok(None)
+    }
+}
+
+#[async_trait]
+impl<T> PrunedHeightStorage for ReadOnly<T>
+where
+    T: PrunedHeightStorage + Sync,
+{
+    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+        (**self).load_pruned_height().await
     }
 }
 

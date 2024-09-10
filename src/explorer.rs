@@ -401,7 +401,7 @@ mod test {
             mocks::{mock_transaction, MockBase, MockTypes},
             setup_test,
         },
-        Error,
+        ApiState, Error,
     };
     use futures::StreamExt;
     use portpicker::pick_unused_port;
@@ -867,7 +867,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module("explorer", define_api(MockBase::instance()).unwrap())
             .unwrap();
         app.register_module(

@@ -135,12 +135,8 @@ where
             }
             .boxed()
         })?
-        .at("sync_status", |_req, state| {
-            async move {
-                let fut = state.read(|state| state.sync_status()).await;
-                Ok(fut.await?)
-            }
-            .boxed()
+        .get("sync_status", |_req, state| {
+            async move { state.sync_status().await.context(QuerySnafu) }.boxed()
         })?
         .get("get_header_window", |req, state| {
             async move {
@@ -176,7 +172,7 @@ mod test {
             mocks::{MockBase, MockTypes},
             setup_test,
         },
-        Error, Header, VidShare,
+        ApiState, Error, Header, VidShare,
     };
     use async_std::{sync::RwLock, task::sleep};
     use committable::Committable;
@@ -201,7 +197,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "node",
             define_api(&Default::default(), MockBase::instance()).unwrap(),

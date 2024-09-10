@@ -448,7 +448,9 @@ where
 mod test {
     use super::*;
     use crate::{
-        data_source::{storage::no_storage, ExtensibleDataSource},
+        data_source::{
+            storage::no_storage, ExtensibleDataSource, Transaction, VersionedDataSource,
+        },
         status::StatusDataSource,
         task::BackgroundTask,
         testing::{
@@ -457,13 +459,12 @@ mod test {
             setup_test,
         },
         types::HeightIndexed,
-        Error, Header,
+        ApiState, Error, Header,
     };
     use async_std::sync::RwLock;
     use committable::Committable;
     use futures::future::FutureExt;
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_types::data::Leaf;
+    use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -758,7 +759,7 @@ mod test {
 
         // Start the web server.
         let port = pick_unused_port().unwrap();
-        let mut app = App::<_, Error>::with_state(network.data_source());
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
             define_api(
@@ -853,7 +854,7 @@ mod test {
         setup_test();
 
         let dir = TempDir::with_prefix("test_availability_extensions").unwrap();
-        let mut data_source = ExtensibleDataSource::new(
+        let data_source = ExtensibleDataSource::new(
             MockDataSource::create(dir.path(), Default::default())
                 .await
                 .unwrap(),
@@ -861,15 +862,15 @@ mod test {
         );
 
         // mock up some consensus data.
-        let leaf = Leaf::<MockTypes>::genesis(
-            &TestValidatedState::default(),
-            &TestInstanceState::default(),
-        )
-        .await;
+        let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::default()).await;
+        let qc = QuorumCertificate::genesis(&Default::default(), &Default::default()).await;
+        let leaf = LeafQueryData::new(leaf, qc).unwrap();
+        let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());
 
-        let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
-
-        data_source.insert_block(block.clone()).await.unwrap();
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(leaf).await.unwrap();
+        tx.insert_block(block.clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         // assert that the store has data before we move on to API requests
         assert_eq!(

@@ -28,7 +28,6 @@ use crate::{
     Header, Payload, QueryResult, Transaction, VidShare,
 };
 use async_trait::async_trait;
-use futures::future::BoxFuture;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
@@ -114,20 +113,25 @@ impl<D, U> AsMut<U> for ExtensibleDataSource<D, U> {
     }
 }
 
-#[async_trait]
 impl<D, U> VersionedDataSource for ExtensibleDataSource<D, U>
 where
     D: VersionedDataSource + Send,
-    U: Send,
+    U: Send + Sync,
 {
-    type Error = D::Error;
+    type Transaction<'a> = D::Transaction<'a>
+    where
+        Self: 'a;
 
-    async fn commit(&mut self) -> Result<(), Self::Error> {
-        self.data_source.commit().await
+    type ReadOnly<'a> = D::ReadOnly<'a>
+    where
+        Self: 'a;
+
+    async fn write(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        self.data_source.write().await
     }
 
-    async fn revert(&mut self) {
-        self.data_source.revert().await
+    async fn read(&self) -> anyhow::Result<Self::ReadOnly<'_>> {
+        self.data_source.read().await
     }
 }
 
@@ -215,13 +219,11 @@ where
     U: Send + Sync,
     Types: NodeType,
 {
-    type Error = D::Error;
-
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
         self.data_source.insert_leaf(leaf).await
     }
 
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
         self.data_source.insert_block(block).await
     }
 
@@ -229,7 +231,7 @@ where
         &mut self,
         common: VidCommonQueryData<Types>,
         share: Option<VidShare>,
-    ) -> Result<(), Self::Error> {
+    ) -> anyhow::Result<()> {
         self.data_source.insert_vid(common, share).await
     }
 }
@@ -256,7 +258,7 @@ where
     {
         self.data_source.vid_share(id).await
     }
-    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
         self.data_source.sync_status().await
     }
     async fn get_header_window(
@@ -307,9 +309,6 @@ where
     D: MerklizedStateHeightPersistence + Send + Sync,
     U: Send + Sync,
 {
-    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()> {
-        self.data_source.set_last_state_height(height).await
-    }
     async fn get_last_state_height(&self) -> QueryResult<usize> {
         self.data_source.get_last_state_height().await
     }
@@ -324,12 +323,16 @@ where
     State: MerklizedState<Types, ARITY>,
     Types: NodeType,
 {
+    async fn set_last_state_height(&mut self, height: usize) -> anyhow::Result<()> {
+        self.data_source.set_last_state_height(height).await
+    }
+
     async fn insert_merkle_nodes(
         &mut self,
         path: MerkleProof<State::Entry, State::Key, State::T, ARITY>,
         traversal_path: Vec<usize>,
         block_number: u64,
-    ) -> QueryResult<()> {
+    ) -> anyhow::Result<()> {
         self.data_source
             .insert_merkle_nodes(path, traversal_path, block_number)
             .await
@@ -408,7 +411,7 @@ where
 mod impl_testable_data_source {
     use super::*;
     use crate::{
-        data_source::UpdateDataSource,
+        data_source::{Transaction, UpdateDataSource},
         testing::{
             consensus::{DataSourceLifeCycle, TestableDataSource},
             mocks::MockTypes,
@@ -420,7 +423,8 @@ mod impl_testable_data_source {
     impl<D, U> DataSourceLifeCycle for ExtensibleDataSource<D, U>
     where
         D: TestableDataSource,
-        U: Default + Send + Sync + 'static,
+        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+        U: Clone + Default + Send + Sync + 'static,
     {
         type Storage = D::Storage;
 
@@ -436,9 +440,10 @@ mod impl_testable_data_source {
             Self::new(D::reset(storage).await, Default::default())
         }
 
-        async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            self.update(event).await.unwrap();
-            self.commit().await.unwrap();
+        async fn handle_event(&self, event: &Event<MockTypes>) {
+            let mut tx = self.write().await.unwrap();
+            tx.update(event).await.unwrap();
+            tx.commit().await.unwrap();
         }
     }
 }
