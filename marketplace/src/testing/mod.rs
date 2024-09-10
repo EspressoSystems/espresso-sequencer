@@ -34,8 +34,8 @@ use hotshot_example_types::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::builder_state::BuiltFromProposedBlock;
 use crate::service::{broadcast_channels, GlobalState};
+use crate::utils::BuiltFromProposedBlock;
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use std::sync::Arc;

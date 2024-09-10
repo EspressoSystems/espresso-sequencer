@@ -7,14 +7,13 @@ use hotshot_types::{
         EncodeBytes,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
 };
 
 use committable::{Commitment, Committable};
 
 use crate::{
     service::{BroadcastReceivers, GlobalState, ReceivedTransaction},
-    utils::{BlockId, BuilderStateId, RotatingSet},
+    utils::{BlockId, BuilderStateId, BuiltFromProposedBlock, RotatingSet},
 };
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
@@ -95,22 +94,6 @@ pub struct ResponseMessage<TYPES: NodeType> {
 pub enum Status {
     ShouldExit,
     ShouldContinue,
-}
-
-/// Builder State to hold the state of the builder
-#[derive(Debug, Clone)]
-pub struct BuiltFromProposedBlock<TYPES: NodeType> {
-    pub view_number: TYPES::Time,
-    pub vid_commitment: VidCommitment,
-    pub leaf_commit: Commitment<Leaf<TYPES>>,
-    pub builder_commitment: BuilderCommitment,
-}
-
-// implement display for the derived info
-impl<TYPES: NodeType> std::fmt::Display for BuiltFromProposedBlock<TYPES> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "View Number: {:?}", self.view_number)
-    }
 }
 
 #[derive(Debug)]
