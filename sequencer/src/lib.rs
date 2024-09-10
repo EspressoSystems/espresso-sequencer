@@ -641,18 +641,15 @@ pub mod testing {
         }
 
         pub fn upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+            for key in upgrades.keys() {
+                let upgrade = upgrades.get(key).unwrap();
+                upgrade.set_hotshot_config_parameters(&mut self.config)
+            }
             self.upgrades = upgrades;
             self
         }
 
-        pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrade) = self
-                .upgrades
-                .get(&<MockSequencerVersions as Versions>::Upgrade::VERSION)
-            {
-                upgrade.set_hotshot_config_parameters(&mut self.config)
-            }
-
+        pub fn build(self) -> TestConfig<NUM_NODES> {
             TestConfig {
                 config: self.config,
                 priv_keys: self.priv_keys,
