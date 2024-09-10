@@ -114,6 +114,8 @@ pub struct DishonestLeader<TYPES: NodeType> {
     pub dishonest_at_proposal_numbers: HashSet<u64>,
     /// How far back to look for a QC
     pub view_look_back: usize,
+    /// Shared state of all view numbers we send bad proposal at
+    pub dishonest_proposal_view_numbers: Arc<RwLock<HashSet<TYPES::Time>>>,
 }
 
 /// Add method that will handle `QuorumProposalSend` events
@@ -122,7 +124,7 @@ pub struct DishonestLeader<TYPES: NodeType> {
 impl<TYPES: NodeType> DishonestLeader<TYPES> {
     /// When a leader is sending a proposal this method will mock a dishonest leader
     /// We accomplish this by looking back a number of specified views and using that cached proposals QC
-    fn handle_proposal_send_event(
+    async fn handle_proposal_send_event(
         &self,
         event: &HotShotEvent<TYPES>,
         proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
@@ -150,6 +152,10 @@ impl<TYPES: NodeType> DishonestLeader<TYPES> {
         let mut dishonest_proposal = proposal.clone();
         dishonest_proposal.data.justify_qc = proposal_from_look_back.justify_qc;
 
+        // Save the view we sent the dishonest proposal on (used for coordination attacks with other byzantine replicas)
+        let mut dishonest_proposal_sent = self.dishonest_proposal_view_numbers.write().await;
+        dishonest_proposal_sent.insert(proposal.data.view_number);
+
         HotShotEvent::QuorumProposalSend(dishonest_proposal, sender.clone())
     }
 }
@@ -173,7 +179,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
         match event {
             HotShotEvent::QuorumProposalSend(proposal, sender) => {
                 self.total_proposals_from_node += 1;
-                return vec![self.handle_proposal_send_event(event, proposal, sender)];
+                return vec![
+                    self.handle_proposal_send_event(event, proposal, sender)
+                        .await,
+                ];
             }
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
                 self.validated_proposals.push(proposal.clone());
@@ -356,5 +365,69 @@ impl<TYPES: NodeType> std::fmt::Debug for DishonestVoting<TYPES> {
         f.debug_struct("DishonestVoting")
             .field("view_increment", &self.view_increment)
             .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug)]
+/// An `EventHandlerState` that will send a vote for a bad proposal
+pub struct DishonestVoter<TYPES: NodeType> {
+    /// Collect all votes the node sends
+    pub votes_sent: Vec<QuorumVote<TYPES>>,
+    /// Shared state with views numbers that leaders were dishonest at
+    pub dishonest_proposal_view_numbers: Arc<RwLock<HashSet<TYPES::Time>>>,
+}
+
+#[async_trait]
+impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Versions>
+    EventTransformerState<TYPES, I, V> for DishonestVoter<TYPES>
+{
+    async fn recv_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>> {
+        vec![event.clone()]
+    }
+
+    async fn send_handler(
+        &mut self,
+        event: &HotShotEvent<TYPES>,
+        public_key: &TYPES::SignatureKey,
+        private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+        _consensus: Arc<RwLock<Consensus<TYPES>>>,
+    ) -> Vec<HotShotEvent<TYPES>> {
+        match event {
+            HotShotEvent::QuorumProposalRecv(proposal, _sender) => {
+                // Check if view is a dishonest proposal, if true send a vote
+                let dishonest_proposals = self.dishonest_proposal_view_numbers.read().await;
+                if dishonest_proposals.contains(&proposal.data.view_number) {
+                    // Create a vote using data from most recent vote and the current event number
+                    // We wont update internal consensus state for this Byzantine replica but we are at least
+                    // Going to send a vote to the next honest leader
+                    let vote = QuorumVote::<TYPES>::create_signed_vote(
+                        self.votes_sent.last().unwrap().data.clone(),
+                        event.view_number().unwrap(),
+                        public_key,
+                        private_key,
+                        upgrade_lock,
+                    )
+                    .await
+                    .context("Failed to sign vote")
+                    .unwrap();
+                    return vec![HotShotEvent::QuorumVoteSend(vote)];
+                }
+            }
+            HotShotEvent::TimeoutVoteSend(vote) => {
+                // Check if this view was a dishonest proposal view, if true dont send timeout
+                let dishonest_proposals = self.dishonest_proposal_view_numbers.read().await;
+                if dishonest_proposals.contains(&vote.view_number) {
+                    // We craft the vote upon `QuorumProposalRecv` and send out a vote.
+                    // So, dont send the timeout to the next leader from this byzantine replica
+                    return vec![];
+                }
+            }
+            HotShotEvent::QuorumVoteSend(vote) => {
+                self.votes_sent.push(vote.clone());
+            }
+            _ => {}
+        }
+        vec![event.clone()]
     }
 }

@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use async_lock::RwLock;
 use hotshot_example_types::{
     node_types::{Libp2pImpl, MarketplaceTestVersions, MemoryImpl, PushCdnImpl, TestVersions},
     state_types::TestTypes,
@@ -13,8 +14,8 @@ use hotshot_macros::cross_tests;
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     byzantine::byzantine_behaviour::{
-        BadProposalViewDos, DishonestDa, DishonestLeader, DishonestVoting, DoubleProposeVote,
-        ViewDelay,
+        BadProposalViewDos, DishonestDa, DishonestLeader, DishonestVoter, DishonestVoting,
+        DoubleProposeVote, ViewDelay,
     },
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     test_builder::{Behaviour, TestDescription},
@@ -96,7 +97,8 @@ cross_tests!(
                     dishonest_at_proposal_numbers: HashSet::from([2, 3]),
                     validated_proposals: Vec::new(),
                     total_proposals_from_node: 0,
-                    view_look_back: 1
+                    view_look_back: 1,
+                    dishonest_proposal_view_numbers: Arc::new(RwLock::new(HashSet::new())),
                 };
                 match node_id {
                     2 => Behaviour::Byzantine(Box::new(dishonest_leader)),
@@ -244,6 +246,52 @@ cross_tests!(
         };
 
         metadata.num_nodes_with_stake = nodes_count;
+        metadata
+    },
+);
+
+cross_tests!(
+    TestName: coordination_attack,
+    Impls: [MemoryImpl],
+    Types: [TestTypes],
+    Versions: [MarketplaceTestVersions],
+    Ignore: false,
+    Metadata: {
+        let dishonest_proposal_view_numbers = Arc::new(RwLock::new(HashSet::new()));
+        let behaviour = Rc::new(move |node_id| {
+            match node_id {
+                4 => Behaviour::Byzantine(Box::new(DishonestLeader {
+                    // On second proposal send a dishonest qc
+                    dishonest_at_proposal_numbers: HashSet::from([2]),
+                    validated_proposals: Vec::new(),
+                    total_proposals_from_node: 0,
+                    view_look_back: 1,
+                    dishonest_proposal_view_numbers: Arc::clone(&dishonest_proposal_view_numbers),
+                })),
+                5 | 6 => Behaviour::Byzantine(Box::new(DishonestVoter {
+                    votes_sent: Vec::new(),
+                    dishonest_proposal_view_numbers: Arc::clone(&dishonest_proposal_view_numbers),
+                })),
+                _ => Behaviour::Standard,
+            }
+        });
+
+        let mut metadata = TestDescription {
+            // allow more time to pass in CI
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                TimeBasedCompletionTaskDescription {
+                    duration: Duration::from_secs(60),
+                },
+            ),
+            behaviour,
+            ..TestDescription::default()
+        };
+
+        metadata.overall_safety_properties.num_failed_views = 1;
+        metadata.num_nodes_with_stake = 10;
+        metadata.overall_safety_properties.expected_views_to_fail = HashMap::from([
+            (ViewNumber::new(14), false),
+        ]);
         metadata
     },
 );
