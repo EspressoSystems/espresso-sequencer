@@ -465,7 +465,7 @@ where
             match async_timeout(check_duration, response_receiver.recv()).await {
                 Err(toe) => {
                     if Instant::now() >= timeout_after {
-                        tracing::warn!(%toe, "Couldn't get available blocks in time for parent {state_id}");
+                        tracing::debug!(%toe, "Couldn't get available blocks in time for parent {state_id}");
                         // lookup into the builder_state_to_last_built_block, if it contains the result, return that otherwise return error
                         if let Some(last_built_block) = self
                             .global_state
@@ -528,7 +528,7 @@ where
 
             // We failed to get available blocks
             Err(e) => {
-                tracing::warn!("Failed to get available blocks for parent {state_id}",);
+                tracing::debug!("Failed to get available blocks for parent {state_id}",);
                 Err(e)
             }
         }
