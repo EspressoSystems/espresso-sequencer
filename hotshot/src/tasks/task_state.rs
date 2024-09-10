@@ -120,7 +120,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             cur_view: handle.cur_view().await,
             vote_collector: None,
             network: Arc::clone(&handle.hotshot.network),
-            membership: handle.hotshot.memberships.vid_membership.clone().into(),
+            membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
             id: handle.hotshot.id,
@@ -161,12 +161,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             current_view: cur_view,
             next_view: cur_view,
             network: Arc::clone(&handle.hotshot.network),
-            membership: handle
-                .hotshot
-                .memberships
-                .view_sync_membership
-                .clone()
-                .into(),
+            membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
             num_timeouts_tracked: 0,

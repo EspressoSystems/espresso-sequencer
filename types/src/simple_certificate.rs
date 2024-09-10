@@ -154,7 +154,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
             return true;
         }
         let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::public_parameter(
-            membership.committee_qc_stake_table(),
+            membership.stake_table(),
             U256::from(Self::threshold(membership)),
         );
         let Ok(commit) = self.date_commitment(upgrade_lock).await else {

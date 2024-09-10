@@ -56,12 +56,14 @@ async fn test_network_task() {
     let consensus = handle.hotshot.consensus();
     let config = launcher.resource_generator.config.clone();
     let public_key = config.my_own_validator_config.public_key;
-    let known_nodes_with_stake = config.known_nodes_with_stake.clone();
 
-    let membership = <TestTypes as NodeType>::Membership::create_election(
-        known_nodes_with_stake.clone(),
-        known_nodes_with_stake,
+    let all_nodes = config.known_nodes_with_stake.clone();
+
+    let membership = <TestTypes as NodeType>::Membership::new(
+        all_nodes.clone(),
+        all_nodes,
         Topic::Global,
+        #[cfg(feature = "fixed-leader-election")]
         config.fixed_leader_for_gpuvid,
     );
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
@@ -135,13 +137,14 @@ async fn test_network_storage_fail() {
     storage.write().await.should_return_err = true;
     let config = launcher.resource_generator.config.clone();
     let public_key = config.my_own_validator_config.public_key;
-    let known_nodes_with_stake = config.known_nodes_with_stake.clone();
+    let all_nodes = config.known_nodes_with_stake.clone();
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
 
-    let membership = <TestTypes as NodeType>::Membership::create_election(
-        known_nodes_with_stake.clone(),
-        known_nodes_with_stake,
+    let membership = <TestTypes as NodeType>::Membership::new(
+        all_nodes.clone(),
+        all_nodes,
         Topic::Global,
+        #[cfg(feature = "fixed-leader-election")]
         config.fixed_leader_for_gpuvid,
     );
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =

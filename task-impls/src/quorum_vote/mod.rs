@@ -603,7 +603,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                         .validate(&disperse.signature, payload_commitment.as_ref())
                 {
                     let mut validated = false;
-                    for da_member in self.da_membership.staked_committee(view) {
+                    for da_member in self.da_membership.committee_members(view) {
                         if da_member.validate(&disperse.signature, payload_commitment.as_ref()) {
                             validated = true;
                             break;

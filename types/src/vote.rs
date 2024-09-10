@@ -161,7 +161,7 @@ impl<
         let Some(stake_table_entry) = membership.stake(&key) else {
             return Either::Left(());
         };
-        let stake_table = membership.committee_qc_stake_table();
+        let stake_table = membership.stake_table();
         let Some(vote_node_id) = stake_table
             .iter()
             .position(|x| *x == stake_table_entry.clone())

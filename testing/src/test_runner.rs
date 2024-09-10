@@ -394,7 +394,6 @@ where
     ) -> Vec<u64> {
         let mut results = vec![];
         let config = self.launcher.resource_generator.config.clone();
-        let known_nodes_with_stake = config.known_nodes_with_stake.clone();
 
         let (mut builder_tasks, builder_urls) = self.init_builders::<B>().await;
         self.add_servers(builder_urls.clone()).await;
@@ -412,29 +411,22 @@ where
             self.next_node_id += 1;
             tracing::debug!("launch node {}", i);
 
+            let all_nodes = config.known_nodes_with_stake.clone();
+            let da_nodes = config.known_da_nodes.clone();
+
             let memberships = Memberships {
-                quorum_membership: <TYPES as NodeType>::Membership::create_election(
-                    known_nodes_with_stake.clone(),
-                    known_nodes_with_stake.clone(),
+                quorum_membership: <TYPES as NodeType>::Membership::new(
+                    all_nodes.clone(),
+                    all_nodes.clone(),
                     Topic::Global,
+                    #[cfg(feature = "fixed-leader-election")]
                     config.fixed_leader_for_gpuvid,
                 ),
-                da_membership: <TYPES as NodeType>::Membership::create_election(
-                    known_nodes_with_stake.clone(),
-                    config.known_da_nodes.clone(),
+                da_membership: <TYPES as NodeType>::Membership::new(
+                    all_nodes,
+                    da_nodes,
                     Topic::Da,
-                    config.fixed_leader_for_gpuvid,
-                ),
-                vid_membership: <TYPES as NodeType>::Membership::create_election(
-                    known_nodes_with_stake.clone(),
-                    known_nodes_with_stake.clone(),
-                    Topic::Global,
-                    config.fixed_leader_for_gpuvid,
-                ),
-                view_sync_membership: <TYPES as NodeType>::Membership::create_election(
-                    known_nodes_with_stake.clone(),
-                    known_nodes_with_stake.clone(),
-                    Topic::Global,
+                    #[cfg(feature = "fixed-leader-election")]
                     config.fixed_leader_for_gpuvid,
                 ),
             };

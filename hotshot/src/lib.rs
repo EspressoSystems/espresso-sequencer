@@ -90,14 +90,10 @@ pub struct MarketplaceConfig<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 /// Bundle of all the memberships a consensus instance uses
 #[derive(Clone)]
 pub struct Memberships<TYPES: NodeType> {
-    /// Quorum Membership
+    /// The entire quorum
     pub quorum_membership: TYPES::Membership,
-    /// DA
+    /// The DA nodes
     pub da_membership: TYPES::Membership,
-    /// VID
-    pub vid_membership: TYPES::Membership,
-    /// View Sync
-    pub view_sync_membership: TYPES::Membership,
 }
 
 /// Holds the state needed to participate in `HotShot` consensus

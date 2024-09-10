@@ -377,32 +377,34 @@ pub trait RunDa<
         // Get KeyPair for certificate Aggregation
         let pk = config.config.my_own_validator_config.public_key.clone();
         let sk = config.config.my_own_validator_config.private_key.clone();
-        let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
 
         let network = self.network();
 
+        let all_nodes = config.config.known_nodes_with_stake.clone();
+        let da_nodes = config.config.known_da_nodes.clone();
+
         // Create the quorum membership from all nodes
-        let quorum_membership = <TYPES as NodeType>::Membership::create_election(
-            known_nodes_with_stake.clone(),
-            known_nodes_with_stake.clone(),
+        let quorum_membership = <TYPES as NodeType>::Membership::new(
+            all_nodes.clone(),
+            all_nodes.clone(),
             Topic::Global,
+            #[cfg(feature = "fixed-leader-election")]
             config.config.fixed_leader_for_gpuvid,
         );
 
         // Create the quorum membership from all nodes, specifying the committee
         // as the known da nodes
-        let da_membership = <TYPES as NodeType>::Membership::create_election(
-            known_nodes_with_stake.clone(),
-            config.config.known_da_nodes.clone(),
+        let da_membership = <TYPES as NodeType>::Membership::new(
+            all_nodes.clone(),
+            da_nodes,
             Topic::Da,
+            #[cfg(feature = "fixed-leader-election")]
             config.config.fixed_leader_for_gpuvid,
         );
 
         let memberships = Memberships {
             quorum_membership: quorum_membership.clone(),
             da_membership,
-            vid_membership: quorum_membership.clone(),
-            view_sync_membership: quorum_membership,
         };
 
         let marketplace_config = MarketplaceConfig {

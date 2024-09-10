@@ -56,10 +56,8 @@ enable_registration_verification = true
 
 [config]
 num_nodes_with_stake = 10
-num_nodes_without_stake = 0
 start_threshold = [8, 10]
 staked_da_nodes = 10
-non_staked_da_nodes = 0
 fixed_leader_for_gpuvid = 1
 next_view_timeout = 30000
 timeout_ratio = [11, 10]

@@ -499,8 +499,6 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub start_threshold: (u64, u64),
     /// Total number of staked nodes in the network
     pub num_nodes_with_stake: NonZeroUsize,
-    /// Total number of non-staked nodes in the network
-    pub num_nodes_without_stake: usize,
     #[serde(skip)]
     /// My own public key, secret key, stake value
     pub my_own_validator_config: ValidatorConfig<KEY>,
@@ -515,8 +513,6 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub known_nodes_without_stake: Vec<KEY>,
     /// Number of staking DA nodes
     pub staked_da_nodes: usize,
-    /// Number of non-staking DA nodes
-    pub non_staked_da_nodes: usize,
     /// Number of fixed leaders for GPU VID
     pub fixed_leader_for_gpuvid: usize,
     /// Base duration for next-view timeout, in milliseconds
@@ -641,13 +637,11 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
             execution_type: ExecutionType::Continuous,
             start_threshold: val.start_threshold,
             num_nodes_with_stake: val.num_nodes_with_stake,
-            num_nodes_without_stake: val.num_nodes_without_stake,
             known_da_nodes: val.known_da_nodes,
             known_nodes_with_stake: val.known_nodes_with_stake,
             known_nodes_without_stake: val.known_nodes_without_stake,
             my_own_validator_config: val.my_own_validator_config,
             da_staked_committee_size: val.staked_da_nodes,
-            da_non_staked_committee_size: val.non_staked_da_nodes,
             fixed_leader_for_gpuvid: val.fixed_leader_for_gpuvid,
             next_view_timeout: val.next_view_timeout,
             view_sync_timeout: val.view_sync_timeout,
@@ -720,13 +714,11 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
         Self {
             num_nodes_with_stake: NonZeroUsize::new(10).unwrap(),
             start_threshold: (1, 1),
-            num_nodes_without_stake: 0,
             my_own_validator_config: ValidatorConfig::default(),
             known_nodes_with_stake: gen_known_nodes_with_stake,
             known_nodes_without_stake: vec![],
             staked_da_nodes,
             known_da_nodes,
-            non_staked_da_nodes: 0,
             fixed_leader_for_gpuvid: 1,
             next_view_timeout: 10000,
             view_sync_timeout: Duration::from_millis(1000),

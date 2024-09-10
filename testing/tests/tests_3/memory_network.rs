@@ -60,7 +60,7 @@ impl NodeType for Test {
     type Transaction = TestTransaction;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
-    type Membership = GeneralStaticCommittee<Test, Self::SignatureKey>;
+    type Membership = GeneralStaticCommittee<Test>;
     type BuilderSignatureKey = BuilderKey;
 }
 

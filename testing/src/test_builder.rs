@@ -60,8 +60,6 @@ pub struct TimingData {
 pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Total number of staked nodes in the test
     pub num_nodes_with_stake: usize,
-    /// Total number of non-staked nodes in the test
-    pub num_nodes_without_stake: usize,
     /// nodes available at start
     pub start_nodes: usize,
     /// Whether to skip initializing nodes that will start late, which will catch up later with
@@ -71,8 +69,6 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
     pub num_bootstrap_nodes: usize,
     /// Size of the staked DA committee for the test
     pub da_staked_committee_size: usize,
-    /// Size of the non-staked DA committee for the test
-    pub da_non_staked_committee_size: usize,
     /// overall safety property description
     pub overall_safety_properties: OverallSafetyPropertiesDescription<TYPES>,
     /// spinning properties
@@ -239,12 +235,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
     #[allow(clippy::redundant_field_names)]
     pub fn default_stress() -> Self {
         let num_nodes_with_stake = 100;
-        let num_nodes_without_stake = 0;
 
         Self {
             num_bootstrap_nodes: num_nodes_with_stake,
             num_nodes_with_stake,
-            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             overall_safety_properties: OverallSafetyPropertiesDescription::<TYPES> {
                 num_successful_views: 50,
@@ -272,13 +266,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
     #[allow(clippy::redundant_field_names)]
     pub fn default_multiple_rounds() -> Self {
         let num_nodes_with_stake = 10;
-        let num_nodes_without_stake = 0;
         TestDescription::<TYPES, I, V> {
             // TODO: remove once we have fixed the DHT timeout issue
             // https://github.com/EspressoSystems/HotShot/issues/2088
             num_bootstrap_nodes: num_nodes_with_stake,
             num_nodes_with_stake,
-            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             overall_safety_properties: OverallSafetyPropertiesDescription::<TYPES> {
                 num_successful_views: 20,
@@ -304,10 +296,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
     #[allow(clippy::redundant_field_names)]
     pub fn default_more_nodes() -> Self {
         let num_nodes_with_stake = 20;
-        let num_nodes_without_stake = 0;
         Self {
             num_nodes_with_stake,
-            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             num_bootstrap_nodes: num_nodes_with_stake,
             // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
@@ -342,16 +332,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Default
     #[allow(clippy::redundant_field_names)]
     fn default() -> Self {
         let num_nodes_with_stake = 6;
-        let num_nodes_without_stake = 0;
         Self {
             timing_data: TimingData::default(),
             num_nodes_with_stake,
-            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             skip_late: false,
             num_bootstrap_nodes: num_nodes_with_stake,
             da_staked_committee_size: num_nodes_with_stake,
-            da_non_staked_committee_size: num_nodes_without_stake,
             spinning_properties: SpinningTaskDescription {
                 node_changes: vec![],
             },
@@ -404,7 +391,6 @@ where
             num_bootstrap_nodes,
             timing_data,
             da_staked_committee_size,
-            da_non_staked_committee_size,
             unreliable_network,
             ..
         } = self.clone();
@@ -446,13 +432,11 @@ where
             num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
             // Currently making this zero for simplicity
             known_da_nodes,
-            num_nodes_without_stake: 0,
             num_bootstrap: num_bootstrap_nodes,
             known_nodes_with_stake,
             known_nodes_without_stake: vec![],
             my_own_validator_config,
             da_staked_committee_size,
-            da_non_staked_committee_size,
             fixed_leader_for_gpuvid: 1,
             next_view_timeout: 500,
             view_sync_timeout: Duration::from_millis(250),

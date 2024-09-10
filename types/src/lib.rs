@@ -176,8 +176,6 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     /// Total number of nodes in the network
     // Earlier it was total_nodes
     pub num_nodes_with_stake: NonZeroUsize,
-    /// Number of nodes without stake
-    pub num_nodes_without_stake: usize,
     /// List of known node's public keys and stake value for certificate aggregation, serving as public parameter
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     /// All public keys known to be DA nodes
@@ -188,8 +186,6 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     pub my_own_validator_config: ValidatorConfig<KEY>,
     /// List of DA committee (staking)nodes for static DA committee
     pub da_staked_committee_size: usize,
-    /// List of DA committee nodes (non-staking)nodes for static DA committee
-    pub da_non_staked_committee_size: usize,
     /// Number of fixed leaders for GPU VID, normally it will be 0, it's only used when running GPU VID
     pub fixed_leader_for_gpuvid: usize,
     /// Base duration for next-view timeout, in milliseconds
