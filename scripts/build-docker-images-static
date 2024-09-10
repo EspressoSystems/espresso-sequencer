@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "This script only works on Linux."
+  echo "On macOS, use scripts/build-docker-images-native instead."
+  exit 1
+fi
+
 set -euxo pipefail
 
 nix develop .#crossShell --ignore-environment --command cargo build --release
@@ -35,7 +41,7 @@ for ARCH in "amd64" "arm64"; do
       ;;
   esac
   mkdir -p ${WORKDIR}/target/$ARCH/release
-  for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "utils" "state-relay-server" "state-prover" "deploy" "permissionless-builder" "nasty-client" "espresso-bridge" "espresso-dev-node" "marketplace-solver" "marketplace-builder" "dev-rollup"; do
+    for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "espresso-bridge" "espresso-dev-node" "marketplace-solver" "marketplace-builder" "dev-rollup" "utils"; do
     cp -v "${CARGO_TARGET_DIR}/${TARGET}/release/$binary" ${WORKDIR}/target/$ARCH/release
   done
 done

@@ -30,7 +30,8 @@ contract LightClientDefenderDeployScript is Script {
         cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (state,,) = abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        LC.StakeTableState memory stakeState;
+        (state, stakeState) = abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
         ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
         multisig = upgradeApprovalProcess.via;
@@ -51,7 +52,9 @@ contract LightClientDefenderDeployScript is Script {
 
         proxy = Upgrades.deployUUPSProxy(
             contractName,
-            abi.encodeCall(LC.initialize, (state, stateHistoryRetentionPeriod, multisig)),
+            abi.encodeCall(
+                LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, multisig)
+            ),
             opts
         );
 

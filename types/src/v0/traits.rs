@@ -457,6 +457,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 state,
                 validated_state,
                 view,
+                highest_voted_view,
                 saved_proposals,
                 high_qc,
                 undecided_leaves.into_values().collect(),

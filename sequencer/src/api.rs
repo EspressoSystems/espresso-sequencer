@@ -375,7 +375,7 @@ pub mod test_helpers {
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-    use hotshot_contract_adapter::light_client::ParsedLightClientState;
+    use hotshot_contract_adapter::light_client::{ParsedLightClientState, ParsedStakeTableState};
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -621,7 +621,7 @@ pub mod test_helpers {
             }
         }
 
-        pub fn light_client_genesis(&self) -> ParsedLightClientState {
+        pub fn light_client_genesis(&self) -> (ParsedLightClientState, ParsedStakeTableState) {
             let st = self.cfg.stake_table();
             light_client_genesis_from_stake_table(st).unwrap()
         }

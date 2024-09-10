@@ -60,8 +60,13 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            if let UpgradeType::Fee { chain_config } = upgrade.upgrade_type {
-                base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+            match upgrade.upgrade_type {
+                UpgradeType::Fee { chain_config } => {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
+                UpgradeType::Marketplace { chain_config } => {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
             }
         }
 
