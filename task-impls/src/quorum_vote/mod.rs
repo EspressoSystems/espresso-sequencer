@@ -12,7 +12,6 @@ use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use committable::Committable;
 use hotshot_task::{
     dependency::{AndDependency, Dependency, EventDependency},
     dependency_task::{DependencyTask, HandleDepOutput},
@@ -157,7 +156,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
 
         let view = View {
             view_inner: ViewInner::Leaf {
-                leaf: proposed_leaf.commit(),
+                leaf: proposed_leaf.commit(&self.upgrade_lock).await,
                 state: Arc::clone(&state),
                 delta: Some(Arc::clone(&delta)),
             },
@@ -167,7 +166,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         {
             tracing::trace!("{e:?}");
         }
-        consensus_writer.update_saved_leaves(proposed_leaf.clone());
+        consensus_writer
+            .update_saved_leaves(proposed_leaf.clone(), &self.upgrade_lock)
+            .await;
 
         // Kick back our updated structures for downstream usage.
         let new_leaves = consensus_writer.saved_leaves().clone();
@@ -209,7 +210,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         // Create and send the vote.
         let vote = QuorumVote::<TYPES>::create_signed_vote(
             QuorumData {
-                leaf_commit: leaf.commit(),
+                leaf_commit: leaf.commit(&self.upgrade_lock).await,
             },
             self.view_number,
             &self.public_key,
@@ -285,7 +286,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     } else {
                         payload_commitment = Some(proposal_payload_comm);
                     }
-                    let parent_commitment = parent_leaf.commit();
+                    let parent_commitment = parent_leaf.commit(&self.upgrade_lock).await;
                     let proposed_leaf = Leaf::from_quorum_proposal(proposal);
                     if proposed_leaf.parent_commitment() != parent_commitment {
                         warn!("Proposed leaf parent commitment does not match parent leaf payload commitment. Aborting vote.");

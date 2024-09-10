@@ -37,7 +37,6 @@ use async_broadcast::{broadcast, InactiveReceiver, Receiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use async_trait::async_trait;
-use committable::Committable;
 use futures::join;
 use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry};
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
@@ -194,7 +193,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     ///
     /// Use this instead of `init` if you want to start the tasks manually
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub async fn new(
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
@@ -223,6 +222,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             interal_chan,
             external_chan,
         )
+        .await
     }
 
     /// Creates a new [`Arc<SystemContext>`] with the given configuration options.
@@ -233,7 +233,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// Use this function if you want to use some prexisting channels and to spin up the tasks
     /// and start consensus manually.  Mostly useful for tests
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    pub fn new_from_channels(
+    pub async fn new_from_channels(
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
@@ -279,7 +279,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             anchored_leaf.view_number(),
             View {
                 view_inner: ViewInner::Leaf {
-                    leaf: anchored_leaf.commit(),
+                    leaf: anchored_leaf.commit(&upgrade_lock).await,
                     state: Arc::clone(&validated_state),
                     delta: initializer.state_delta.clone(),
                 },
@@ -291,10 +291,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
 
         let mut saved_leaves = HashMap::new();
         let mut saved_payloads = BTreeMap::new();
-        saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
+        saved_leaves.insert(
+            anchored_leaf.commit(&upgrade_lock).await,
+            anchored_leaf.clone(),
+        );
 
         for leaf in initializer.undecided_leafs {
-            saved_leaves.insert(leaf.commit(), leaf.clone());
+            saved_leaves.insert(leaf.commit(&upgrade_lock).await, leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
             let encoded_txns = payload.encode();
@@ -411,7 +414,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
                     TYPES::ValidatedState::genesis(&self.instance_state);
 
                 let qc = Arc::new(
-                    QuorumCertificate::genesis(&validated_state, self.instance_state.as_ref())
+                    QuorumCertificate::genesis::<V>(&validated_state, self.instance_state.as_ref())
                         .await,
                 );
 
@@ -596,7 +599,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             metrics,
             storage,
             marketplace_config,
-        );
+        )
+        .await;
         let handle = Arc::clone(&hotshot).run_tasks().await;
         let (tx, rx) = hotshot.internal_event_stream.clone();
 
@@ -753,7 +757,8 @@ where
             metrics.clone(),
             storage.clone(),
             marketplace_config.clone(),
-        );
+        )
+        .await;
         let right_system_context = SystemContext::new(
             public_key,
             private_key,
@@ -765,7 +770,8 @@ where
             metrics,
             storage,
             marketplace_config,
-        );
+        )
+        .await;
 
         // create registries for both handles
         let left_consensus_registry = ConsensusTaskRegistry::new();
@@ -972,11 +978,11 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub async fn from_genesis(
+    pub async fn from_genesis<V: Versions>(
         instance_state: TYPES::InstanceState,
     ) -> Result<Self, HotShotError<TYPES>> {
         let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
-        let high_qc = QuorumCertificate::genesis(&validated_state, &instance_state).await;
+        let high_qc = QuorumCertificate::genesis::<V>(&validated_state, &instance_state).await;
 
         Ok(Self {
             inner: Leaf::genesis(&validated_state, &instance_state).await,

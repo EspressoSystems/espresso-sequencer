@@ -19,9 +19,9 @@ use hotshot_testing::{
     test_builder::TestDescription,
     view_sync_task::ViewSyncTaskDescription,
 };
-use hotshot_types::message::{GeneralConsensusMessage, MessageKind, SequencingMessage};
 use hotshot_types::{
     data::ViewNumber,
+    message::{GeneralConsensusMessage, MessageKind, SequencingMessage},
     traits::{
         election::Membership,
         network::TransmitType,

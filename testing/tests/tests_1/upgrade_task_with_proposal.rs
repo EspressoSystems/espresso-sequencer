@@ -102,11 +102,15 @@ async fn test_upgrade_task_with_proposal() {
         leaders.push(view.leader_public_key);
         views.push(view.clone());
         consensus_writer
-            .update_saved_leaves(Leaf::from_quorum_proposal(&view.quorum_proposal.data));
+            .update_saved_leaves(
+                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                &handle.hotshot.upgrade_lock,
+            )
+            .await;
         consensus_writer
             .update_validated_state_map(
                 view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone()),
+                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
             )
             .unwrap();
     }
@@ -122,11 +126,15 @@ async fn test_upgrade_task_with_proposal() {
         leaves.push(view.leaf.clone());
         views.push(view.clone());
         consensus_writer
-            .update_saved_leaves(Leaf::from_quorum_proposal(&view.quorum_proposal.data));
+            .update_saved_leaves(
+                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                &handle.hotshot.upgrade_lock,
+            )
+            .await;
         consensus_writer
             .update_validated_state_map(
                 view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone()),
+                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
             )
             .unwrap();
     }
@@ -175,7 +183,7 @@ async fn test_upgrade_task_with_proposal() {
             VidDisperseSend(vid_dispersals[0].clone(), handle.public_key()),
             ValidatedStateUpdated(
                 genesis_cert.view_number(),
-                build_fake_view_with_leaf(genesis_leaf.clone()),
+                build_fake_view_with_leaf(genesis_leaf.clone(), &handle.hotshot.upgrade_lock).await,
             ),
         ],
         random![
@@ -192,7 +200,7 @@ async fn test_upgrade_task_with_proposal() {
             VidDisperseSend(vid_dispersals[1].clone(), handle.public_key()),
             ValidatedStateUpdated(
                 proposals[0].data.view_number(),
-                build_fake_view_with_leaf(leaves[0].clone()),
+                build_fake_view_with_leaf(leaves[0].clone(), &handle.hotshot.upgrade_lock).await,
             ),
         ],
         InputOrder::Random(upgrade_vote_recvs),
@@ -210,7 +218,7 @@ async fn test_upgrade_task_with_proposal() {
             VidDisperseSend(vid_dispersals[2].clone(), handle.public_key()),
             ValidatedStateUpdated(
                 proposals[1].data.view_number(),
-                build_fake_view_with_leaf(leaves[1].clone()),
+                build_fake_view_with_leaf(leaves[1].clone(), &handle.hotshot.upgrade_lock).await,
             ),
         ],
     ];

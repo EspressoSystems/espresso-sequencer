@@ -89,10 +89,12 @@ async fn test_upgrade_task_with_vote() {
         consensus_writer
             .update_validated_state_map(
                 view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone()),
+                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
             )
             .unwrap();
-        consensus_writer.update_saved_leaves(view.leaf.clone());
+        consensus_writer
+            .update_saved_leaves(view.leaf.clone(), &handle.hotshot.upgrade_lock)
+            .await;
     }
     drop(consensus_writer);
 

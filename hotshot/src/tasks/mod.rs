@@ -318,7 +318,8 @@ where
             metrics,
             storage,
             marketplace_config,
-        );
+        )
+        .await;
         let consensus_registry = ConsensusTaskRegistry::new();
         let network_registry = NetworkTaskRegistry::new();
 

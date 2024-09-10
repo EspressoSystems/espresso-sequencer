@@ -216,7 +216,7 @@ where
                                     read_storage.last_actioned_view().await,
                                     read_storage.proposals_cloned().await,
                                     read_storage.high_qc_cloned().await.unwrap_or(
-                                        QuorumCertificate::genesis(
+                                        QuorumCertificate::genesis::<V>(
                                             &TestValidatedState::default(),
                                             &TestInstanceState::default(),
                                         )
@@ -302,7 +302,7 @@ where
         Ok(())
     }
 
-    fn check(&self) -> TestResult {
+    async fn check(&self) -> TestResult {
         TestResult::Pass
     }
 }

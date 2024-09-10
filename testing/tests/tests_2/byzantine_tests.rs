@@ -1,5 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
     time::Duration,
 };
 
@@ -27,8 +29,6 @@ use hotshot_types::{
     },
     vote::HasViewNumber,
 };
-use std::rc::Rc;
-use std::sync::Arc;
 cross_tests!(
     TestName: double_propose_vote,
     Impls: [MemoryImpl],

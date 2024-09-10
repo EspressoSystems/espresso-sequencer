@@ -73,7 +73,7 @@ pub async fn build_system_handle<
     let marketplace_config = (launcher.resource_generator.marketplace_config)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer = HotShotInitializer::<TYPES>::from_genesis(TestInstanceState::new(
+    let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::new(
         launcher.metadata.async_delay_config,
     ))
     .await
@@ -380,7 +380,7 @@ pub async fn build_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versio
     let leaf: Leaf<_> = Leaf::from_quorum_proposal(&proposal);
     let vote = QuorumVote::<TYPES>::create_signed_vote(
         QuorumData {
-            leaf_commit: leaf.commit(),
+            leaf_commit: leaf.commit(&handle.hotshot.upgrade_lock).await,
         },
         view,
         &handle.public_key(),
@@ -410,18 +410,22 @@ where
 }
 
 /// This function will create a fake [`View`] from a provided [`Leaf`].
-pub fn build_fake_view_with_leaf(leaf: Leaf<TestTypes>) -> View<TestTypes> {
-    build_fake_view_with_leaf_and_state(leaf, TestValidatedState::default())
+pub async fn build_fake_view_with_leaf<V: Versions>(
+    leaf: Leaf<TestTypes>,
+    upgrade_lock: &UpgradeLock<TestTypes, V>,
+) -> View<TestTypes> {
+    build_fake_view_with_leaf_and_state(leaf, TestValidatedState::default(), upgrade_lock).await
 }
 
 /// This function will create a fake [`View`] from a provided [`Leaf`] and `state`.
-pub fn build_fake_view_with_leaf_and_state(
+pub async fn build_fake_view_with_leaf_and_state<V: Versions>(
     leaf: Leaf<TestTypes>,
     state: TestValidatedState,
+    upgrade_lock: &UpgradeLock<TestTypes, V>,
 ) -> View<TestTypes> {
     View {
         view_inner: ViewInner::Leaf {
-            leaf: leaf.commit(),
+            leaf: leaf.commit(upgrade_lock).await,
             state: state.into(),
             delta: None,
         },

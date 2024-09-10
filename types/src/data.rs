@@ -32,21 +32,22 @@ use snafu::Snafu;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 use tracing::error;
+use vbs::version::StaticVersionType;
 use vec1::Vec1;
 
 use crate::{
-    message::Proposal,
+    message::{Proposal, UpgradeLock},
     simple_certificate::{
         QuorumCertificate, TimeoutCertificate, UpgradeCertificate, ViewSyncFinalizeCertificate2,
     },
-    simple_vote::{QuorumData, UpgradeProposalData},
+    simple_vote::{QuorumData, UpgradeProposalData, VersionedVoteData},
     traits::{
         block_contents::{
             vid_commitment, BlockHeader, BuilderFee, EncodeBytes, TestableBlock,
             GENESIS_VID_NUM_STORAGE_NODES,
         },
         election::Membership,
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
         states::TestableState,
         BlockPayload,
@@ -444,6 +445,29 @@ pub struct Leaf<TYPES: NodeType> {
     block_payload: Option<TYPES::BlockPayload>,
 }
 
+impl<TYPES: NodeType> Leaf<TYPES> {
+    /// Calculate the leaf commitment,
+    /// which is gated on the version to include the block header.
+    pub async fn commit<V: Versions>(
+        &self,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Commitment<Self> {
+        let version = upgrade_lock.version_infallible(self.view_number).await;
+
+        if version < V::Marketplace::VERSION {
+            <Self as Committable>::commit(self)
+        } else {
+            RawCommitmentBuilder::new("leaf commitment")
+                .u64_field("view number", *self.view_number)
+                .field("parent leaf commitment", self.parent_commitment)
+                .field("block header", self.block_header.commit())
+                .field("justify qc", self.justify_qc.commit())
+                .optional("upgrade certificate", &self.upgrade_certificate)
+                .finalize()
+        }
+    }
+}
+
 impl<TYPES: NodeType> PartialEq for Leaf<TYPES> {
     fn eq(&self, other: &Self) -> bool {
         self.view_number == other.view_number
@@ -477,20 +501,32 @@ impl<TYPES: NodeType> Display for Leaf<TYPES> {
 impl<TYPES: NodeType> QuorumCertificate<TYPES> {
     #[must_use]
     /// Creat the Genesis certificate
-    pub async fn genesis(
+    pub async fn genesis<V: Versions>(
         validated_state: &TYPES::ValidatedState,
         instance_state: &TYPES::InstanceState,
     ) -> Self {
+        // since this is genesis, we should never have a decided upgrade certificate.
+        let upgrade_lock = UpgradeLock::<TYPES, V>::new();
+
+        let genesis_view = <TYPES::Time as ConsensusTime>::genesis();
+
         let data = QuorumData {
             leaf_commit: Leaf::genesis(validated_state, instance_state)
                 .await
-                .commit(),
+                .commit(&upgrade_lock)
+                .await,
         };
-        let commit = data.commit();
+
+        let versioned_data =
+            VersionedVoteData::<_, _, V>::new_infallible(data.clone(), genesis_view, &upgrade_lock)
+                .await;
+
+        let bytes: [u8; 32] = versioned_data.commit().into();
+
         Self::new(
             data,
-            commit,
-            <TYPES::Time as ConsensusTime>::genesis(),
+            Commitment::from_raw(bytes),
+            genesis_view,
             None,
             PhantomData,
         )

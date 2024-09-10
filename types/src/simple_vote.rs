@@ -216,6 +216,24 @@ impl<TYPES: NodeType, DATA: Voteable, V: Versions> VersionedVoteData<TYPES, DATA
             _pd: PhantomData,
         })
     }
+
+    /// Create a new `VersionedVoteData` struct
+    ///
+    /// This function cannot error, but may use an invalid version.
+    pub async fn new_infallible(
+        data: DATA,
+        view: TYPES::Time,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Self {
+        let version = upgrade_lock.version_infallible(view).await;
+
+        Self {
+            data,
+            view,
+            version,
+            _pd: PhantomData,
+        }
+    }
 }
 
 impl<TYPES: NodeType, DATA: Voteable, V: Versions> Committable

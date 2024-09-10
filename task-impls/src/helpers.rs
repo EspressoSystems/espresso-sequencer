@@ -108,7 +108,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
                         hs_event.as_ref()
                     {
                         // Make sure that the quorum_proposal is valid
-                        if quorum_proposal.validate_signature(&mem).is_ok() {
+                        if quorum_proposal.validate_signature(&mem, upgrade_lock).await.is_ok() {
                             proposal = Some(quorum_proposal.clone());
                         }
 
@@ -140,7 +140,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 
     let view = View {
         view_inner: ViewInner::Leaf {
-            leaf: leaf.commit(),
+            leaf: leaf.commit(upgrade_lock).await,
             state,
             delta: None,
         },
@@ -149,7 +149,9 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
         tracing::trace!("{e:?}");
     }
 
-    consensus_write.update_saved_leaves(leaf.clone());
+    consensus_write
+        .update_saved_leaves(leaf.clone(), upgrade_lock)
+        .await;
     broadcast_event(
         HotShotEvent::ValidatedStateUpdated(view_number, view).into(),
         &event_sender,
@@ -410,7 +412,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
 
     let reached_decided = leaf.view_number() == consensus_reader.last_decided_view();
     let parent_leaf = leaf.clone();
-    let original_parent_hash = parent_leaf.commit();
+    let original_parent_hash = parent_leaf.commit(upgrade_lock).await;
     let mut next_parent_hash = original_parent_hash;
 
     // Walk back until we find a decide
@@ -460,7 +462,7 @@ pub async fn validate_proposal_safety_and_liveness<
 
     let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
     ensure!(
-        proposed_leaf.parent_commitment() == parent_leaf.commit(),
+        proposed_leaf.parent_commitment() == parent_leaf.commit(&upgrade_lock).await,
         "Proposed leaf does not extend the parent leaf."
     );
 
@@ -469,7 +471,7 @@ pub async fn validate_proposal_safety_and_liveness<
     );
     let view = View {
         view_inner: ViewInner::Leaf {
-            leaf: proposed_leaf.commit(),
+            leaf: proposed_leaf.commit(&upgrade_lock).await,
             state,
             delta: None, // May be updated to `Some` in the vote task.
         },
@@ -480,7 +482,9 @@ pub async fn validate_proposal_safety_and_liveness<
         if let Err(e) = consensus_write.update_validated_state_map(view_number, view.clone()) {
             tracing::trace!("{e:?}");
         }
-        consensus_write.update_saved_leaves(proposed_leaf.clone());
+        consensus_write
+            .update_saved_leaves(proposed_leaf.clone(), &upgrade_lock)
+            .await;
 
         // Update our internal storage of the proposal. The proposal is valid, so
         // we swallow this error and just log if it occurs.
@@ -602,7 +606,9 @@ pub async fn validate_proposal_view_and_certs<TYPES: NodeType, V: Versions>(
     );
 
     // Validate the proposal's signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
-    proposal.validate_signature(quorum_membership)?;
+    proposal
+        .validate_signature(quorum_membership, upgrade_lock)
+        .await?;
 
     // Verify a timeout certificate OR a view sync certificate exists and is valid.
     if proposal.data.justify_qc.view_number() != view - 1 {

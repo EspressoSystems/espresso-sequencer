@@ -63,7 +63,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
         Ok(())
     }
 
-    fn check(&self) -> TestResult {
+    async fn check(&self) -> TestResult {
         match self.description.clone() {
             ViewSyncTaskDescription::Threshold(min, max) => {
                 let num_hits = self.hit_view_sync.len();

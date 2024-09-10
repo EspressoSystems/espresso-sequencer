@@ -15,7 +15,7 @@ use std::{
 
 use anyhow::{bail, ensure, Result};
 use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
-use committable::{Commitment, Committable};
+use committable::Commitment;
 use tracing::{debug, error, instrument, trace};
 use vec1::Vec1;
 
@@ -24,12 +24,12 @@ use crate::{
     data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
     error::HotShotError,
     event::HotShotAction,
-    message::Proposal,
+    message::{Proposal, UpgradeLock},
     simple_certificate::{DaCertificate, QuorumCertificate},
     traits::{
         block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
@@ -585,8 +585,13 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Update the saved leaves with a new leaf.
-    pub fn update_saved_leaves(&mut self, leaf: Leaf<TYPES>) {
-        self.saved_leaves.insert(leaf.commit(), leaf);
+    pub async fn update_saved_leaves<V: Versions>(
+        &mut self,
+        leaf: Leaf<TYPES>,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) {
+        self.saved_leaves
+            .insert(leaf.commit(upgrade_lock).await, leaf);
     }
 
     /// Update the saved payloads with a new encoded transaction.

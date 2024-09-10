@@ -44,7 +44,7 @@ pub trait TestTaskState: Send {
     async fn handle_event(&mut self, (event, id): (Self::Event, usize)) -> Result<()>;
 
     /// Check the result of the test.
-    fn check(&self) -> TestResult;
+    async fn check(&self) -> TestResult;
 }
 
 /// A basic task which loops waiting for events to come from `event_receiver`
@@ -88,7 +88,7 @@ impl<S: TestTaskState + Send + 'static> TestTask<S> {
         spawn(async move {
             loop {
                 if let Ok(TestEvent::Shutdown) = self.test_receiver.try_recv() {
-                    break self.state.check();
+                    break self.state.check().await;
                 }
 
                 let mut messages = Vec::new();

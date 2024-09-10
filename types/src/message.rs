@@ -14,7 +14,6 @@ use std::{fmt, fmt::Debug, marker::PhantomData, sync::Arc};
 use anyhow::{bail, ensure, Context, Result};
 use async_lock::RwLock;
 use cdn_proto::util::mnemonic;
-use committable::Committable;
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use vbs::{
@@ -358,13 +357,20 @@ where
     /// Checks that the signature of the quorum proposal is valid.
     /// # Errors
     /// Returns an error when the proposal signature is invalid.
-    pub fn validate_signature(&self, quorum_membership: &TYPES::Membership) -> Result<()> {
+    pub async fn validate_signature<V: Versions>(
+        &self,
+        quorum_membership: &TYPES::Membership,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Result<()> {
         let view_number = self.data.view_number();
         let view_leader_key = quorum_membership.leader(view_number);
         let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
 
         ensure!(
-            view_leader_key.validate(&self.signature, proposed_leaf.commit().as_ref()),
+            view_leader_key.validate(
+                &self.signature,
+                proposed_leaf.commit(upgrade_lock).await.as_ref()
+            ),
             "Proposal signature is invalid."
         );
 
@@ -415,6 +421,24 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
         };
 
         Ok(version)
+    }
+
+    /// Calculate the version applied in a view, based on the provided upgrade lock.
+    ///
+    /// This function does not fail, since it does not check that the version is supported.
+    pub async fn version_infallible(&self, view: TYPES::Time) -> Version {
+        let upgrade_certificate = self.decided_upgrade_certificate.read().await;
+
+        match *upgrade_certificate {
+            Some(ref cert) => {
+                if view >= cert.data.new_version_first_view {
+                    cert.data.new_version
+                } else {
+                    cert.data.old_version
+                }
+            }
+            None => V::Base::VERSION,
+        }
     }
 
     /// Serialize a message with a version number, using `message.view_number()` and an optional decided upgrade certificate to determine the message's version.

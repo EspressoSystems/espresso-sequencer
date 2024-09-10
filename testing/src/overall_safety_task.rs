@@ -234,7 +234,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
         Ok(())
     }
 
-    fn check(&self) -> TestResult {
+    async fn check(&self) -> TestResult {
         if let Some(e) = &self.error {
             return TestResult::Fail(e.clone());
         }

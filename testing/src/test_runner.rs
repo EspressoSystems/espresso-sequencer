@@ -184,7 +184,7 @@ where
                 &TestInstanceState::default(),
             )
             .await,
-            high_qc: QuorumCertificate::genesis(
+            high_qc: QuorumCertificate::genesis::<V>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -209,9 +209,10 @@ where
             consensus_leaves: BTreeMap::new(),
             safety_properties: self.launcher.metadata.overall_safety_properties,
             ensure_upgrade: self.launcher.metadata.upgrade_view.is_some(),
+            _pd: PhantomData,
         };
 
-        let consistency_task = TestTask::<ConsistencyTask<TYPES>>::new(
+        let consistency_task = TestTask::<ConsistencyTask<TYPES, V>>::new(
             consistency_task_state,
             event_rxs.clone(),
             test_receiver.clone(),
@@ -481,7 +482,7 @@ where
                         },
                     );
                 } else {
-                    let initializer = HotShotInitializer::<TYPES>::from_genesis(
+                    let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(
                         TestInstanceState::new(self.launcher.metadata.async_delay_config.clone()),
                     )
                     .await
@@ -615,6 +616,7 @@ where
             storage,
             marketplace_config,
         )
+        .await
     }
 
     /// add a specific node with a config
@@ -654,6 +656,7 @@ where
             internal_channel,
             external_channel,
         )
+        .await
     }
 }
 

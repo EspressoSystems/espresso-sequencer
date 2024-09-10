@@ -55,7 +55,7 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
     );
     let view = View {
         view_inner: ViewInner::Leaf {
-            leaf: leaf.commit(),
+            leaf: leaf.commit(&task_state.upgrade_lock).await,
             state,
             delta: None, // May be updated to `Some` in the vote task.
         },
@@ -64,7 +64,9 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
     if let Err(e) = consensus_write.update_validated_state_map(view_number, view.clone()) {
         tracing::trace!("{e:?}");
     }
-    consensus_write.update_saved_leaves(leaf.clone());
+    consensus_write
+        .update_saved_leaves(leaf.clone(), &task_state.upgrade_lock)
+        .await;
 
     if let Err(e) = task_state
         .storage

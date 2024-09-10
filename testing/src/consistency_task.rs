@@ -5,15 +5,15 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 #![allow(clippy::unwrap_or_default)]
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, marker::PhantomData};
 
 use anyhow::{bail, ensure, Context, Result};
 use async_trait::async_trait;
-use committable::Committable;
 use hotshot_types::{
     data::Leaf,
     event::{Event, EventType},
-    traits::node_implementation::NodeType,
+    message::UpgradeLock,
+    traits::node_implementation::{ConsensusTime, NodeType, Versions},
 };
 
 use crate::{
@@ -55,7 +55,36 @@ fn sanitize_node_map<TYPES: NodeType>(
 }
 
 /// For a NodeMapSanitized, we validate that each leaf extends the preceding leaf.
-fn validate_node_map<TYPES: NodeType>(node_map: &NodeMapSanitized<TYPES>) -> Result<()> {
+async fn validate_node_map<TYPES: NodeType, V: Versions>(
+    node_map: &NodeMapSanitized<TYPES>,
+) -> Result<()> {
+    // We first scan 3-chains to find an upgrade certificate that has reached a decide.
+    let leaf_triples = node_map
+        .values()
+        .zip(node_map.values().skip(1))
+        .zip(node_map.values().skip(2))
+        .map(|((a, b), c)| (a, b, c));
+
+    let mut decided_upgrade_certificate = None;
+    let mut view_decided = TYPES::Time::new(0);
+
+    for (grandparent, _parent, child) in leaf_triples {
+        if let Some(cert) = grandparent.upgrade_certificate() {
+            if cert.data.decide_by <= child.view_number() {
+                decided_upgrade_certificate = Some(cert);
+                view_decided = child.view_number();
+
+                break;
+            }
+        }
+    }
+
+    // To mimic consensus to use e.g. the `extends_upgrade` method,
+    // we cannot immediately put the upgrade certificate in the lock.
+    //
+    // Instead, we initialize an empty lock and add the certificate in the appropriate view.
+    let upgrade_lock = UpgradeLock::<TYPES, V>::new();
+
     let leaf_pairs = node_map.values().zip(node_map.values().skip(1));
 
     // Check that the child leaf follows the parent, possibly with a gap.
@@ -63,12 +92,27 @@ fn validate_node_map<TYPES: NodeType>(node_map: &NodeMapSanitized<TYPES>) -> Res
         ensure!(
               child.justify_qc().view_number >= parent.view_number(),
               "The node has provided leaf:\n\n{child:?}\n\nbut its quorum certificate points to a view before the most recent leaf:\n\n{parent:?}"
-            );
+        );
 
+        child
+            .extends_upgrade(parent, &upgrade_lock.decided_upgrade_certificate)
+            .await
+            .context("Leaf {child} does not extend its parent {parent}")?;
+
+        // We want to make sure the commitment matches,
+        // but allow for the possibility that we may have skipped views in between.
         if child.justify_qc().view_number == parent.view_number()
-            && child.justify_qc().data.leaf_commit != parent.commit()
+            && child.justify_qc().data.leaf_commit != parent.commit(&upgrade_lock).await
         {
             bail!("The node has provided leaf:\n\n{child:?}\n\nwhich points to:\n\n{parent:?}\n\nbut the commits do not match.");
+        }
+
+        if child.view_number() == view_decided {
+            upgrade_lock
+                .decided_upgrade_certificate
+                .write()
+                .await
+                .clone_from(&decided_upgrade_certificate);
         }
     }
 
@@ -105,12 +149,13 @@ pub type ViewMap<TYPES> = BTreeMap<<TYPES as NodeType>::Time, BTreeMap<usize, Le
 // # Errors
 //
 // Returns an error if any node map is invalid.
-fn invert_network_map<TYPES: NodeType>(
+async fn invert_network_map<TYPES: NodeType, V: Versions>(
     network_map: &NetworkMapSanitized<TYPES>,
 ) -> Result<ViewMap<TYPES>> {
     let mut inverted_map = BTreeMap::new();
     for (node_id, node_map) in network_map.iter() {
-        validate_node_map(node_map)
+        validate_node_map::<TYPES, V>(node_map)
+            .await
             .context(format!("Node {node_id} has an invalid leaf history"))?;
 
         // validate each node's leaf map
@@ -153,20 +198,22 @@ fn sanitize_view_map<TYPES: NodeType>(
 }
 
 /// Data availability task state
-pub struct ConsistencyTask<TYPES: NodeType> {
+pub struct ConsistencyTask<TYPES: NodeType, V: Versions> {
     /// A map from node ids to (leaves keyed on view number)
     pub consensus_leaves: NetworkMap<TYPES>,
     /// safety task requirements
     pub safety_properties: OverallSafetyPropertiesDescription<TYPES>,
     /// whether we should have seen an upgrade certificate or not
     pub ensure_upgrade: bool,
+    /// phantom marker
+    pub _pd: PhantomData<V>,
 }
 
-impl<TYPES: NodeType> ConsistencyTask<TYPES> {
-    pub fn validate(&self) -> Result<()> {
+impl<TYPES: NodeType, V: Versions> ConsistencyTask<TYPES, V> {
+    pub async fn validate(&self) -> Result<()> {
         let sanitized_network_map = sanitize_network_map(&self.consensus_leaves)?;
 
-        let inverted_map = invert_network_map(&sanitized_network_map)?;
+        let inverted_map = invert_network_map::<TYPES, V>(&sanitized_network_map).await?;
 
         let sanitized_view_map = sanitize_view_map(&inverted_map)?;
 
@@ -184,7 +231,7 @@ impl<TYPES: NodeType> ConsistencyTask<TYPES> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType> TestTaskState for ConsistencyTask<TYPES> {
+impl<TYPES: NodeType, V: Versions> TestTaskState for ConsistencyTask<TYPES, V> {
     type Event = Event<TYPES>;
 
     /// Handles an event from one of multiple receivers.
@@ -206,8 +253,8 @@ impl<TYPES: NodeType> TestTaskState for ConsistencyTask<TYPES> {
         Ok(())
     }
 
-    fn check(&self) -> TestResult {
-        if let Err(e) = self.validate() {
+    async fn check(&self) -> TestResult {
+        if let Err(e) = self.validate().await {
             return TestResult::Fail(Box::new(e));
         }
 

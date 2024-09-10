@@ -14,7 +14,6 @@ use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use chrono::Utc;
-use committable::Committable;
 use futures::FutureExt;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus, View},
@@ -37,7 +36,7 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::StaticVersionType;
 
 use super::ConsensusTaskState;
 use crate::{
@@ -67,7 +66,7 @@ pub async fn create_and_send_proposal<TYPES: NodeType, V: Versions>(
     proposal_cert: Option<ViewChangeEvidence<TYPES>>,
     round_start_delay: u64,
     instance_state: Arc<TYPES::InstanceState>,
-    version: Version,
+    upgrade_lock: UpgradeLock<TYPES, V>,
     id: u64,
 ) -> Result<()> {
     let consensus_read = consensus.read().await;
@@ -80,6 +79,11 @@ pub async fn create_and_send_proposal<TYPES: NodeType, V: Versions>(
         ))?
         .context("Failed to get vid share")?;
     drop(consensus_read);
+
+    let version = upgrade_lock
+        .version(view)
+        .await
+        .context("Failed to get version number")?;
 
     let block_header = if version < V::Marketplace::VERSION {
         TYPES::BlockHeader::new_legacy(
@@ -122,9 +126,12 @@ pub async fn create_and_send_proposal<TYPES: NodeType, V: Versions>(
 
     let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
 
-    ensure!(proposed_leaf.parent_commitment() == parent_leaf.commit());
+    ensure!(proposed_leaf.parent_commitment() == parent_leaf.commit(&upgrade_lock).await);
 
-    let signature = TYPES::SignatureKey::sign(&private_key, proposed_leaf.commit().as_ref())?;
+    let signature = TYPES::SignatureKey::sign(
+        &private_key,
+        proposed_leaf.commit(&upgrade_lock).await.as_ref(),
+    )?;
 
     let message = Proposal {
         data: proposal,
@@ -221,8 +228,6 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
         "Cannot propose because our VID payload commitment and metadata is for an older view."
     );
 
-    let version = upgrade_lock.version(view).await?;
-
     let create_and_send_proposal_handle = async_spawn(async move {
         match create_and_send_proposal::<TYPES, V>(
             public_key,
@@ -237,7 +242,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
             proposal_certificate,
             delay,
             instance_state,
-            version,
+            upgrade_lock,
             id,
         )
         .await
@@ -432,7 +437,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
             view,
             View {
                 view_inner: ViewInner::Leaf {
-                    leaf: leaf.commit(),
+                    leaf: leaf.commit(&task_state.upgrade_lock).await,
                     state,
                     delta: None,
                 },
@@ -441,7 +446,9 @@ pub(crate) async fn handle_quorum_proposal_recv<
             tracing::trace!("{e:?}");
         }
 
-        consensus_write.update_saved_leaves(leaf.clone());
+        consensus_write
+            .update_saved_leaves(leaf.clone(), &task_state.upgrade_lock)
+            .await;
         let new_leaves = consensus_write.saved_leaves().clone();
         let new_state = consensus_write.validated_state_map().clone();
         drop(consensus_write);
@@ -812,7 +819,7 @@ pub async fn update_state_and_vote_if_able<
 
     let state = Arc::new(validated_state);
     let delta = Arc::new(state_delta);
-    let parent_commitment = parent.commit();
+    let parent_commitment = parent.commit(upgrade_lock).await;
 
     let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
     if proposed_leaf.parent_commitment() != parent_commitment {
@@ -834,7 +841,7 @@ pub async fn update_state_and_vote_if_able<
         }
         if let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
             QuorumData {
-                leaf_commit: proposed_leaf.commit(),
+                leaf_commit: proposed_leaf.commit(upgrade_lock).await,
             },
             view,
             &public_key,
@@ -861,7 +868,7 @@ pub async fn update_state_and_vote_if_able<
         cur_view,
         View {
             view_inner: ViewInner::Leaf {
-                leaf: proposed_leaf.commit(),
+                leaf: proposed_leaf.commit(upgrade_lock).await,
                 state: Arc::clone(&state),
                 delta: Some(Arc::clone(&delta)),
             },
@@ -869,7 +876,9 @@ pub async fn update_state_and_vote_if_able<
     ) {
         tracing::trace!("{e:?}");
     }
-    consensus.update_saved_leaves(proposed_leaf.clone());
+    consensus
+        .update_saved_leaves(proposed_leaf.clone(), upgrade_lock)
+        .await;
     let new_leaves = consensus.saved_leaves().clone();
     let new_state = consensus.validated_state_map().clone();
     drop(consensus);
