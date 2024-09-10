@@ -14,7 +14,9 @@ use contract_bindings::{
 use derive_more::Display;
 use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 use futures::future::{BoxFuture, FutureExt};
-use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedLightClientState};
+use hotshot_contract_adapter::light_client::{
+    LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
+};
 use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
 
@@ -301,13 +303,14 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     Ok(contract.address())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
-    genesis: BoxFuture<'_, anyhow::Result<ParsedLightClientState>>,
+    genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;
@@ -354,8 +357,10 @@ pub async fn deploy(
         };
         let light_client = LightClient::new(lc_address, l1.clone());
 
+        let (genesis_lc, genesis_stake) = genesis.await?.clone();
+
         let data = light_client
-            .initialize(genesis.await?.into(), 864000, owner)
+            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, owner)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts
