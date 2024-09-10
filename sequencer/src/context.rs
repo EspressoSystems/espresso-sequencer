@@ -317,6 +317,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         tracing::info!("shutting down SequencerContext");
         self.handle.write().await.shut_down().await;
         self.tasks.shut_down().await;
+
+        // Since we've already shut down, we can set `detached` so the drop
+        // handler doesn't call `shut_down` again.
+        self.detached = true;
     }
 
     /// Wait for consensus to complete.
