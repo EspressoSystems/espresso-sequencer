@@ -155,112 +155,206 @@ pub struct BuilderState<TYPES: NodeType> {
     pub instance_state: Arc<TYPES::InstanceState>,
 }
 
+/// [best_builder_states_to_extend] is a utility function that is used to
+/// in order to determine which [BuilderState]s are the best fit to extend
+/// from.
+///
+/// This function is designed to inspect the current state of the global state
+/// in order to determine which [BuilderState]s are the best fit to extend
+/// from. We only want to use information from [GlobalState] as otherwise
+/// we would have some insider knowledge unique to our specific [BuilderState]
+/// rather than knowledge that is available to all [BuilderState]s. In fact,
+/// in order to ensure this, this function lives outside of the [BuilderState]
+/// itself.
+///
+/// In an ideal circumstance the best [BuilderState] to extend from is going to
+/// be the one that is immediately preceding the [QuorumProposal] that we are
+/// attempting to extend from. However, if all we know is the [ViewNumber] of
+/// the [QuorumProposal] that we are attempting to extend from, then we may end
+/// up in a scenario where we have multiple [BuilderState]s that are all equally
+/// valid to extend from.  When this happens, we have the potential for a data
+/// race.
+///
+/// The primary cause of this has to due with the interface of the
+/// [ProxyGlobalState]'s API.  In general, we want to be able to retrieve a
+/// [BuilderState] via the [BuilderStateId].  The [BuilderStateId] only
+/// references a [ViewNumber] and a [VidCommitment]. While this information is
+/// available in the [QuorumProposal], it only helps us to rule out
+/// [BuilderState]s that already exist.  It does **NOT** help us to pick a
+/// [BuilderState] that is the best fit to extend from.
+///
+/// This is where the `justify_qc` comes in to consideration.  The `justify_qc`
+/// contains the previous [ViewNumber] that is being extended from, and in
+/// addition it also contains the previous [Commitment<Leaf<TYPES>>] that is
+/// being built on top of.  Since our [BuilderState]s store identifying
+/// information that contains this same `leaf_commit` we can compare these
+/// directly to ensure that we are extending from the correct [BuilderState].
+///
+/// This function determines the best [BuilderState] in the following steps:
+///
+/// 1. If we have a [BuilderState] that is already spawned for the current
+///    [QuorumProposal], then we should should return no states, as one already
+///    exists.  This will prevent us from attempting to spawn duplicate
+///    [BuilderState]s.
+/// 2. Attempt to find all [BuilderState]s that are recorded within
+///    [GlobalState] that have matching view number and leaf commitments. There
+///    *should* only be one of these.  But all would be valid extension points.
+/// 3. If we can't find any [BuilderState]s that match the view number
+///    and leaf commitment, then we should return for the maximum stored view
+///    number that is smaller than the current [QuorumProposal].
+/// 4. If there is is only one [BuilderState] stored in the [GlobalState], then
+///    we should return that [BuilderState] as the best fit.
+/// 5. If none of the other criteria match, we return an empty result as it is
+///    unclear what to do in this case.
+///
+/// > Note: Any time this function returns more than a single entry in its
+/// > [HashSet] result, there is a potential for a race condition.  This is
+/// > because there are multiple [BuilderState]s that are equally valid to
+/// > extend from.  This race could be avoided by just picking one of the
+/// > entries in the resulting [HashSet], but this is not done here in order
+/// > to allow us to highlight the possibility of the race.
+async fn best_builder_states_to_extend<TYPES: NodeType>(
+    quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
+    global_state: Arc<RwLock<GlobalState<TYPES>>>,
+) -> HashSet<BuilderStateId<TYPES>> {
+    let current_view_number = quorum_proposal.data.view_number;
+    let current_commitment = quorum_proposal.data.block_header.payload_commitment();
+    let current_builder_state_id = BuilderStateId::<TYPES> {
+        parent_commitment: current_commitment,
+        parent_view: current_view_number,
+    };
+
+    let global_state_read_lock = global_state.read_arc().await;
+
+    // The first step is to check if we already have a spawned [BuilderState].
+    // If we do, then we should indicate that there is no best fit, as we
+    // don't want to spawn another [BuilderState].
+    if global_state_read_lock
+        .spawned_builder_states
+        .contains_key(&current_builder_state_id)
+    {
+        // We already have a spawned [BuilderState] for this proposal.
+        // So we should just ignore it.
+        return HashSet::new();
+    }
+
+    // Next we want to see if there is an immediate match for a [BuilderState]
+    // that we can extend from.  This is the most ideal situation, as it
+    // implies that we are extending from the correct [BuilderState].
+    // We do this by checking the `justify_qc` stored within the
+    // [QuorumProposal], and checking it against the current spawned
+    // [BuilderState]s
+    let justify_qc = &quorum_proposal.data.justify_qc;
+    let existing_states: HashSet<_> = global_state_read_lock
+        .spawned_builder_states
+        .iter()
+        .filter(
+            |(_, (built_from_proposed_block, _))| match built_from_proposed_block {
+                None => false,
+                Some(built_from_proposed_block) => {
+                    built_from_proposed_block.leaf_commit == justify_qc.data.leaf_commit
+                        && built_from_proposed_block.view_number == justify_qc.view_number
+                }
+            },
+        )
+        .map(|(builder_state_id, _)| builder_state_id.clone())
+        .collect();
+
+    // If we found any matching [BuilderState]s, then we should return them
+    // as the best fit.
+    if !existing_states.is_empty() {
+        return existing_states;
+    }
+
+    // At this point, we don't have any "ideal" matches or scenarios.  So we
+    // need to look for a suitable fall-back. The best fallback condition to
+    // start with is any [BuilderState] that has the maximum spawned view
+    // number whose value is smaller than the current [QuorumProposal].
+    let maximum_stored_view_number_smaller_than_quorum_proposal = global_state_read_lock
+        .spawned_builder_states
+        .keys()
+        .map(|builder_state_id| *builder_state_id.parent_view)
+        .filter(|view_number| view_number < &current_view_number)
+        .max();
+
+    // If we have a maximum view number that meets our criteria, then we should
+    // return all [BuilderStateId]s that match this view number.
+    // This can lead to multiple [BuilderStateId]s being returned.
+    if let Some(maximum_stored_view_number_smaller_than_quorum_proposal) =
+        maximum_stored_view_number_smaller_than_quorum_proposal
+    {
+        // If we are the maximum stored view number smaller than the quorum
+        // proposal's view number, then we are the best fit.
+        let mut result = HashSet::new();
+        for builder_state_id in
+            global_state_read_lock
+                .spawned_builder_states
+                .keys()
+                .filter(|builder_state_id| {
+                    builder_state_id.parent_view.u64()
+                        == maximum_stored_view_number_smaller_than_quorum_proposal
+                })
+        {
+            result.insert(builder_state_id.clone());
+        }
+        return result;
+    }
+
+    // This is our last ditch effort to continue making progress.  If there is
+    // only one [BuilderState] active, then we should return that as the best
+    // fit, as it will be the only way we can continue making progress with
+    // the builder.
+    if global_state_read_lock.spawned_builder_states.len() == 1 {
+        let mut result = HashSet::new();
+        for builder_state_id in global_state_read_lock.spawned_builder_states.keys() {
+            result.insert(builder_state_id.clone());
+        }
+        return result;
+    }
+
+    // This implies that there are only larger [BuilderState]s active than
+    // the one we are.  This is weird, it implies that some sort of time
+    // travel has occurred view-wise.  It is unclear what to do in this
+    // situation.
+
+    HashSet::new()
+}
+
 impl<TYPES: NodeType> BuilderState<TYPES> {
     /// [am_i_the_best_builder_state_to_extend] is a utility method that
-    /// attempts to determine the best [BuilderState] to extend from, given a
-    /// [QuorumProposal].
-    ///
-    /// In an ideal case the [BuilderState] whose recorded view and
-    /// vid_commitment that match the [QuorumProposal]'s justify_qc should be
-    /// the best fit.  However, if there is no exact match, then the best fit
-    /// is the [BuilderState] with the largest view number smaller than the
-    /// [QuorumProposal]'s view number.
-    ///
-    /// If there are no [BuilderState]s with a view number smaller than the
-    /// [QuorumProposal]'s view number, then the best fit is the only
-    /// [BuilderState] active.
+    /// attempts to determine whether we are among the best [BuilderState]s to
+    /// extend from.
     async fn am_i_the_best_builder_state_to_extend(
         &self,
         quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
     ) -> bool {
-        let justify_qc = &quorum_proposal.data.justify_qc;
-        let parent_view_number = justify_qc.view_number;
-        let parent_commitment = quorum_proposal.data.block_header.payload_commitment();
+        let best_builder_states_to_extend =
+            best_builder_states_to_extend(quorum_proposal.clone(), self.global_state.clone()).await;
 
-        if quorum_proposal.data.view_number == self.built_from_proposed_block.view_number {
-            // We are being asked to extend ourselves.  This is likely a
-            // spawning initial condition or a test condition.
-            return false;
-        }
+        tracing::debug!(
+            "{}@{} thinks these are the best builder states to extend from: {:?} for proposal {}@{}",
+            self.built_from_proposed_block.vid_commitment,
+            self.built_from_proposed_block.view_number.u64(),
+            best_builder_states_to_extend
+                .iter()
+                .map(|builder_state_id| format!(
+                    "{}@{}",
+                    builder_state_id.parent_commitment,
+                    builder_state_id.parent_view.u64()
+                ))
+                .collect::<Vec<String>>(),
+            quorum_proposal.data.block_header.payload_commitment(),
+            quorum_proposal.data.view_number.u64(),
+        );
 
-        if parent_view_number == self.built_from_proposed_block.view_number
-            && parent_commitment == self.built_from_proposed_block.vid_commitment
-        {
-            // This is us exactly, so we should be the best one to extend.
-            return true;
-        }
-
-        let desired_builder_state_id = BuilderStateId::<TYPES> {
-            parent_commitment,
-            parent_view: parent_view_number,
-        };
-
-        // Alright, we weren't the immediate best fit, let's see if there's a better fit out there.
-
-        let global_state_read_lock = self.global_state.read_arc().await;
-
-        if global_state_read_lock
-            .spawned_builder_states
-            .contains_key(&desired_builder_state_id)
-        {
-            // There is an exact match that isn't us, so we should not extend,
-            // and we should wait for that match to extend instead.
-            return false;
-        }
-
-        // There is no exact match that we are aware of.  This ultimately means
-        // that we do not have visibility on the previously extended
-        // [BuilderState].
-        //
-        // It would be best if we could determine which was the best one to
-        // extend from, but there's a very real possibility that we just do
-        // not have any previous [BuilderState]s to extend from.  This would
-        // mean that we should extend from the oldest [BuilderState] that we
-        // have locally in order to ensure that we don't drop any transactions
-        // that we believe may be pending with other calls that have been made.
-
-        let leaf = Leaf::<TYPES>::from_quorum_proposal(&quorum_proposal.data);
-        if self.built_from_proposed_block.leaf_commit == leaf.commit() {
-            // We are the oldest [BuilderState] that we have locally, so we
-            // should extend from ourselves.
-            return true;
-        }
-
-        // At this point we don't have any way to inspecting the other
-        // [BuilderState]'s `build_from_proposed_block` values to determine
-        // if another [BuilderState] will be extending from the same parent.
-        // So we'll do some other checks to see if we can make some safe
-        // assumptions.
-
-        let maximum_stored_view_number_smaller_than_quorum_proposal = global_state_read_lock
-            .spawned_builder_states
-            .keys()
-            .map(|builder_state_id| *builder_state_id.parent_view)
-            .filter(|view_number| view_number < &quorum_proposal.data.view_number)
-            .max();
-
-        if let Some(maximum_stored_view_number_smaller_than_quorum_proposal) =
-            maximum_stored_view_number_smaller_than_quorum_proposal
-        {
-            // If we are the maximum stored view number smaller than the quorum
-            // proposal's view number, then we are the best fit.
-            return maximum_stored_view_number_smaller_than_quorum_proposal
-                == self.built_from_proposed_block.view_number.u64();
-        }
-
-        // If there are no stored view numbers smaller than the quorum proposal
-        // Are we the only builder state?
-        if global_state_read_lock.spawned_builder_states.len() == 1 {
-            return true;
-        }
-
-        // This implies that there are only larger [BuilderState]s active than
-        // the one we are.  This is weird, it implies that some sort of time
-        // travel has occurred view-wise.  It is unclear what to do in this
-        // situation.
-
-        true
+        // We are a best fit if we are contained within the returned set of
+        // best [BuilderState]s to extend from.
+        best_builder_states_to_extend.contains(&BuilderStateId {
+            parent_commitment: self.built_from_proposed_block.vid_commitment,
+            parent_view: self.built_from_proposed_block.view_number,
+        })
     }
+
     /// processing the DA proposal
     #[tracing::instrument(skip_all, name = "process da proposal",
                                     fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
