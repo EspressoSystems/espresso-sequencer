@@ -389,6 +389,7 @@ pub mod test_helpers {
     };
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
+    use marketplace_solver::testing::MockSolver;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
@@ -411,6 +412,7 @@ pub mod test_helpers {
         pub server: SequencerContext<network::Memory, P::Persistence, V>,
         pub peers: Vec<SequencerContext<network::Memory, P::Persistence, V>>,
         pub cfg: TestConfig<{ NUM_NODES }>,
+        pub mock_solver: Option<MockSolver>,
     }
 
     pub struct TestNetworkConfig<const NUM_NODES: usize, P, C>
@@ -538,12 +540,15 @@ pub mod test_helpers {
                 cfg.network_config.set_builder_urls(vec1::vec1![url]);
             };
 
+            let mut solver_url = None;
+            let mut mock_solver = None;
+
             if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION
                 || <V as Versions>::Base::VERSION >= MarketplaceVersion::VERSION
             {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.marketplace_builder_port(),
-                    NodeState::default(),
+                    NodeState::default().with_current_version(V::Base::VERSION),
                     cfg.state[0].clone(),
                 )
                 .await;
@@ -551,6 +556,10 @@ pub mod test_helpers {
                 cfg.network_config
                     .set_builder_urls(vec1::vec1![url.clone()]);
                 marketplace_builder_url = url;
+
+                let solver = MockSolver::init().await;
+                solver_url = Some(solver.solver_url.clone());
+                mock_solver = Some(solver);
             }
 
             let mut nodes = join_all(
@@ -561,6 +570,7 @@ pub mod test_helpers {
                         let cfg = &cfg.network_config;
                         let upgrades_map = cfg.upgrades();
                         let marketplace_builder_url = marketplace_builder_url.clone();
+                        let solver_url = solver_url.clone();
                         async move {
                             if i == 0 {
                                 opt.serve(|metrics| {
@@ -576,6 +586,7 @@ pub mod test_helpers {
                                             bind_version,
                                             upgrades_map,
                                             marketplace_builder_url,
+                                            solver_url,
                                         )
                                         .await
                                     }
@@ -594,6 +605,7 @@ pub mod test_helpers {
                                     bind_version,
                                     upgrades_map,
                                     marketplace_builder_url,
+                                    solver_url,
                                 )
                                 .await
                             }
@@ -620,6 +632,7 @@ pub mod test_helpers {
                 server,
                 peers,
                 cfg: cfg.network_config,
+                mock_solver,
             }
         }
 
@@ -1297,6 +1310,7 @@ mod test {
                 MockSequencerVersions::new(),
                 Default::default(),
                 "http://localhost".parse().unwrap(),
+                None,
             )
             .await;
         let mut events = node.event_stream().await;

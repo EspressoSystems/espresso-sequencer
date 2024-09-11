@@ -121,7 +121,7 @@ pub mod mock {
         let mut count = 1;
         loop {
             while count % 10 != 0 {
-                tracing::info!("generating ViewFinished event");
+                tracing::debug!("generating ViewFinished event");
 
                 streamer
                     .write()

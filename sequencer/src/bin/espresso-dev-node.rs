@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions};
+use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions, V0_1};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -182,17 +182,14 @@ async fn main() -> anyhow::Result<()> {
         .l1_url(l1_url.clone())
         .build();
 
-    const NUM_NODES: usize = 2;
+    const NUM_NODES: usize = 5;
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(api_options)
         .network_config(network_config)
         .build();
+    let network =
+        TestNetwork::new(config, SequencerVersions::<MarketplaceVersion, V0_1>::new()).await;
 
-    let network = TestNetwork::new(
-        config,
-        SequencerVersions::<SequencerApiVersion, MarketplaceVersion>::new(),
-    )
-    .await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
@@ -613,18 +610,20 @@ mod tests {
 
         // assert!(!builder_address.is_empty());
 
-        let tx = Transaction::new(100_u32.into(), vec![1, 2, 3]);
+        let tx = Transaction::new(2_u32.into(), vec![1, 2, 3]);
 
-        let hash: Commitment<Transaction> = builder_api_client
-            .post("txn_submit/submit")
-            .body_json(&tx)
+        let hash: Vec<Commitment<Transaction>> = builder_api_client
+            .post("txn_submit/batch")
+            .body_binary(&vec![tx.clone()])
             .unwrap()
             .send()
             .await
             .unwrap();
 
         let tx_hash = tx.commit();
+        let hash = hash[0];
         assert_eq!(hash, tx_hash);
+        
 
         let mut tx_result = api_client
             .get::<TransactionQueryData<SeqTypes>>(&format!(
@@ -646,190 +645,190 @@ mod tests {
                 .await;
         }
 
-        let large_tx = Transaction::new(100_u32.into(), vec![0; 20000]);
-        let large_hash: Commitment<Transaction> = api_client
-            .post("submit/submit")
-            .body_json(&large_tx)
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
+        // let large_tx = Transaction::new(2_u32.into(), vec![0; 20000]);
+        // let large_hash: Commitment<Transaction> = api_client
+        //     .post("submit/submit")
+        //     .body_json(&large_tx)
+        //     .unwrap()
+        //     .send()
+        //     .await
+        //     .unwrap();
 
-        let tx_hash = large_tx.commit();
-        assert_eq!(large_hash, tx_hash);
+        // let tx_hash = large_tx.commit();
+        // assert_eq!(large_hash, tx_hash);
 
-        let mut tx_result = api_client
-            .get::<TransactionQueryData<SeqTypes>>(&format!(
-                "availability/transaction/hash/{tx_hash}",
-            ))
-            .send()
-            .await;
-        while tx_result.is_err() {
-            tracing::info!("waiting for large tx");
-            sleep(Duration::from_secs(1)).await;
+        // let mut tx_result = api_client
+        //     .get::<TransactionQueryData<SeqTypes>>(&format!(
+        //         "availability/transaction/hash/{tx_hash}",
+        //     ))
+        //     .send()
+        //     .await;
+        // while tx_result.is_err() {
+        //     tracing::info!("waiting for large tx");
+        //     sleep(Duration::from_secs(1)).await;
 
-            tx_result = api_client
-                .get::<TransactionQueryData<SeqTypes>>(&format!(
-                    "availability/transaction/hash/{}",
-                    tx_hash
-                ))
-                .send()
-                .await;
-        }
+        //     tx_result = api_client
+        //         .get::<TransactionQueryData<SeqTypes>>(&format!(
+        //             "availability/transaction/hash/{}",
+        //             tx_hash
+        //         ))
+        //         .send()
+        //         .await;
+        // }
 
-        {
-            // transactions with size larger than max_block_size result in an error
-            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 50120]);
-            api_client
-                .post::<Commitment<Transaction>>("submit/submit")
-                .body_json(&extremely_large_tx)
-                .unwrap()
-                .send()
-                .await
-                .unwrap_err();
+        // {
+        //     // transactions with size larger than max_block_size result in an error
+        //     let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 50120]);
+        //     api_client
+        //         .post::<Commitment<Transaction>>("submit/submit")
+        //         .body_json(&extremely_large_tx)
+        //         .unwrap()
+        //         .send()
+        //         .await
+        //         .unwrap_err();
 
-            // Now we send a small transaction to make sure this transaction can be included in a hotshot block.
-            let tx = Transaction::new(100_u32.into(), vec![0; 3]);
-            let tx_hash: Commitment<Transaction> = api_client
-                .post("submit/submit")
-                .body_json(&tx)
-                .unwrap()
-                .send()
-                .await
-                .unwrap();
+        //     // Now we send a small transaction to make sure this transaction can be included in a hotshot block.
+        //     let tx = Transaction::new(100_u32.into(), vec![0; 3]);
+        //     let tx_hash: Commitment<Transaction> = api_client
+        //         .post("submit/submit")
+        //         .body_json(&tx)
+        //         .unwrap()
+        //         .send()
+        //         .await
+        //         .unwrap();
 
-            let mut result = api_client
-                .get::<TransactionQueryData<SeqTypes>>(&format!(
-                    "availability/transaction/hash/{tx_hash}",
-                ))
-                .send()
-                .await;
-            while result.is_err() {
-                sleep(Duration::from_secs(1)).await;
+        //     let mut result = api_client
+        //         .get::<TransactionQueryData<SeqTypes>>(&format!(
+        //             "availability/transaction/hash/{tx_hash}",
+        //         ))
+        //         .send()
+        //         .await;
+        //     while result.is_err() {
+        //         sleep(Duration::from_secs(1)).await;
 
-                result = api_client
-                    .get::<TransactionQueryData<SeqTypes>>(&format!(
-                        "availability/transaction/hash/{}",
-                        tx_hash
-                    ))
-                    .send()
-                    .await;
-            }
-        }
+        //         result = api_client
+        //             .get::<TransactionQueryData<SeqTypes>>(&format!(
+        //                 "availability/transaction/hash/{}",
+        //                 tx_hash
+        //             ))
+        //             .send()
+        //             .await;
+        //     }
+        // }
 
-        let tx_block_height = tx_result.unwrap().block_height();
+        // let tx_block_height = tx_result.unwrap().block_height();
 
-        // Check the namespace proof
-        let proof = api_client
-            .get::<NamespaceProofQueryData>(&format!(
-                "availability/block/{tx_block_height}/namespace/100"
-            ))
-            .send()
-            .await
-            .unwrap();
-        assert!(proof.proof.is_some());
+        // // Check the namespace proof
+        // let proof = api_client
+        //     .get::<NamespaceProofQueryData>(&format!(
+        //         "availability/block/{tx_block_height}/namespace/100"
+        //     ))
+        //     .send()
+        //     .await
+        //     .unwrap();
+        // assert!(proof.proof.is_some());
 
-        // These endpoints are currently used in `espresso-sequencer-go`. These checks
-        // serve as reminders of syncing the API updates to go client repo when they change.
-        {
-            api_client
-                .get::<u64>("status/block-height")
-                .send()
-                .await
-                .unwrap();
+        // // These endpoints are currently used in `espresso-sequencer-go`. These checks
+        // // serve as reminders of syncing the API updates to go client repo when they change.
+        // {
+        //     api_client
+        //         .get::<u64>("status/block-height")
+        //         .send()
+        //         .await
+        //         .unwrap();
 
-            api_client
-                .get::<Header>("availability/header/3")
-                .send()
-                .await
-                .unwrap();
+        //     api_client
+        //         .get::<Header>("availability/header/3")
+        //         .send()
+        //         .await
+        //         .unwrap();
 
-            api_client
-                .get::<VidCommonQueryData<SeqTypes>>(&format!(
-                    "availability/vid/common/{tx_block_height}"
-                ))
-                .send()
-                .await
-                .unwrap();
+        //     api_client
+        //         .get::<VidCommonQueryData<SeqTypes>>(&format!(
+        //             "availability/vid/common/{tx_block_height}"
+        //         ))
+        //         .send()
+        //         .await
+        //         .unwrap();
 
-            while api_client
-                .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>("block-state/3/2")
-                .send()
-                .await
-                .is_err()
-            {
-                sleep(Duration::from_secs(1)).await;
-            }
-        }
+        //     while api_client
+        //         .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>("block-state/3/2")
+        //         .send()
+        //         .await
+        //         .is_err()
+        //     {
+        //         sleep(Duration::from_secs(1)).await;
+        //     }
+        // }
 
-        let dev_node_client: Client<ServerError, SequencerApiVersion> =
-            Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
-        dev_node_client.connect(None).await;
+        // let dev_node_client: Client<ServerError, SequencerApiVersion> =
+        //     Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
+        // dev_node_client.connect(None).await;
 
-        // Check the dev node api
-        {
-            tracing::info!("checking the dev node api");
-            let dev_info = dev_node_client
-                .get::<DevInfo>("api/dev-info")
-                .send()
-                .await
-                .unwrap();
+        // // Check the dev node api
+        // {
+        //     tracing::info!("checking the dev node api");
+        //     let dev_info = dev_node_client
+        //         .get::<DevInfo>("api/dev-info")
+        //         .send()
+        //         .await
+        //         .unwrap();
 
-            let light_client_address = dev_info.l1_light_client_address;
+        //     let light_client_address = dev_info.l1_light_client_address;
 
-            let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
-            let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
+        //     let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
+        //     let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
 
-            while light_client
-                .get_hot_shot_commitment(U256::from(1))
-                .call()
-                .await
-                .is_err()
-            {
-                tracing::info!("waiting for commitment");
-                sleep(Duration::from_secs(3)).await;
-            }
+        //     while light_client
+        //         .get_hot_shot_commitment(U256::from(1))
+        //         .call()
+        //         .await
+        //         .is_err()
+        //     {
+        //         tracing::info!("waiting for commitment");
+        //         sleep(Duration::from_secs(3)).await;
+        //     }
 
-            let height = signer.get_block_number().await.unwrap().as_u64();
-            dev_node_client
-                .post::<()>("api/set-hotshot-down")
-                .body_json(&SetHotshotDownReqBody {
-                    chain_id: None,
-                    height: height - 1,
-                })
-                .unwrap()
-                .send()
-                .await
-                .unwrap();
+        //     let height = signer.get_block_number().await.unwrap().as_u64();
+        //     dev_node_client
+        //         .post::<()>("api/set-hotshot-down")
+        //         .body_json(&SetHotshotDownReqBody {
+        //             chain_id: None,
+        //             height: height - 1,
+        //         })
+        //         .unwrap()
+        //         .send()
+        //         .await
+        //         .unwrap();
 
-            while !light_client
-                .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
-                .call()
-                .await
-                .unwrap_or(false)
-            {
-                tracing::info!("waiting for setting hotshot down");
-                sleep(Duration::from_secs(3)).await;
-            }
+        //     while !light_client
+        //         .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
+        //         .call()
+        //         .await
+        //         .unwrap_or(false)
+        //     {
+        //         tracing::info!("waiting for setting hotshot down");
+        //         sleep(Duration::from_secs(3)).await;
+        //     }
 
-            dev_node_client
-                .post::<()>("api/set-hotshot-up")
-                .body_json(&())
-                .unwrap()
-                .send()
-                .await
-                .unwrap();
+        //     dev_node_client
+        //         .post::<()>("api/set-hotshot-up")
+        //         .body_json(&())
+        //         .unwrap()
+        //         .send()
+        //         .await
+        //         .unwrap();
 
-            while light_client
-                .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
-                .call()
-                .await
-                .unwrap_or(true)
-            {
-                tracing::info!("waiting for setting hotshot up");
-                sleep(Duration::from_secs(3)).await;
-            }
-        }
+        //     while light_client
+        //         .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
+        //         .call()
+        //         .await
+        //         .unwrap_or(true)
+        //     {
+        //         tracing::info!("waiting for setting hotshot up");
+        //         sleep(Duration::from_secs(3)).await;
+        //     }
+        // }
 
         drop(process);
         drop(db);

@@ -4,18 +4,27 @@ use std::sync::Arc;
 
 use async_compatibility_layer::art::async_spawn;
 use async_std::{sync::RwLock, task::JoinHandle};
-use espresso_types::MarketplaceVersion;
+use committable::Committable;
+use espresso_types::v0_3::RollupRegistrationBody;
+use espresso_types::SeqTypes;
+use espresso_types::{v0_3::RollupRegistration, MarketplaceVersion};
+use hotshot::types::{BLSPubKey, SignatureKey};
 use hotshot_query_service::data_source::sql::testing::TmpDb;
+use hotshot_types::traits::node_implementation::NodeType;
 use portpicker::pick_unused_port;
-use tide_disco::{App, Url};
+use std::str::FromStr;
+use tide_disco::Url;
+
+use tide_disco::App;
 use vbs::version::StaticVersionType;
 
+use crate::SolverError;
 use crate::{
     database::{mock::setup_mock_database, PostgresClient},
     define_api, handle_events,
     mock::run_mock_event_service,
     state::{GlobalState, SolverState, StakeTable},
-    EventsServiceClient, SolverError, SOLVER_API_PATH,
+    EventsServiceClient, SOLVER_API_PATH,
 };
 
 pub struct MockSolver {
@@ -98,6 +107,22 @@ impl MockSolver {
             }
         });
 
+        let client = surf_disco::Client::<SolverError, MarketplaceVersion>::new(
+            solver_url.clone().join(SOLVER_API_PATH).unwrap(),
+        );
+        client.connect(None).await;
+
+        // Register the first rollup (ns = 1)
+        let (reg_ns_1, _, _) =
+            register_rollup_helper(1, Some("http://localhost"), 200, true, "test").await;
+        let _: RollupRegistration = client
+            .post("register_rollup")
+            .body_json(&reg_ns_1)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
         let handles = vec![
             generate_events_handle,
             event_handler_handle,
@@ -116,69 +141,70 @@ impl MockSolver {
     }
 }
 
+pub async fn register_rollup_helper(
+    namespace_id: u64,
+    reserve_url: Option<&str>,
+    reserve_price: u64,
+    active: bool,
+    text: &str,
+) -> (
+    RollupRegistration,
+    <BLSPubKey as SignatureKey>::PrivateKey,
+    Vec<BLSPubKey>,
+) {
+    let private_key = <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+    let signature_key = BLSPubKey::from_private(&private_key);
+
+    // Create a list of signature keys for rollup registration data
+    let mut signature_keys = vec![signature_key];
+
+    for _ in 0..10 {
+        let private_key =
+            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+        signature_keys.push(BLSPubKey::from_private(&private_key));
+    }
+
+    // Initialize a rollup registration with the provided namespace id
+    let reg_body = RollupRegistrationBody {
+        namespace_id: namespace_id.into(),
+        reserve_url: reserve_url.map(|url| Url::from_str(url).unwrap()),
+        reserve_price: reserve_price.into(),
+        active,
+        signature_keys: signature_keys.clone(),
+        text: text.to_string(),
+        signature_key,
+    };
+
+    // Sign the registration body
+    let signature =
+        <SeqTypes as NodeType>::SignatureKey::sign(&private_key, reg_body.commit().as_ref())
+            .expect("failed to sign");
+
+    let reg = RollupRegistration {
+        body: reg_body,
+        signature,
+    };
+
+    (reg, private_key, signature_keys)
+}
+
 #[cfg(test)]
 mod test {
 
     use committable::Committable;
     use espresso_types::{
-        v0_3::{BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
+        v0_3::{BidTx, RollupRegistration, RollupUpdate, RollupUpdatebody},
         FeeAccount, MarketplaceVersion, SeqTypes,
         Update::{Set, Skip},
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_types::traits::node_implementation::NodeType;
-    use std::{str::FromStr, time::Duration};
-    use tide_disco::Url;
+    use std::time::Duration;
 
-    use crate::{testing::MockSolver, SolverError};
-
-    async fn register_rollup_helper(
-        namespace_id: u64,
-        reserve_url: Option<&str>,
-        reserve_price: u64,
-        active: bool,
-        text: &str,
-    ) -> (
-        RollupRegistration,
-        <BLSPubKey as SignatureKey>::PrivateKey,
-        Vec<BLSPubKey>,
-    ) {
-        let private_key =
-            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
-        let signature_key = BLSPubKey::from_private(&private_key);
-
-        // Create a list of signature keys for rollup registration data
-        let mut signature_keys = vec![signature_key];
-
-        for _ in 0..10 {
-            let private_key =
-                <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
-            signature_keys.push(BLSPubKey::from_private(&private_key));
-        }
-
-        // Initialize a rollup registration with the provided namespace id
-        let reg_body = RollupRegistrationBody {
-            namespace_id: namespace_id.into(),
-            reserve_url: reserve_url.map(|url| Url::from_str(url).unwrap()),
-            reserve_price: reserve_price.into(),
-            active,
-            signature_keys: signature_keys.clone(),
-            text: text.to_string(),
-            signature_key,
-        };
-
-        // Sign the registration body
-        let signature =
-            <SeqTypes as NodeType>::SignatureKey::sign(&private_key, reg_body.commit().as_ref())
-                .expect("failed to sign");
-
-        let reg = RollupRegistration {
-            body: reg_body,
-            signature,
-        };
-
-        (reg, private_key, signature_keys)
-    }
+    use crate::{
+        testing::{register_rollup_helper, MockSolver},
+        SolverError,
+    };
 
     #[async_std::test]
     async fn test_duplicate_rollup_registration() {

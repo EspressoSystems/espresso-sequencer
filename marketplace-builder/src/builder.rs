@@ -384,7 +384,7 @@ mod test {
     /// Initiate a mock solver and register a rollup.
     ///
     /// Returns the solver and its base URL.
-    async fn init_mock_solver_and_register_rollup() -> (MockSolver, Url) {
+    pub async fn init_mock_solver_and_register_rollup() -> (MockSolver, Url) {
         let mock_solver = MockSolver::init().await;
         let solver_base_url = mock_solver.solver_url.clone();
         let client = connect_to_solver(solver_base_url.clone());

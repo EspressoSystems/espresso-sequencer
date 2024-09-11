@@ -503,7 +503,7 @@ pub mod testing {
         instance_state: NodeState,
         validated_state: ValidatedState,
     ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let builder_key_pair = EthKeyPair::random();
+        let builder_key_pair = FeeAccount::generated_from_seed_indexed([1; 32], 0).1;
         let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
 
         // This should never fail.
@@ -810,6 +810,7 @@ pub mod testing {
                         self.marketplace_builder_port.unwrap_or_default()
                     ))
                     .unwrap(),
+                    None,
                 )
                 .await
             }))
@@ -848,6 +849,7 @@ pub mod testing {
             bind_version: V,
             upgrades: BTreeMap<Version, Upgrade>,
             marketplace_builder_url: Url,
+            marketplace_solver_url: Option<Url>,
         ) -> SequencerContext<network::Memory, P::Persistence, V> {
             let mut config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
@@ -877,6 +879,7 @@ pub mod testing {
             let builder_account = Self::builder_key().fee_account();
             tracing::info!(%builder_account, "prefunding builder account");
             state.prefund_account(builder_account, U256::max_value().into());
+
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
@@ -894,6 +897,16 @@ pub mod testing {
                 state_key = %config.my_own_validator_config.state_key_pair.ver_key(),
                 "starting node",
             );
+
+            let mut auction_results_provider = SolverAuctionResultsProvider::default();
+
+            if let Some(url) = marketplace_solver_url {
+                auction_results_provider = SolverAuctionResultsProvider {
+                    url,
+                    ..Default::default()
+                }
+            }
+
             SequencerContext::init(
                 NetworkConfig {
                     config,
@@ -910,7 +923,7 @@ pub mod testing {
                 None, // The public API URL
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
-                    auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
+                    auction_results_provider: Arc::new(auction_results_provider),
                     fallback_builder_url: marketplace_builder_url,
                 },
             )
