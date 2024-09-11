@@ -107,6 +107,13 @@ pub struct GlobalState<TYPES: NodeType> {
     pub spawned_builder_states: HashMap<
         BuilderStateId<TYPES>,
         (
+            // This is provided as an Option for convenience with initialization.
+            // When we build the initial state, we don't necessarily want to
+            // have to generate a valid BuiltFromProposedBlock object.  As doing
+            // such would require a bit of setup.  Additionally it would
+            // result in the call signature to `GlobalState::new` changing.
+            // However for every subsequent BuilderState, we expect this value
+            // to be populated.
             Option<BuiltFromProposedBlock<TYPES>>,
             BroadcastSender<MessageType<TYPES>>,
         ),
