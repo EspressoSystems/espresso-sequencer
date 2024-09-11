@@ -310,7 +310,10 @@ where
 
         let mut app: App<ProxyGlobalState<TYPES, H>, BuilderApiError> = App::with_state(self);
 
-        app.register_module("block_info", builder_api)?;
+        app.register_module(
+            hotshot_types::constants::MARKETPLACE_BUILDER_MODULE,
+            builder_api,
+        )?;
 
         app.register_module("txn_submit", private_mempool_api)?;
 
