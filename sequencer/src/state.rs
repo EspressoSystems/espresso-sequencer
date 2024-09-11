@@ -2,7 +2,7 @@ use core::fmt::Debug;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{bail, ensure, Context};
-use async_std::{stream::StreamExt, sync::RwLock};
+use async_std::stream::StreamExt;
 use espresso_types::{
     v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
 };
@@ -10,7 +10,7 @@ use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
-    data_source::VersionedDataSource,
+    data_source::{Transaction, VersionedDataSource},
     merklized_state::{MerklizedStateHeightPersistence, UpdateStateData},
     status::StatusDataSource,
     types::HeightIndexed,
@@ -59,7 +59,7 @@ async fn compute_state_update(
 }
 
 async fn store_state_update(
-    storage: &mut impl SequencerStateDataSource,
+    tx: &mut impl SequencerStateUpdate,
     block_number: u64,
     state: &ValidatedState,
     delta: Delta,
@@ -85,7 +85,7 @@ async fn store_state_update(
             );
 
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
-            storage,
+            tx,
             proof,
             path,
             block_number,
@@ -106,7 +106,7 @@ async fn store_state_update(
 
     {
         UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
-            storage,
+            tx,
             proof,
             path,
             block_number,
@@ -115,11 +115,12 @@ async fn store_state_update(
         .context("failed to store block merkle nodes")?;
     }
 
-    storage
-        .set_last_state_height(block_number as usize)
-        .await
-        .context("setting state height")?;
-    storage.commit().await.context("committing state update")?;
+    UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::set_last_state_height(
+        tx,
+        block_number as usize,
+    )
+    .await
+    .context("setting state height")?;
     Ok(())
 }
 
@@ -131,25 +132,28 @@ async fn store_state_update(
         height = parent_leaf.height(),
     ),
 )]
-async fn update_state_storage(
+async fn update_state_storage<T>(
     parent_state: &ValidatedState,
-    storage: &Arc<RwLock<impl SequencerStateDataSource>>,
+    storage: &Arc<T>,
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
-) -> anyhow::Result<ValidatedState> {
+) -> anyhow::Result<ValidatedState>
+where
+    T: SequencerStateDataSource,
+    for<'a> T::Transaction<'a>: SequencerStateUpdate,
+{
     let parent_chain_config = parent_state.chain_config;
 
     let (state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
         .await
         .context("computing state update")?;
 
-    let mut storage = storage.write().await;
-    if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), &state, delta).await
-    {
-        storage.revert().await;
-        return Err(err);
-    }
+    let mut tx = storage
+        .write()
+        .await
+        .context("opening transaction for state update")?;
+    store_state_update(&mut tx, proposed_leaf.height(), &state, delta).await?;
 
     if parent_chain_config != state.chain_config {
         let cf = state
@@ -157,17 +161,21 @@ async fn update_state_storage(
             .resolve()
             .context("failed to resolve to chain config")?;
 
-        storage.insert_chain_config(cf).await?
+        tx.insert_chain_config(cf).await?;
     }
 
+    tx.commit().await?;
     Ok(state)
 }
 
-async fn store_genesis_state(
-    storage: &mut impl SequencerStateDataSource,
+async fn store_genesis_state<T>(
+    mut tx: T,
     chain_config: ChainConfig,
     state: &ValidatedState,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    T: SequencerStateUpdate,
+{
     ensure!(
         state.block_merkle_tree.num_leaves() == 0,
         "genesis state with non-empty block tree is unsupported"
@@ -187,35 +195,37 @@ async fn store_genesis_state(
             );
 
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
-            storage, proof, path, 0,
+            &mut tx, proof, path, 0,
         )
         .await
         .context("failed to store fee merkle nodes")?;
     }
 
-    storage.insert_chain_config(chain_config).await?;
+    tx.insert_chain_config(chain_config).await?;
 
-    storage.commit().await?;
+    tx.commit().await?;
     Ok(())
 }
 
-pub(crate) async fn update_state_storage_loop(
-    storage: Arc<RwLock<impl SequencerStateDataSource>>,
+pub(crate) async fn update_state_storage_loop<T>(
+    storage: Arc<T>,
     instance: impl Future<Output = NodeState>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    T: SequencerStateDataSource,
+    for<'a> T::Transaction<'a>: SequencerStateUpdate,
+{
     let mut instance = instance.await;
     instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
 
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
-        let state = storage.upgradable_read().await;
-
-        let last_height = state.get_last_state_height().await?;
-        let current_height = state.block_height().await?;
+        let last_height = storage.get_last_state_height().await?;
+        let current_height = storage.block_height().await?;
         tracing::info!(last_height, current_height, "updating state storage");
 
-        let parent_leaf = state.get_leaf(last_height).await;
-        let leaves = state.subscribe_leaves(last_height + 1).await;
+        let parent_leaf = storage.get_leaf(last_height).await;
+        let leaves = storage.subscribe_leaves(last_height + 1).await;
         (last_height, parent_leaf, leaves)
     };
     // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not
@@ -227,18 +237,13 @@ pub(crate) async fn update_state_storage_loop(
         // If the last height is 0, we need to insert the genesis state, since this state is
         // never the result of a state update and thus is not inserted in the loop below.
         tracing::info!("storing genesis merklized state");
-        let mut storage = storage.write().await;
-        if let Err(err) = store_genesis_state(
-            &mut *storage,
-            instance.chain_config,
-            &instance.genesis_state,
-        )
-        .await
-        {
-            tracing::error!("failed to store genesis state: {err:#}");
-            storage.revert().await;
-            return Err(err);
-        }
+        let tx = storage
+            .write()
+            .await
+            .context("starting transaction for genesis state")?;
+        store_genesis_state(tx, instance.chain_config, &instance.genesis_state)
+            .await
+            .context("storing genesis state")?;
     }
 
     while let Some(leaf) = leaves.next().await {
@@ -270,10 +275,7 @@ pub(crate) trait SequencerStateDataSource:
     + StatusDataSource
     + VersionedDataSource
     + CatchupDataSource
-    + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
-    + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
     + MerklizedStateHeightPersistence
-    + ChainConfigPersistence
 {
 }
 
@@ -284,9 +286,22 @@ impl<T> SequencerStateDataSource for T where
         + StatusDataSource
         + VersionedDataSource
         + CatchupDataSource
+        + MerklizedStateHeightPersistence
+{
+}
+
+pub(crate) trait SequencerStateUpdate:
+    Transaction
+    + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+    + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+    + ChainConfigPersistence
+{
+}
+
+impl<T> SequencerStateUpdate for T where
+    T: Transaction
         + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
         + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
-        + MerklizedStateHeightPersistence
         + ChainConfigPersistence
 {
 }

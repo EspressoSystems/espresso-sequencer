@@ -13,20 +13,16 @@ use futures::{
 };
 use hotshot_events_service::events::Error as EventStreamingError;
 use hotshot_query_service::{
-    data_source::{ExtensibleDataSource, MetricsDataSource},
+    data_source::{ExtensibleDataSource, MetricsDataSource, UpdateDataSource},
     status::{self, UpdateStatusData},
-    Error,
+    ApiState as AppState, Error,
 };
 use hotshot_types::traits::{
     metrics::{Metrics, NoMetrics},
     network::ConnectedNetwork,
     node_implementation::Versions,
 };
-use tide_disco::{
-    listener::RateLimitListener,
-    method::{ReadState, WriteState},
-    App, Url,
-};
+use tide_disco::{listener::RateLimitListener, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
 use super::{
@@ -42,7 +38,7 @@ use crate::{
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
-    SequencerApiVersion,
+    SeqTypes, SequencerApiVersion,
 };
 
 #[derive(Clone, Debug)]
@@ -263,18 +259,19 @@ impl Options {
         bind_version: SequencerApiVersion,
     ) -> anyhow::Result<(
         Box<dyn Metrics>,
-        Arc<RwLock<StorageState<N, P, D, V>>>,
-        App<Arc<RwLock<StorageState<N, P, D, V>>>, Error>,
+        Arc<StorageState<N, P, D, V>>,
+        App<AppState<StorageState<N, P, D, V>>, Error>,
     )>
     where
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
         D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
+        for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
     {
         let metrics = ds.populate_metrics();
-        let ds: endpoints::AvailState<N, P, D, V> =
-            Arc::new(RwLock::new(ExtensibleDataSource::new(ds, state.clone())));
-        let mut app = App::<_, Error>::with_state(ds.clone());
+        let ds = Arc::new(ExtensibleDataSource::new(ds, state.clone()));
+        let api_state: endpoints::AvailState<N, P, D, V> = ds.clone().into();
+        let mut app = App::<_, Error>::with_state(api_state);
 
         // Initialize status API
         if self.status.is_some() {
@@ -388,7 +385,7 @@ impl Options {
     /// source, so initialization is the same no matter what mode the service is running in.
     fn init_hotshot_modules<N, P, S>(&self, app: &mut App<S, Error>) -> anyhow::Result<()>
     where
-        S: 'static + Send + Sync + ReadState + WriteState,
+        S: 'static + Send + Sync + ReadState,
         P: SequencerPersistence,
         S::State: Send
             + Sync

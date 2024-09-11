@@ -44,12 +44,12 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
-    async fn save_config(&mut self, _: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&self, _: &NetworkConfig) -> anyhow::Result<()> {
         Ok(())
     }
 
     async fn append_decided_leaves(
-        &mut self,
+        &self,
         view_number: ViewNumber,
         leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
         consumer: &impl EventConsumer,
@@ -115,33 +115,29 @@ impl SequencerPersistence for NoStorage {
     }
 
     async fn append_vid(
-        &mut self,
+        &self,
         _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn append_da(
-        &mut self,
+        &self,
         _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn record_action(
-        &mut self,
-        _view: ViewNumber,
-        _action: HotShotAction,
-    ) -> anyhow::Result<()> {
+    async fn record_action(&self, _view: ViewNumber, _action: HotShotAction) -> anyhow::Result<()> {
         Ok(())
     }
     async fn update_undecided_state(
-        &mut self,
+        &self,
         _leaves: CommitmentMap<Leaf>,
         _state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn append_quorum_proposal(
-        &mut self,
+        &self,
         _proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())

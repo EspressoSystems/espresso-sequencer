@@ -32,8 +32,8 @@ use jf_merkle_tree::MerkleTreeScheme;
 
 use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
 use crate::{
-    context::Consensus, network, persistence::ChainConfigPersistence, state_signature::StateSigner,
-    SeqTypes, SequencerApiVersion, SequencerContext,
+    context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
+    SequencerContext,
 };
 
 pub mod data_source;
@@ -246,24 +246,24 @@ impl<
     }
 }
 
-#[async_trait]
-impl<
-        N: ConnectedNetwork<PubKey>,
-        V: Versions,
-        P: SequencerPersistence,
-        D: ChainConfigPersistence + Send + Sync,
-    > ChainConfigPersistence for StorageState<N, P, D, V>
-{
-    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
-        self.inner_mut().insert_chain_config(chain_config).await
-    }
-    async fn load_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        self.inner().load_chain_config(commitment).await
-    }
-}
+// #[async_trait]
+// impl<
+//         N: ConnectedNetwork<PubKey>,
+//         V: Versions,
+//         P: SequencerPersistence,
+//         D: ChainConfigPersistence + Send + Sync,
+//     > ChainConfigPersistence for StorageState<N, P, D, V>
+// {
+//     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+//         self.inner_mut().insert_chain_config(chain_config).await
+//     }
+//     async fn load_chain_config(
+//         &self,
+//         commitment: Commitment<ChainConfig>,
+//     ) -> anyhow::Result<ChainConfig> {
+//         self.inner().load_chain_config(commitment).await
+//     }
+// }
 
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupDataSource
     for ApiState<N, P, V>
@@ -1011,7 +1011,7 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::{collections::BTreeMap, time::Duration};
 
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
@@ -1020,8 +1020,8 @@ mod test {
         mock::MockStateCatchup,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, MockSequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
-        UpgradeType, ValidatedState,
+        FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade,
+        Timestamp, Upgrade, UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1048,7 +1048,7 @@ mod test {
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use time::OffsetDateTime;
-    use vbs::version::{StaticVersion, StaticVersionType};
+    use vbs::version::{StaticVersion, StaticVersionType, Version};
 
     use self::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
@@ -1410,13 +1410,29 @@ mod test {
     async fn test_fee_upgrade_view_based() {
         setup_test();
 
-        test_fee_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
+        let mut upgrades = std::collections::BTreeMap::new();
+        type MySequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
+
+        let mode = UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: None,
             stop_voting_view: None,
             start_proposing_view: 1,
             stop_proposing_view: 10,
-        }))
-        .await;
+        });
+
+        let upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: 300.into(),
+                base_fee: 1.into(),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            <MySequencerVersions as Versions>::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
     #[async_std::test]
@@ -1424,36 +1440,107 @@ mod test {
         setup_test();
 
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        test_fee_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
+
+        let mut upgrades = std::collections::BTreeMap::new();
+        type MySequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
+
+        let mode = UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
             stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
             start_voting_time: None,
             stop_voting_time: None,
-        }))
-        .await;
+        });
+
+        let upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: 300.into(),
+                base_fee: 1.into(),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            <MySequencerVersions as Versions>::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    async fn test_fee_upgrade_helper(mode: UpgradeMode) {
+    #[async_std::test]
+    async fn test_marketplace_upgrade_view_based() {
+        setup_test();
+
+        let mut upgrades = std::collections::BTreeMap::new();
+        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+
+        let mode = UpgradeMode::View(ViewBasedUpgrade {
+            start_voting_view: None,
+            stop_voting_view: None,
+            start_proposing_view: 1,
+            stop_proposing_view: 10,
+        });
+
+        let upgrade_type = UpgradeType::Marketplace {
+            chain_config: ChainConfig {
+                max_block_size: 400.into(),
+                base_fee: 2.into(),
+                bid_recipient: Some(Default::default()),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            <MySequencerVersions as Versions>::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_upgrade_time_based() {
+        setup_test();
+
+        let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
+
+        let mut upgrades = std::collections::BTreeMap::new();
+        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+
+        let mode = UpgradeMode::Time(TimeBasedUpgrade {
+            start_proposing_time: Timestamp::from_integer(now).unwrap(),
+            stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
+            start_voting_time: None,
+            stop_voting_time: None,
+        });
+
+        let upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: 400.into(),
+                base_fee: 2.into(),
+                bid_recipient: Some(Default::default()),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            <MySequencerVersions as Versions>::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
+    }
+
+    async fn test_upgrade_helper<MockSeqVersions: Versions>(
+        upgrades: BTreeMap<Version, Upgrade>,
+        bind_version: MockSeqVersions,
+    ) {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
 
-        let chain_config_upgrade = ChainConfig {
-            max_block_size: 300.into(),
-            base_fee: 1.into(),
-            ..Default::default()
-        };
-        let mut upgrades = std::collections::BTreeMap::new();
-
-        upgrades.insert(
-            StaticVersion::<0, 2>::version(),
-            Upgrade {
-                mode,
-                upgrade_type: UpgradeType::Fee {
-                    chain_config: chain_config_upgrade,
-                },
-            },
-        );
+        let chain_config_upgrade = upgrades
+            .get(&<MockSeqVersions as Versions>::Upgrade::VERSION)
+            .unwrap()
+            .upgrade_type
+            .data();
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
@@ -1474,12 +1561,12 @@ mod test {
             .network_config(
                 TestConfigBuilder::default()
                     .l1_url(l1)
-                    .upgrades(upgrades)
+                    .upgrades::<MockSeqVersions>(upgrades)
                     .build(),
             )
             .build();
 
-        let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let mut network = TestNetwork::new(config, bind_version).await;
 
         let mut events = network.server.event_stream().await;
 
@@ -1488,15 +1575,12 @@ mod test {
         // voting and finally the actual upgrade.
         let new_version_first_view = loop {
             let event = events.next().await.unwrap();
-
             match event.event {
                 EventType::UpgradeProposal { proposal, .. } => {
                     let upgrade = proposal.data.upgrade_proposal;
                     let new_version = upgrade.new_version;
-                    assert_eq!(
-                        new_version,
-                        <MockSequencerVersions as Versions>::Upgrade::VERSION
-                    );
+                    dbg!(&new_version);
+                    assert_eq!(new_version, <MockSeqVersions as Versions>::Upgrade::VERSION);
                     break upgrade.new_version_first_view;
                 }
                 _ => continue,
@@ -1511,9 +1595,10 @@ mod test {
         // Loop to wait on the upgrade itself.
         loop {
             // Get height as a proxy for view number. Height is always
-            // >= to view, especially using anvil. As a possible
-            // alternative we might loop on hotshot events here again
-            // and pull the view number off the event.
+            // >= to view. Especially when using Anvil, there should be little
+            // difference. As a possible alternative we might loop on
+            // hotshot events here again and pull the view number off
+            // the event.
             let height = client
                 .get::<ViewNumber>("status/block-height")
                 .send()
@@ -1534,7 +1619,8 @@ mod test {
 
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
-                if height >= new_version_first_view {
+                dbg!(height, new_version_first_view);
+                if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
                     }

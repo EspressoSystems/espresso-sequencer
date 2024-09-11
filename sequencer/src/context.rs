@@ -137,7 +137,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             config.num_nodes_without_stake,
         )));
 
-        let persistence = Arc::new(RwLock::new(persistence));
+        let persistence = Arc::new(persistence);
 
         let handle = SystemContext::init(
             config.my_own_validator_config.public_key,
@@ -187,7 +187,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     #[allow(clippy::too_many_arguments)]
     fn new(
         handle: Consensus<N, P, V>,
-        persistence: Arc<RwLock<P>>,
+        persistence: Arc<P>,
         state_signer: StateSigner<SequencerApiVersion>,
         external_event_handler: ExternalEventHandler<V>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
@@ -356,7 +356,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
 async fn handle_events<V: Versions>(
     node_id: u64,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
-    persistence: Arc<RwLock<impl SequencerPersistence>>,
+    persistence: Arc<impl SequencerPersistence>,
     state_signer: Arc<StateSigner<SequencerApiVersion>>,
     external_event_handler: ExternalEventHandler<V>,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
@@ -366,8 +366,10 @@ async fn handle_events<V: Versions>(
     if let Some(view) = anchor_view {
         // Process and clean up any leaves that we may have persisted last time we were running but
         // failed to handle due to a shutdown.
-        let mut p = persistence.write().await;
-        if let Err(err) = p.append_decided_leaves(view, vec![], &event_consumer).await {
+        if let Err(err) = persistence
+            .append_decided_leaves(view, vec![], &event_consumer)
+            .await
+        {
             tracing::warn!(
                 "failed to process decided leaves, chain may not be up to date: {err:#}"
             );
@@ -377,11 +379,9 @@ async fn handle_events<V: Versions>(
     while let Some(event) = events.next().await {
         tracing::debug!(node_id, ?event, "consensus event");
 
-        {
-            let mut p = persistence.write().await;
-            // Store latest consensus state.
-            p.handle_event(&event, &event_consumer).await;
-        }
+        // Store latest consensus state.
+        persistence.handle_event(&event, &event_consumer).await;
+
         // Generate state signature.
         state_signer.handle_event(&event).await;
 

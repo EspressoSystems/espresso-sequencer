@@ -97,7 +97,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<Se
     for Node<N, P>
 {
     type Network = N;
-    type Storage = Arc<RwLock<P>>;
+    type Storage = Arc<P>;
     type AuctionResultsProvider = SolverAuctionResultsProvider;
 }
 
@@ -225,7 +225,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let mut persistence = persistence_opt.clone().create().await?;
+    let persistence = persistence_opt.clone().create().await?;
     let (mut config, wait_for_orchestrator) = match (
         persistence.load_config().await?,
         network_params.config_peers,
@@ -441,8 +441,8 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
-        Event, FeeAccount, Leaf, MarketplaceVersion, MockSequencerVersions, Payload, PubKey,
-        SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
+        Upgrade,
     };
     use futures::{
         future::join_all,
@@ -647,19 +647,14 @@ pub mod testing {
             self
         }
 
-        pub fn upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+        pub fn upgrades<V: Versions>(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+            let upgrade = upgrades.get(&<V as Versions>::Upgrade::VERSION).unwrap();
+            upgrade.set_hotshot_config_parameters(&mut self.config);
             self.upgrades = upgrades;
             self
         }
 
-        pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrade) = self
-                .upgrades
-                .get(&<MockSequencerVersions as Versions>::Upgrade::VERSION)
-            {
-                upgrade.set_hotshot_config_parameters(&mut self.config)
-            }
-
+        pub fn build(self) -> TestConfig<NUM_NODES> {
             TestConfig {
                 config: self.config,
                 priv_keys: self.priv_keys,

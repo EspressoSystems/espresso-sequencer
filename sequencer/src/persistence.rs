@@ -9,20 +9,28 @@
 //! persistence which is _required_ to run a node.
 
 use async_trait::async_trait;
-use committable::Commitment;
 use espresso_types::v0_3::ChainConfig;
+use hotshot_query_service::data_source::fetching;
+
+use crate::SeqTypes;
 
 pub mod fs;
 pub mod no_storage;
 pub mod sql;
 
 #[async_trait]
-pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
+pub trait ChainConfigPersistence: Sized + Send + Sync {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
-    async fn load_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig>;
+}
+
+#[async_trait]
+impl<'a, T> ChainConfigPersistence for fetching::Transaction<'a, SeqTypes, T>
+where
+    T: ChainConfigPersistence,
+{
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        self.as_mut().insert_chain_config(chain_config).await
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -85,7 +93,7 @@ mod persistence_tests {
         setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Initially, there is no saved view.
         assert_eq!(storage.load_latest_acted_view().await.unwrap(), None);
@@ -137,7 +145,7 @@ mod persistence_tests {
         setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Test append VID
         assert_eq!(
@@ -475,7 +483,7 @@ mod persistence_tests {
         setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Create a short blockchain.
         let mut chain = vec![];
@@ -532,6 +540,7 @@ mod persistence_tests {
 
         // Add proposals.
         for (_, _, vid, da) in &chain {
+            tracing::info!(?da, ?vid, "insert proposal");
             storage.append_da(da).await.unwrap();
             storage.append_vid(vid).await.unwrap();
         }
@@ -542,6 +551,7 @@ mod persistence_tests {
             .take(2)
             .map(|(leaf, qc, _, _)| (leaf_info(leaf.clone()), qc.clone()))
             .collect::<Vec<_>>();
+        tracing::info!("decide with event handling failure");
         storage
             .append_decided_leaves(
                 ViewNumber::new(1),
@@ -552,6 +562,7 @@ mod persistence_tests {
             .unwrap();
         // No garbage collection should have run.
         for i in 0..4 {
+            tracing::info!(i, "check proposal availability");
             assert!(storage
                 .load_vid_share(ViewNumber::new(i))
                 .await
@@ -563,6 +574,7 @@ mod persistence_tests {
                 .unwrap()
                 .is_some());
         }
+        tracing::info!("check anchor leaf updated");
         assert_eq!(
             storage
                 .load_anchor_leaf()
@@ -582,6 +594,7 @@ mod persistence_tests {
             .skip(2)
             .map(|(leaf, qc, _, _)| (leaf_info(leaf.clone()), qc.clone()))
             .collect::<Vec<_>>();
+        tracing::info!("decide successfully");
         storage
             .append_decided_leaves(
                 ViewNumber::new(3),
@@ -592,6 +605,7 @@ mod persistence_tests {
             .unwrap();
         // Garbage collection should have run.
         for i in 0..4 {
+            tracing::info!(i, "check proposal garbage collected");
             assert!(storage
                 .load_vid_share(ViewNumber::new(i))
                 .await
@@ -603,6 +617,7 @@ mod persistence_tests {
                 .unwrap()
                 .is_none());
         }
+        tracing::info!("check anchor leaf updated");
         assert_eq!(
             storage
                 .load_anchor_leaf()
@@ -615,6 +630,7 @@ mod persistence_tests {
         );
 
         // Check decide event.
+        tracing::info!("check decide event");
         let events = consumer.events.read().await;
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].view_number, ViewNumber::new(3));

@@ -3,7 +3,6 @@
 use std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
 use anyhow::{bail, ensure, Context};
-use async_std::sync::RwLock;
 use async_trait::async_trait;
 use committable::Commitment;
 use dyn_clone::DynClone;
@@ -337,7 +336,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>>;
 
     /// Save the orchestrator config to storage.
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
     /// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
@@ -468,7 +467,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     }
 
     /// Update storage based on an event from consensus.
-    async fn handle_event(&mut self, event: &Event, consumer: &(impl EventConsumer + 'static)) {
+    async fn handle_event(&self, event: &Event, consumer: &(impl EventConsumer + 'static)) {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             let Some(LeafInfo { leaf, .. }) = leaf_chain.first() else {
                 // No new leaves.
@@ -522,7 +521,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// consensus storage. For example, the `consumer` could be used for moving data from consensus
     /// storage to long-term archival storage.
     async fn append_decided_leaves(
-        &mut self,
+        &self,
         decided_view: ViewNumber,
         leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
@@ -531,25 +530,21 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_anchor_leaf(&self)
         -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
     async fn append_vid(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_da(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
-    async fn record_action(
-        &mut self,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -> anyhow::Result<()>;
+    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
     async fn update_undecided_state(
-        &mut self,
+        &self,
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_quorum_proposal(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
 }
@@ -583,22 +578,22 @@ impl EventConsumer for NullEventConsumer {
 }
 
 #[async_trait]
-impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
+impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_vid(
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_vid(proposal).await
+        (**self).append_vid(proposal).await
     }
 
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_da(proposal).await
+        (**self).append_da(proposal).await
     }
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        self.write().await.record_action(view, action).await
+        (**self).record_action(view, action).await
     }
     async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
         Ok(())
@@ -609,17 +604,14 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write()
-            .await
-            .update_undecided_state(leaves, state)
-            .await
+        (**self).update_undecided_state(leaves, state).await
     }
 
     async fn append_proposal(
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_quorum_proposal(proposal).await
+        (**self).append_quorum_proposal(proposal).await
     }
 }
 
