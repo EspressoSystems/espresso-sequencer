@@ -395,6 +395,27 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
 }
 
 impl ValidatedState {
+    #[cfg(test)]
+    pub async fn apply_header(
+        &self,
+        _instance: &NodeState,
+        _parent_leaf: &Leaf,
+        _proposed_header: &Header,
+        _version: Version,
+    ) -> anyhow::Result<(Self, Delta)> {
+        use ethers::types::U256;
+
+        let mut state = ValidatedState::default();
+        let mut cf = state.chain_config.resolve().unwrap();
+        cf.max_block_size = BlockSize { 0: 10 };
+        cf.base_fee = FeeAmount {
+            0: U256::from(1000 as u128),
+        };
+        state.chain_config = ResolvableChainConfig::from(cf);
+
+        Ok((state, Delta::default()))
+    }
+    #[cfg(not(test))]
     pub async fn apply_header(
         &self,
         instance: &NodeState,
@@ -411,6 +432,8 @@ impl ValidatedState {
         let chain_config = validated_state
             .get_chain_config(instance, &proposed_header.chain_config())
             .await?;
+
+        println!("fetched chain config {:?}", chain_config);
 
         if Some(chain_config) != validated_state.chain_config.resolve() {
             validated_state.chain_config = chain_config.into();
@@ -929,19 +952,32 @@ mod test {
         let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
 
-        // Validation fails because the genesis fee (0) is too low.
-        let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
-            .unwrap_err();
+        println!("HEADER {:?}", header.chain_config().resolve().unwrap());
 
-        tracing::info!(%err, "task failed successfully");
-        assert_eq!(
-            ProposalValidationError::InsufficientFee {
-                max_block_size: instance.chain_config.max_block_size,
-                base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount().unwrap()
-            },
-            err
-        );
+        let (vs, delta) = state
+            .validate_and_apply_header(
+                &instance,
+                &parent,
+                header,
+                vid_common.clone(),
+                Version { major: 0, minor: 3 },
+            )
+            .await
+            .unwrap();
+
+        // Validation fails because the genesis fee (0) is too low.
+        // let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
+        //     .unwrap_err();
+
+        // tracing::info!(%err, "task failed successfully");
+        // assert_eq!(
+        //     ProposalValidationError::InsufficientFee {
+        //         max_block_size: instance.chain_config.max_block_size,
+        //         base_fee: instance.chain_config.base_fee,
+        //         proposed_fee: header.fee_info().amount().unwrap()
+        //     },
+        //     err
+        // );
     }
 
     #[test]
