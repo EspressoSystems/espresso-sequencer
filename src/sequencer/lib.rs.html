@@ -1081,11 +1081,6 @@
 <a href="#1081" id="1081">1081</a>
 <a href="#1082" id="1082">1082</a>
 <a href="#1083" id="1083">1083</a>
-<a href="#1084" id="1084">1084</a>
-<a href="#1085" id="1085">1085</a>
-<a href="#1086" id="1086">1086</a>
-<a href="#1087" id="1087">1087</a>
-<a href="#1088" id="1088">1088</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1522,8 +1517,8 @@
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, Leaf, MarketplaceVersion, MockSequencerVersions, Payload, PubKey,
-        SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
+        Upgrade,
     };
     <span class="kw">use </span>futures::{
         future::join_all,
@@ -1728,19 +1723,14 @@
             <span class="self">self
         </span>}
 
-        <span class="kw">pub fn </span>upgrades(<span class="kw-2">mut </span><span class="self">self</span>, upgrades: BTreeMap&lt;Version, Upgrade&gt;) -&gt; <span class="self">Self </span>{
+        <span class="kw">pub fn </span>upgrades&lt;V: Versions&gt;(<span class="kw-2">mut </span><span class="self">self</span>, upgrades: BTreeMap&lt;Version, Upgrade&gt;) -&gt; <span class="self">Self </span>{
+            <span class="kw">let </span>upgrade = upgrades.get(<span class="kw-2">&amp;</span>&lt;V <span class="kw">as </span>Versions&gt;::Upgrade::VERSION).unwrap();
+            upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config);
             <span class="self">self</span>.upgrades = upgrades;
             <span class="self">self
         </span>}
 
-        <span class="kw">pub fn </span>build(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; TestConfig&lt;NUM_NODES&gt; {
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = <span class="self">self
-                </span>.upgrades
-                .get(<span class="kw-2">&amp;</span>&lt;MockSequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION)
-            {
-                upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config)
-            }
-
+        <span class="kw">pub fn </span>build(<span class="self">self</span>) -&gt; TestConfig&lt;NUM_NODES&gt; {
             TestConfig {
                 config: <span class="self">self</span>.config,
                 priv_keys: <span class="self">self</span>.priv_keys,

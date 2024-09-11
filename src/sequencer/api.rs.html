@@ -1795,6 +1795,92 @@
 <a href="#1795" id="1795">1795</a>
 <a href="#1796" id="1796">1796</a>
 <a href="#1797" id="1797">1797</a>
+<a href="#1798" id="1798">1798</a>
+<a href="#1799" id="1799">1799</a>
+<a href="#1800" id="1800">1800</a>
+<a href="#1801" id="1801">1801</a>
+<a href="#1802" id="1802">1802</a>
+<a href="#1803" id="1803">1803</a>
+<a href="#1804" id="1804">1804</a>
+<a href="#1805" id="1805">1805</a>
+<a href="#1806" id="1806">1806</a>
+<a href="#1807" id="1807">1807</a>
+<a href="#1808" id="1808">1808</a>
+<a href="#1809" id="1809">1809</a>
+<a href="#1810" id="1810">1810</a>
+<a href="#1811" id="1811">1811</a>
+<a href="#1812" id="1812">1812</a>
+<a href="#1813" id="1813">1813</a>
+<a href="#1814" id="1814">1814</a>
+<a href="#1815" id="1815">1815</a>
+<a href="#1816" id="1816">1816</a>
+<a href="#1817" id="1817">1817</a>
+<a href="#1818" id="1818">1818</a>
+<a href="#1819" id="1819">1819</a>
+<a href="#1820" id="1820">1820</a>
+<a href="#1821" id="1821">1821</a>
+<a href="#1822" id="1822">1822</a>
+<a href="#1823" id="1823">1823</a>
+<a href="#1824" id="1824">1824</a>
+<a href="#1825" id="1825">1825</a>
+<a href="#1826" id="1826">1826</a>
+<a href="#1827" id="1827">1827</a>
+<a href="#1828" id="1828">1828</a>
+<a href="#1829" id="1829">1829</a>
+<a href="#1830" id="1830">1830</a>
+<a href="#1831" id="1831">1831</a>
+<a href="#1832" id="1832">1832</a>
+<a href="#1833" id="1833">1833</a>
+<a href="#1834" id="1834">1834</a>
+<a href="#1835" id="1835">1835</a>
+<a href="#1836" id="1836">1836</a>
+<a href="#1837" id="1837">1837</a>
+<a href="#1838" id="1838">1838</a>
+<a href="#1839" id="1839">1839</a>
+<a href="#1840" id="1840">1840</a>
+<a href="#1841" id="1841">1841</a>
+<a href="#1842" id="1842">1842</a>
+<a href="#1843" id="1843">1843</a>
+<a href="#1844" id="1844">1844</a>
+<a href="#1845" id="1845">1845</a>
+<a href="#1846" id="1846">1846</a>
+<a href="#1847" id="1847">1847</a>
+<a href="#1848" id="1848">1848</a>
+<a href="#1849" id="1849">1849</a>
+<a href="#1850" id="1850">1850</a>
+<a href="#1851" id="1851">1851</a>
+<a href="#1852" id="1852">1852</a>
+<a href="#1853" id="1853">1853</a>
+<a href="#1854" id="1854">1854</a>
+<a href="#1855" id="1855">1855</a>
+<a href="#1856" id="1856">1856</a>
+<a href="#1857" id="1857">1857</a>
+<a href="#1858" id="1858">1858</a>
+<a href="#1859" id="1859">1859</a>
+<a href="#1860" id="1860">1860</a>
+<a href="#1861" id="1861">1861</a>
+<a href="#1862" id="1862">1862</a>
+<a href="#1863" id="1863">1863</a>
+<a href="#1864" id="1864">1864</a>
+<a href="#1865" id="1865">1865</a>
+<a href="#1866" id="1866">1866</a>
+<a href="#1867" id="1867">1867</a>
+<a href="#1868" id="1868">1868</a>
+<a href="#1869" id="1869">1869</a>
+<a href="#1870" id="1870">1870</a>
+<a href="#1871" id="1871">1871</a>
+<a href="#1872" id="1872">1872</a>
+<a href="#1873" id="1873">1873</a>
+<a href="#1874" id="1874">1874</a>
+<a href="#1875" id="1875">1875</a>
+<a href="#1876" id="1876">1876</a>
+<a href="#1877" id="1877">1877</a>
+<a href="#1878" id="1878">1878</a>
+<a href="#1879" id="1879">1879</a>
+<a href="#1880" id="1880">1880</a>
+<a href="#1881" id="1881">1881</a>
+<a href="#1882" id="1882">1882</a>
+<a href="#1883" id="1883">1883</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -2866,7 +2952,7 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>std::time::Duration;
+    <span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
 
     <span class="kw">use </span>async_std::task::sleep;
     <span class="kw">use </span>committable::{Commitment, Committable};
@@ -2874,8 +2960,8 @@
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, MockSequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
-        UpgradeType, ValidatedState,
+        FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade,
+        Timestamp, Upgrade, UpgradeType, ValidatedState,
     };
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::{
@@ -2902,7 +2988,7 @@
     };
     <span class="kw">use </span>tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     <span class="kw">use </span>time::OffsetDateTime;
-    <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
+    <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType, Version};
 
     <span class="kw">use </span><span class="self">self</span>::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
@@ -3262,13 +3348,29 @@
     </span><span class="kw">async fn </span>test_fee_upgrade_view_based() {
         setup_test();
 
-        test_fee_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
+        <span class="kw">let </span><span class="kw-2">mut </span>upgrades = std::collections::BTreeMap::new();
+        <span class="kw">type </span>MySequencerVersions = SequencerVersions&lt;StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;, StaticVersion&lt;<span class="number">0</span>, <span class="number">2</span>&gt;&gt;;
+
+        <span class="kw">let </span>mode = UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: <span class="prelude-val">None</span>,
             stop_voting_view: <span class="prelude-val">None</span>,
             start_proposing_view: <span class="number">1</span>,
             stop_proposing_view: <span class="number">10</span>,
-        }))
-        .<span class="kw">await</span>;
+        });
+
+        <span class="kw">let </span>upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: <span class="number">300</span>.into(),
+                base_fee: <span class="number">1</span>.into(),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            &lt;MySequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::&lt;MySequencerVersions&gt;(upgrades, MySequencerVersions::new()).<span class="kw">await</span>;
     }
 
     <span class="attr">#[async_std::test]
@@ -3276,36 +3378,107 @@
         setup_test();
 
         <span class="kw">let </span>now = OffsetDateTime::now_utc().unix_timestamp() <span class="kw">as </span>u64;
-        test_fee_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
+
+        <span class="kw">let </span><span class="kw-2">mut </span>upgrades = std::collections::BTreeMap::new();
+        <span class="kw">type </span>MySequencerVersions = SequencerVersions&lt;StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;, StaticVersion&lt;<span class="number">0</span>, <span class="number">2</span>&gt;&gt;;
+
+        <span class="kw">let </span>mode = UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
             stop_proposing_time: Timestamp::from_integer(now + <span class="number">500</span>).unwrap(),
             start_voting_time: <span class="prelude-val">None</span>,
             stop_voting_time: <span class="prelude-val">None</span>,
-        }))
-        .<span class="kw">await</span>;
+        });
+
+        <span class="kw">let </span>upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: <span class="number">300</span>.into(),
+                base_fee: <span class="number">1</span>.into(),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            &lt;MySequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::&lt;MySequencerVersions&gt;(upgrades, MySequencerVersions::new()).<span class="kw">await</span>;
     }
 
-    <span class="kw">async fn </span>test_fee_upgrade_helper(mode: UpgradeMode) {
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_marketplace_upgrade_view_based() {
+        setup_test();
+
+        <span class="kw">let </span><span class="kw-2">mut </span>upgrades = std::collections::BTreeMap::new();
+        <span class="kw">type </span>MySequencerVersions = SequencerVersions&lt;StaticVersion&lt;<span class="number">0</span>, <span class="number">2</span>&gt;, StaticVersion&lt;<span class="number">0</span>, <span class="number">3</span>&gt;&gt;;
+
+        <span class="kw">let </span>mode = UpgradeMode::View(ViewBasedUpgrade {
+            start_voting_view: <span class="prelude-val">None</span>,
+            stop_voting_view: <span class="prelude-val">None</span>,
+            start_proposing_view: <span class="number">1</span>,
+            stop_proposing_view: <span class="number">10</span>,
+        });
+
+        <span class="kw">let </span>upgrade_type = UpgradeType::Marketplace {
+            chain_config: ChainConfig {
+                max_block_size: <span class="number">400</span>.into(),
+                base_fee: <span class="number">2</span>.into(),
+                bid_recipient: <span class="prelude-val">Some</span>(Default::default()),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            &lt;MySequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::&lt;MySequencerVersions&gt;(upgrades, MySequencerVersions::new()).<span class="kw">await</span>;
+    }
+
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_marketplace_upgrade_time_based() {
+        setup_test();
+
+        <span class="kw">let </span>now = OffsetDateTime::now_utc().unix_timestamp() <span class="kw">as </span>u64;
+
+        <span class="kw">let </span><span class="kw-2">mut </span>upgrades = std::collections::BTreeMap::new();
+        <span class="kw">type </span>MySequencerVersions = SequencerVersions&lt;StaticVersion&lt;<span class="number">0</span>, <span class="number">2</span>&gt;, StaticVersion&lt;<span class="number">0</span>, <span class="number">3</span>&gt;&gt;;
+
+        <span class="kw">let </span>mode = UpgradeMode::Time(TimeBasedUpgrade {
+            start_proposing_time: Timestamp::from_integer(now).unwrap(),
+            stop_proposing_time: Timestamp::from_integer(now + <span class="number">500</span>).unwrap(),
+            start_voting_time: <span class="prelude-val">None</span>,
+            stop_voting_time: <span class="prelude-val">None</span>,
+        });
+
+        <span class="kw">let </span>upgrade_type = UpgradeType::Fee {
+            chain_config: ChainConfig {
+                max_block_size: <span class="number">400</span>.into(),
+                base_fee: <span class="number">2</span>.into(),
+                bid_recipient: <span class="prelude-val">Some</span>(Default::default()),
+                ..Default::default()
+            },
+        };
+
+        upgrades.insert(
+            &lt;MySequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION,
+            Upgrade { mode, upgrade_type },
+        );
+        test_upgrade_helper::&lt;MySequencerVersions&gt;(upgrades, MySequencerVersions::new()).<span class="kw">await</span>;
+    }
+
+    <span class="kw">async fn </span>test_upgrade_helper&lt;MockSeqVersions: Versions&gt;(
+        upgrades: BTreeMap&lt;Version, Upgrade&gt;,
+        bind_version: MockSeqVersions,
+    ) {
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
 
-        <span class="kw">let </span>chain_config_upgrade = ChainConfig {
-            max_block_size: <span class="number">300</span>.into(),
-            base_fee: <span class="number">1</span>.into(),
-            ..Default::default()
-        };
-        <span class="kw">let </span><span class="kw-2">mut </span>upgrades = std::collections::BTreeMap::new();
-
-        upgrades.insert(
-            StaticVersion::&lt;<span class="number">0</span>, <span class="number">2</span>&gt;::version(),
-            Upgrade {
-                mode,
-                upgrade_type: UpgradeType::Fee {
-                    chain_config: chain_config_upgrade,
-                },
-            },
-        );
+        <span class="kw">let </span>chain_config_upgrade = upgrades
+            .get(<span class="kw-2">&amp;</span>&lt;MockSeqVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION)
+            .unwrap()
+            .upgrade_type
+            .data();
 
         <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
         <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;NUM_NODES, <span class="kw">_</span>, <span class="kw">_</span>&gt;::with_num_nodes()
@@ -3326,12 +3499,12 @@
             .network_config(
                 TestConfigBuilder::default()
                     .l1_url(l1)
-                    .upgrades(upgrades)
+                    .upgrades::&lt;MockSeqVersions&gt;(upgrades)
                     .build(),
             )
             .build();
 
-        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config, bind_version).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
 
@@ -3340,15 +3513,12 @@
         // voting and finally the actual upgrade.
         </span><span class="kw">let </span>new_version_first_view = <span class="kw">loop </span>{
             <span class="kw">let </span>event = events.next().<span class="kw">await</span>.unwrap();
-
             <span class="kw">match </span>event.event {
                 EventType::UpgradeProposal { proposal, .. } =&gt; {
                     <span class="kw">let </span>upgrade = proposal.data.upgrade_proposal;
                     <span class="kw">let </span>new_version = upgrade.new_version;
-                    <span class="macro">assert_eq!</span>(
-                        new_version,
-                        &lt;MockSequencerVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION
-                    );
+                    <span class="macro">dbg!</span>(<span class="kw-2">&amp;</span>new_version);
+                    <span class="macro">assert_eq!</span>(new_version, &lt;MockSeqVersions <span class="kw">as </span>Versions&gt;::Upgrade::VERSION);
                     <span class="kw">break </span>upgrade.new_version_first_view;
                 }
                 <span class="kw">_ </span>=&gt; <span class="kw">continue</span>,
@@ -3363,9 +3533,10 @@
         <span class="comment">// Loop to wait on the upgrade itself.
         </span><span class="kw">loop </span>{
             <span class="comment">// Get height as a proxy for view number. Height is always
-            // &gt;= to view, especially using anvil. As a possible
-            // alternative we might loop on hotshot events here again
-            // and pull the view number off the event.
+            // &gt;= to view. Especially when using Anvil, there should be little
+            // difference. As a possible alternative we might loop on
+            // hotshot events here again and pull the view number off
+            // the event.
             </span><span class="kw">let </span>height = client
                 .get::&lt;ViewNumber&gt;(<span class="string">"status/block-height"</span>)
                 .send()
@@ -3386,7 +3557,8 @@
 
             <span class="comment">// ChainConfigs will eventually be resolved
             </span><span class="kw">if let </span><span class="prelude-val">Some</span>(configs) = configs {
-                <span class="kw">if </span>height &gt;= new_version_first_view {
+                <span class="macro">dbg!</span>(height, new_version_first_view);
+                <span class="kw">if </span>height &gt; new_version_first_view {
                     <span class="kw">for </span>config <span class="kw">in </span>configs {
                         <span class="macro">assert_eq!</span>(config, chain_config_upgrade);
                     }
