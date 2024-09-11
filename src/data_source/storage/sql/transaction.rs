@@ -35,6 +35,7 @@ use crate::{
         update::{self, ReadOnly},
     },
     merklized_state::{MerklizedState, UpdateStateData},
+    task::Task,
     types::HeightIndexed,
     Header, Payload,
     QueryError::{self, NotFound},
@@ -42,7 +43,10 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::CanonicalSerialize;
-use async_std::{sync::MutexGuard, task::sleep};
+use async_std::{
+    sync::{Arc, MutexGuard},
+    task::sleep,
+};
 use async_trait::async_trait;
 use bit_vec::BitVec;
 use committable::Committable;
@@ -67,37 +71,54 @@ use std::{
 pub(super) struct Connection {
     #[deref]
     #[deref_mut]
-    client: Client,
-    revert_queued: bool,
+    client: Arc<Client>,
+
+    // When the connection is dropped in a synchronous context, we spawn a task to revert the
+    // in-progress transaction, so the revert can run asynchronously without blocking the dropping
+    // thread. If such a revert is in progress, a handle to the task will be stored here. The handle
+    // _must_ be awaited to allow the revert to finish before the connection can be used again.
+    revert: Option<Task<anyhow::Result<()>>>,
 }
 
 impl From<Client> for Connection {
     fn from(client: Client) -> Self {
         Self {
-            client,
-            revert_queued: false,
+            client: Arc::new(client),
+            revert: None,
         }
     }
 }
 
 impl Connection {
+    /// Prepare the connection for use.
+    ///
+    /// This will wait for any async operations to finish which were spawned when the connection was
+    /// dropped in a synchronous context. This _must_ be called the first time the connection is
+    /// invoked in an async context after being dropped in a sync context.
     async fn acquire(&mut self) -> anyhow::Result<()> {
-        if self.revert_queued {
-            // If a revert was queued when this connection was released in a synchronous context,
-            // execute it now that we are in an async context.
-            self.revert().await?;
-            self.revert_queued = false;
+        if let Some(revert) = self.revert.take() {
+            // If a revert was started when this connection was released in a synchronous context,
+            // we must wait for it to finish before reusing the connection.
+            revert.join().await?;
         }
         Ok(())
     }
 
-    fn queue_revert(&mut self) {
-        self.revert_queued = true;
-    }
+    /// Spawn a revert to run asynchronously.
+    fn spawn_revert(&mut self) {
+        // Consistency check.
+        assert!(
+            self.revert.is_none(),
+            "attempting to queue revert while a queued revert is in progress; this should not be possible",
+        );
 
-    async fn revert(&mut self) -> anyhow::Result<()> {
-        self.client.batch_execute("ROLLBACK").await?;
-        Ok(())
+        // Get a client that is not connected to the lifetime of this reference, so we can run the
+        // revert command in the background.
+        let client = self.client.clone();
+        self.revert = Some(Task::spawn("revert postgres transaction", async move {
+            client.batch_execute("ROLLBACK").await?;
+            Ok(())
+        }));
     }
 
     #[cfg(test)]
@@ -113,7 +134,7 @@ impl Connection {
 #[derivative(Debug)]
 pub struct Transaction<'a> {
     inner: MutexGuard<'a, Connection>,
-    committed: bool,
+    finalized: bool,
 }
 
 impl<'a> Transaction<'a> {
@@ -126,7 +147,7 @@ impl<'a> Transaction<'a> {
             .await?;
         Ok(Self {
             inner,
-            committed: false,
+            finalized: false,
         }
         .into())
     }
@@ -138,7 +159,7 @@ impl<'a> Transaction<'a> {
             .await?;
         Ok(Self {
             inner,
-            committed: false,
+            finalized: false,
         })
     }
 }
@@ -146,25 +167,25 @@ impl<'a> Transaction<'a> {
 impl<'a> update::Transaction for Transaction<'a> {
     async fn commit(mut self) -> anyhow::Result<()> {
         self.inner.batch_execute("COMMIT").await?;
-        self.committed = true;
+        self.finalized = true;
         Ok(())
     }
     fn revert(mut self) -> impl Future + Send {
         async move {
-            self.inner.revert().await.unwrap();
+            self.inner.batch_execute("ROLLBACK").await.unwrap();
+            self.finalized = true;
         }
     }
 }
 
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
-        if !self.committed {
+        if !self.finalized {
             // Since `drop` is synchronous, we can't execute the asynchronous revert process here,
             // at least not without blocking the current thread (which may be an async executor
             // thread, blocking other unrelated futures and causing deadlocks). Instead, we will
-            // simply queue the transaction to be reverted the next time this connection is invoked
-            // in an async context.
-            self.inner.queue_revert();
+            // revert the transaction asynchronously.
+            self.inner.spawn_revert();
         }
     }
 }
