@@ -413,7 +413,7 @@ pub mod metrics;
 pub mod node;
 mod resolvable;
 pub mod status;
-mod task;
+pub mod task;
 pub mod testing;
 pub mod types;
 
