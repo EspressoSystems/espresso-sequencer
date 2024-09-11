@@ -20,6 +20,8 @@ members = [
   "sequencer",
   "types",
   "utils",
+  "tests",
+  "client",
 ]
 
 [workspace.dependencies]

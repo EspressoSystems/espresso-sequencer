@@ -1742,6 +1742,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "021080b0a3dbefcf1c1f0b3ad6a923b81f16801d874ec338c168ac0b0762baf5"
 
 [[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "contract-bindings",
+ "espresso-types",
+ "ethers",
+ "futures",
+ "jf-merkle-tree",
+ "sequencer-utils",
+ "surf-disco",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
 name = "coins-bip32"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8044,6 +8061,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes 1.7.1",
  "encoding_rs",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "h2 0.4.6",
@@ -8633,6 +8651,7 @@ dependencies = [
  "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
  "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
  "clap",
+ "client",
  "committable",
  "contract-bindings",
  "csv",
@@ -9822,6 +9841,21 @@ dependencies = [
  "dirs-next",
  "rustversion",
  "winapi",
+]
+
+[[package]]
+name = "tests"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "client",
+ "dotenvy",
+ "espresso-types",
+ "ethers",
+ "futures",
+ "reqwest 0.12.7",
+ "surf-disco",
 ]
 
 [[package]]

@@ -47,8 +47,11 @@ jobs:
         run: cargo build --locked --release
 
       - name: Test Demo
+        env:
+          CARGO_TERM_COLOR: always
+          NEXTEST_PROFILE: integration
         run: |
           export PATH="$PWD/target/release:$PATH"
-          set -o pipefail
           scripts/demo-native --tui=false &
-          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
+          cargo nextest run --locked --release --workspace --all-features --verbose --nocapture
+        timeout-minutes: 10
