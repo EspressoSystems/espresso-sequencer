@@ -175,6 +175,9 @@ pub struct BuilderState<TYPES: NodeType> {
 
 impl<TYPES: NodeType> BuilderState<TYPES> {
     /// processing the DA proposal
+    /// pending whether it's processed already, if so, skip, or else, process it
+    /// deciding whether we have matching quorum proposal, if so, we remove them from the storage and 
+    /// spawn a clone
     #[tracing::instrument(skip_all, name = "process da proposal",
                                     fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
     async fn process_da_proposal(&mut self, da_msg: Arc<DaProposalMessage<TYPES>>) {
@@ -191,6 +194,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             da_msg.builder_commitment
         );
 
+        // If we've never processed this da proposal before, process it
         if let std::collections::hash_map::Entry::Vacant(e) = self
             .da_proposal_payload_commit_to_da_proposal
             .entry((da_msg.builder_commitment.clone(), da_msg.view_number))
@@ -204,6 +208,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                 let quorum_proposal = quorum_proposal.remove();
 
                 // if we have a matching quorum proposal
+                // which means they have matching BuilderCommitment and view number
                 //  if (this is the correct parent or
                 //      (the correct parent is missing and this is the highest view))
                 //    spawn a clone
@@ -245,7 +250,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // Case 1: Bootstrapping phase
         // Case 2: No intended builder state exist
         // To handle both cases, we can have the highest view number builder state running
-        // and only doing the insertion if and only if intended builder state for a particulat view is not present
+        // and only doing the insertion if and only if intended builder state for a particular view is not present
         // check the presence of quorum_proposal.data.view_number-1 in the spawned_builder_states list
         if qc_msg.proposal.data.justify_qc.view_number != self.built_from_proposed_block.view_number
         {
@@ -254,6 +259,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                 qc_msg.proposal.data.justify_qc.view_number,
                 self.built_from_proposed_block
             );
+
+            // if the parent views for qc and builder are matching
             if !self
                 .global_state
                 .read_arc()
@@ -293,7 +300,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             payload_builder_commitment
         );
 
-        // first check whether vid_commitment exists in the qc_payload_commit_to_qc hashmap, if yer, ignore it, otherwise validate it and later insert in
+        // first check whether vid_commitment exists in the qc_payload_commit_to_qc hashmap, if yes, ignore it, otherwise validate it and later insert in
         if let std::collections::hash_map::Entry::Vacant(e) = self
             .quorum_proposal_payload_commit_to_quorum_proposal
             .entry((payload_builder_commitment.clone(), view_number))
@@ -738,3 +745,22 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         }
     }
 }
+
+// #[cfg(test)]
+// mod test {
+//     use hotshot::types::BLSPubKey;
+//     use hotshot_types::traits::signature_key::BuilderSignatureKey;
+
+//     use super::DaProposalMessage;
+
+//     /// This test checkes da_proposal_payload_commit_to_da_proposal and
+//     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
+//     /// when receiving a da message.
+//     /// This test also checks whether corresponding BuilderStateId is in global_state
+//     #[async_std::test]
+//     async fn test_process_da_proposal() {
+//         let (_sender_public_key, _sender_private_key) =
+//             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+        
+//     }
+// }
