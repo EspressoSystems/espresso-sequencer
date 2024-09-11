@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::Result;
-use async_std::sync::{Arc, RwLock};
 use committable::Committable;
 use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
@@ -17,7 +16,7 @@ use hotshot_query_service::{
     merklized_state::{
         self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
     },
-    node, Error,
+    node, ApiState, Error,
 };
 use hotshot_types::{
     data::ViewNumber,
@@ -29,10 +28,7 @@ use hotshot_types::{
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
-use tide_disco::{
-    method::{ReadState, WriteState},
-    Api, Error as _, StatusCode,
-};
+use tide_disco::{method::ReadState, Api, Error as _, StatusCode};
 use vbs::version::StaticVersionType;
 
 use super::{
@@ -50,7 +46,7 @@ pub struct NamespaceProofQueryData {
     pub transactions: Vec<Transaction>,
 }
 
-pub(super) type AvailState<N, P, D, ApiVer> = Arc<RwLock<StorageState<N, P, D, ApiVer>>>;
+pub(super) type AvailState<N, P, D, ApiVer> = ApiState<StorageState<N, P, D, ApiVer>>;
 
 type AvailabilityApi<N, P, D, V, ApiVer> = Api<AvailState<N, P, D, V>, availability::Error, ApiVer>;
 
@@ -159,7 +155,7 @@ where
 pub(super) fn submit<N, P, S, ApiVer: StaticVersionType + 'static>() -> Result<Api<S, Error, ApiVer>>
 where
     N: ConnectedNetwork<PubKey>,
-    S: 'static + Send + Sync + WriteState,
+    S: 'static + Send + Sync + ReadState,
     P: SequencerPersistence,
     S::State: Send + Sync + SubmitDataSource<N, P>,
 {

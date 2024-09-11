@@ -367,7 +367,7 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
     };
     let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
-    let da_storage = Arc::new(RwLock::new(persistence));
+    let da_storage = Arc::new(persistence);
     tracing::debug!("Before hotshot handle initialisation");
     let hotshot_handle = SystemContext::init(
         config.my_own_validator_config.public_key,

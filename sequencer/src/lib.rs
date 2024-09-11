@@ -97,7 +97,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<Se
     for Node<N, P>
 {
     type Network = N;
-    type Storage = Arc<RwLock<P>>;
+    type Storage = Arc<P>;
     type AuctionResultsProvider = SolverAuctionResultsProvider;
 }
 
@@ -224,7 +224,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let mut persistence = persistence_opt.clone().create().await?;
+    let persistence = persistence_opt.clone().create().await?;
     let (mut config, wait_for_orchestrator) = match (
         persistence.load_config().await?,
         network_params.config_peers,
