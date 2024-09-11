@@ -209,33 +209,16 @@
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
 <a href="#211" id="211">211</a>
-<a href="#212" id="212">212</a>
-<a href="#213" id="213">213</a>
-<a href="#214" id="214">214</a>
-<a href="#215" id="215">215</a>
-<a href="#216" id="216">216</a>
-<a href="#217" id="217">217</a>
-<a href="#218" id="218">218</a>
-<a href="#219" id="219">219</a>
-<a href="#220" id="220">220</a>
-<a href="#221" id="221">221</a>
-<a href="#222" id="222">222</a>
-<a href="#223" id="223">223</a>
-<a href="#224" id="224">224</a>
-<a href="#225" id="225">225</a>
-<a href="#226" id="226">226</a>
-<a href="#227" id="227">227</a>
-<a href="#228" id="228">228</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccountProof, FeeMerkleTree};
 <span class="kw">use </span>ethers::prelude::Address;
-<span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_query_service::{
     data_source::{
-        sql::{Config, Query, SqlDataSource},
+        sql::{Config, SqlDataSource, Transaction},
         storage::SqlStorage,
+        VersionedDataSource,
     },
     merklized_state::{MerklizedStateDataSource, Snapshot},
     Resolvable,
@@ -249,7 +232,7 @@
 };
 <span class="kw">use crate</span>::{
     persistence::{
-        sql::{sql_param, transaction, Options},
+        sql::{sql_param, Options},
         ChainConfigPersistence,
     },
     SeqTypes,
@@ -295,6 +278,11 @@
         account: Address,
     ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
         <span class="kw">let </span>proof = <span class="self">self
+            </span>.read()
+            .<span class="kw">await
+            </span>.context(<span class="macro">format!</span>(
+                <span class="string">"opening transaction to fetch account {account}; height {height}"
+            </span>))<span class="question-mark">?
             </span>.get_path(
                 Snapshot::&lt;SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }&gt;::Index(height),
                 account.into(),
@@ -321,66 +309,29 @@
     }
 
     <span class="kw">async fn </span>get_frontier(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64, _view: ViewNumber) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
-        <span class="self">self</span>.get_path(
-            Snapshot::&lt;SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }&gt;::Index(height),
-            height - <span class="number">1</span>,
-        )
-        .<span class="kw">await
-        </span>.context(<span class="macro">format!</span>(<span class="string">"fetching frontier at height {height}"</span>))
+        <span class="self">self</span>.read()
+            .<span class="kw">await
+            </span>.context(<span class="macro">format!</span>(
+                <span class="string">"opening transaction to fetch frontier at height {height}"
+            </span>))<span class="question-mark">?
+            </span>.get_path(
+                Snapshot::&lt;SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }&gt;::Index(height),
+                height - <span class="number">1</span>,
+            )
+            .<span class="kw">await
+            </span>.context(<span class="macro">format!</span>(<span class="string">"fetching frontier at height {height}"</span>))
     }
 
     <span class="kw">async fn </span>get_chain_config(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        commitment: committable::Commitment&lt;ChainConfig&gt;,
-    ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
-        <span class="self">self</span>.load_chain_config(commitment).<span class="kw">await
-    </span>}
-}
-
-<span class="kw">impl </span>CatchupDataSource <span class="kw">for </span>DataSource {
-    <span class="kw">async fn </span>get_account(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        height: u64,
-        view: ViewNumber,
-        account: Address,
-    ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
-        (<span class="kw-2">*</span><span class="self">self</span>.storage().<span class="kw">await</span>)
-            .get_account(height, view, account)
-            .<span class="kw">await
-    </span>}
-
-    <span class="kw">async fn </span>get_frontier(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64, view: ViewNumber) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
-        <span class="self">self</span>.storage().<span class="kw">await</span>.get_frontier(height, view).<span class="kw">await
-    </span>}
-}
-
-<span class="attr">#[async_trait]
-</span><span class="kw">impl </span>ChainConfigPersistence <span class="kw">for </span>SqlStorage {
-    <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="kw">let </span>commitment = chain_config.commitment();
-        <span class="kw">let </span>data = bincode::serialize(<span class="kw-2">&amp;</span>chain_config)<span class="question-mark">?</span>;
-
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.upsert(
-                    <span class="string">"chain_config"</span>,
-                    [<span class="string">"commitment"</span>, <span class="string">"data"</span>],
-                    [<span class="string">"commitment"</span>],
-                    [[sql_param(<span class="kw-2">&amp;</span>(commitment.to_string())), sql_param(<span class="kw-2">&amp;</span>data)]],
-                )
-                .<span class="kw">await
-                </span>.map_err(Into::into)
-            }
-            .boxed()
-        })
-        .<span class="kw">await
-    </span>}
-
-    <span class="kw">async fn </span>load_chain_config(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        commitment: committable::Commitment&lt;ChainConfig&gt;,
+        commitment: Commitment&lt;ChainConfig&gt;,
     ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
         <span class="kw">let </span>query = <span class="self">self
+            </span>.read()
+            .<span class="kw">await
+            </span>.context(<span class="macro">format!</span>(
+                <span class="string">"opening transaction to fetch chain config {commitment}"
+            </span>))<span class="question-mark">?
             </span>.query_one(
                 <span class="string">"SELECT * from chain_config where commitment = $1"</span>,
                 [<span class="kw-2">&amp;</span>commitment.to_string()],
@@ -393,20 +344,35 @@
     }
 }
 
-<span class="attr">#[async_trait]
-</span><span class="kw">impl </span>ChainConfigPersistence <span class="kw">for </span>DataSource {
-    <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt; {
-        (<span class="kw-2">*</span><span class="self">self</span>.storage_mut().<span class="kw">await</span>)
-            .insert_chain_config(chain_config)
-            .<span class="kw">await
+<span class="kw">impl </span>CatchupDataSource <span class="kw">for </span>DataSource {
+    <span class="kw">async fn </span>get_account(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        height: u64,
+        view: ViewNumber,
+        account: Address,
+    ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
+        <span class="self">self</span>.as_ref().get_account(height, view, account).<span class="kw">await
     </span>}
 
-    <span class="kw">async fn </span>load_chain_config(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        commitment: Commitment&lt;ChainConfig&gt;,
-    ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
-        <span class="self">self</span>.storage().<span class="kw">await</span>.load_chain_config(commitment).<span class="kw">await
+    <span class="kw">async fn </span>get_frontier(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64, view: ViewNumber) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
+        <span class="self">self</span>.as_ref().get_frontier(height, view).<span class="kw">await
     </span>}
+}
+
+<span class="attr">#[async_trait]
+</span><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; ChainConfigPersistence <span class="kw">for </span>Transaction&lt;<span class="lifetime">'a</span>&gt; {
+    <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span>commitment = chain_config.commitment();
+        <span class="kw">let </span>data = bincode::serialize(<span class="kw-2">&amp;</span>chain_config)<span class="question-mark">?</span>;
+        <span class="self">self</span>.upsert(
+            <span class="string">"chain_config"</span>,
+            [<span class="string">"commitment"</span>, <span class="string">"data"</span>],
+            [<span class="string">"commitment"</span>],
+            [[sql_param(<span class="kw-2">&amp;</span>(commitment.to_string())), sql_param(<span class="kw-2">&amp;</span>data)]],
+        )
+        .<span class="kw">await
+        </span>.map_err(Into::into)
+    }
 }
 
 <span class="attr">#[cfg(test)]

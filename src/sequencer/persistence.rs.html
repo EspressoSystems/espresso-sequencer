@@ -373,6 +373,14 @@
 <a href="#373" id="373">373</a>
 <a href="#374" id="374">374</a>
 <a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -384,20 +392,28 @@
 //! persistence which is _required_ to run a node.
 
 </span><span class="kw">use </span>async_trait::async_trait;
-<span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>espresso_types::v0_3::ChainConfig;
+<span class="kw">use </span>hotshot_query_service::data_source::fetching;
+
+<span class="kw">use </span><span class="kw">crate</span>::SeqTypes;
 
 <span class="kw">pub mod </span>fs;
 <span class="kw">pub mod </span>no_storage;
 <span class="kw">pub mod </span>sql;
 
 <span class="attr">#[async_trait]
-</span><span class="kw">pub trait </span>ChainConfigPersistence: Sized + Send + Sync + <span class="lifetime">'static </span>{
+</span><span class="kw">pub trait </span>ChainConfigPersistence: Sized + Send + Sync {
     <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt;;
-    <span class="kw">async fn </span>load_chain_config(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        commitment: Commitment&lt;ChainConfig&gt;,
-    ) -&gt; anyhow::Result&lt;ChainConfig&gt;;
+}
+
+<span class="attr">#[async_trait]
+</span><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, T&gt; ChainConfigPersistence <span class="kw">for </span>fetching::Transaction&lt;<span class="lifetime">'a</span>, SeqTypes, T&gt;
+<span class="kw">where
+    </span>T: ChainConfigPersistence,
+{
+    <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="self">self</span>.as_mut().insert_chain_config(chain_config).<span class="kw">await
+    </span>}
 }
 
 <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
@@ -445,7 +461,7 @@
         setup_test();
 
         <span class="kw">let </span>tmp = P::tmp_storage().<span class="kw">await</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
+        <span class="kw">let </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
 
         <span class="comment">// Initially, there is no saved leaf.
         </span><span class="macro">assert_eq!</span>(storage.load_anchor_leaf().<span class="kw">await</span>.unwrap(), <span class="prelude-val">None</span>);
@@ -491,7 +507,7 @@
         setup_test();
 
         <span class="kw">let </span>tmp = P::tmp_storage().<span class="kw">await</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
+        <span class="kw">let </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
 
         <span class="comment">// Initially, there is no saved view.
         </span><span class="macro">assert_eq!</span>(storage.load_latest_acted_view().<span class="kw">await</span>.unwrap(), <span class="prelude-val">None</span>);
@@ -534,7 +550,7 @@
         setup_test();
 
         <span class="kw">let </span>tmp = P::tmp_storage().<span class="kw">await</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
+        <span class="kw">let </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
 
         <span class="comment">// Test append VID
         </span><span class="macro">assert_eq!</span>(

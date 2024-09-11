@@ -692,6 +692,31 @@
 <a href="#692" id="692">692</a>
 <a href="#693" id="693">693</a>
 <a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
+<a href="#716" id="716">716</a>
+<a href="#717" id="717">717</a>
+<a href="#718" id="718">718</a>
+<a href="#719" id="719">719</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::BTreeMap,
     fs::{<span class="self">self</span>, File, OpenOptions},
@@ -700,6 +725,7 @@
 };
 
 <span class="kw">use </span>anyhow::{anyhow, Context};
+<span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>espresso_types::{
@@ -755,8 +781,8 @@
 
     <span class="kw">async fn </span>create(<span class="self">self</span>) -&gt; anyhow::Result&lt;Persistence&gt; {
         <span class="prelude-val">Ok</span>(Persistence {
-            path: <span class="self">self</span>.path,
             store_undecided_state: <span class="self">self</span>.store_undecided_state,
+            inner: Arc::new(RwLock::new(Inner { path: <span class="self">self</span>.path })),
         })
     }
 
@@ -768,11 +794,20 @@
 <span class="doccomment">/// File system backed persistence.
 </span><span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>Persistence {
-    path: PathBuf,
     store_undecided_state: bool,
+
+    <span class="comment">// We enforce mutual exclusion on access to the data source, as the current file system
+    // implementation does not support transaction isolation for concurrent reads and writes. We can
+    // improve this in the future by switching to a SQLite-based file system implementation.
+    </span>inner: Arc&lt;RwLock&lt;Inner&gt;&gt;,
 }
 
-<span class="kw">impl </span>Persistence {
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>Inner {
+    path: PathBuf,
+}
+
+<span class="kw">impl </span>Inner {
     <span class="kw">fn </span>config_path(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PathBuf {
         <span class="self">self</span>.path.join(<span class="string">"hotshot.cfg"</span>)
     }
@@ -849,7 +884,8 @@
 <span class="attr">#[async_trait]
 </span><span class="kw">impl </span>SequencerPersistence <span class="kw">for </span>Persistence {
     <span class="kw">async fn </span>load_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;NetworkConfig&gt;&gt; {
-        <span class="kw">let </span>path = <span class="self">self</span>.config_path();
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+        <span class="kw">let </span>path = inner.config_path();
         <span class="kw">if </span>!path.is_file() {
             <span class="macro">tracing::info!</span>(<span class="string">"config not found at {}"</span>, path.display());
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
@@ -864,13 +900,15 @@
         <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(config))
     }
 
-    <span class="kw">async fn </span>save_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cfg: <span class="kw-2">&amp;</span>NetworkConfig) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="kw">let </span>path = <span class="self">self</span>.config_path();
+    <span class="kw">async fn </span>save_config(<span class="kw-2">&amp;</span><span class="self">self</span>, cfg: <span class="kw-2">&amp;</span>NetworkConfig) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
+        <span class="kw">let </span>path = inner.config_path();
         <span class="macro">tracing::info!</span>(<span class="string">"saving config to {}"</span>, path.display());
         <span class="prelude-val">Ok</span>(cfg.to_file(path.display().to_string())<span class="question-mark">?</span>)
     }
 
-    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt; {
+    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
         <span class="kw">let </span>view_number = view.u64();
 
         <span class="kw">let </span>delete_files = |dir_path: PathBuf| -&gt; anyhow::Result&lt;()&gt; {
@@ -894,29 +932,32 @@
             <span class="prelude-val">Ok</span>(())
         };
 
-        delete_files(<span class="self">self</span>.da_dir_path())<span class="question-mark">?</span>;
-        delete_files(<span class="self">self</span>.vid_dir_path())<span class="question-mark">?</span>;
-        delete_files(<span class="self">self</span>.quorum_proposals_dir_path())
+        delete_files(inner.da_dir_path())<span class="question-mark">?</span>;
+        delete_files(inner.vid_dir_path())<span class="question-mark">?</span>;
+        delete_files(inner.quorum_proposals_dir_path())
     }
 
     <span class="kw">async fn </span>load_latest_acted_view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;ViewNumber&gt;&gt; {
-        <span class="kw">let </span>path = <span class="self">self</span>.voted_view_path();
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+        <span class="kw">let </span>path = inner.voted_view_path();
         <span class="kw">if </span>!path.is_file() {
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
         }
-        <span class="kw">let </span>bytes = fs::read(<span class="self">self</span>.voted_view_path())<span class="question-mark">?
+        <span class="kw">let </span>bytes = fs::read(inner.voted_view_path())<span class="question-mark">?
             </span>.try_into()
             .map_err(|bytes| <span class="macro">anyhow!</span>(<span class="string">"malformed voted view file: {bytes:?}"</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(ViewNumber::new(u64::from_le_bytes(bytes))))
     }
 
     <span class="kw">async fn </span>save_anchor_leaf(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         leaf: <span class="kw-2">&amp;</span>Leaf,
         qc: <span class="kw-2">&amp;</span>QuorumCertificate&lt;SeqTypes&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.replace(
-            <span class="kw-2">&amp;</span><span class="self">self</span>.anchor_leaf_path(),
+        <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
+        <span class="kw">let </span>path = <span class="kw-2">&amp;</span>inner.anchor_leaf_path();
+        inner.replace(
+            path,
             |<span class="kw-2">mut </span>file| {
                 <span class="comment">// Check if we already have a later leaf before writing the new one. The height of
                 // the latest saved leaf is in the first 8 bytes of the file.
@@ -957,7 +998,8 @@
     <span class="kw">async fn </span>load_anchor_leaf(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;(Leaf, QuorumCertificate&lt;SeqTypes&gt;)&gt;&gt; {
-        <span class="kw">let </span>path = <span class="self">self</span>.anchor_leaf_path();
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+        <span class="kw">let </span>path = inner.anchor_leaf_path();
         <span class="kw">if </span>!path.is_file() {
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
         }
@@ -975,7 +1017,8 @@
     <span class="kw">async fn </span>load_undecided_state(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;(CommitmentMap&lt;Leaf&gt;, BTreeMap&lt;ViewNumber, View&lt;SeqTypes&gt;&gt;)&gt;&gt; {
-        <span class="kw">let </span>path = <span class="self">self</span>.undecided_state_path();
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+        <span class="kw">let </span>path = inner.undecided_state_path();
         <span class="kw">if </span>!path.is_file() {
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
         }
@@ -987,7 +1030,8 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         view: ViewNumber,
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;&gt;&gt; {
-        <span class="kw">let </span>dir_path = <span class="self">self</span>.da_dir_path();
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+        <span class="kw">let </span>dir_path = inner.da_dir_path();
 
         <span class="kw">let </span>file_path = dir_path.join(view.u64().to_string()).with_extension(<span class="string">"txt"</span>);
 
@@ -1006,7 +1050,8 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         view: ViewNumber,
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;&gt;&gt; {
-        <span class="kw">let </span>dir_path = <span class="self">self</span>.vid_dir_path();
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+        <span class="kw">let </span>dir_path = inner.vid_dir_path();
 
         <span class="kw">let </span>file_path = dir_path.join(view.u64().to_string()).with_extension(<span class="string">"txt"</span>);
 
@@ -1021,16 +1066,17 @@
     }
 
     <span class="kw">async fn </span>append_vid(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
         <span class="kw">let </span>view_number = proposal.data.view_number().u64();
-        <span class="kw">let </span>dir_path = <span class="self">self</span>.vid_dir_path();
+        <span class="kw">let </span>dir_path = inner.vid_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context(<span class="string">"failed to create vid dir"</span>)<span class="question-mark">?</span>;
 
         <span class="kw">let </span>file_path = dir_path.join(view_number.to_string()).with_extension(<span class="string">"txt"</span>);
-        <span class="self">self</span>.replace(
+        inner.replace(
             <span class="kw-2">&amp;</span>file_path,
             |<span class="kw">_</span>| {
                 <span class="comment">// Don't overwrite an existing share, but warn about it as this is likely not intended
@@ -1046,16 +1092,17 @@
         )
     }
     <span class="kw">async fn </span>append_da(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
         <span class="kw">let </span>view_number = proposal.data.view_number().u64();
-        <span class="kw">let </span>dir_path = <span class="self">self</span>.da_dir_path();
+        <span class="kw">let </span>dir_path = inner.da_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context(<span class="string">"failed to create da dir"</span>)<span class="question-mark">?</span>;
 
         <span class="kw">let </span>file_path = dir_path.join(view_number.to_string()).with_extension(<span class="string">"txt"</span>);
-        <span class="self">self</span>.replace(
+        inner.replace(
             <span class="kw-2">&amp;</span>file_path,
             |<span class="kw">_</span>| {
                 <span class="comment">// Don't overwrite an existing proposal, but warn about it as this is likely not
@@ -1070,17 +1117,15 @@
             },
         )
     }
-    <span class="kw">async fn </span>record_action(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -&gt; anyhow::Result&lt;()&gt; {
+    <span class="kw">async fn </span>record_action(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber, action: HotShotAction) -&gt; anyhow::Result&lt;()&gt; {
         <span class="comment">// Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         </span><span class="kw">if </span>!<span class="macro">matches!</span>(action, HotShotAction::Propose | HotShotAction::Vote) {
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
-        <span class="self">self</span>.replace(
-            <span class="kw-2">&amp;</span><span class="self">self</span>.voted_view_path(),
+        <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
+        <span class="kw">let </span>path = <span class="kw-2">&amp;</span>inner.voted_view_path();
+        inner.replace(
+            path,
             |<span class="kw-2">mut </span>file| {
                 <span class="kw">let </span><span class="kw-2">mut </span>bytes = <span class="macro">vec!</span>[];
                 file.read_to_end(<span class="kw-2">&amp;mut </span>bytes)<span class="question-mark">?</span>;
@@ -1099,7 +1144,7 @@
         )
     }
     <span class="kw">async fn </span>update_undecided_state(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         leaves: CommitmentMap&lt;Leaf&gt;,
         state: BTreeMap&lt;ViewNumber, View&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
@@ -1107,8 +1152,10 @@
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
 
-        <span class="self">self</span>.replace(
-            <span class="kw-2">&amp;</span><span class="self">self</span>.undecided_state_path(),
+        <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
+        <span class="kw">let </span>path = <span class="kw-2">&amp;</span>inner.undecided_state_path();
+        inner.replace(
+            path,
             |<span class="kw">_</span>| {
                 <span class="comment">// Always overwrite the previous file.
                 </span><span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
@@ -1122,16 +1169,17 @@
         )
     }
     <span class="kw">async fn </span>append_quorum_proposal(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>inner = <span class="self">self</span>.inner.write().<span class="kw">await</span>;
         <span class="kw">let </span>view_number = proposal.data.view_number().u64();
-        <span class="kw">let </span>dir_path = <span class="self">self</span>.quorum_proposals_dir_path();
+        <span class="kw">let </span>dir_path = inner.quorum_proposals_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context(<span class="string">"failed to create proposals dir"</span>)<span class="question-mark">?</span>;
 
         <span class="kw">let </span>file_path = dir_path.join(view_number.to_string()).with_extension(<span class="string">"txt"</span>);
-        <span class="self">self</span>.replace(
+        inner.replace(
             <span class="kw-2">&amp;</span>file_path,
             |<span class="kw">_</span>| {
                 <span class="comment">// Always overwrite the previous file
@@ -1149,8 +1197,10 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt;&gt;
     {
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+
         <span class="comment">// First, get the proposal directory.
-        </span><span class="kw">let </span>dir_path = <span class="self">self</span>.quorum_proposals_dir_path();
+        </span><span class="kw">let </span>dir_path = inner.quorum_proposals_dir_path();
 
         <span class="comment">// Then, we want to get the entries in this directory since they'll be the
         // key/value pairs for our map.

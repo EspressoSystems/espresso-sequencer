@@ -57,11 +57,7 @@
 <a href="#57" id="57">57</a>
 <a href="#58" id="58">58</a>
 <a href="#59" id="59">59</a>
-<a href="#60" id="60">60</a>
-<a href="#61" id="61">61</a>
-<a href="#62" id="62">62</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_query_service::data_source::VersionedDataSource;
-<span class="kw">use </span>sequencer::{
+</pre></div><pre class="rust"><code><span class="kw">use </span>sequencer::{
     api::data_source::{DataSourceOptions, SequencerDataSource},
     persistence,
 };
@@ -114,9 +110,7 @@
 
 <span class="kw">async fn </span>reset_storage&lt;O: DataSourceOptions&gt;(opt: O) -&gt; anyhow::Result&lt;()&gt; {
     <span class="comment">// Reset query service storage.
-    </span><span class="kw">let </span><span class="kw-2">mut </span>ds = O::DataSource::create(opt.clone(), Default::default(), <span class="bool-val">true</span>).<span class="kw">await</span><span class="question-mark">?</span>;
-    ds.commit().<span class="kw">await</span><span class="question-mark">?</span>;
-
+    </span>O::DataSource::create(opt.clone(), Default::default(), <span class="bool-val">true</span>).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="comment">// Reset consensus storage.
     </span>opt.reset().<span class="kw">await</span><span class="question-mark">?</span>;
 

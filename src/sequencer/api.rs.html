@@ -1915,8 +1915,8 @@
 
 <span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
-    context::Consensus, network, persistence::ChainConfigPersistence, state_signature::StateSigner,
-    SeqTypes, SequencerApiVersion, SequencerContext,
+    context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
+    SequencerContext,
 };
 
 <span class="kw">pub mod </span>data_source;
@@ -2136,26 +2136,26 @@
     </span>}
 }
 
-<span class="attr">#[async_trait]
-</span><span class="kw">impl</span>&lt;
-        N: ConnectedNetwork&lt;PubKey&gt;,
-        V: Versions,
-        P: SequencerPersistence,
-        D: ChainConfigPersistence + Send + Sync,
-    &gt; ChainConfigPersistence <span class="kw">for </span>StorageState&lt;N, P, D, V&gt;
-{
-    <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.inner_mut().insert_chain_config(chain_config).<span class="kw">await
-    </span>}
-    <span class="kw">async fn </span>load_chain_config(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        commitment: Commitment&lt;ChainConfig&gt;,
-    ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
-        <span class="self">self</span>.inner().load_chain_config(commitment).<span class="kw">await
-    </span>}
-}
+<span class="comment">// #[async_trait]
+// impl&lt;
+//         N: ConnectedNetwork&lt;PubKey&gt;,
+//         V: Versions,
+//         P: SequencerPersistence,
+//         D: ChainConfigPersistence + Send + Sync,
+//     &gt; ChainConfigPersistence for StorageState&lt;N, P, D, V&gt;
+// {
+//     async fn insert_chain_config(&amp;mut self, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt; {
+//         self.inner_mut().insert_chain_config(chain_config).await
+//     }
+//     async fn load_chain_config(
+//         &amp;self,
+//         commitment: Commitment&lt;ChainConfig&gt;,
+//     ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
+//         self.inner().load_chain_config(commitment).await
+//     }
+// }
 
-<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, V: Versions, P: SequencerPersistence&gt; CatchupDataSource
+</span><span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, V: Versions, P: SequencerPersistence&gt; CatchupDataSource
     <span class="kw">for </span>ApiState&lt;N, P, V&gt;
 {
     <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]

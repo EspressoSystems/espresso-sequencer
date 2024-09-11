@@ -600,20 +600,11 @@
 <a href="#600" id="600">600</a>
 <a href="#601" id="601">601</a>
 <a href="#602" id="602">602</a>
-<a href="#603" id="603">603</a>
-<a href="#604" id="604">604</a>
-<a href="#605" id="605">605</a>
-<a href="#606" id="606">606</a>
-<a href="#607" id="607">607</a>
-<a href="#608" id="608">608</a>
-<a href="#609" id="609">609</a>
-<a href="#610" id="610">610</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
 
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
-<span class="kw">use </span>async_std::sync::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>futures::{FutureExt, TryFutureExt};
@@ -946,16 +937,16 @@
     </span><span class="kw">async fn </span>load_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;NetworkConfig&gt;&gt;;
 
     <span class="doccomment">/// Save the orchestrator config to storage.
-    </span><span class="kw">async fn </span>save_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cfg: <span class="kw-2">&amp;</span>NetworkConfig) -&gt; anyhow::Result&lt;()&gt;;
+    </span><span class="kw">async fn </span>save_config(<span class="kw-2">&amp;</span><span class="self">self</span>, cfg: <span class="kw-2">&amp;</span>NetworkConfig) -&gt; anyhow::Result&lt;()&gt;;
 
-    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt;;
+    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt;;
 
     <span class="doccomment">/// Saves the latest decided leaf.
     ///
     /// If the height of the new leaf is not greater than the height of the previous decided leaf,
     /// storage is not updated.
     </span><span class="kw">async fn </span>save_anchor_leaf(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         leaf: <span class="kw-2">&amp;</span>Leaf,
         qc: <span class="kw-2">&amp;</span>QuorumCertificate&lt;SeqTypes&gt;,
     ) -&gt; anyhow::Result&lt;()&gt;;
@@ -1086,7 +1077,7 @@
     }
 
     <span class="doccomment">/// Update storage based on an event from consensus.
-    </span><span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;mut </span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event) {
+    </span><span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event) {
         <span class="kw">if let </span>EventType::Decide { leaf_chain, qc, .. } = <span class="kw-2">&amp;</span>event.event {
             <span class="kw">if let </span><span class="prelude-val">Some</span>(LeafInfo { leaf, .. }) = leaf_chain.first() {
                 <span class="kw">if </span>qc.view_number != leaf.view_number() {
@@ -1113,46 +1104,42 @@
     }
 
     <span class="kw">async fn </span>append_vid(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt;;
     <span class="kw">async fn </span>append_da(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt;;
-    <span class="kw">async fn </span>record_action(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -&gt; anyhow::Result&lt;()&gt;;
+    <span class="kw">async fn </span>record_action(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber, action: HotShotAction) -&gt; anyhow::Result&lt;()&gt;;
     <span class="kw">async fn </span>update_undecided_state(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         leaves: CommitmentMap&lt;Leaf&gt;,
         state: BTreeMap&lt;ViewNumber, View&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt;;
     <span class="kw">async fn </span>append_quorum_proposal(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt;;
 }
 
 <span class="attr">#[async_trait]
-</span><span class="kw">impl</span>&lt;P: SequencerPersistence&gt; Storage&lt;SeqTypes&gt; <span class="kw">for </span>Arc&lt;RwLock&lt;P&gt;&gt; {
+</span><span class="kw">impl</span>&lt;P: SequencerPersistence&gt; Storage&lt;SeqTypes&gt; <span class="kw">for </span>Arc&lt;P&gt; {
     <span class="kw">async fn </span>append_vid(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.write().<span class="kw">await</span>.append_vid(proposal).<span class="kw">await
+        (<span class="kw-2">**</span><span class="self">self</span>).append_vid(proposal).<span class="kw">await
     </span>}
 
     <span class="kw">async fn </span>append_da(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.write().<span class="kw">await</span>.append_da(proposal).<span class="kw">await
+        (<span class="kw-2">**</span><span class="self">self</span>).append_da(proposal).<span class="kw">await
     </span>}
     <span class="kw">async fn </span>record_action(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber, action: HotShotAction) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.write().<span class="kw">await</span>.record_action(view, action).<span class="kw">await
+        (<span class="kw-2">**</span><span class="self">self</span>).record_action(view, action).<span class="kw">await
     </span>}
     <span class="kw">async fn </span>update_high_qc(<span class="kw-2">&amp;</span><span class="self">self</span>, _high_qc: QuorumCertificate&lt;SeqTypes&gt;) -&gt; anyhow::Result&lt;()&gt; {
         <span class="prelude-val">Ok</span>(())
@@ -1163,17 +1150,14 @@
         leaves: CommitmentMap&lt;Leaf&gt;,
         state: BTreeMap&lt;ViewNumber, View&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.write()
-            .<span class="kw">await
-            </span>.update_undecided_state(leaves, state)
-            .<span class="kw">await
+        (<span class="kw-2">**</span><span class="self">self</span>).update_undecided_state(leaves, state).<span class="kw">await
     </span>}
 
     <span class="kw">async fn </span>append_proposal(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.write().<span class="kw">await</span>.append_quorum_proposal(proposal).<span class="kw">await
+        (<span class="kw-2">**</span><span class="self">self</span>).append_quorum_proposal(proposal).<span class="kw">await
     </span>}
 }
 

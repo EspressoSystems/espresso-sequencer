@@ -273,13 +273,9 @@
 <a href="#273" id="273">273</a>
 <a href="#274" id="274">274</a>
 <a href="#275" id="275">275</a>
-<a href="#276" id="276">276</a>
-<a href="#277" id="277">277</a>
-<a href="#278" id="278">278</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::{bail, Context};
-<span class="kw">use </span>async_std::sync::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>espresso_types::{
@@ -489,12 +485,12 @@
 
 <span class="attr">#[derive(Debug)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>SqlStateCatchup&lt;T&gt; {
-    db: Arc&lt;RwLock&lt;T&gt;&gt;,
+    db: Arc&lt;T&gt;,
     backoff: BackoffParams,
 }
 
 <span class="kw">impl</span>&lt;T&gt; SqlStateCatchup&lt;T&gt; {
-    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new(db: Arc&lt;RwLock&lt;T&gt;&gt;, backoff: BackoffParams) -&gt; <span class="self">Self </span>{
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new(db: Arc&lt;T&gt;, backoff: BackoffParams) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{ db, backoff }
     }
 }
@@ -513,9 +509,7 @@
         account: FeeAccount,
     ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
         <span class="self">self</span>.db
-            .read()
-            .<span class="kw">await
-            </span>.get_account(block_height, view, account.into())
+            .get_account(block_height, view, account.into())
             .<span class="kw">await
     </span>}
 
@@ -530,7 +524,7 @@
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
 
-        <span class="kw">let </span>proof = <span class="self">self</span>.db.read().<span class="kw">await</span>.get_frontier(bh, view).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>proof = <span class="self">self</span>.db.get_frontier(bh, view).<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="kw">match </span>proof
             .proof
             .first()
@@ -547,7 +541,7 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         commitment: Commitment&lt;ChainConfig&gt;,
     ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
-        <span class="self">self</span>.db.read().<span class="kw">await</span>.get_chain_config(commitment).<span class="kw">await
+        <span class="self">self</span>.db.get_chain_config(commitment).<span class="kw">await
     </span>}
 
     <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {

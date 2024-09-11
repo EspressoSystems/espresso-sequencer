@@ -1035,7 +1035,7 @@
     };
     <span class="kw">let </span>state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
-    <span class="kw">let </span>da_storage = Arc::new(RwLock::new(persistence));
+    <span class="kw">let </span>da_storage = Arc::new(persistence);
     <span class="macro">tracing::debug!</span>(<span class="string">"Before hotshot handle initialisation"</span>);
     <span class="kw">let </span>hotshot_handle = SystemContext::init(
         config.my_own_validator_config.public_key,

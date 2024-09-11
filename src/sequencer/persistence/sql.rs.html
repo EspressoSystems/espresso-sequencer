@@ -609,75 +609,10 @@
 <a href="#609" id="609">609</a>
 <a href="#610" id="610">610</a>
 <a href="#611" id="611">611</a>
-<a href="#612" id="612">612</a>
-<a href="#613" id="613">613</a>
-<a href="#614" id="614">614</a>
-<a href="#615" id="615">615</a>
-<a href="#616" id="616">616</a>
-<a href="#617" id="617">617</a>
-<a href="#618" id="618">618</a>
-<a href="#619" id="619">619</a>
-<a href="#620" id="620">620</a>
-<a href="#621" id="621">621</a>
-<a href="#622" id="622">622</a>
-<a href="#623" id="623">623</a>
-<a href="#624" id="624">624</a>
-<a href="#625" id="625">625</a>
-<a href="#626" id="626">626</a>
-<a href="#627" id="627">627</a>
-<a href="#628" id="628">628</a>
-<a href="#629" id="629">629</a>
-<a href="#630" id="630">630</a>
-<a href="#631" id="631">631</a>
-<a href="#632" id="632">632</a>
-<a href="#633" id="633">633</a>
-<a href="#634" id="634">634</a>
-<a href="#635" id="635">635</a>
-<a href="#636" id="636">636</a>
-<a href="#637" id="637">637</a>
-<a href="#638" id="638">638</a>
-<a href="#639" id="639">639</a>
-<a href="#640" id="640">640</a>
-<a href="#641" id="641">641</a>
-<a href="#642" id="642">642</a>
-<a href="#643" id="643">643</a>
-<a href="#644" id="644">644</a>
-<a href="#645" id="645">645</a>
-<a href="#646" id="646">646</a>
-<a href="#647" id="647">647</a>
-<a href="#648" id="648">648</a>
-<a href="#649" id="649">649</a>
-<a href="#650" id="650">650</a>
-<a href="#651" id="651">651</a>
-<a href="#652" id="652">652</a>
-<a href="#653" id="653">653</a>
-<a href="#654" id="654">654</a>
-<a href="#655" id="655">655</a>
-<a href="#656" id="656">656</a>
-<a href="#657" id="657">657</a>
-<a href="#658" id="658">658</a>
-<a href="#659" id="659">659</a>
-<a href="#660" id="660">660</a>
-<a href="#661" id="661">661</a>
-<a href="#662" id="662">662</a>
-<a href="#663" id="663">663</a>
-<a href="#664" id="664">664</a>
-<a href="#665" id="665">665</a>
-<a href="#666" id="666">666</a>
-<a href="#667" id="667">667</a>
-<a href="#668" id="668">668</a>
-<a href="#669" id="669">669</a>
-<a href="#670" id="670">670</a>
-<a href="#671" id="671">671</a>
-<a href="#672" id="672">672</a>
-<a href="#673" id="673">673</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
-<span class="kw">use </span>async_std::{
-    stream::StreamExt,
-    sync::{Arc, RwLock},
-};
+<span class="kw">use </span>async_std::{stream::StreamExt, sync::Arc};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>derivative::Derivative;
@@ -686,13 +621,12 @@
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, NetworkConfig,
 };
-<span class="kw">use </span>futures::future::{BoxFuture, FutureExt};
 <span class="kw">use </span>hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, postgres::types::ToSql, Config, Query, SqlStorage, Transaction},
+        sql::{include_migrations, postgres::types::ToSql, Config, SqlStorage},
     },
-    VersionedDataSource,
+    Transaction, VersionedDataSource,
 };
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
@@ -928,40 +862,13 @@
     store_undecided_state: bool,
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>transaction(
-    sql: <span class="kw-2">&amp;mut </span>SqlStorage,
-    f: <span class="kw">impl </span>FnOnce(Transaction) -&gt; BoxFuture&lt;anyhow::Result&lt;()&gt;&gt;,
-) -&gt; anyhow::Result&lt;()&gt; {
-    <span class="kw">let </span>tx = sql.transaction().<span class="kw">await</span><span class="question-mark">?</span>;
-    <span class="kw">match </span>f(tx).<span class="kw">await </span>{
-        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
-            <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = sql.commit().<span class="kw">await </span>{
-                <span class="macro">tracing::warn!</span>(<span class="string">"transaction failed, reverting: {err:#}"</span>);
-                sql.revert().<span class="kw">await</span>;
-
-                <span class="kw">return </span><span class="prelude-val">Err</span>(err.into());
-            }
-
-            <span class="prelude-val">Ok</span>(())
-        }
-        <span class="prelude-val">Err</span>(err) =&gt; {
-            <span class="macro">tracing::warn!</span>(<span class="string">"transaction failed, reverting: {err:#}"</span>);
-            sql.revert().<span class="kw">await</span>;
-            <span class="prelude-val">Err</span>(err)
-        }
-    }
-}
-
 <span class="attr">#[async_trait]
 </span><span class="kw">impl </span>SequencerPersistence <span class="kw">for </span>Persistence {
     <span class="kw">fn </span>into_catchup_provider(
         <span class="self">self</span>,
         backoff: BackoffParams,
     ) -&gt; anyhow::Result&lt;Arc&lt;<span class="kw">dyn </span>StateCatchup&gt;&gt; {
-        <span class="prelude-val">Ok</span>(Arc::new(SqlStateCatchup::new(
-            Arc::new(RwLock::new(<span class="self">self</span>.db)),
-            backoff,
-        )))
+        <span class="prelude-val">Ok</span>(Arc::new(SqlStateCatchup::new(Arc::new(<span class="self">self</span>.db), backoff)))
     }
 
     <span class="kw">async fn </span>load_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;NetworkConfig&gt;&gt; {
@@ -970,7 +877,9 @@
         <span class="comment">// Select the most recent config (although there should only be one).
         </span><span class="kw">let </span><span class="prelude-val">Some</span>(row) = <span class="self">self
             </span>.db
-            .query_opt_static(<span class="string">"SELECT config FROM network_config ORDER BY id DESC LIMIT 1"</span>)
+            .read()
+            .<span class="kw">await</span><span class="question-mark">?
+            </span>.query_opt_static(<span class="string">"SELECT config FROM network_config ORDER BY id DESC LIMIT 1"</span>)
             .<span class="kw">await</span><span class="question-mark">?
         </span><span class="kw">else </span>{
             <span class="macro">tracing::info!</span>(<span class="string">"config not found"</span>);
@@ -980,44 +889,33 @@
         <span class="prelude-val">Ok</span>(serde_json::from_value(config)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">async fn </span>save_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, cfg: <span class="kw-2">&amp;</span>NetworkConfig) -&gt; anyhow::Result&lt;()&gt; {
+    <span class="kw">async fn </span>save_config(<span class="kw-2">&amp;</span><span class="self">self</span>, cfg: <span class="kw-2">&amp;</span>NetworkConfig) -&gt; anyhow::Result&lt;()&gt; {
         <span class="macro">tracing::info!</span>(<span class="string">"saving config to Postgres"</span>);
         <span class="kw">let </span>json = serde_json::to_value(cfg)<span class="question-mark">?</span>;
 
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.execute_one_with_retries(
-                    <span class="string">"INSERT INTO network_config (config) VALUES ($1)"</span>,
-                    [<span class="kw-2">&amp;</span>json],
-                )
-                .<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.execute_one_with_retries(<span class="string">"INSERT INTO network_config (config) VALUES ($1)"</span>, [<span class="kw-2">&amp;</span>json])
+            .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await
     </span>}
 
-    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt; {
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                <span class="kw">let </span>stmt1 = <span class="string">"DELETE FROM vid_share where view &lt;= $1"</span>;
-                tx.execute(stmt1, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
 
-                <span class="kw">let </span>stmt2 = <span class="string">"DELETE FROM da_proposal where view &lt;= $1"</span>;
-                tx.execute(stmt2, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>stmt1 = <span class="string">"DELETE FROM vid_share where view &lt;= $1"</span>;
+        tx.execute(stmt1, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
 
-                <span class="kw">let </span>stmt3 = <span class="string">"DELETE FROM quorum_proposals where view &lt;= $1"</span>;
-                tx.execute(stmt3, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span>stmt2 = <span class="string">"DELETE FROM da_proposal where view &lt;= $1"</span>;
+        tx.execute(stmt2, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="kw">let </span>stmt3 = <span class="string">"DELETE FROM quorum_proposals where view &lt;= $1"</span>;
+        tx.execute(stmt3, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
+
+        tx.commit().<span class="kw">await
     </span>}
 
     <span class="kw">async fn </span>save_anchor_leaf(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         leaf: <span class="kw-2">&amp;</span>Leaf,
         qc: <span class="kw-2">&amp;</span>QuorumCertificate&lt;SeqTypes&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
@@ -1045,29 +943,26 @@
         <span class="kw">let </span>leaf_bytes = bincode::serialize(leaf)<span class="question-mark">?</span>;
         <span class="kw">let </span>qc_bytes = bincode::serialize(qc)<span class="question-mark">?</span>;
 
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.execute_one_with_retries(
-                    stmt,
-                    [
-                        sql_param(<span class="kw-2">&amp;</span>height),
-                        sql_param(<span class="kw-2">&amp;</span>view),
-                        sql_param(<span class="kw-2">&amp;</span>leaf_bytes),
-                        sql_param(<span class="kw-2">&amp;</span>qc_bytes),
-                    ],
-                )
-                .<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.execute_one_with_retries(
+            stmt,
+            [
+                sql_param(<span class="kw-2">&amp;</span>height),
+                sql_param(<span class="kw-2">&amp;</span>view),
+                sql_param(<span class="kw-2">&amp;</span>leaf_bytes),
+                sql_param(<span class="kw-2">&amp;</span>qc_bytes),
+            ],
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await
     </span>}
 
     <span class="kw">async fn </span>load_latest_acted_view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;ViewNumber&gt;&gt; {
         <span class="prelude-val">Ok</span>(<span class="self">self
             </span>.db
-            .query_opt_static(<span class="string">"SELECT view FROM highest_voted_view WHERE id = 0"</span>)
+            .read()
+            .<span class="kw">await</span><span class="question-mark">?
+            </span>.query_opt_static(<span class="string">"SELECT view FROM highest_voted_view WHERE id = 0"</span>)
             .<span class="kw">await</span><span class="question-mark">?
             </span>.map(|row| {
                 <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
@@ -1080,7 +975,9 @@
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;(Leaf, QuorumCertificate&lt;SeqTypes&gt;)&gt;&gt; {
         <span class="kw">let </span><span class="prelude-val">Some</span>(row) = <span class="self">self
             </span>.db
-            .query_opt_static(<span class="string">"SELECT leaf, qc FROM anchor_leaf WHERE id = 0"</span>)
+            .read()
+            .<span class="kw">await</span><span class="question-mark">?
+            </span>.query_opt_static(<span class="string">"SELECT leaf, qc FROM anchor_leaf WHERE id = 0"</span>)
             .<span class="kw">await</span><span class="question-mark">?
         </span><span class="kw">else </span>{
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
@@ -1100,7 +997,9 @@
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;(CommitmentMap&lt;Leaf&gt;, BTreeMap&lt;ViewNumber, View&lt;SeqTypes&gt;&gt;)&gt;&gt; {
         <span class="kw">let </span><span class="prelude-val">Some</span>(row) = <span class="self">self
             </span>.db
-            .query_opt_static(<span class="string">"SELECT leaves, state FROM undecided_state WHERE id = 0"</span>)
+            .read()
+            .<span class="kw">await</span><span class="question-mark">?
+            </span>.query_opt_static(<span class="string">"SELECT leaves, state FROM undecided_state WHERE id = 0"</span>)
             .<span class="kw">await</span><span class="question-mark">?
         </span><span class="kw">else </span>{
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
@@ -1121,7 +1020,9 @@
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;&gt;&gt; {
         <span class="kw">let </span>result = <span class="self">self
             </span>.db
-            .query_opt(
+            .read()
+            .<span class="kw">await</span><span class="question-mark">?
+            </span>.query_opt(
                 <span class="string">"SELECT data FROM da_proposal where view = $1"</span>,
                 [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
             )
@@ -1141,7 +1042,9 @@
     ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;&gt;&gt; {
         <span class="kw">let </span>result = <span class="self">self
             </span>.db
-            .query_opt(
+            .read()
+            .<span class="kw">await</span><span class="question-mark">?
+            </span>.query_opt(
                 <span class="string">"SELECT data FROM vid_share where view = $1"</span>,
                 [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
             )
@@ -1161,7 +1064,9 @@
     {
         <span class="kw">let </span>rows = <span class="self">self
             </span>.db
-            .query_static(<span class="string">"SELECT * FROM quorum_proposals"</span>)
+            .read()
+            .<span class="kw">await</span><span class="question-mark">?
+            </span>.query_static(<span class="string">"SELECT * FROM quorum_proposals"</span>)
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(BTreeMap::from_iter(
@@ -1180,56 +1085,42 @@
     }
 
     <span class="kw">async fn </span>append_vid(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
         <span class="kw">let </span>data = <span class="kw-2">&amp;</span>proposal.data;
         <span class="kw">let </span>view = data.view_number().u64();
         <span class="kw">let </span>data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.upsert(
-                    <span class="string">"vid_share"</span>,
-                    [<span class="string">"view"</span>, <span class="string">"data"</span>],
-                    [<span class="string">"view"</span>],
-                    [[sql_param(<span class="kw-2">&amp;</span>(view <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>data_bytes)]],
-                )
-                .<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.upsert(
+            <span class="string">"vid_share"</span>,
+            [<span class="string">"view"</span>, <span class="string">"data"</span>],
+            [<span class="string">"view"</span>],
+            [[sql_param(<span class="kw-2">&amp;</span>(view <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>data_bytes)]],
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await
     </span>}
     <span class="kw">async fn </span>append_da(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
         <span class="kw">let </span>data = <span class="kw-2">&amp;</span>proposal.data;
         <span class="kw">let </span>view = data.view_number().u64();
         <span class="kw">let </span>data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.upsert(
-                    <span class="string">"da_proposal"</span>,
-                    [<span class="string">"view"</span>, <span class="string">"data"</span>],
-                    [<span class="string">"view"</span>],
-                    [[sql_param(<span class="kw-2">&amp;</span>(view <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>data_bytes)]],
-                )
-                .<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.upsert(
+            <span class="string">"da_proposal"</span>,
+            [<span class="string">"view"</span>, <span class="string">"data"</span>],
+            [<span class="string">"view"</span>],
+            [[sql_param(<span class="kw-2">&amp;</span>(view <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>data_bytes)]],
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await
     </span>}
-    <span class="kw">async fn </span>record_action(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -&gt; anyhow::Result&lt;()&gt; {
+    <span class="kw">async fn </span>record_action(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber, action: HotShotAction) -&gt; anyhow::Result&lt;()&gt; {
         <span class="comment">// Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         </span><span class="kw">if </span>!<span class="macro">matches!</span>(action, HotShotAction::Propose | HotShotAction::Vote) {
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());
@@ -1238,18 +1129,13 @@
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)"</span>;
 
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.execute_one_with_retries(stmt, [view.u64() <span class="kw">as </span>i64])
-                    .<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.execute_one_with_retries(stmt, [view.u64() <span class="kw">as </span>i64])
+            .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await
     </span>}
     <span class="kw">async fn </span>update_undecided_state(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         leaves: CommitmentMap&lt;Leaf&gt;,
         state: BTreeMap&lt;ViewNumber, View&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
@@ -1260,45 +1146,35 @@
         <span class="kw">let </span>leaves_bytes = bincode::serialize(<span class="kw-2">&amp;</span>leaves).context(<span class="string">"serializing leaves"</span>)<span class="question-mark">?</span>;
         <span class="kw">let </span>state_bytes = bincode::serialize(<span class="kw-2">&amp;</span>state).context(<span class="string">"serializing state"</span>)<span class="question-mark">?</span>;
 
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.upsert(
-                    <span class="string">"undecided_state"</span>,
-                    [<span class="string">"id"</span>, <span class="string">"leaves"</span>, <span class="string">"state"</span>],
-                    [<span class="string">"id"</span>],
-                    [[
-                        sql_param(<span class="kw-2">&amp;</span><span class="number">0i32</span>),
-                        sql_param(<span class="kw-2">&amp;</span>leaves_bytes),
-                        sql_param(<span class="kw-2">&amp;</span>state_bytes),
-                    ]],
-                )
-                .<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.upsert(
+            <span class="string">"undecided_state"</span>,
+            [<span class="string">"id"</span>, <span class="string">"leaves"</span>, <span class="string">"state"</span>],
+            [<span class="string">"id"</span>],
+            [[
+                sql_param(<span class="kw-2">&amp;</span><span class="number">0i32</span>),
+                sql_param(<span class="kw-2">&amp;</span>leaves_bytes),
+                sql_param(<span class="kw-2">&amp;</span>state_bytes),
+            ]],
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await
     </span>}
     <span class="kw">async fn </span>append_quorum_proposal(
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
         <span class="kw">let </span>view_number = proposal.data.view_number().u64();
         <span class="kw">let </span>proposal_bytes = bincode::serialize(<span class="kw-2">&amp;</span>proposal).context(<span class="string">"serializing proposal"</span>)<span class="question-mark">?</span>;
-        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
-            <span class="kw">async move </span>{
-                tx.upsert(
-                    <span class="string">"quorum_proposals"</span>,
-                    [<span class="string">"view"</span>, <span class="string">"data"</span>],
-                    [<span class="string">"view"</span>],
-                    [[sql_param(<span class="kw-2">&amp;</span>(view_number <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>proposal_bytes)]],
-                )
-                .<span class="kw">await</span><span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>(())
-            }
-            .boxed()
-        })
-        .<span class="kw">await
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.upsert(
+            <span class="string">"quorum_proposals"</span>,
+            [<span class="string">"view"</span>, <span class="string">"data"</span>],
+            [<span class="string">"view"</span>],
+            [[sql_param(<span class="kw-2">&amp;</span>(view_number <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>proposal_bytes)]],
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await
     </span>}
 }
 
