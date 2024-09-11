@@ -434,8 +434,8 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, Leaf, MarketplaceVersion, MockSequencerVersions, Payload, PubKey,
-        SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
+        Upgrade,
     };
     use futures::{
         future::join_all,
@@ -640,19 +640,14 @@ pub mod testing {
             self
         }
 
-        pub fn upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+        pub fn upgrades<V: Versions>(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+            let upgrade = upgrades.get(&<V as Versions>::Upgrade::VERSION).unwrap();
+            upgrade.set_hotshot_config_parameters(&mut self.config);
             self.upgrades = upgrades;
             self
         }
 
-        pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrade) = self
-                .upgrades
-                .get(&<MockSequencerVersions as Versions>::Upgrade::VERSION)
-            {
-                upgrade.set_hotshot_config_parameters(&mut self.config)
-            }
-
+        pub fn build(self) -> TestConfig<NUM_NODES> {
             TestConfig {
                 config: self.config,
                 priv_keys: self.priv_keys,
