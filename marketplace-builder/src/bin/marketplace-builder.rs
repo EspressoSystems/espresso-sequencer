@@ -3,7 +3,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion, NamespaceId, SequencerVersions, V0_0, V0_1
+    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion,
+    NamespaceId, SequencerVersions, V0_0, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
