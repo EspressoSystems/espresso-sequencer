@@ -58,7 +58,7 @@ impl BackgroundTask {
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct TaskInner<T> {
+struct TaskInner<T: Send> {
     name: String,
     #[derivative(Debug = "ignore")]
     handle: JoinHandle<T>,
@@ -67,7 +67,7 @@ struct TaskInner<T> {
 /// A task handle which can be joined, but is cancelled on [`Drop`]
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-pub struct Task<T> {
+pub struct Task<T: Send + 'static> {
     // The task handle is an `Option` so we can `take()` out of it during `join` and `drop`. This
     // will always be `Some` except during joining or cancellation.
     inner: Option<TaskInner<T>>,
@@ -116,12 +116,19 @@ impl<T: Send + 'static> Task<T> {
     }
 }
 
-impl<T> Drop for Task<T> {
+impl<T: Send + 'static> Drop for Task<T> {
     fn drop(&mut self) {
         if let Some(inner) = self.inner.take() {
-            tracing::info!(name = inner.name, "cancelling task");
-            async_std::task::block_on(inner.handle.cancel());
-            tracing::info!(name = inner.name, "cancelled task");
+            // Spawn the cancellation in a background task. It may sound strange to spawn a new task
+            // when our whole goal is to cancel one. Unfortunately, the cancellation is async and
+            // `drop` runs in a synchronous context, so this is the best we can do. In effect we are
+            // replacing a long-lived background task with a short-lived detached task which will
+            // exit quickly: as soon as the background task has been successfully cancelled.
+            spawn(async move {
+                tracing::info!(name = inner.name, "cancelling task");
+                inner.handle.cancel().await;
+                tracing::info!(name = inner.name, "cancelled task");
+            });
         }
     }
 }
