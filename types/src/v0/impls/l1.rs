@@ -256,7 +256,7 @@ mod test {
     use std::ops::Add;
 
     use contract_bindings::fee_contract::FeeContract;
-    use ethers::utils::{parse_ether, Anvil};
+    use ethers::utils::{hex, parse_ether, Anvil};
     use sequencer_utils::test_utils::setup_test;
 
     use super::*;
@@ -315,7 +315,8 @@ mod test {
         // In order to deposit we need a provider that can sign.
         let provider =
             Provider::<Http>::try_from(anvil.endpoint())?.interval(Duration::from_millis(10u64));
-        let client = SignerMiddleware::new(provider, wallet.with_chain_id(anvil.chain_id()));
+        let client =
+            SignerMiddleware::new(provider.clone(), wallet.with_chain_id(anvil.chain_id()));
         let client = Arc::new(client);
 
         // Initialize a contract with some deposits
@@ -348,6 +349,23 @@ mod test {
         // confirm that the owner of the contract is the address that was sent as part of the initialization data
         let owner = fee_contract_proxy.owner().await;
         assert_eq!(owner.unwrap(), wallet_address.clone());
+
+        // confirm that the implementation address is the address of the fee contract deployed above
+        // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
+        let hex_bytes =
+            hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+                .expect("Failed to decode hex string");
+        let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
+        let storage = provider
+            .clone()
+            .get_storage_at(
+                fee_contract_proxy.clone().address(),
+                implementation_slot,
+                None,
+            )
+            .await?;
+        let implementation_address = H160::from_slice(&storage[12..]);
+        assert_eq!(fee_contract.clone().address(), implementation_address);
 
         // Anvil will produce a bock for every transaction.
         let head = l1_client.get_block_number().await;

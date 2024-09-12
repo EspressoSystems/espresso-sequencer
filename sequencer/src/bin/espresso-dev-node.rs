@@ -9,7 +9,8 @@ use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
-    types::{Address, U256},
+    types::{Address, H160, U256},
+    utils::hex,
 };
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_state_prover::service::{
@@ -258,6 +259,19 @@ async fn main() -> anyhow::Result<()> {
         let light_client_address = contracts
             .get_contract_address(Contract::LightClientProxy)
             .unwrap();
+
+        // confirm that the light_client_address is a proxy
+        // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
+        let hex_bytes =
+            hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+                .expect("Failed to decode hex string");
+        let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
+        let storage = provider
+            .clone()
+            .get_storage_at(light_client_address, implementation_slot, None)
+            .await?;
+        let implementation_address = H160::from_slice(&storage[12..]);
+        assert_ne!(implementation_address, H160::zero());
 
         mock_contracts.insert(
             chain_id,
