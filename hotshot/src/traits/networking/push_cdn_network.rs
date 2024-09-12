@@ -546,7 +546,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
     ///
     /// # Errors
     /// - If we fail to receive messages. Will trigger a retry automatically.
-    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError> {
+    async fn recv_message(&self) -> Result<Vec<u8>, NetworkError> {
         // Receive a message
         let message = self.client.receive_message().await;
 
@@ -577,7 +577,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
             return Ok(vec![]);
         };
 
-        Ok(vec![message])
+        Ok(message)
     }
 
     /// Do nothing here, as we don't need to look up nodes.

@@ -18,6 +18,8 @@ use std::{
     time::Duration,
 };
 
+use parking_lot::RwLock as PlRwLock;
+
 use async_broadcast::{broadcast, InactiveReceiver, Sender};
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
@@ -68,7 +70,7 @@ pub struct CombinedNetworks<TYPES: NodeType> {
     networks: Arc<UnderlyingCombinedNetworks<TYPES>>,
 
     /// Last n seen messages to prevent processing duplicates
-    message_cache: Arc<RwLock<LruCache<u64, ()>>>,
+    message_cache: Arc<PlRwLock<LruCache<u64, ()>>>,
 
     /// How many times primary failed to deliver
     primary_fail_counter: Arc<AtomicU64>,
@@ -106,7 +108,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
 
         Self {
             networks,
-            message_cache: Arc::new(RwLock::new(LruCache::new(
+            message_cache: Arc::new(PlRwLock::new(LruCache::new(
                 NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
             ))),
             primary_fail_counter: Arc::new(AtomicU64::new(0)),
@@ -304,7 +306,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 );
 
                 // We want to use the same message cache between the two networks
-                let message_cache = Arc::new(RwLock::new(LruCache::new(
+                let message_cache = Arc::new(PlRwLock::new(LruCache::new(
                     NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
                 )));
 
@@ -466,35 +468,29 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
     ///
     /// # Errors
     /// Does not error
-    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError> {
-        // recv on both networks because nodes may be accessible only on either. discard duplicates
-        // TODO: improve this algorithm: https://github.com/EspressoSystems/HotShot/issues/2089
-        let mut primary_fut = self.primary().recv_msgs().fuse();
-        let mut secondary_fut = self.secondary().recv_msgs().fuse();
+    async fn recv_message(&self) -> Result<Vec<u8>, NetworkError> {
+        loop {
+            // Receive from both networks
+            let mut primary_fut = self.primary().recv_message().fuse();
+            let mut secondary_fut = self.secondary().recv_message().fuse();
 
-        let msgs = select! {
-            p = primary_fut => p?,
-            s = secondary_fut => s?,
-        };
+            // Wait for one to return a message
+            let message = select! {
+                p = primary_fut => p?,
+                s = secondary_fut => s?,
+            };
 
-        let mut filtered_msgs = Vec::with_capacity(msgs.len());
-
-        // For each message,
-        for msg in msgs {
             // Calculate hash of the message
-            let message_hash = calculate_hash_of(&msg);
+            let message_hash = calculate_hash_of(&message);
 
-            // Add the hash to the cache
-            if !self.message_cache.read().await.contains(&message_hash) {
-                // If the message is not in the cache, process it
-                filtered_msgs.push(msg.clone());
+            // Check if the hash is in the cache
+            if !self.message_cache.read().contains(&message_hash) {
+                // Add the hash to the cache
+                self.message_cache.write().put(message_hash, ());
 
-                // Add it to the cache
-                self.message_cache.write().await.put(message_hash, ());
+                break Ok(message);
             }
         }
-
-        Ok(filtered_msgs)
     }
 
     fn queue_node_lookup(

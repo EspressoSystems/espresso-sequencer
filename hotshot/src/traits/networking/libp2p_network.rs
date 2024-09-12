@@ -1055,12 +1055,12 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
     ///
     /// # Errors
     /// If there is a network-related failure.
-    #[instrument(name = "Libp2pNetwork::recv_msgs", skip_all)]
-    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError> {
+    #[instrument(name = "Libp2pNetwork::recv_message", skip_all)]
+    async fn recv_message(&self) -> Result<Vec<u8>, NetworkError> {
         let result = self
             .inner
             .receiver
-            .drain_at_least_one()
+            .recv()
             .await
             .map_err(|_x| NetworkError::ShutDown)?;
 

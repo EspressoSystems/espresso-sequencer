@@ -8,15 +8,15 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
+use async_compatibility_layer::art::{async_spawn, async_timeout};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::{spawn, JoinHandle};
 use async_trait::async_trait;
 use futures::future::select_all;
-use hotshot::types::Event;
+use hotshot::types::{Event, Message};
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkMessageTaskState};
 use hotshot_types::{
-    message::{Messages, UpgradeLock},
+    message::UpgradeLock,
     traits::{
         network::ConnectedNetwork,
         node_implementation::{NodeType, Versions},
@@ -131,37 +131,27 @@ pub async fn add_network_message_test_task<
 
     async_spawn(async move {
         loop {
-            let msgs = match network.recv_msgs().await {
-                Ok(msgs) => {
-                    let mut deserialized_messages = Vec::new();
-
-                    for msg in msgs {
-                        let deserialized_message = match upgrade_lock.deserialize(&msg).await {
-                            Ok(deserialized) => deserialized,
-                            Err(e) => {
-                                tracing::error!("Failed to deserialize message: {}", e);
-                                return;
-                            }
-                        };
-
-                        deserialized_messages.push(deserialized_message);
-                    }
-
-                    Messages(deserialized_messages)
-                }
-                Err(err) => {
-                    error!("failed to receive messages: {err}");
-
-                    // return zero messages so we sleep and try again
-                    Messages(vec![])
+            // Get the next message from the network
+            let message = match network.recv_message().await {
+                Ok(message) => message,
+                Err(e) => {
+                    error!("Failed to receive message: {:?}", e);
+                    continue;
                 }
             };
-            if msgs.0.is_empty() {
-                // TODO: Stop sleeping here: https://github.com/EspressoSystems/HotShot/issues/2558
-                async_sleep(Duration::from_millis(100)).await;
-            } else {
-                state.handle_messages(msgs.0).await;
-            }
+
+            // Deserialize the message
+            let deserialized_message: Message<TYPES> =
+                match upgrade_lock.deserialize(&message).await {
+                    Ok(message) => message,
+                    Err(e) => {
+                        tracing::error!("Failed to deserialize message: {:?}", e);
+                        continue;
+                    }
+                };
+
+            // Handle the message
+            state.handle_message(deserialized_message).await;
         }
     })
 }

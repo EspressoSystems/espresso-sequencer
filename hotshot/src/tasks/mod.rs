@@ -8,10 +8,10 @@
 
 /// Provides trait to create task states from a `SystemContextHandle`
 pub mod task_state;
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{fmt::Debug, sync::Arc};
 
 use async_broadcast::broadcast;
-use async_compatibility_layer::art::{async_sleep, async_spawn};
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{
@@ -35,7 +35,7 @@ use hotshot_task_impls::{
 use hotshot_types::{
     consensus::Consensus,
     constants::EVENT_CHANNEL_SIZE,
-    message::{Messages, UpgradeLock},
+    message::{Message, UpgradeLock},
     request_response::RequestReceiver,
     traits::{
         network::ConnectedNetwork,
@@ -119,53 +119,37 @@ pub fn add_network_message_task<
     let task_handle = async_spawn(async move {
         futures::pin_mut!(shutdown_signal);
 
-        let recv_stream = stream::unfold((), |()| async {
-            let msgs = match network.recv_msgs().await {
-                Ok(msgs) => {
-                    let mut deserialized_messages = Vec::new();
-                    for msg in msgs {
-                        let deserialized_message = match upgrade_lock.deserialize(&msg).await {
-                            Ok(deserialized) => deserialized,
-                            Err(e) => {
-                                tracing::error!("Failed to deserialize message: {}", e);
-                                continue;
-                            }
-                        };
-                        deserialized_messages.push(deserialized_message);
-                    }
-                    Messages(deserialized_messages)
-                }
-                Err(err) => {
-                    tracing::error!("failed to receive messages: {err}");
-                    Messages(vec![])
-                }
-            };
-            Some((msgs, ()))
-        });
-
-        let fused_recv_stream = recv_stream.boxed().fuse();
-        futures::pin_mut!(fused_recv_stream);
-
         loop {
+            // Wait for one of the following to resolve:
             futures::select! {
+                // Wait for a shutdown signal
                 () = shutdown_signal => {
                     tracing::error!("Shutting down network message task");
                     return;
                 }
-                msgs_option = fused_recv_stream.next() => {
-                    if let Some(msgs) = msgs_option {
-                        if msgs.0.is_empty() {
-                            // TODO: Stop sleeping here: https://github.com/EspressoSystems/HotShot/issues/2558
-                            async_sleep(Duration::from_millis(100)).await;
-                        } else {
-                            state.handle_messages(msgs.0).await;
+
+                // Wait for a message from the network
+                message = network.recv_message().fuse() => {
+                    // Make sure the message did not fail
+                    let message = match message {
+                        Ok(message) => message,
+                        Err(e) => {
+                            tracing::error!("Failed to receive message: {:?}", e);
+                            continue;
                         }
-                    } else {
-                        // Stream has ended, which shouldn't happen in this case.
-                        // You might want to handle this situation, perhaps by breaking the loop or logging an error.
-                        tracing::error!("Network message stream unexpectedly ended");
-                        return;
-                    }
+                    };
+
+                    // Deserialize the message
+                    let deserialized_message: Message<TYPES> = match upgrade_lock.deserialize(&message).await {
+                        Ok(message) => message,
+                        Err(e) => {
+                            tracing::error!("Failed to deserialize message: {:?}", e);
+                            continue;
+                        }
+                    };
+
+                    // Handle the message
+                    state.handle_message(deserialized_message).await;
                 }
             }
         }

@@ -304,7 +304,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
     ///
     /// # Errors
     /// If there is a network-related failure.
-    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError>;
+    async fn recv_message(&self) -> Result<Vec<u8>, NetworkError>;
 
     /// Ask request the network for some data.  Returns the request ID for that data,
     /// The ID returned can be used for cancelling the request

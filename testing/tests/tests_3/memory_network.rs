@@ -5,9 +5,9 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 #![allow(clippy::panic)]
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use async_compatibility_layer::logging::setup_logging;
+use async_compatibility_layer::{art::async_timeout, logging::setup_logging};
 use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
@@ -171,13 +171,16 @@ async fn memory_network_direct_queue() {
             .direct_message(serialized_message.clone(), pub_key_2)
             .await
             .expect("Failed to message node");
-        let mut recv_messages = network2
-            .recv_msgs()
+        let recv_message = network2
+            .recv_message()
             .await
             .expect("Failed to receive message");
-        let recv_message = recv_messages.pop().unwrap();
         let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
-        assert!(recv_messages.is_empty());
+        assert!(
+            async_timeout(Duration::from_secs(1), network2.recv_message())
+                .await
+                .is_err()
+        );
         fake_message_eq(sent_message, deserialized_message);
     }
 
@@ -191,13 +194,16 @@ async fn memory_network_direct_queue() {
             .direct_message(serialized_message.clone(), pub_key_1)
             .await
             .expect("Failed to message node");
-        let mut recv_messages = network1
-            .recv_msgs()
+        let recv_message = network1
+            .recv_message()
             .await
             .expect("Failed to receive message");
-        let recv_message = recv_messages.pop().unwrap();
         let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
-        assert!(recv_messages.is_empty());
+        assert!(
+            async_timeout(Duration::from_secs(1), network1.recv_message())
+                .await
+                .is_err()
+        );
         fake_message_eq(sent_message, deserialized_message);
     }
 }
@@ -226,13 +232,16 @@ async fn memory_network_broadcast_queue() {
             .broadcast_message(serialized_message.clone(), Topic::Da, BroadcastDelay::None)
             .await
             .expect("Failed to message node");
-        let mut recv_messages = network2
-            .recv_msgs()
+        let recv_message = network2
+            .recv_message()
             .await
             .expect("Failed to receive message");
-        let recv_message = recv_messages.pop().unwrap();
         let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
-        assert!(recv_messages.is_empty());
+        assert!(
+            async_timeout(Duration::from_secs(1), network2.recv_message())
+                .await
+                .is_err()
+        );
         fake_message_eq(sent_message, deserialized_message);
     }
 
@@ -250,13 +259,16 @@ async fn memory_network_broadcast_queue() {
             )
             .await
             .expect("Failed to message node");
-        let mut recv_messages = network1
-            .recv_msgs()
+        let recv_message = network1
+            .recv_message()
             .await
             .expect("Failed to receive message");
-        let recv_message = recv_messages.pop().unwrap();
         let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
-        assert!(recv_messages.is_empty());
+        assert!(
+            async_timeout(Duration::from_secs(1), network1.recv_message())
+                .await
+                .is_err()
+        );
         fake_message_eq(sent_message, deserialized_message);
     }
 }
@@ -325,18 +337,18 @@ async fn memory_network_test_in_flight_message_count() {
 
     while TestableNetworkingImplementation::<Test>::in_flight_message_count(&network1).unwrap() > 0
     {
-        network1.recv_msgs().await.unwrap();
+        network1.recv_message().await.unwrap();
     }
 
     while TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2).unwrap()
         > messages.len()
     {
-        network2.recv_msgs().await.unwrap();
+        network2.recv_message().await.unwrap();
     }
 
     while TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2).unwrap() > 0
     {
-        network2.recv_msgs().await.unwrap();
+        network2.recv_message().await.unwrap();
     }
 
     assert_eq!(
