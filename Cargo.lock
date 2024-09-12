@@ -4322,7 +4322,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.53"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=jb/non-blocking-cancel#128893d4e243c0ff2ce4ec3e6696201864bdc05a"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.59#5eefc35de48c41a5237d4e194dcae168b860456c"
 dependencies = [
  "anyhow",
  "ark-serialize",
