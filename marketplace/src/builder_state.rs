@@ -1,8 +1,8 @@
 use hotshot_types::{
     data::{Leaf, QuorumProposal},
     message::Proposal,
-    traits::block_contents::{BlockHeader, BlockPayload},
     traits::{
+        block_contents::{BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType},
         EncodeBytes,
     },
