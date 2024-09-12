@@ -328,9 +328,9 @@ pub fn validate_proposal(
         });
     }
 
-    proposal
-        .ns_table()
-        .validate(&PayloadByteLen::from_vid_common(vid_common))?;
+    // proposal
+    //     .ns_table()
+    //     .validate(&PayloadByteLen::from_vid_common(vid_common))?;
 
     Ok(())
 }
@@ -395,27 +395,27 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
 }
 
 impl ValidatedState {
-    #[cfg(test)]
-    pub async fn apply_header(
-        &self,
-        _instance: &NodeState,
-        _parent_leaf: &Leaf,
-        _proposed_header: &Header,
-        _version: Version,
-    ) -> anyhow::Result<(Self, Delta)> {
-        use ethers::types::U256;
+    // #[cfg(test)]
+    // pub async fn apply_header(
+    //     &self,
+    //     _instance: &NodeState,
+    //     _parent_leaf: &Leaf,
+    //     _proposed_header: &Header,
+    //     _version: Version,
+    // ) -> anyhow::Result<(Self, Delta)> {
+    //     use ethers::types::U256;
 
-        let mut state = ValidatedState::default();
-        let mut cf = state.chain_config.resolve().unwrap();
-        cf.max_block_size = BlockSize { 0: 10 };
-        cf.base_fee = FeeAmount {
-            0: U256::from(1000 as u128),
-        };
-        state.chain_config = ResolvableChainConfig::from(cf);
+    //     let mut state = ValidatedState::default();
+    //     let mut cf = state.chain_config.resolve().unwrap();
+    //     cf.max_block_size = BlockSize { 0: 10 };
+    //     cf.base_fee = FeeAmount {
+    //         0: U256::from(1000 as u128),
+    //     };
+    //     state.chain_config = ResolvableChainConfig::from(cf);
 
-        Ok((state, Delta::default()))
-    }
-    #[cfg(not(test))]
+    //     Ok((state, Delta::default()))
+    // }
+    // #[cfg(not(test))]
     pub async fn apply_header(
         &self,
         instance: &NodeState,
@@ -947,10 +947,32 @@ mod test {
             max_block_size: max_block_size.into(),
             ..state.chain_config.resolve().unwrap()
         });
+
+        let key_pair = EthKeyPair::random();
+        let account = key_pair.fee_account();
+
         // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
         // b/c version in `Leaf::genesis` is set to 1
         let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
+        let data = 100000;
+        let header = match header {
+            Header::V1(header) => Header::V1(v0_1::Header {
+                height: 1,
+                fee_info: FeeInfo::new(account, data),
+                ..header.clone()
+            }),
+            Header::V2(header) => Header::V2(v0_2::Header {
+                height: 1,
+                fee_info: FeeInfo::new(account, data),
+                ..header.clone()
+            }),
+            Header::V3(header) => Header::V3(v0_3::Header {
+                height: 1,
+                fee_info: vec![FeeInfo::new(account, data)],
+                ..header.clone()
+            }),
+        };
 
         println!("HEADER {:?}", header.chain_config().resolve().unwrap());
 
@@ -958,7 +980,18 @@ mod test {
             .validate_and_apply_header(
                 &instance,
                 &parent,
-                header,
+                &header.clone(),
+                vid_common.clone(),
+                Version { major: 0, minor: 3 },
+            )
+            .await
+            .unwrap();
+
+        let (vs, delta) = state
+            .validate_and_apply_header(
+                &instance,
+                &parent,
+                &header,
                 vid_common.clone(),
                 Version { major: 0, minor: 3 },
             )

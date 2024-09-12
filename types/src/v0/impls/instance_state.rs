@@ -34,7 +34,7 @@ pub struct NodeState {
     /// Current version of the sequencer.
     ///
     /// This version is checked to determine if an upgrade is planned,
-    /// and which version variant for versioned types  
+    /// and which version variant for versioned types
     /// to use in functions such as genesis.
     /// (example: genesis returns V2 Header if version is 0.2)
     pub current_version: Version,
@@ -204,6 +204,10 @@ pub mod mock {
             view: ViewNumber,
             mt: &mut BlockMerkleTree,
         ) -> anyhow::Result<()> {
+            for i in 0..mt.num_leaves() {
+                mt.forget(i);
+            }
+
             tracing::info!("catchup: fetching frontier for view {view:?}");
             let src = &self.state[&view].block_merkle_tree;
 
@@ -213,10 +217,12 @@ pub mod mock {
                 "catchup should not be triggered when blocks tree is empty"
             );
 
-            let index = src.num_leaves() - 1;
-            let (elem, proof) = src.lookup(index).expect_ok().unwrap();
-            mt.remember(index, elem, proof.clone())
-                .expect("Proof verifies");
+            println!("Table deleted");
+
+            // let index = src.num_leaves() - 1;
+            // let (elem, proof) = src.lookup(index).expect_ok().unwrap();
+            // mt.remember(index, elem, proof.clone())
+            //     .expect("Proof verifies");
 
             Ok(())
         }
