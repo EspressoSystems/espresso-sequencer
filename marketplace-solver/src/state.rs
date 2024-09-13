@@ -249,7 +249,7 @@ impl UpdateSolverState for GlobalState {
         let db = self.database();
 
         let rows: Vec<RollupRegistrationResult> =
-            sqlx::query_as("SELECT * from rollup_registrations;")
+            sqlx::query_as("SELECT * from rollup_registrations ORDER BY namespace_id;")
                 .fetch_all(db)
                 .await
                 .map_err(SolverError::from)?;
