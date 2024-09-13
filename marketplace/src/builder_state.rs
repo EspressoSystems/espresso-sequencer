@@ -980,6 +980,7 @@ mod test {
     use rkyv::collections::ArchivedHashMap;
 
     use crate::service::{broadcast_channels, GlobalState};
+    use crate::utils::BuilderStateId;
 
     use super::BuilderState;
     use super::BuiltFromProposedBlock;
@@ -1069,6 +1070,8 @@ mod test {
             sender: leader_public_key,
             builder_commitment: block_builder_commitment.clone(),
         });
+
+        // sub-test one
         // call process_da_proposal without matching quorum proposal message
         // da_proposal_payload_commit_to_da_proposal should insert the message
         let da_msg = MessageType::DaProposalMessage(Arc::clone(&da_proposal));
@@ -1097,7 +1100,6 @@ mod test {
         );
         let deserialized_map: HashMap<_, _> =
             builder_state.da_proposal_payload_commit_to_da_proposal;
-        // assert_eq!(deserialized_map, correct_da_proposal_payload_commit_to_da_proposal);
         for (key, value) in deserialized_map.iter() {
             let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
             assert_eq!(
@@ -1109,10 +1111,26 @@ mod test {
                     .clone()
             );
         }
+        // check global_state didn't change
+        let builder_state_id = BuilderStateId {
+            parent_commitment: block_vid_commitment,
+            parent_view: ViewNumber::new(0),
+        };
+        if let Some(_x) = global_state
+            .read_arc()
+            .await
+            .spawned_builder_states
+            .get(&builder_state_id) {
+                panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+        }
 
+        
+        // sub-test two
         // call process_da_proposal with the same msg again
         // we should skip the process and everything should be the same
 
+
+        // sub-test three
         // add the matching quorum proposal message with different tx
         // and call process_da_proposal with this matching da proposal message and quorum proposal message
         // we should spawn_clone here
