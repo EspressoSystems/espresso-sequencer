@@ -8,12 +8,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+use committable::Commitment;
 use either::Either::{self, Left, Right};
 use futures::{FutureExt, Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_events_service::events::Error as EventStreamError;
 use hotshot_types::{
-    traits::node_implementation::NodeType, utils::BuilderCommitment, vid::VidCommitment,
+    data::Leaf, traits::node_implementation::NodeType, utils::BuilderCommitment, vid::VidCommitment,
 };
 use surf_disco::Client;
 use tracing::error;
@@ -120,6 +121,15 @@ impl<TYPES: NodeType> std::fmt::Display for BuilderStateId<TYPES> {
             self.parent_commitment, *self.parent_view
         )
     }
+}
+
+/// Builder State to hold the state of the builder
+#[derive(Debug, Clone)]
+pub struct BuiltFromProposedBlock<TYPES: NodeType> {
+    pub view_number: TYPES::Time,
+    pub vid_commitment: VidCommitment,
+    pub leaf_commit: Commitment<Leaf<TYPES>>,
+    pub builder_commitment: BuilderCommitment,
 }
 
 type EventServiceConnection<TYPES, V> = surf_disco::socket::Connection<

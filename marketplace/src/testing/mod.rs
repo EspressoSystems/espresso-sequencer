@@ -34,8 +34,8 @@ use hotshot_example_types::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::builder_state::BuiltFromProposedBlock;
 use crate::service::{broadcast_channels, GlobalState};
+use crate::utils::BuiltFromProposedBlock;
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use std::sync::Arc;
@@ -171,7 +171,7 @@ async fn calc_proposal_msg(
             SimpleCertificate::<TestTypes, QuorumData<TestTypes>, SuccessThreshold>::new(
                 quorum_data.clone(),
                 quorum_data.commit(),
-                ViewNumber::new(round as u64),
+                prev_proposal.view_number,
                 prev_justify_qc.signatures.clone(),
                 PhantomData,
             )
