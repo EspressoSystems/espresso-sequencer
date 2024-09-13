@@ -39,14 +39,14 @@ anvil *args:
 
 test:
 	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
+	cargo nextest run --locked --release --workspace --all-features --verbose 
 
 test-slow:
 	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)'
+	cargo nextest run --locked --release --workspace --all-features --verbose --profile slow
 
 test-all:
-	cargo nextest run --locked --release --workspace --all-features --verbose
+	cargo nextest run --locked --release --workspace --all-features --verbose --profile all
 
 clippy:
     cargo clippy --workspace --all-features --all-targets -- -D warnings

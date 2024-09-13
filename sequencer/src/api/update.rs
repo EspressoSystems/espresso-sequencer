@@ -1,53 +1,50 @@
 //! Update loop for query API state.
 
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use espresso_types::{v0::traits::SequencerPersistence, PubKey};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
-use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
+use hotshot_query_service::data_source::{Transaction, UpdateDataSource, VersionedDataSource};
 use hotshot_types::traits::{network::ConnectedNetwork, node_implementation::Versions};
 
 use super::{data_source::SequencerDataSource, StorageState};
 use crate::SeqTypes;
 
 pub(super) async fn update_loop<N, P, D, V: Versions>(
-    state: Arc<RwLock<StorageState<N, P, D, V>>>,
+    state: Arc<StorageState<N, P, D, V>>,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
 ) where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     D: SequencerDataSource + Send + Sync,
+    for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
 {
     tracing::debug!("waiting for event");
     while let Some(event) = events.next().await {
-        let mut state = state.write().await;
-
-        // If update results in an error, revert to undo partial state changes. We will continue
-        // streaming events, as we can update our state based on future events and then filling in
-        // the missing part of the state later, by fetching from a peer.
-        if let Err(err) = update_state(&mut *state, &event).await {
+        if let Err(err) = update_state(&state, &event).await {
             tracing::error!(
                 ?event,
                 %err,
                 "failed to update API state",
             );
-            state.revert().await;
         }
     }
     tracing::warn!("end of HotShot event stream, updater task will exit");
 }
 
 async fn update_state<N, P, D, V: Versions>(
-    state: &mut StorageState<N, P, D, V>,
+    state: &StorageState<N, P, D, V>,
     event: &Event<SeqTypes>,
 ) -> anyhow::Result<()>
 where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     D: SequencerDataSource + Send + Sync,
+    for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
 {
-    state.update(event).await?;
-    state.commit().await?;
+    let mut tx = state.write().await?;
+    tx.update(event).await?;
+    tx.commit().await?;
 
     Ok(())
 }
