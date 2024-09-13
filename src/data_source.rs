@@ -453,6 +453,7 @@ pub mod persistence_tests {
             mocks::{MockPayload, MockTypes},
             setup_test,
         },
+        types::HeightIndexed,
         Leaf,
     };
     use committable::Committable;
@@ -589,6 +590,85 @@ pub mod persistence_tests {
         );
         ds.get_leaf(1).await.try_resolve().unwrap_err();
         ds.get_block(1).await.try_resolve().unwrap_err();
+    }
+
+    #[async_std::test]
+    pub async fn test_drop_tx<D: TestableDataSource>()
+    where
+        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>
+            + NodeDataSource<MockTypes>
+            + AvailabilityStorage<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+    {
+        setup_test();
+
+        let storage = D::create(0).await;
+        let ds = D::connect(&storage).await;
+
+        // Mock up some consensus data.
+        let mut mock_qc = QuorumCertificate::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+        )
+        .await;
+        let mut mock_leaf = Leaf::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+        )
+        .await;
+        // Increment the block number, to distinguish this block from the genesis block, which
+        // already exists.
+        mock_leaf.block_header_mut().block_number += 1;
+        mock_qc.data.leaf_commit = mock_leaf.commit();
+
+        let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
+        let leaf = LeafQueryData::new(mock_leaf.clone(), mock_qc.clone()).unwrap();
+
+        // Insert, but do not commit, some data and check that we can read it back.
+        tracing::info!("write");
+        let mut tx = ds.write().await.unwrap();
+        tx.insert_leaf(leaf.clone()).await.unwrap();
+        tx.insert_block(block.clone()).await.unwrap();
+
+        assert_eq!(tx.block_height().await.unwrap(), 2);
+        assert_eq!(leaf, tx.get_leaf(1.into()).await.unwrap());
+        assert_eq!(block, tx.get_block(1.into()).await.unwrap());
+
+        // Drop the transaction, causing a revert.
+        drop(tx);
+
+        // Open a new transaction and check that the changes are reverted.
+        tracing::info!("read");
+        let tx = ds.read().await.unwrap();
+        assert_eq!(tx.block_height().await.unwrap(), 0);
+        drop(tx);
+
+        // Get a mutable transaction again, insert different data.
+        mock_leaf.block_header_mut().block_number += 1;
+        mock_qc.data.leaf_commit = mock_leaf.commit();
+        let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
+        let leaf = LeafQueryData::new(mock_leaf, mock_qc).unwrap();
+
+        tracing::info!("write again");
+        let mut tx = ds.write().await.unwrap();
+        tx.insert_leaf(leaf.clone()).await.unwrap();
+        tx.insert_block(block.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Read the data back. We should have _only_ the data that was written in the final
+        // transaction.
+        tracing::info!("read again");
+        let height = leaf.height() as usize;
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            height + 1
+        );
+        assert_eq!(leaf, ds.get_leaf(height).await.await);
+        assert_eq!(block, ds.get_block(height).await.await);
+        ds.get_leaf(height - 1).await.try_resolve().unwrap_err();
+        ds.get_block(height - 1).await.try_resolve().unwrap_err();
     }
 }
 

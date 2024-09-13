@@ -270,9 +270,41 @@ where
     }
 }
 
+pub trait Revert {
+    fn revert(&mut self);
+}
+
+impl<'a, Types> Revert for RwLockWriteGuard<'a, FileSystemStorageInner<Types>>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    fn revert(&mut self) {
+        self.leaf_storage.revert_version().unwrap();
+        self.block_storage.revert_version().unwrap();
+        self.vid_storage.revert_version().unwrap();
+    }
+}
+
+impl<'a, Types> Revert for RwLockReadGuard<'a, FileSystemStorageInner<Types>>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    fn revert(&mut self) {
+        // Nothing to revert for a read-only transaction.
+    }
+}
+
 #[derive(Debug)]
-pub struct Transaction<T> {
+pub struct Transaction<T: Revert> {
     inner: T,
+}
+
+impl<T: Revert> Drop for Transaction<T> {
+    fn drop(&mut self) {
+        self.inner.revert();
+    }
 }
 
 impl<'a, Types> update::Transaction
@@ -291,12 +323,9 @@ where
         Ok(())
     }
 
-    fn revert(mut self) -> impl Future + Send {
-        async move {
-            self.inner.leaf_storage.revert_version().unwrap();
-            self.inner.block_storage.revert_version().unwrap();
-            self.inner.vid_storage.revert_version().unwrap();
-        }
+    fn revert(self) -> impl Future + Send {
+        // The revert is handled when `self` is dropped.
+        async move {}
     }
 }
 
@@ -312,8 +341,8 @@ where
     }
 
     fn revert(self) -> impl Future + Send {
-        // Nothing to revert for a read-only transaction.
-        async {}
+        // The revert is handled when `self` is dropped.
+        async move {}
     }
 }
 
@@ -388,7 +417,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    T: Deref<Target = FileSystemStorageInner<Types>> + Send + Sync,
+    T: Revert + Deref<Target = FileSystemStorageInner<Types>> + Send + Sync,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let n = match id {
@@ -581,7 +610,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    T: Deref<Target = FileSystemStorageInner<Types>> + Sync,
+    T: Revert + Deref<Target = FileSystemStorageInner<Types>> + Sync,
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(self.inner.leaf_storage.iter().len())
@@ -680,4 +709,4 @@ where
     }
 }
 
-impl<T> PrunedHeightStorage for Transaction<T> {}
+impl<T: Revert> PrunedHeightStorage for Transaction<T> {}
