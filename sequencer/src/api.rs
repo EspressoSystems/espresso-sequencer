@@ -543,7 +543,7 @@ pub mod test_helpers {
             {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.marketplace_builder_port(),
-                    NodeState::default(),
+                    NodeState::default().with_current_version(V::Base::VERSION),
                     cfg.state[0].clone(),
                 )
                 .await;

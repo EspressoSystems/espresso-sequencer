@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions};
+use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions, V0_1};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -188,11 +188,8 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(
-        config,
-        SequencerVersions::<SequencerApiVersion, MarketplaceVersion>::new(),
-    )
-    .await;
+    let network =
+        TestNetwork::new(config, SequencerVersions::<MarketplaceVersion, V0_1>::new()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();

@@ -503,7 +503,7 @@ pub mod testing {
         instance_state: NodeState,
         validated_state: ValidatedState,
     ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let builder_key_pair = EthKeyPair::random();
+        let builder_key_pair = TestConfig::<0>::builder_key();
         let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
 
         // This should never fail.
