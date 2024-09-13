@@ -48,6 +48,8 @@ esac
 # Compile binaries
 case $KERNEL in
   linux)
+    CARGO_TARGET_DIR=target
+    CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
     cargo build --release
     ;;
   darwin)
@@ -108,21 +110,21 @@ mkdir -p ${WORKDIR}/scripts
 cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}/scripts
 
 export DOCKER_BUILDKIT=1
-docker build --platform $PLATFORM -t orchestrator:evil -f docker/orchestrator.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t cdn-broker:evil -f docker/cdn-broker.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t cdn-marshal:evil -f docker/cdn-marshal.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t cdn-whitelist:evil -f docker/cdn-whitelist.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t state-relay-server:evil -f docker/state-relay-server.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t prover-service:evil -f docker/prover-service.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t orchestrator:evil -f docker/orchestrator.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t cdn-broker:evil -f docker/cdn-broker.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t cdn-marshal:evil -f docker/cdn-marshal.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t cdn-whitelist:evil -f docker/cdn-whitelist.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t state-relay-server:evil -f docker/state-relay-server.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t prover-service:evil -f docker/prover-service.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t sequencer:evil -f docker/sequencer.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t commitment-task:evil -f docker/commitment-task.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t submit-transactions:evil -f docker/submit-transactions.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t deploy:evil -f docker/deploy.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t builder:evil -f docker/permissionless-builder.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t nasty-client:evil -f docker/nasty-client.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t espresso-dev-node:evil -f docker/espresso-dev-node.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t bridge:evil -f docker/espresso-bridge.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t marketplace-solver:evil -f docker/marketplace-solver.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t marketplace-builder:evil -f docker/marketplace-builder.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t node-validator:evil -f docker/node-validator.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t dev-rollup:evil -f docker/dev-rollup.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t commitment-task:evil -f docker/commitment-task.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t submit-transactions:evil -f docker/submit-transactions.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t deploy:evil -f docker/deploy.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t builder:evil -f docker/permissionless-builder.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t nasty-client:evil -f docker/nasty-client.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t espresso-dev-node:evil -f docker/espresso-dev-node.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t bridge:evil -f docker/espresso-bridge.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t marketplace-solver:evil -f docker/marketplace-solver.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t marketplace-builder:evil -f docker/marketplace-builder.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t node-validator:evil -f docker/node-validator.Dockerfile ${WORKDIR}
+# docker build --platform $PLATFORM -t dev-rollup:evil -f docker/dev-rollup.Dockerfile ${WORKDIR}

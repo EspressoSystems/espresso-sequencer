@@ -374,7 +374,7 @@ services:
         condition: service_completed_successfully
 
   sequencer3:
-    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
+    image: sequencer:evil
     ports:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- http -- catchup -- status
