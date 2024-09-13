@@ -3,11 +3,11 @@ use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccountProof, FeeMerkleTree};
 use ethers::prelude::Address;
-use futures::FutureExt;
 use hotshot_query_service::{
     data_source::{
-        sql::{Config, Query, SqlDataSource},
+        sql::{Config, SqlDataSource, Transaction},
         storage::SqlStorage,
+        VersionedDataSource,
     },
     merklized_state::{MerklizedStateDataSource, Snapshot},
     Resolvable,
@@ -21,7 +21,7 @@ use super::{
 };
 use crate::{
     persistence::{
-        sql::{sql_param, transaction, Options},
+        sql::{sql_param, Options},
         ChainConfigPersistence,
     },
     SeqTypes,
@@ -67,6 +67,11 @@ impl CatchupDataSource for SqlStorage {
         account: Address,
     ) -> anyhow::Result<AccountQueryData> {
         let proof = self
+            .read()
+            .await
+            .context(format!(
+                "opening transaction to fetch account {account}; height {height}"
+            ))?
             .get_path(
                 Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(height),
                 account.into(),
@@ -93,66 +98,29 @@ impl CatchupDataSource for SqlStorage {
     }
 
     async fn get_frontier(&self, height: u64, _view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        self.get_path(
-            Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
-            height - 1,
-        )
-        .await
-        .context(format!("fetching frontier at height {height}"))
+        self.read()
+            .await
+            .context(format!(
+                "opening transaction to fetch frontier at height {height}"
+            ))?
+            .get_path(
+                Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
+                height - 1,
+            )
+            .await
+            .context(format!("fetching frontier at height {height}"))
     }
 
     async fn get_chain_config(
         &self,
-        commitment: committable::Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        self.load_chain_config(commitment).await
-    }
-}
-
-impl CatchupDataSource for DataSource {
-    async fn get_account(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
-        (*self.storage().await)
-            .get_account(height, view, account)
-            .await
-    }
-
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        self.storage().await.get_frontier(height, view).await
-    }
-}
-
-#[async_trait]
-impl ChainConfigPersistence for SqlStorage {
-    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
-        let commitment = chain_config.commitment();
-        let data = bincode::serialize(&chain_config)?;
-
-        transaction(self, |mut tx| {
-            async move {
-                tx.upsert(
-                    "chain_config",
-                    ["commitment", "data"],
-                    ["commitment"],
-                    [[sql_param(&(commitment.to_string())), sql_param(&data)]],
-                )
-                .await
-                .map_err(Into::into)
-            }
-            .boxed()
-        })
-        .await
-    }
-
-    async fn load_chain_config(
-        &self,
-        commitment: committable::Commitment<ChainConfig>,
+        commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         let query = self
+            .read()
+            .await
+            .context(format!(
+                "opening transaction to fetch chain config {commitment}"
+            ))?
             .query_one(
                 "SELECT * from chain_config where commitment = $1",
                 [&commitment.to_string()],
@@ -165,19 +133,34 @@ impl ChainConfigPersistence for SqlStorage {
     }
 }
 
-#[async_trait]
-impl ChainConfigPersistence for DataSource {
-    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
-        (*self.storage_mut().await)
-            .insert_chain_config(chain_config)
-            .await
+impl CatchupDataSource for DataSource {
+    async fn get_account(
+        &self,
+        height: u64,
+        view: ViewNumber,
+        account: Address,
+    ) -> anyhow::Result<AccountQueryData> {
+        self.as_ref().get_account(height, view, account).await
     }
 
-    async fn load_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        self.storage().await.load_chain_config(commitment).await
+    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+        self.as_ref().get_frontier(height, view).await
+    }
+}
+
+#[async_trait]
+impl<'a> ChainConfigPersistence for Transaction<'a> {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        let commitment = chain_config.commitment();
+        let data = bincode::serialize(&chain_config)?;
+        self.upsert(
+            "chain_config",
+            ["commitment", "data"],
+            ["commitment"],
+            [[sql_param(&(commitment.to_string())), sql_param(&data)]],
+        )
+        .await
+        .map_err(Into::into)
     }
 }
 

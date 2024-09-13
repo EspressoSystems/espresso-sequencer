@@ -1,10 +1,7 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Context;
-use async_std::{
-    stream::StreamExt,
-    sync::{Arc, RwLock},
-};
+use async_std::{stream::StreamExt, sync::Arc};
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
@@ -13,13 +10,12 @@ use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, NetworkConfig,
 };
-use futures::future::{BoxFuture, FutureExt};
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, postgres::types::ToSql, Config, Query, SqlStorage, Transaction},
+        sql::{include_migrations, postgres::types::ToSql, Config, SqlStorage},
     },
-    VersionedDataSource,
+    Transaction, VersionedDataSource,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
@@ -255,40 +251,13 @@ pub struct Persistence {
     store_undecided_state: bool,
 }
 
-pub(crate) async fn transaction(
-    sql: &mut SqlStorage,
-    f: impl FnOnce(Transaction) -> BoxFuture<anyhow::Result<()>>,
-) -> anyhow::Result<()> {
-    let tx = sql.transaction().await?;
-    match f(tx).await {
-        Ok(_) => {
-            if let Err(err) = sql.commit().await {
-                tracing::warn!("transaction failed, reverting: {err:#}");
-                sql.revert().await;
-
-                return Err(err.into());
-            }
-
-            Ok(())
-        }
-        Err(err) => {
-            tracing::warn!("transaction failed, reverting: {err:#}");
-            sql.revert().await;
-            Err(err)
-        }
-    }
-}
-
 #[async_trait]
 impl SequencerPersistence for Persistence {
     fn into_catchup_provider(
         self,
         backoff: BackoffParams,
     ) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        Ok(Arc::new(SqlStateCatchup::new(
-            Arc::new(RwLock::new(self.db)),
-            backoff,
-        )))
+        Ok(Arc::new(SqlStateCatchup::new(Arc::new(self.db), backoff)))
     }
 
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
@@ -297,6 +266,8 @@ impl SequencerPersistence for Persistence {
         // Select the most recent config (although there should only be one).
         let Some(row) = self
             .db
+            .read()
+            .await?
             .query_opt_static("SELECT config FROM network_config ORDER BY id DESC LIMIT 1")
             .await?
         else {
@@ -307,44 +278,33 @@ impl SequencerPersistence for Persistence {
         Ok(serde_json::from_value(config)?)
     }
 
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
         tracing::info!("saving config to Postgres");
         let json = serde_json::to_value(cfg)?;
 
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                tx.execute_one_with_retries(
-                    "INSERT INTO network_config (config) VALUES ($1)",
-                    [&json],
-                )
-                .await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let mut tx = self.db.write().await?;
+        tx.execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", [&json])
+            .await?;
+        tx.commit().await
     }
 
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                let stmt1 = "DELETE FROM vid_share where view <= $1";
-                tx.execute(stmt1, [&(view.u64() as i64)]).await?;
+    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
+        let mut tx = self.db.write().await?;
 
-                let stmt2 = "DELETE FROM da_proposal where view <= $1";
-                tx.execute(stmt2, [&(view.u64() as i64)]).await?;
+        let stmt1 = "DELETE FROM vid_share where view <= $1";
+        tx.execute(stmt1, [&(view.u64() as i64)]).await?;
 
-                let stmt3 = "DELETE FROM quorum_proposals where view <= $1";
-                tx.execute(stmt3, [&(view.u64() as i64)]).await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let stmt2 = "DELETE FROM da_proposal where view <= $1";
+        tx.execute(stmt2, [&(view.u64() as i64)]).await?;
+
+        let stmt3 = "DELETE FROM quorum_proposals where view <= $1";
+        tx.execute(stmt3, [&(view.u64() as i64)]).await?;
+
+        tx.commit().await
     }
 
     async fn save_anchor_leaf(
-        &mut self,
+        &self,
         leaf: &Leaf,
         qc: &QuorumCertificate<SeqTypes>,
     ) -> anyhow::Result<()> {
@@ -372,28 +332,25 @@ impl SequencerPersistence for Persistence {
         let leaf_bytes = bincode::serialize(leaf)?;
         let qc_bytes = bincode::serialize(qc)?;
 
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                tx.execute_one_with_retries(
-                    stmt,
-                    [
-                        sql_param(&height),
-                        sql_param(&view),
-                        sql_param(&leaf_bytes),
-                        sql_param(&qc_bytes),
-                    ],
-                )
-                .await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let mut tx = self.db.write().await?;
+        tx.execute_one_with_retries(
+            stmt,
+            [
+                sql_param(&height),
+                sql_param(&view),
+                sql_param(&leaf_bytes),
+                sql_param(&qc_bytes),
+            ],
+        )
+        .await?;
+        tx.commit().await
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
         Ok(self
             .db
+            .read()
+            .await?
             .query_opt_static("SELECT view FROM highest_voted_view WHERE id = 0")
             .await?
             .map(|row| {
@@ -407,6 +364,8 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
         let Some(row) = self
             .db
+            .read()
+            .await?
             .query_opt_static("SELECT leaf, qc FROM anchor_leaf WHERE id = 0")
             .await?
         else {
@@ -427,6 +386,8 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
         let Some(row) = self
             .db
+            .read()
+            .await?
             .query_opt_static("SELECT leaves, state FROM undecided_state WHERE id = 0")
             .await?
         else {
@@ -448,6 +409,8 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         let result = self
             .db
+            .read()
+            .await?
             .query_opt(
                 "SELECT data FROM da_proposal where view = $1",
                 [&(view.u64() as i64)],
@@ -468,6 +431,8 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let result = self
             .db
+            .read()
+            .await?
             .query_opt(
                 "SELECT data FROM vid_share where view = $1",
                 [&(view.u64() as i64)],
@@ -488,6 +453,8 @@ impl SequencerPersistence for Persistence {
     {
         let rows = self
             .db
+            .read()
+            .await?
             .query_static("SELECT * FROM quorum_proposals")
             .await?;
 
@@ -507,56 +474,42 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn append_vid(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                tx.upsert(
-                    "vid_share",
-                    ["view", "data"],
-                    ["view"],
-                    [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
-                )
-                .await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "vid_share",
+            ["view", "data"],
+            ["view"],
+            [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
+        )
+        .await?;
+        tx.commit().await
     }
     async fn append_da(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                tx.upsert(
-                    "da_proposal",
-                    ["view", "data"],
-                    ["view"],
-                    [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
-                )
-                .await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "da_proposal",
+            ["view", "data"],
+            ["view"],
+            [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
+        )
+        .await?;
+        tx.commit().await
     }
-    async fn record_action(
-        &mut self,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -> anyhow::Result<()> {
+    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
@@ -565,18 +518,13 @@ impl SequencerPersistence for Persistence {
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
 
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                tx.execute_one_with_retries(stmt, [view.u64() as i64])
-                    .await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let mut tx = self.db.write().await?;
+        tx.execute_one_with_retries(stmt, [view.u64() as i64])
+            .await?;
+        tx.commit().await
     }
     async fn update_undecided_state(
-        &mut self,
+        &self,
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
@@ -587,45 +535,35 @@ impl SequencerPersistence for Persistence {
         let leaves_bytes = bincode::serialize(&leaves).context("serializing leaves")?;
         let state_bytes = bincode::serialize(&state).context("serializing state")?;
 
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                tx.upsert(
-                    "undecided_state",
-                    ["id", "leaves", "state"],
-                    ["id"],
-                    [[
-                        sql_param(&0i32),
-                        sql_param(&leaves_bytes),
-                        sql_param(&state_bytes),
-                    ]],
-                )
-                .await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "undecided_state",
+            ["id", "leaves", "state"],
+            ["id"],
+            [[
+                sql_param(&0i32),
+                sql_param(&leaves_bytes),
+                sql_param(&state_bytes),
+            ]],
+        )
+        .await?;
+        tx.commit().await
     }
     async fn append_quorum_proposal(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
-        transaction(&mut self.db, |mut tx| {
-            async move {
-                tx.upsert(
-                    "quorum_proposals",
-                    ["view", "data"],
-                    ["view"],
-                    [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
-                )
-                .await?;
-                Ok(())
-            }
-            .boxed()
-        })
-        .await
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "quorum_proposals",
+            ["view", "data"],
+            ["view"],
+            [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
+        )
+        .await?;
+        tx.commit().await
     }
 }
 

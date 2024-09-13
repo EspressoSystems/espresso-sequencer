@@ -15,7 +15,7 @@ use hotshot_orchestrator::config::{
 };
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::{MetricsDataSource, UpdateDataSource, VersionedDataSource},
+    data_source::{MetricsDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
@@ -71,7 +71,6 @@ pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + NodeDataSource<SeqTypes>
     + StatusDataSource
-    + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {

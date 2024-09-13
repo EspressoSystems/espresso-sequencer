@@ -548,8 +548,7 @@ mod tests {
 
         let api_port = pick_unused_port().unwrap();
 
-        // let dev_node_port = pick_unused_port().unwrap();
-        let dev_node_port = 20000;
+        let dev_node_port = pick_unused_port().unwrap();
 
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
@@ -582,7 +581,6 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        tracing::info!("connectingmmmmmmmm");
         let api_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
@@ -631,7 +629,6 @@ mod tests {
             ))
             .send()
             .await;
-        tracing::warn!("waiting for tx???????");
         while tx_result.is_err() {
             sleep(Duration::from_secs(1)).await;
             tracing::warn!("waiting for tx");
