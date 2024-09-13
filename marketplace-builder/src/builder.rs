@@ -633,7 +633,7 @@ mod test {
             }
         } else {
             let mut events = submit_transactions_via_private_mempool(transactions, urls).await;
-                task::sleep(std::time::Duration::from_millis(1000)).await;
+            task::sleep(std::time::Duration::from_millis(1000)).await;
 
             let start = Instant::now();
             loop {
