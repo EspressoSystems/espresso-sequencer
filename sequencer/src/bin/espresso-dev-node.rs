@@ -551,8 +551,7 @@ mod tests {
 
         let api_port = pick_unused_port().unwrap();
 
-        // let dev_node_port = pick_unused_port().unwrap();
-        let dev_node_port = 20000;
+        let dev_node_port = pick_unused_port().unwrap();
 
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
@@ -585,7 +584,6 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        tracing::info!("connectingmmmmmmmm");
         let api_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
@@ -604,14 +602,6 @@ mod tests {
         let builder_api_client: Client<ServerError, StaticVersion<0, 1>> =
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
-
-        // let builder_address = builder_api_client
-        //     .get::<String>("block_info/builderaddress")
-        //     .send()
-        //     .await
-        //     .unwrap();
-
-        // assert!(!builder_address.is_empty());
 
         let tx = Transaction::new(100_u32.into(), vec![1, 2, 3]);
 
@@ -632,7 +622,6 @@ mod tests {
             ))
             .send()
             .await;
-        tracing::warn!("waiting for tx???????");
         while tx_result.is_err() {
             sleep(Duration::from_secs(1)).await;
             tracing::warn!("waiting for tx");
