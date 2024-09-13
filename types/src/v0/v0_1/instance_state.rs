@@ -11,6 +11,17 @@ pub enum UpgradeType {
     Marketplace { chain_config: ChainConfig },
 }
 
+impl UpgradeType {
+    /// Get the upgrade data from `UpgradeType`. As of this writing,
+    /// we are only concerned w/ `ChainConfig`.
+    pub fn data(&self) -> ChainConfig {
+        match self {
+            UpgradeType::Fee { chain_config } => *chain_config,
+            UpgradeType::Marketplace { chain_config } => *chain_config,
+        }
+    }
+}
+
 /// Represents an upgrade based on time (unix timestamp).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct TimeBasedUpgrade {

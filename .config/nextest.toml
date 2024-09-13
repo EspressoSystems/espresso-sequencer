@@ -1,0 +1,10 @@
+[profile.default]
+slow-timeout = "2m"
+default-filter = 'not test(slow_)'
+retries = 2
+
+[profile.slow]
+default-filter = 'test(slow_)'
+
+[profile.all]
+default-filter = 'all()'
