@@ -15,7 +15,7 @@ timestamp = "1970-01-01T00:00:00Z"
 
 [[upgrade]]
 version = "0.2"
-start_proposing_time = "2024-09-18T15:00:00Z"
+start_proposing_time = "2024-09-17T16:00:00Z"
 stop_proposing_time = "2024-09-19T15:00:00Z"
 
 [upgrade.fee]
