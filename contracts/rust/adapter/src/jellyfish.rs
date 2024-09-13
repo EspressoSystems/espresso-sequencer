@@ -176,7 +176,7 @@ impl From<VerifyingKey<Bn254>> for ParsedVerifyingKey {
         // ```rust
         // let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(6) as usize + 2).expect("Aztec SRS fail to load");
         // println!("{}", hex::encode(jf_utils::to_bytes!(&srs.beta_h).unwrap()));
-        // ````
+        // ```
         assert_eq!(
             g2_lsb.encode_hex::<String>(),
             String::from("b0838893ec1f237e8b07323b0744599f4e97b598b3b589bcc2bc37b8d5c41801")
