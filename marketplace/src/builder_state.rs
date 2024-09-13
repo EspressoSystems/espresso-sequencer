@@ -47,7 +47,7 @@ pub struct DecideMessage<TYPES: NodeType> {
     pub latest_decide_view_number: TYPES::Time,
 }
 /// DA Proposal Message to be put on the da proposal channel
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DaProposalMessage<TYPES: NodeType> {
     pub view_number: TYPES::Time,
     pub txn_commitments: Vec<Commitment<TYPES::Transaction>>,
@@ -746,21 +746,147 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use hotshot::types::BLSPubKey;
-//     use hotshot_types::traits::signature_key::BuilderSignatureKey;
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::time::Duration;
 
-//     use super::DaProposalMessage;
+    use async_broadcast::broadcast;
+    use async_lock::RwLock;
+    use committable::{Commitment, CommitmentBoundsArkless, Committable};
+    use hotshot::traits::BlockPayload;
+    use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_example_types::block_types::{TestBlockPayload, TestMetadata};
+    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
+    use hotshot_example_types::{block_types::TestTransaction, node_types::TestTypes};
+    use hotshot_task_impls::transactions;
+    use hotshot_types::data::Leaf;
+    use hotshot_types::traits::block_contents::vid_commitment;
+    use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
+    use hotshot_types::utils::BuilderCommitment;
+    use hotshot_types::{data::ViewNumber, traits::signature_key::BuilderSignatureKey};
+    use rkyv::collections::ArchivedHashMap;
 
-//     /// This test checkes da_proposal_payload_commit_to_da_proposal and
-//     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
-//     /// when receiving a da message.
-//     /// This test also checks whether corresponding BuilderStateId is in global_state
-//     #[async_std::test]
-//     async fn test_process_da_proposal() {
-//         let (_sender_public_key, _sender_private_key) =
-//             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+    use crate::service::{broadcast_channels, GlobalState};
+
+    use super::MessageType;
+    use super::DaProposalMessage;
+    use super::BuiltFromProposedBlock;
+    use super::BuilderState;
+    use rkyv::{Deserialize, Infallible};
+
+    /// This test checkes da_proposal_payload_commit_to_da_proposal and
+    /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
+    /// when receiving a da message.
+    /// This test also checks whether corresponding BuilderStateId is in global_state
+    #[async_std::test]
+    async fn test_process_da_proposal() {
+        async_compatibility_layer::logging::setup_logging();
+        async_compatibility_layer::logging::setup_backtrace();
+        tracing::info!("Testing the function `test_process_da_proposal` in `builder_state.rs`");
+
+        // Number of views to simulate
+        const NUM_ROUNDS: usize = 5;
+        // Number of transactions to submit per round
+        const NUM_TXNS_PER_ROUND: usize = 4;
+        // Capacity of broadcast channels
+        const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
+        // Number of nodes on DA committee
+        const NUM_STORAGE_NODES: usize = 4;
+
+        let (sender_public_key, sender_private_key) =
+            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
+
+        let (leader_public_key, leader_private_key) =
+            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
         
-//     }
-// }
+        let channel_capacity = CHANNEL_CAPACITY;
+        let num_storage_nodes = NUM_STORAGE_NODES;
+        // set up the broadcast channels
+        let (bootstrap_sender, bootstrap_receiver) =
+            broadcast::<MessageType<TestTypes>>(channel_capacity);
+        let (senders, receivers) = broadcast_channels(channel_capacity);
+
+        let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
+        let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
+        let built_from_info = BuiltFromProposedBlock {
+            view_number: ViewNumber::genesis(),
+            vid_commitment: genesis_vid_commitment,
+            leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
+            builder_commitment: genesis_builder_commitment,
+        };
+
+        // instantiate the global state
+        let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
+            bootstrap_sender,
+            senders.transactions.clone(),
+            genesis_vid_commitment,
+            ViewNumber::genesis(),
+        )));
+
+        // instantiate the bootstrap builder state
+        let mut builder_state = BuilderState::<TestTypes>::new(
+            built_from_info,
+            &receivers,
+            bootstrap_receiver,
+            Vec::new(),
+            Arc::clone(&global_state),
+            Duration::from_millis(10), // max time to wait for non-zero txn block
+            0,                         // base fee
+            Arc::new(TestInstanceState::default()),
+            Duration::from_secs(3600), // duration for txn garbage collection
+            Arc::new(TestValidatedState::default()),
+        );
+
+        // randomly generate a transaction
+        let transactions = vec![
+            TestTransaction::new(vec![1, 2, 3]); 3
+        ];
+
+        let txn_commitments = transactions.iter().map(Committable::commit).collect();
+        let encoded_transactions = TestTransaction::encode(&transactions);
+        let block_payload = TestBlockPayload { transactions };
+        let block_vid_commitment = vid_commitment(&encoded_transactions, num_storage_nodes);
+        let block_builder_commitment =
+            <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
+                &block_payload,
+                &TestMetadata,
+            );
+
+        let da_proposal = Arc::new(DaProposalMessage {
+            view_number: ViewNumber::new(0),
+            txn_commitments,
+            sender: leader_public_key,
+            builder_commitment: block_builder_commitment.clone(),
+        });
+        // call process_da_proposal without matching quorum proposal message
+        // da_proposal_payload_commit_to_da_proposal should insert the message
+        let da_msg = MessageType::DaProposalMessage(Arc::clone(&da_proposal));
+        let mut correct_da_proposal_payload_commit_to_da_proposal: HashMap<(BuilderCommitment, <TestTypes as NodeType>::Time), Arc<DaProposalMessage<TestTypes>>> = HashMap::new();
+        
+        if let MessageType::DaProposalMessage(practice_da_msg) = da_msg {
+            builder_state.process_da_proposal(practice_da_msg.clone()).await;
+            correct_da_proposal_payload_commit_to_da_proposal.insert((practice_da_msg.builder_commitment.clone(), practice_da_msg.view_number), practice_da_msg);
+        } else {
+            tracing::error!("Not a da_proposal_message in correct format");
+        }
+        tracing::debug!("da_proposal_payload_commit_to_da_proposal = {:?}", builder_state.da_proposal_payload_commit_to_da_proposal);
+        let deserialized_map: HashMap<_, _> = builder_state.da_proposal_payload_commit_to_da_proposal;
+        // assert_eq!(deserialized_map, correct_da_proposal_payload_commit_to_da_proposal);
+        for (key, value) in deserialized_map.iter() {
+            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
+            assert_eq!(value.as_ref().clone(), rkyv::option::ArchivedOption::Some(correct_value).unwrap().unwrap().as_ref().clone());
+        }
+        
+        // call process_da_proposal with the same msg again
+        // we should skip the process and everything should be the same
+
+
+        // add the matching quorum proposal message with different tx
+        // and call process_da_proposal with this matching da proposal message and quorum proposal message
+        // we should spawn_clone here
+        // and check whether global_state has correct BuilderStateId
+            
+    }
+}
