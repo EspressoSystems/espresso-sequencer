@@ -439,43 +439,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // To handle both cases, we can have the highest view number builder state running
         // and only doing the insertion if and only if intended builder state for a particular view is not present
         // check the presence of quorum_proposal.data.view_number-1 in the spawned_builder_states list
-        if qc_msg.proposal.data.justify_qc.view_number != self.built_from_proposed_block.view_number
-        {
-            tracing::debug!(
-                "View number {:?} from justify qc does not match for builder {:?}",
-                qc_msg.proposal.data.justify_qc.view_number,
-                self.built_from_proposed_block
-            );
-            if !self
-                .global_state
-                .read_arc()
-                .await
-                .should_view_handle_other_proposals(
-                    &self.built_from_proposed_block.view_number,
-                    &qc_msg.proposal.data.justify_qc.view_number,
-                )
-            {
-                tracing::debug!(
-                    "Builder {:?} is not currently bootstrapping.",
-                    self.built_from_proposed_block
-                );
-                // if we have the matching da proposal, we now know we don't need to keep it.
-                self.da_proposal_payload_commit_to_da_proposal.remove(&(
-                    qc_msg
-                        .proposal
-                        .data
-                        .block_header
-                        .builder_commitment()
-                        .clone(),
-                    qc_msg.proposal.data.view_number,
-                ));
-                return;
-            }
-            tracing::debug!(
-                "Builder {:?} handling proposal as bootstrap.",
-                self.built_from_proposed_block
-            );
-        }
         let quorum_proposal = &qc_msg.proposal;
         let view_number = quorum_proposal.data.view_number;
         let payload_builder_commitment = quorum_proposal.data.block_header.builder_commitment();
@@ -485,7 +448,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             payload_builder_commitment
         );
 
-        // first check whether vid_commitment exists in the qc_payload_commit_to_qc hashmap, if yes, ignore it, otherwise validate it and later insert in
+        // first check whether vid_commitment exists in the qc_payload_commit_to_qc hashmap, if yer, ignore it, otherwise validate it and later insert in
         if let std::collections::hash_map::Entry::Vacant(e) = self
             .quorum_proposal_payload_commit_to_quorum_proposal
             .entry((payload_builder_commitment.clone(), view_number))
@@ -1027,7 +990,7 @@ mod test {
     /// This test checkes da_proposal_payload_commit_to_da_proposal and
     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
     /// when receiving a da message.
-    /// This test also checks whether corresponding BuilderStateId is in global_state
+    /// This test also checks whether corresponding BuilderStateId is in global_state.
     #[async_std::test]
     async fn test_process_da_proposal() {
         async_compatibility_layer::logging::setup_logging();
