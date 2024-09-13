@@ -292,8 +292,11 @@ mod test {
     };
     use ethers::utils::Anvil;
     use hooks::connect_to_solver;
-    use hotshot::rand;
-    use hotshot::types::{BLSPrivKey, Event, EventType};
+    use hotshot::types::{
+        BLSPrivKey, Event,
+        EventType::{Decide, *},
+    };
+    use hotshot::{rand, types::EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -302,10 +305,11 @@ mod test {
     use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
+        event::LeafInfo,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
             node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
@@ -464,10 +468,10 @@ mod test {
         builder_client
     }
 
-    /// Submit transactions.
+    /// Submit transactions via the private mempool.
     ///
     /// Returns the subscribed events.
-    async fn submit_transactions(
+    async fn submit_transactions_via_private_mempool(
         transactions: Vec<Transaction>,
         urls: Urls,
     ) -> Connection<
@@ -502,8 +506,47 @@ mod test {
             .unwrap()
     }
 
-    #[async_std::test]
-    async fn test_marketplace_reserve_builder() {
+    /// Verify that the bundle associated with the received quorum proposal contains the expected
+    /// transaction.
+    ///
+    /// # Returns
+    /// * `true` if the verification succeeds.
+    /// * `false` if the expected quorum proposal isn't received yet.
+    ///
+    /// # Panics
+    /// * If the verification fails.
+    async fn verify_bundle(
+        event: Event<SeqTypes>,
+        builder_client: Client<ServerError, MarketplaceVersion>,
+        transaction: Transaction,
+    ) -> bool {
+        if let EventType::QuorumProposal { proposal, .. } = event.event {
+            let parent_view_number = *proposal.data.view_number;
+            let parent_commitment = Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+            if let Ok(bundle) = builder_client
+                .get::<Bundle<SeqTypes>>(
+                    format!(
+                        "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                        parent_view_number + 1
+                    )
+                    .as_str(),
+                )
+                .send()
+                .await
+            {
+                if bundle.transactions.is_empty() {
+                    return false;
+                }
+                assert_eq!(bundle.transactions, vec![transaction]);
+                return true;
+            } else {
+                return false;
+            }
+        }
+        false
+    }
+
+    async fn test_marketplace_reserve_builder(public_mempool: bool) {
         setup_test();
 
         let (ports, urls) = pick_urls_and_start_network().await;
@@ -527,7 +570,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Register a rollup using the mock solver.
         // Use `_mock_solver` here to avoid it being dropped.
@@ -563,40 +606,55 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
         let transactions = vec![registered_transaction.clone(), unregistered_transaction];
-        let mut subscribed_events = submit_transactions(transactions, urls).await;
-        task::sleep(std::time::Duration::from_millis(1000)).await;
-
-        // Verify the bundle.
-        let start = Instant::now();
-        loop {
-            if start.elapsed() > Duration::from_secs(10) {
-                panic!("Didn't get a quorum proposal in 10 seconds");
+        if public_mempool {
+            let server = &network.server;
+            for transaction in transactions {
+                let _ = server.submit_transaction(transaction).await;
             }
+            let mut events = server.event_stream().await;
+            task::sleep(std::time::Duration::from_millis(1000)).await;
 
-            let event = subscribed_events.next().await.unwrap().unwrap();
-            if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
-                let parent_commitment =
-                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
-                let bundle = builder_client
-                    .get::<Bundle<SeqTypes>>(
-                        format!(
-                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
-                            parent_view_number + 1
-                        )
-                        .as_str(),
-                    )
-                    .send()
-                    .await
-                    .unwrap();
-                assert_eq!(bundle.transactions, vec![registered_transaction]);
-                break;
+            let start = Instant::now();
+            loop {
+                if start.elapsed() > Duration::from_secs(10) {
+                    panic!("Didn't get a quorum proposal in 10 seconds");
+                }
+                let event = events.next().await.unwrap();
+
+                if verify_bundle(
+                    event,
+                    builder_client.clone(),
+                    registered_transaction.clone(),
+                )
+                .await
+                {
+                    break;
+                }
+            }
+        } else {
+            let mut events = submit_transactions_via_private_mempool(transactions, urls).await;
+                task::sleep(std::time::Duration::from_millis(1000)).await;
+
+            let start = Instant::now();
+            loop {
+                if start.elapsed() > Duration::from_secs(10) {
+                    panic!("Didn't get a quorum proposal in 10 seconds");
+                }
+                let event = events.next().await.unwrap().unwrap();
+                if verify_bundle(
+                    event,
+                    builder_client.clone(),
+                    registered_transaction.clone(),
+                )
+                .await
+                {
+                    break;
+                }
             }
         }
     }
 
-    #[async_std::test]
-    async fn test_marketplace_fallback_builder() {
+    async fn test_marketplace_fallback_builder(public_mempool: bool) {
         setup_test();
 
         let (ports, urls) = pick_urls_and_start_network().await;
@@ -620,7 +678,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Register a rollup using the mock solver.
         // Use `_mock_solver` here to avoid it being dropped.
@@ -653,35 +711,71 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
         let transactions = vec![registered_transaction, unregistered_transaction.clone()];
-        let mut subscribed_events = submit_transactions(transactions, urls).await;
-        task::sleep(std::time::Duration::from_millis(2000)).await;
-
-        // Verify the bundle.
-        let start = Instant::now();
-        loop {
-            if start.elapsed() > Duration::from_secs(10) {
-                panic!("Didn't get a quorum proposal in 10 seconds");
+        if public_mempool {
+            let server = &network.server;
+            for transaction in transactions {
+                let _ = server.submit_transaction(transaction).await;
             }
+            let mut events = server.event_stream().await;
+            task::sleep(std::time::Duration::from_millis(1000)).await;
 
-            let event = subscribed_events.next().await.unwrap().unwrap();
-            if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
-                let parent_commitment =
-                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
-                let bundle = builder_client
-                    .get::<Bundle<SeqTypes>>(
-                        format!(
-                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
-                            parent_view_number + 1
-                        )
-                        .as_str(),
-                    )
-                    .send()
-                    .await
-                    .unwrap();
-                assert_eq!(bundle.transactions, vec![unregistered_transaction]);
-                break;
+            let start = Instant::now();
+            loop {
+                if start.elapsed() > Duration::from_secs(10) {
+                    panic!("Didn't get a quorum proposal in 10 seconds");
+                }
+                let event = events.next().await.unwrap();
+
+                if verify_bundle(
+                    event,
+                    builder_client.clone(),
+                    unregistered_transaction.clone(),
+                )
+                .await
+                {
+                    break;
+                }
+            }
+        } else {
+            let mut events = submit_transactions_via_private_mempool(transactions, urls).await;
+            task::sleep(std::time::Duration::from_millis(1000)).await;
+
+            let start = Instant::now();
+            loop {
+                if start.elapsed() > Duration::from_secs(15) {
+                    panic!("Didn't get a quorum proposal in 10 seconds");
+                }
+                let event = events.next().await.unwrap().unwrap();
+                if verify_bundle(
+                    event,
+                    builder_client.clone(),
+                    unregistered_transaction.clone(),
+                )
+                .await
+                {
+                    break;
+                }
             }
         }
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_reserve_builder_with_public_mempool() {
+        test_marketplace_reserve_builder(true).await;
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_reserve_builder_with_private_mempool() {
+        test_marketplace_reserve_builder(false).await;
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_fallback_builder_with_public_mempool() {
+        test_marketplace_fallback_builder(true).await;
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_fallback_builder_with_private_mempool() {
+        test_marketplace_fallback_builder(false).await;
     }
 }
