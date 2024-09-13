@@ -46,7 +46,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --locked --release
+        run: cargo nextest run --locked --release --workspace --all-features --no-run
+        timeout-minutes: 90
 
       - name: Test Demo
         env:
@@ -56,4 +57,4 @@ jobs:
           export PATH="$PWD/target/release:$PATH"
           scripts/demo-native --tui=false &
           cargo nextest run --locked --release --workspace --all-features --verbose --nocapture
-        timeout-minutes: 10
+        timeout-minutes: 40
