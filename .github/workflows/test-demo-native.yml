@@ -55,6 +55,7 @@ jobs:
           NEXTEST_PROFILE: integration
         run: |
           export PATH="$PWD/target/release:$PATH"
+          docker compose pull || docker-compose pull
           scripts/demo-native --tui=false &
           cargo nextest run --locked --release --workspace --all-features --verbose --nocapture
         timeout-minutes: 40

@@ -61,4 +61,15 @@ jobs:
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
-        timeout-minutes: 5
+        timeout-minutes: 10
+
+      - name: Test Demo
+        env:
+          CARGO_TERM_COLOR: always
+          NEXTEST_PROFILE: integration
+        run: |
+          export PATH="$PWD/target/release:$PATH"
+          scripts/demo-native -D
+          cargo nextest run --locked --release --workspace --all-features --verbose --nocapture
+        timeout-minutes: 40
+
