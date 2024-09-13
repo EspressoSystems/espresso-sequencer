@@ -63,6 +63,10 @@ jobs:
           cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
         timeout-minutes: 10
 
+      - name: Install process-compose
+        run: |
+          nix profile install nixpkgs#process-compose
+        
       - name: Test Demo
         env:
           CARGO_TERM_COLOR: always
