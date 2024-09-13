@@ -365,7 +365,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
     /// processing the DA proposal
     /// pending whether it's processed already, if so, skip, or else, process it
-    /// deciding whether we have matching quorum proposal, if so, we remove them from the storage and 
+    /// deciding whether we have matching quorum proposal, if so, we remove them from the storage and
     /// spawn a clone
     #[tracing::instrument(skip_all, name = "process da proposal",
                                     fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
@@ -622,7 +622,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
     // Sishan TODO: the function returns a vec of transactions
     /// build a block from the BuilderStateId
-    /// This function collects available transactions not already in `included_txns` from near future 
+    /// This function collects available transactions not already in `included_txns` from near future
     /// then form them into a block and calculate the block's `builder_hash` `block_payload` and `metadata`
     /// insert `builder_hash` to `builder_commitments`
     /// and finally return a struct in `BuildBlockInfo`
@@ -981,10 +981,10 @@ mod test {
 
     use crate::service::{broadcast_channels, GlobalState};
 
-    use super::MessageType;
-    use super::DaProposalMessage;
-    use super::BuiltFromProposedBlock;
     use super::BuilderState;
+    use super::BuiltFromProposedBlock;
+    use super::DaProposalMessage;
+    use super::MessageType;
     use rkyv::{Deserialize, Infallible};
 
     /// This test checkes da_proposal_payload_commit_to_da_proposal and
@@ -1011,7 +1011,7 @@ mod test {
 
         let (leader_public_key, leader_private_key) =
             <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
-        
+
         let channel_capacity = CHANNEL_CAPACITY;
         let num_storage_nodes = NUM_STORAGE_NODES;
         // set up the broadcast channels
@@ -1051,9 +1051,7 @@ mod test {
         );
 
         // randomly generate a transaction
-        let transactions = vec![
-            TestTransaction::new(vec![1, 2, 3]); 3
-        ];
+        let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
 
         let txn_commitments = transactions.iter().map(Committable::commit).collect();
         let encoded_transactions = TestTransaction::encode(&transactions);
@@ -1074,30 +1072,50 @@ mod test {
         // call process_da_proposal without matching quorum proposal message
         // da_proposal_payload_commit_to_da_proposal should insert the message
         let da_msg = MessageType::DaProposalMessage(Arc::clone(&da_proposal));
-        let mut correct_da_proposal_payload_commit_to_da_proposal: HashMap<(BuilderCommitment, <TestTypes as NodeType>::Time), Arc<DaProposalMessage<TestTypes>>> = HashMap::new();
-        
+        let mut correct_da_proposal_payload_commit_to_da_proposal: HashMap<
+            (BuilderCommitment, <TestTypes as NodeType>::Time),
+            Arc<DaProposalMessage<TestTypes>>,
+        > = HashMap::new();
+
         if let MessageType::DaProposalMessage(practice_da_msg) = da_msg {
-            builder_state.process_da_proposal(practice_da_msg.clone()).await;
-            correct_da_proposal_payload_commit_to_da_proposal.insert((practice_da_msg.builder_commitment.clone(), practice_da_msg.view_number), practice_da_msg);
+            builder_state
+                .process_da_proposal(practice_da_msg.clone())
+                .await;
+            correct_da_proposal_payload_commit_to_da_proposal.insert(
+                (
+                    practice_da_msg.builder_commitment.clone(),
+                    practice_da_msg.view_number,
+                ),
+                practice_da_msg,
+            );
         } else {
             tracing::error!("Not a da_proposal_message in correct format");
         }
-        tracing::debug!("da_proposal_payload_commit_to_da_proposal = {:?}", builder_state.da_proposal_payload_commit_to_da_proposal);
-        let deserialized_map: HashMap<_, _> = builder_state.da_proposal_payload_commit_to_da_proposal;
+        tracing::debug!(
+            "da_proposal_payload_commit_to_da_proposal = {:?}",
+            builder_state.da_proposal_payload_commit_to_da_proposal
+        );
+        let deserialized_map: HashMap<_, _> =
+            builder_state.da_proposal_payload_commit_to_da_proposal;
         // assert_eq!(deserialized_map, correct_da_proposal_payload_commit_to_da_proposal);
         for (key, value) in deserialized_map.iter() {
             let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
-            assert_eq!(value.as_ref().clone(), rkyv::option::ArchivedOption::Some(correct_value).unwrap().unwrap().as_ref().clone());
+            assert_eq!(
+                value.as_ref().clone(),
+                rkyv::option::ArchivedOption::Some(correct_value)
+                    .unwrap()
+                    .unwrap()
+                    .as_ref()
+                    .clone()
+            );
         }
-        
+
         // call process_da_proposal with the same msg again
         // we should skip the process and everything should be the same
-
 
         // add the matching quorum proposal message with different tx
         // and call process_da_proposal with this matching da proposal message and quorum proposal message
         // we should spawn_clone here
         // and check whether global_state has correct BuilderStateId
-            
     }
 }
