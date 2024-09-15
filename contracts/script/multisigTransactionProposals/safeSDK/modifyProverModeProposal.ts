@@ -16,11 +16,8 @@ async function main() {
   try {
     const command = processCommandLineArguments();
 
-    /**TODO
-     * change from SEPOLIA_RPC_URL to production URL when deploying to production
-     */
     // Initialize web3 provider using the RPC URL from environment variables
-    const web3Provider = new ethers.JsonRpcProvider(getEnvVar("SEPOLIA_RPC_URL"));
+    const web3Provider = new ethers.JsonRpcProvider(getEnvVar("RPC_URL"));
     // Create a signer using the orchestrator's private key and the web3 provider
     const orchestratorSigner = new ethers.Wallet(getEnvVar("SAFE_ORCHESTRATOR_PRIVATE_KEY"), web3Provider);
 
@@ -95,7 +92,7 @@ export async function proposeSetProverTransaction(
   // Prepare the transaction data to set the permissioned prover
   let data = createPermissionedProverTxData(proverAddress);
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
@@ -147,7 +144,7 @@ export async function proposeDisableProverTransaction(
   // Prepare the transaction data to disable permissioned prover mode
   let data = createDisablePermissionedProverTxData();
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object

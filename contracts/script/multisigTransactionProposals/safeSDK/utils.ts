@@ -29,7 +29,7 @@ export function getEnvVar(name: string): string {
  * Function to create safe transaction data to be used with the safe SDK
  * @param {string} to - The destination address for the transaction
  * @param {string} data - The contract data to be sent
- * @param {string} value - The value to be sent
+ * @param {number} value - The value to be sent
  * @returns {object} - Returns the safe transaction data object
  */
 export function createSafeTransactionData(to: string, data: string, value: string) {

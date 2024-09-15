@@ -126,7 +126,7 @@ forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderD
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
-$LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS \
+$LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS \
 contracts/src/LightClient.sol:LightClient --watch
 ```
 
