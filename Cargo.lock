@@ -6181,8 +6181,8 @@ dependencies = [
 
 [[package]]
 name = "marketplace-builder-core"
-version = "0.1.47"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=ab/update-module-path#f6c715d3e038bfcca784c85cf639be661040fea6"
+version = "0.1.48"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.48#aa79a76769cf0d13d48cfeaafb455173ad85edf0"
 dependencies = [
  "anyhow",
  "async-broadcast",
