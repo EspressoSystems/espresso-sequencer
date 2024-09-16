@@ -26,8 +26,8 @@ async fn main() -> anyhow::Result<()> {
     let genesis = Genesis::from_file(&opt.genesis_file)?;
     tracing::info!(?genesis, "genesis");
 
-    let base = genesis.base_version;
-    let upgrade = genesis.upgrade_version;
+    let base = genesis.versions.base;
+    let upgrade = genesis.versions.upgrade;
 
     match (base, upgrade) {
         (V0_1::VERSION, FeeVersion::VERSION) => {
@@ -225,7 +225,7 @@ mod test {
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
-        genesis::StakeTableConfig,
+        genesis::{GenesisSequencerVersions, StakeTableConfig},
         persistence::fs,
         SequencerApiVersion,
     };
@@ -254,8 +254,10 @@ mod test {
             l1_finalized: Default::default(),
             header: Default::default(),
             upgrades: Default::default(),
-            base_version: Version { major: 0, minor: 1 },
-            upgrade_version: Version { major: 0, minor: 2 },
+            versions: GenesisSequencerVersions {
+                base: Version { major: 0, minor: 1 },
+                upgrade: Version { major: 0, minor: 2 },
+            },
         };
         genesis.to_file(&genesis_file).unwrap();
 

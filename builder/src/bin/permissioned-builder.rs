@@ -310,8 +310,8 @@ async fn main() -> anyhow::Result<()> {
     let genesis = Genesis::from_file(&opt.genesis_file)?;
     tracing::info!(?genesis, "genesis");
 
-    let base = genesis.base_version;
-    let upgrade = genesis.upgrade_version;
+    let base = genesis.versions.base;
+    let upgrade = genesis.versions.upgrade;
 
     match (base, upgrade) {
         (V0_1::VERSION, FeeVersion::VERSION) => {
