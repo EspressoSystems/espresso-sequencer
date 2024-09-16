@@ -966,14 +966,13 @@ mod test {
     use async_broadcast::broadcast;
     use async_lock::RwLock;
     use committable::{Commitment, CommitmentBoundsArkless};
-    use hotshot::types::SignatureKey;
     use hotshot_example_types::block_types::TestTransaction;
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
     use hotshot_types::data::Leaf;
+    use hotshot_types::data::ViewNumber;
     use hotshot_types::traits::block_contents::vid_commitment;
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
-    use hotshot_types::{data::ViewNumber, traits::signature_key::BuilderSignatureKey};
 
     use crate::service::{broadcast_channels, GlobalState};
 
@@ -982,6 +981,30 @@ mod test {
     use super::DaProposalMessage;
     use super::MessageType;
     use crate::testing::{calc_proposal_msg, TestTypes};
+
+    fn check_equal_da_proposal_hashmap(
+        da_proposal_payload_commit_to_da_proposal: HashMap<
+            (BuilderCommitment, <TestTypes as NodeType>::Time),
+            Arc<DaProposalMessage<TestTypes>>,
+        >,
+        correct_da_proposal_payload_commit_to_da_proposal: HashMap<
+            (BuilderCommitment, <TestTypes as NodeType>::Time),
+            Arc<DaProposalMessage<TestTypes>>,
+        >,
+    ) {
+        let deserialized_map: HashMap<_, _> = da_proposal_payload_commit_to_da_proposal.clone();
+        for (key, value) in deserialized_map.iter() {
+            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
+            assert_eq!(
+                value.as_ref().clone(),
+                rkyv::option::ArchivedOption::Some(correct_value)
+                    .unwrap()
+                    .unwrap()
+                    .as_ref()
+                    .clone()
+            );
+        }
+    }
 
     /// This test checkes da_proposal_payload_commit_to_da_proposal and
     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
@@ -995,19 +1018,12 @@ mod test {
 
         // Number of views to simulate
         const NUM_ROUNDS: usize = 5;
-        // Number of transactions to submit per round
-        const NUM_TXNS_PER_ROUND: usize = 4;
         // Capacity of broadcast channels
         const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
         // Number of nodes on DA committee
         const NUM_STORAGE_NODES: usize = 4;
 
-        let (sender_public_key, sender_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-
-        let (leader_public_key, leader_private_key) =
-            <BLSPubKey as SignatureKey>::generated_from_seed_indexed([0; 32], 1);
-
+        // start builder state, very similar to `start_builder_state` in `mod.rs` without starting the event loop
         let channel_capacity = CHANNEL_CAPACITY;
         let num_storage_nodes = NUM_STORAGE_NODES;
         // set up the broadcast channels
@@ -1072,20 +1088,12 @@ mod test {
         } else {
             tracing::error!("Not a da_proposal_message in correct format");
         }
-        let deserialized_map: HashMap<_, _> = builder_state
-            .da_proposal_payload_commit_to_da_proposal
-            .clone();
-        for (key, value) in deserialized_map.iter() {
-            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
-            assert_eq!(
-                value.as_ref().clone(),
-                rkyv::option::ArchivedOption::Some(correct_value)
-                    .unwrap()
-                    .unwrap()
-                    .as_ref()
-                    .clone()
-            );
-        }
+        check_equal_da_proposal_hashmap(
+            builder_state
+                .da_proposal_payload_commit_to_da_proposal
+                .clone(),
+            correct_da_proposal_payload_commit_to_da_proposal.clone(),
+        );
         // check global_state didn't change
         if let Some(_x) = global_state
             .read_arc()
@@ -1109,20 +1117,12 @@ mod test {
         } else {
             tracing::error!("Not a da_proposal_message in correct format");
         }
-        let deserialized_map: HashMap<_, _> = builder_state
-            .da_proposal_payload_commit_to_da_proposal
-            .clone();
-        for (key, value) in deserialized_map.iter() {
-            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
-            assert_eq!(
-                value.as_ref().clone(),
-                rkyv::option::ArchivedOption::Some(correct_value)
-                    .unwrap()
-                    .unwrap()
-                    .as_ref()
-                    .clone()
-            );
-        }
+        check_equal_da_proposal_hashmap(
+            builder_state
+                .da_proposal_payload_commit_to_da_proposal
+                .clone(),
+            correct_da_proposal_payload_commit_to_da_proposal.clone(),
+        );
         // check global_state didn't change
         if let Some(_x) = global_state
             .read_arc()
@@ -1160,19 +1160,11 @@ mod test {
         } else {
             tracing::error!("Not a da_proposal_message in correct format");
         }
-        let deserialized_map_2: HashMap<_, _> =
-            builder_state.da_proposal_payload_commit_to_da_proposal;
-        for (key, value) in deserialized_map_2.iter() {
-            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
-            assert_eq!(
-                value.as_ref().clone(),
-                rkyv::option::ArchivedOption::Some(correct_value)
-                    .unwrap()
-                    .unwrap()
-                    .as_ref()
-                    .clone()
-            );
-        }
+        check_equal_da_proposal_hashmap(
+            builder_state
+                .da_proposal_payload_commit_to_da_proposal,
+            correct_da_proposal_payload_commit_to_da_proposal,
+        );
         // check global_state has this new builder_state_id
         if let Some(_x) = global_state
             .read_arc()
