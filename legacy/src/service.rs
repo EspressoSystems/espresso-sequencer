@@ -264,10 +264,10 @@ impl<Types: NodeType> GlobalState<Types> {
     /// Beyond that, the state prefers to drop all `spawned_builder_states`
     /// preceding the derived cutoff view.
     ///
-    /// In addition, for tracking purposes, the `last_garbage_collected_view_num`
-    /// is updated to the target cutoff view number for tracking purposes.  The
-    /// value returned is the cutoff view number such that the returned value
-    /// indicates the point before which everything was cleaned up.
+    /// In addition the `last_garbage_collected_view_num` is updated to the
+    /// target cutoff view number for tracking purposes.  The value returned
+    /// is the cutoff view number such that the returned value indicates the
+    /// point before which everything was cleaned up.
     pub fn remove_handles(&mut self, on_decide_view: Types::Time) -> Types::Time {
         // remove everything from the spawned builder states when view_num <= on_decide_view;
         // if we don't have a highest view > decide, use highest view as cutoff.
