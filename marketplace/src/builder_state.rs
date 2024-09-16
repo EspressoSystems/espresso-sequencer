@@ -960,39 +960,28 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
-    use std::marker::PhantomData;
     use std::sync::Arc;
     use std::time::Duration;
 
     use async_broadcast::broadcast;
     use async_lock::RwLock;
-    use committable::{Commitment, CommitmentBoundsArkless, Committable};
-    use hotshot::traits::BlockPayload;
-    use hotshot::types::{BLSPubKey, SignatureKey};
+    use committable::{Commitment, CommitmentBoundsArkless};
+    use hotshot::types::SignatureKey;
     use hotshot_example_types::block_types::TestTransaction;
-    use hotshot_example_types::block_types::{TestBlockHeader, TestBlockPayload, TestMetadata};
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_task_impls::transactions;
-    use hotshot_types::data::{Leaf, QuorumProposal};
-    use hotshot_types::simple_certificate::{
-        QuorumCertificate, SimpleCertificate, SuccessThreshold,
-    };
-    use hotshot_types::simple_vote::QuorumData;
+    use hotshot_types::data::Leaf;
     use hotshot_types::traits::block_contents::vid_commitment;
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
     use hotshot_types::{data::ViewNumber, traits::signature_key::BuilderSignatureKey};
-    use rkyv::collections::ArchivedHashMap;
 
     use crate::service::{broadcast_channels, GlobalState};
-    use crate::utils::BuilderStateId;
 
     use super::BuilderState;
     use super::BuiltFromProposedBlock;
     use super::DaProposalMessage;
     use super::MessageType;
     use crate::testing::{calc_proposal_msg, TestTypes};
-    use rkyv::{Deserialize, Infallible};
 
     /// This test checkes da_proposal_payload_commit_to_da_proposal and
     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
