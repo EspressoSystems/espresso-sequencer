@@ -4619,7 +4619,7 @@ mod test {
     /// before attempting to send any transactions through the broadcast channel
     /// sender.
     #[async_std::test]
-    async fn test_handle_received_txns_error_something() {
+    async fn test_handle_received_txns_error_internal() {
         let tx_sender = {
             let (tx_sender, _) = async_broadcast::broadcast(10);
             tx_sender
