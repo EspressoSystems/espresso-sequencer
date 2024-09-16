@@ -96,13 +96,6 @@ pub enum Status {
     ShouldContinue,
 }
 
-// implement display for the derived info
-impl<TYPES: NodeType> std::fmt::Display for BuiltFromProposedBlock<TYPES> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "View Number: {:?}", self.view_number)
-    }
-}
-
 /// Builder State to hold the state of the builder
 #[derive(Debug)]
 pub struct BuilderState<TYPES: NodeType> {
@@ -620,7 +613,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.event_loop();
     }
 
-    // Sishan TODO: the function returns a vec of transactions
     /// build a block from the BuilderStateId
     /// This function collects available transactions not already in `included_txns` from near future
     /// then form them into a block and calculate the block's `builder_hash` `block_payload` and `metadata`
@@ -982,6 +974,8 @@ mod test {
     use super::MessageType;
     use crate::testing::{calc_proposal_msg, TestTypes};
 
+    /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
+    /// used for testing only
     fn check_equal_da_proposal_hashmap(
         da_proposal_payload_commit_to_da_proposal: HashMap<
             (BuilderCommitment, <TestTypes as NodeType>::Time),
@@ -1006,7 +1000,8 @@ mod test {
         }
     }
 
-    /// This test checkes da_proposal_payload_commit_to_da_proposal and
+    /// This test the function `process_da_propsal`.
+    /// It checkes da_proposal_payload_commit_to_da_proposal and
     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
     /// when receiving a da message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.

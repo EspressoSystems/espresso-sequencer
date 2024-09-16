@@ -132,6 +132,13 @@ pub struct BuiltFromProposedBlock<TYPES: NodeType> {
     pub builder_commitment: BuilderCommitment,
 }
 
+// implement display for the derived info
+impl<TYPES: NodeType> std::fmt::Display for BuiltFromProposedBlock<TYPES> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "View Number: {:?}", self.view_number)
+    }
+}
+
 type EventServiceConnection<TYPES, V> = surf_disco::socket::Connection<
     Event<TYPES>,
     surf_disco::socket::Unsupported,
