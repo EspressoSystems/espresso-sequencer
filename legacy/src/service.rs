@@ -3285,7 +3285,7 @@ mod test {
     }
 
     /// This test checks that call to `available_blocks_implementation` returns
-    /// a successful response when the function is called before after are
+    /// a successful response when the function is called after blocks are
     /// made available.
     #[async_std::test]
     async fn test_get_available_blocks_requested_after_blocks_available() {
