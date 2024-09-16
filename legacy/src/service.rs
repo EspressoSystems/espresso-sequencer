@@ -717,7 +717,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             tracing::info!("Done Trying sending vid trigger info for {block_id}",);
 
             // sign over the builder commitment, as the proposer can computer it based on provide block_payload
-            // and the met data data
+            // and the metadata
             let response_block_hash = block_payload.builder_commitment(&metadata);
             let signature_over_builder_commitment =
                 <Types as NodeType>::BuilderSignatureKey::sign_builder_message(
