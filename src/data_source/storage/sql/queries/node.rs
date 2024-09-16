@@ -12,80 +12,83 @@
 
 //! Node storage implementation for a database query engine.
 
-use super::{header_where_clause, parse_header, Transaction, HEADER_COLUMNS};
+use super::{
+    super::transaction::{query, query_as, Transaction, TransactionMode},
+    parse_header, DecodeError, QueryBuilder, HEADER_COLUMNS,
+};
 use crate::{
-    node::{BlockId, NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    data_source::storage::NodeStorage,
+    node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
     Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, VidShare,
 };
 use async_trait::async_trait;
 use futures::stream::{StreamExt, TryStreamExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use snafu::OptionExt;
+use sqlx::Row;
 
 #[async_trait]
-impl<'a, Types> NodeDataSource<Types> for Transaction<'a>
+impl<Mode, Types> NodeStorage<Types> for Transaction<Mode>
 where
+    Mode: TransactionMode,
     Types: NodeType,
 {
-    async fn block_height(&self) -> QueryResult<usize> {
-        let query = "SELECT max(height) FROM header";
-        let row = self.query_one_static(query).await?;
-        let height: Option<i64> = row.get(0);
-        match height {
-            Some(height) => {
+    async fn block_height(&mut self) -> QueryResult<usize> {
+        match query_as::<(Option<i64>,)>("SELECT max(height) FROM header")
+            .fetch_one(self.as_mut())
+            .await?
+        {
+            (Some(height),) => {
                 // The height of the block is the number of blocks below it, so the total number of
                 // blocks is one more than the height of the highest block.
                 Ok(height as usize + 1)
             }
-            None => {
+            (None,) => {
                 // If there are no blocks yet, the height is 0.
                 Ok(0)
             }
         }
     }
 
-    async fn count_transactions(&self) -> QueryResult<usize> {
-        let row = self
-            .query_one_static("SELECT count(*) FROM transaction")
+    async fn count_transactions(&mut self) -> QueryResult<usize> {
+        let (count,) = query_as::<(i64,)>("SELECT count(*) FROM transaction")
+            .fetch_one(self.as_mut())
             .await?;
-        let count: i64 = row.get(0);
         Ok(count as usize)
     }
 
-    async fn payload_size(&self) -> QueryResult<usize> {
-        let row = self
-            .query_one_static("SELECT sum(size) FROM payload")
+    async fn payload_size(&mut self) -> QueryResult<usize> {
+        let (sum,) = query_as::<(Option<i64>,)>("SELECT sum(size) FROM payload")
+            .fetch_one(self.as_mut())
             .await?;
-        let sum: Option<i64> = row.get(0);
         Ok(sum.unwrap_or(0) as usize)
     }
 
-    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
-        let (where_clause, param) = header_where_clause(id.into());
+        let mut query = QueryBuilder::default();
+        let where_clause = query.header_where_clause(id.into())?;
         // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
         // selecting by payload ID, as payloads are not unique), we return the first one.
-        let query = format!(
+        let sql = format!(
             "SELECT v.share AS share FROM vid AS v
                JOIN header AS h ON v.height = h.height
               WHERE {where_clause}
               ORDER BY h.height ASC
               LIMIT 1"
         );
-        let row = self.query_one(&query, [param]).await?;
-        let share_data: Option<Vec<u8>> =
-            row.try_get("share").map_err(|err| QueryError::Error {
-                message: format!("error extracting share data from query results: {err}"),
-            })?;
+        let (share_data,) = query
+            .query_as::<(Option<Vec<u8>>,)>(&sql)
+            .fetch_one(self.as_mut())
+            .await?;
         let share_data = share_data.context(MissingSnafu)?;
-        bincode::deserialize(&share_data).map_err(|err| QueryError::Error {
-            message: format!("malformed VID share: {err}"),
-        })
+        let share = bincode::deserialize(&share_data).decode_error("malformed VID share")?;
+        Ok(share)
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn sync_status(&mut self) -> QueryResult<SyncStatus> {
         // A leaf can only be missing if there is no row for it in the database (all its columns are
         // non-nullable). A block can be missing if its corresponding leaf is missing or if the
         // block's `data` field is `NULL`. We can find the number of missing leaves and blocks by
@@ -109,16 +112,19 @@ where
         // missing in that case _or_ if the row is present but share data is NULL. Thus, we also
         // need to select the total number of VID rows and the number of present VID rows with a
         // NULL share.
-        let query = "SELECT l.max_height, l.total_leaves, p.null_payloads, v.total_vid, vn.null_vid, pruned_height FROM
+        let sql = "SELECT l.max_height, l.total_leaves, p.null_payloads, v.total_vid, vn.null_vid, pruned_height FROM
                 (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf) AS l,
                 (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL) AS p,
                 (SELECT count(*) AS total_vid FROM vid) AS v,
                 (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,
                 coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
             ";
-        let row = self.query_opt_static(query).await?.context(NotFoundSnafu)?;
+        let row = query(sql)
+            .fetch_optional(self.as_mut())
+            .await?
+            .context(NotFoundSnafu)?;
 
-        let block_height = match row.get::<_, Option<i64>>("max_height") {
+        let block_height = match row.get::<Option<i64>, _>("max_height") {
             Some(height) => {
                 // The height of the block is the number of blocks below it, so the total number of
                 // blocks is one more than the height of the highest block.
@@ -129,12 +135,12 @@ where
                 0
             }
         };
-        let total_leaves = row.get::<_, i64>("total_leaves") as usize;
-        let null_payloads = row.get::<_, i64>("null_payloads") as usize;
-        let total_vid = row.get::<_, i64>("total_vid") as usize;
-        let null_vid = row.get::<_, i64>("null_vid") as usize;
+        let total_leaves = row.get::<i64, _>("total_leaves") as usize;
+        let null_payloads = row.get::<i64, _>("null_payloads") as usize;
+        let total_vid = row.get::<i64, _>("total_vid") as usize;
+        let null_vid = row.get::<i64, _>("null_vid") as usize;
         let pruned_height = row
-            .get::<_, Option<i64>>("pruned_height")
+            .get::<Option<i64>, _>("pruned_height")
             .map(|h| h as usize);
 
         let missing_leaves = block_height.saturating_sub(total_leaves);
@@ -152,7 +158,7 @@ where
     }
 
     async fn get_header_window(
-        &self,
+        &mut self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
@@ -172,21 +178,18 @@ where
         // Find all blocks starting from `first_block` with timestamps less than `end`. Block
         // timestamps are monotonically increasing, so this query is guaranteed to return a
         // contiguous range of blocks ordered by increasing height.
-        let query = format!(
+        let sql = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.height >= $1 AND h.timestamp < $2
               ORDER BY h.height"
         );
-        let rows = self
-            .query(&query, [&(first_block as i64), &(end as i64)])
-            .await?;
+        let rows = query(&sql)
+            .bind(first_block as i64)
+            .bind(end as i64)
+            .fetch(self.as_mut());
         let window = rows
-            .map(|row| {
-                parse_header::<Types>(row.map_err(|err| QueryError::Error {
-                    message: err.to_string(),
-                })?)
-            })
+            .map(|row| parse_header::<Types>(row?))
             .try_collect()
             .await?;
 
@@ -204,15 +207,16 @@ where
         // unique, deterministic result (the first block with a given timestamp). This sort may not
         // be able to use an index, but it shouldn't be too expensive, since there will never be
         // more than a handful of blocks with the same timestamp.
-        let query = format!(
+        let sql = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
               ORDER BY h.timestamp, h.height
               LIMIT 1"
         );
-        let next = self
-            .query_opt(&query, [&(end as i64)])
+        let next = query(&sql)
+            .bind(end as i64)
+            .fetch_optional(self.as_mut())
             .await?
             .map(parse_header::<Types>)
             .transpose()?;
@@ -221,9 +225,9 @@ where
     }
 }
 
-impl<'a> Transaction<'a> {
+impl<Mode: TransactionMode> Transaction<Mode> {
     async fn time_window<Types: NodeType>(
-        &self,
+        &mut self,
         start: u64,
         end: u64,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
@@ -238,32 +242,32 @@ impl<'a> Transaction<'a> {
         // with a given timestamp). This sort may not be able to use an index, but it shouldn't be
         // too expensive, since there will never be more than a handful of blocks with the same
         // timestamp.
-        let query = format!(
+        let sql = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1 AND h.timestamp < $2
               ORDER BY h.timestamp, h.height"
         );
-        let rows = self.query(&query, [&(start as i64), &(end as i64)]).await?;
+        let rows = query(&sql)
+            .bind(start as i64)
+            .bind(end as i64)
+            .fetch(self.as_mut());
         let window: Vec<_> = rows
-            .map(|row| {
-                parse_header::<Types>(row.map_err(|err| QueryError::Error {
-                    message: err.to_string(),
-                })?)
-            })
+            .map(|row| parse_header::<Types>(row?))
             .try_collect()
             .await?;
 
         // Find the block just after the window.
-        let query = format!(
+        let sql = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
               ORDER BY h.timestamp, h.height
               LIMIT 1"
         );
-        let next = self
-            .query_opt(&query, [&(end as i64)])
+        let next = query(&sql)
+            .bind(end as i64)
+            .fetch_optional(self.as_mut())
             .await?
             .map(parse_header::<Types>)
             .transpose()?;
@@ -280,15 +284,16 @@ impl<'a> Transaction<'a> {
         }
 
         // Find the block just before the window.
-        let query = format!(
+        let sql = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp < $1
               ORDER BY h.timestamp DESC, h.height DESC
               LIMIT 1"
         );
-        let prev = self
-            .query_opt(&query, [&(start as i64)])
+        let prev = query(&sql)
+            .bind(start as i64)
+            .fetch_optional(self.as_mut())
             .await?
             .map(parse_header::<Types>)
             .transpose()?;

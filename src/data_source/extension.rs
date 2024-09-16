@@ -10,14 +10,14 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::{storage::ExplorerStorage, VersionedDataSource};
+use super::VersionedDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
         PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    explorer::{self, ExplorerHeader, ExplorerTransaction},
+    explorer::{self, ExplorerDataSource, ExplorerHeader, ExplorerTransaction},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
         UpdateStateData,
@@ -289,7 +289,7 @@ where
 impl<D, U, Types, State, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
     for ExtensibleDataSource<D, U>
 where
-    D: MerklizedStateDataSource<Types, State, ARITY> + Send + Sync,
+    D: MerklizedStateDataSource<Types, State, ARITY> + Sync,
     U: Send + Sync,
     Types: NodeType,
     State: MerklizedState<Types, ARITY>,
@@ -306,7 +306,7 @@ where
 #[async_trait]
 impl<D, U> MerklizedStateHeightPersistence for ExtensibleDataSource<D, U>
 where
-    D: MerklizedStateHeightPersistence + Send + Sync,
+    D: MerklizedStateHeightPersistence + Sync,
     U: Send + Sync,
 {
     async fn get_last_state_height(&self) -> QueryResult<usize> {
@@ -340,9 +340,9 @@ where
 }
 
 #[async_trait]
-impl<D, U, Types> ExplorerStorage<Types> for ExtensibleDataSource<D, U>
+impl<D, U, Types> ExplorerDataSource<Types> for ExtensibleDataSource<D, U>
 where
-    D: ExplorerStorage<Types> + Send + Sync,
+    D: ExplorerDataSource<Types> + Sync,
     U: Send + Sync,
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,

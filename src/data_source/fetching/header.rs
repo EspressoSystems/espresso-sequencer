@@ -106,7 +106,7 @@ where
 }
 
 pub(super) async fn fetch_header_and_then<Types, S, P>(
-    tx: &impl AvailabilityStorage<Types>,
+    tx: &mut impl AvailabilityStorage<Types>,
     req: BlockId<Types>,
     callback: HeaderCallback<Types, S, P>,
 ) where

@@ -43,7 +43,7 @@ pub use fs::FileSystemDataSource;
 pub use metrics::MetricsDataSource;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlDataSource;
-pub use update::{ReadOnly, Transaction, UpdateDataSource, VersionedDataSource};
+pub use update::{Transaction, UpdateDataSource, VersionedDataSource};
 
 #[cfg(any(test, feature = "testing"))]
 mod test_helpers {
@@ -57,6 +57,7 @@ mod test_helpers {
         stream::{BoxStream, StreamExt},
     };
     use std::ops::{Bound, RangeBounds};
+
     /// Apply an upper bound to a range based on the currently available block height.
     async fn bound_range<R, D>(ds: &D, range: R) -> impl RangeBounds<usize>
     where
@@ -98,9 +99,12 @@ mod test_helpers {
             .boxed()
     }
 
-    pub async fn get_non_empty_blocks(
-        ds: &impl TestableDataSource,
-    ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)> {
+    pub async fn get_non_empty_blocks<D>(
+        ds: &D,
+    ) -> Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)>
+    where
+        D: TestableDataSource,
+    {
         // Ignore the genesis block (start from height 1).
         leaf_range(ds, 1..)
             .await
@@ -118,6 +122,7 @@ pub mod availability_tests {
     use super::test_helpers::*;
     use crate::{
         availability::{payload_size, BlockId},
+        data_source::storage::NodeStorage,
         node::NodeDataSource,
         testing::{
             consensus::{MockNetwork, TestableDataSource},
@@ -274,7 +279,7 @@ pub mod availability_tests {
     #[async_std::test]
     pub async fn test_update<D: TestableDataSource>()
     where
-        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         setup_test();
 
@@ -348,7 +353,7 @@ pub mod availability_tests {
     #[async_std::test]
     pub async fn test_range<D: TestableDataSource>()
     where
-        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         setup_test();
 
@@ -358,7 +363,7 @@ pub mod availability_tests {
 
         // Wait for there to be at least 3 blocks.
         let block_height = loop {
-            let tx = ds.read().await.unwrap();
+            let mut tx = ds.read().await.unwrap();
             let block_height = tx.block_height().await.unwrap();
             if block_height >= 3 {
                 break block_height as u64;
@@ -450,7 +455,10 @@ pub mod availability_tests {
 pub mod persistence_tests {
     use crate::{
         availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
-        data_source::{storage::AvailabilityStorage, Transaction, UpdateDataSource},
+        data_source::{
+            storage::{AvailabilityStorage, NodeStorage},
+            Transaction, UpdateDataSource,
+        },
         node::NodeDataSource,
         testing::{
             consensus::TestableDataSource,
@@ -467,9 +475,8 @@ pub mod persistence_tests {
     #[async_std::test]
     pub async fn test_revert<D: TestableDataSource>()
     where
-        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>
-            + NodeDataSource<MockTypes>
-            + AvailabilityStorage<MockTypes>,
+        for<'a> D::Transaction<'a>:
+            UpdateDataSource<MockTypes> + AvailabilityStorage<MockTypes> + NodeStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
 
@@ -502,12 +509,7 @@ pub mod persistence_tests {
         tx.insert_leaf(leaf.clone()).await.unwrap();
         tx.insert_block(block.clone()).await.unwrap();
 
-        assert_eq!(
-            NodeDataSource::<MockTypes>::block_height(&tx)
-                .await
-                .unwrap(),
-            2
-        );
+        assert_eq!(tx.block_height().await.unwrap(), 2);
         assert_eq!(leaf, tx.get_leaf(1.into()).await.unwrap());
         assert_eq!(block, tx.get_block(1.into()).await.unwrap());
 
@@ -603,10 +605,9 @@ pub mod persistence_tests {
     #[async_std::test]
     pub async fn test_drop_tx<D: TestableDataSource>()
     where
-        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>
-            + NodeDataSource<MockTypes>
-            + AvailabilityStorage<MockTypes>,
-        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+        for<'a> D::Transaction<'a>:
+            UpdateDataSource<MockTypes> + AvailabilityStorage<MockTypes> + NodeStorage<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
 
@@ -649,7 +650,7 @@ pub mod persistence_tests {
 
         // Open a new transaction and check that the changes are reverted.
         tracing::info!("read");
-        let tx = ds.read().await.unwrap();
+        let mut tx = ds.read().await.unwrap();
         assert_eq!(tx.block_height().await.unwrap(), 0);
         drop(tx);
 
@@ -691,8 +692,8 @@ pub mod node_tests {
             BlockQueryData, LeafQueryData, QueryableHeader, UpdateAvailabilityData,
             VidCommonQueryData,
         },
-        data_source::{update::Transaction, UpdateDataSource},
-        node::{BlockId, NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+        data_source::{storage::NodeStorage, update::Transaction, UpdateDataSource},
+        node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
         testing::{
             consensus::{MockNetwork, TestableDataSource},
             mocks::{mock_transaction, MockPayload, MockTypes},
@@ -948,7 +949,7 @@ pub mod node_tests {
     #[async_std::test]
     pub async fn test_vid_shares<D: TestableDataSource>()
     where
-        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         setup_test();
 
@@ -961,7 +962,7 @@ pub mod node_tests {
         let mut leaves = ds.subscribe_leaves(0).await.take(3);
         while let Some(leaf) = leaves.next().await {
             tracing::info!("got leaf {}", leaf.height());
-            let tx = ds.read().await.unwrap();
+            let mut tx = ds.read().await.unwrap();
             let share = tx.vid_share(leaf.height() as usize).await.unwrap();
             assert_eq!(share, tx.vid_share(leaf.block_hash()).await.unwrap());
             assert_eq!(
@@ -977,7 +978,7 @@ pub mod node_tests {
     pub async fn test_vid_monotonicity<D: TestableDataSource>()
     where
         for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
-        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
 
@@ -1027,7 +1028,7 @@ pub mod node_tests {
     #[async_std::test]
     pub async fn test_vid_recovery<D: TestableDataSource>()
     where
-        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         setup_test();
 
@@ -1099,7 +1100,7 @@ pub mod node_tests {
     #[async_std::test]
     pub async fn test_timestamp_window<D: TestableDataSource>()
     where
-        for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         setup_test();
 

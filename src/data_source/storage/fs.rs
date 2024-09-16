@@ -15,7 +15,7 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AvailabilityStorage,
+    AvailabilityStorage, NodeStorage,
 };
 
 use crate::{
@@ -27,7 +27,7 @@ use crate::{
         },
     },
     data_source::{update, VersionedDataSource},
-    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    node::{SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
     ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
@@ -419,7 +419,7 @@ where
     Header<Types>: QueryableHeader<Types>,
     T: Revert + Deref<Target = FileSystemStorageInner<Types>> + Send + Sync,
 {
-    async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
+    async fn get_leaf(&mut self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         let n = match id {
             LeafId::Number(n) => n,
             LeafId::Hash(h) => *self
@@ -436,19 +436,22 @@ where
             .context(MissingSnafu)
     }
 
-    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+    async fn get_block(&mut self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
         self.inner.get_block(id)
     }
 
-    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+    async fn get_header(&mut self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
         self.inner.get_header(id)
     }
 
-    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+    async fn get_payload(&mut self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
         self.get_block(id).await.map(PayloadQueryData::from)
     }
 
-    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+    async fn get_vid_common(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonQueryData<Types>> {
         Ok(self
             .inner
             .vid_storage
@@ -460,7 +463,7 @@ where
     }
 
     async fn get_leaf_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
     where
@@ -470,7 +473,7 @@ where
     }
 
     async fn get_block_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
     where
@@ -480,7 +483,7 @@ where
     }
 
     async fn get_payload_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
     where
@@ -492,7 +495,7 @@ where
     }
 
     async fn get_vid_common_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
     where
@@ -504,7 +507,7 @@ where
     }
 
     async fn get_transaction(
-        &self,
+        &mut self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<TransactionQueryData<Types>> {
         let height = self
@@ -605,26 +608,26 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 }
 
 #[async_trait]
-impl<Types, T> NodeDataSource<Types> for Transaction<T>
+impl<Types, T> NodeStorage<Types> for Transaction<T>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
-    T: Revert + Deref<Target = FileSystemStorageInner<Types>> + Sync,
+    T: Revert + Deref<Target = FileSystemStorageInner<Types>> + Send,
 {
-    async fn block_height(&self) -> QueryResult<usize> {
+    async fn block_height(&mut self) -> QueryResult<usize> {
         Ok(self.inner.leaf_storage.iter().len())
     }
 
-    async fn count_transactions(&self) -> QueryResult<usize> {
+    async fn count_transactions(&mut self) -> QueryResult<usize> {
         Ok(self.inner.num_transactions)
     }
 
-    async fn payload_size(&self) -> QueryResult<usize> {
+    async fn payload_size(&mut self) -> QueryResult<usize> {
         Ok(self.inner.payload_size)
     }
 
-    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
@@ -638,7 +641,7 @@ where
             .context(MissingSnafu)
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn sync_status(&mut self) -> QueryResult<SyncStatus> {
         let height = self.inner.leaf_storage.iter().len();
 
         // The number of missing VID common is just the number of completely missing VID
@@ -662,7 +665,7 @@ where
     }
 
     async fn get_header_window(
-        &self,
+        &mut self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {

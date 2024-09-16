@@ -82,7 +82,7 @@ where
     }
 
     async fn active_fetch<S, P>(
-        tx: &impl AvailabilityStorage<Types>,
+        tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
     ) where
@@ -100,7 +100,7 @@ where
         .await
     }
 
-    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
@@ -116,7 +116,7 @@ where
 {
     type RangedRequest = VidCommonRequest<Types>;
 
-    async fn load_range<S, R>(storage: &S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
+    async fn load_range<S, R>(storage: &mut S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
     where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,

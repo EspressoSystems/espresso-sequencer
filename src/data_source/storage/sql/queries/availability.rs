@@ -13,9 +13,8 @@
 //! Availability storage implementation for a database query engine.
 
 use super::{
-    bounds_to_where_clause, header_where_clause, parse_block, parse_leaf, parse_payload,
-    parse_vid_common, postgres::types::ToSql, Transaction, BLOCK_COLUMNS, PAYLOAD_COLUMNS,
-    VID_COMMON_COLUMNS,
+    super::transaction::{Transaction, TransactionMode},
+    QueryBuilder, BLOCK_COLUMNS, LEAF_COLUMNS, PAYLOAD_COLUMNS, VID_COMMON_COLUMNS,
 };
 use crate::{
     availability::{
@@ -24,36 +23,45 @@ use crate::{
     },
     data_source::storage::AvailabilityStorage,
     types::HeightIndexed,
-    ErrorSnafu, Header, Payload, QueryResult,
+    ErrorSnafu, Header, Payload, QueryError, QueryResult,
 };
 use async_trait::async_trait;
-use futures::stream::StreamExt;
+use futures::stream::{StreamExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use snafu::OptionExt;
+use sqlx::FromRow;
 use std::ops::RangeBounds;
 
 #[async_trait]
-impl<'a, Types> AvailabilityStorage<Types> for Transaction<'a>
+impl<Mode, Types> AvailabilityStorage<Types> for Transaction<Mode>
 where
     Types: NodeType,
+    Mode: TransactionMode,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
 {
-    async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
-        let (where_clause, param): (&str, Box<dyn ToSql + Send + Sync>) = match id {
-            LeafId::Number(n) => ("height = $1", Box::new(n as i64)),
-            LeafId::Hash(h) => ("hash = $1", Box::new(h.to_string())),
+    async fn get_leaf(&mut self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
+        let mut query = QueryBuilder::default();
+        let where_clause = match id {
+            LeafId::Number(n) => format!("height = {}", query.bind(n as i64)?),
+            LeafId::Hash(h) => format!("hash = {}", query.bind(h.to_string())?),
         };
-        let query = format!("SELECT leaf, qc FROM leaf WHERE {where_clause}");
-        let row = self.query_one(&query, [param]).await?;
-        parse_leaf(row)
+        let row = query
+            .query(&format!(
+                "SELECT {LEAF_COLUMNS} FROM leaf WHERE {where_clause}"
+            ))
+            .fetch_one(self.as_mut())
+            .await?;
+        let leaf = LeafQueryData::from_row(&row)?;
+        Ok(leaf)
     }
 
-    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-        let (where_clause, param) = header_where_clause(id);
+    async fn get_block(&mut self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.header_where_clause(id)?;
         // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
         // selecting by payload ID, as payloads are not unique), we return the first one.
-        let query = format!(
+        let sql = format!(
             "SELECT {BLOCK_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
@@ -61,139 +69,170 @@ where
               ORDER BY h.height ASC
               LIMIT 1"
         );
-        let row = self.query_one(&query, [param]).await?;
-        parse_block(row)
+        let row = query.query(&sql).fetch_one(self.as_mut()).await?;
+        let block = BlockQueryData::from_row(&row)?;
+        Ok(block)
     }
 
-    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+    async fn get_header(&mut self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
         self.load_header(id).await
     }
 
-    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
-        let (where_clause, param) = header_where_clause(id);
+    async fn get_payload(&mut self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.header_where_clause(id)?;
         // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
         // selecting by payload ID, as payloads are not unique), we return the first one.
-        let query = format!(
+        let sql = format!(
             "SELECT {PAYLOAD_COLUMNS}
-               FROM header AS h
-               JOIN payload AS p ON h.height = p.height
-               WHERE {where_clause}
-               ORDER BY h.height ASC
-               LIMIT 1"
+              FROM header AS h
+              JOIN payload AS p ON h.height = p.height
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
         );
-        let row = self.query_one(&query, [param]).await?;
-        parse_payload(row)
+        let row = query.query(&sql).fetch_one(self.as_mut()).await?;
+        let payload = PayloadQueryData::from_row(&row)?;
+        Ok(payload)
     }
 
-    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
-        let (where_clause, param) = header_where_clause(id);
+    async fn get_vid_common(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonQueryData<Types>> {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.header_where_clause(id)?;
         // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
         // selecting by payload ID, as payloads are not unique), we return the first one.
-        let query = format!(
+        let sql = format!(
             "SELECT {VID_COMMON_COLUMNS}
-               FROM header AS h
-               JOIN vid AS v ON h.height = v.height
-               WHERE {where_clause}
-               ORDER BY h.height ASC
-               LIMIT 1"
+              FROM header AS h
+              JOIN vid AS v ON h.height = v.height
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
         );
-        let row = self.query_one(&query, [param]).await?;
-        parse_vid_common(row)
+        let row = query.query(&sql).fetch_one(self.as_mut()).await?;
+        let common = VidCommonQueryData::from_row(&row)?;
+        Ok(common)
     }
 
     async fn get_leaf_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send,
     {
-        let (where_clause, params) = bounds_to_where_clause(range, "height");
-        let query = format!("SELECT leaf, qc FROM leaf {where_clause} ORDER BY height ASC");
-        let rows = self.query(&query, params).await?;
-
-        Ok(rows.map(|res| parse_leaf(res?)).collect().await)
+        let mut query = QueryBuilder::default();
+        let where_clause = query.bounds_to_where_clause(range, "height")?;
+        let sql = format!("SELECT {LEAF_COLUMNS} FROM leaf {where_clause} ORDER BY height ASC");
+        Ok(query
+            .query(&sql)
+            .fetch(self.as_mut())
+            .map(|res| LeafQueryData::from_row(&res?))
+            .map_err(QueryError::from)
+            .collect()
+            .await)
     }
 
     async fn get_block_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send,
     {
-        let (where_clause, params) = bounds_to_where_clause(range, "h.height");
-        let query = format!(
+        let mut query = QueryBuilder::default();
+        let where_clause = query.bounds_to_where_clause(range, "h.height")?;
+        let sql = format!(
             "SELECT {BLOCK_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
               {where_clause}
               ORDER BY h.height ASC"
         );
-        let rows = self.query(&query, params).await?;
-
-        Ok(rows.map(|res| parse_block(res?)).collect().await)
+        Ok(query
+            .query(&sql)
+            .fetch(self.as_mut())
+            .map(|res| BlockQueryData::from_row(&res?))
+            .map_err(QueryError::from)
+            .collect()
+            .await)
     }
 
     async fn get_payload_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send,
     {
-        let (where_clause, params) = bounds_to_where_clause(range, "h.height");
-        let query = format!(
+        let mut query = QueryBuilder::default();
+        let where_clause = query.bounds_to_where_clause(range, "h.height")?;
+        let sql = format!(
             "SELECT {PAYLOAD_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
               {where_clause}
               ORDER BY h.height ASC"
         );
-        let rows = self.query(&query, params).await?;
-
-        Ok(rows.map(|res| parse_payload(res?)).collect().await)
+        Ok(query
+            .query(&sql)
+            .fetch(self.as_mut())
+            .map(|res| PayloadQueryData::from_row(&res?))
+            .map_err(QueryError::from)
+            .collect()
+            .await)
     }
 
     async fn get_vid_common_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send,
     {
-        let (where_clause, params) = bounds_to_where_clause(range, "h.height");
-        let query = format!(
+        let mut query = QueryBuilder::default();
+        let where_clause = query.bounds_to_where_clause(range, "h.height")?;
+        let sql = format!(
             "SELECT {VID_COMMON_COLUMNS}
               FROM header AS h
               JOIN vid AS v ON h.height = v.height
               {where_clause}
               ORDER BY h.height ASC"
         );
-        let rows = self.query(&query, params).await?;
-
-        Ok(rows.map(|res| parse_vid_common(res?)).collect().await)
+        Ok(query
+            .query(&sql)
+            .fetch(self.as_mut())
+            .map(|res| VidCommonQueryData::from_row(&res?))
+            .map_err(QueryError::from)
+            .collect()
+            .await)
     }
 
     async fn get_transaction(
-        &self,
+        &mut self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<TransactionQueryData<Types>> {
+        let mut query = QueryBuilder::default();
+        let hash_param = query.bind(hash.to_string())?;
+
         // ORDER BY ASC ensures that if there are duplicate transactions, we return the first
         // one.
-        let query = format!(
+        let sql = format!(
             "SELECT {BLOCK_COLUMNS}, t.index AS tx_index
                 FROM header AS h
                 JOIN payload AS p ON h.height = p.height
                 JOIN transaction AS t ON t.block_height = h.height
-                WHERE t.hash = $1
+                WHERE t.hash = {hash_param}
                 ORDER BY (t.block_height, t.index) ASC
                 LIMIT 1"
         );
-        let row = self.query_one(&query, &[&hash.to_string()]).await?;
+        let row = query.query(&sql).fetch_one(self.as_mut()).await?;
 
         // Extract the block.
-        let block = parse_block(row)?;
+        let block = BlockQueryData::from_row(&row)?;
 
         TransactionQueryData::with_hash(&block, hash).context(ErrorSnafu {
             message: format!(

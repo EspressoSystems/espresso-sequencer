@@ -953,7 +953,7 @@ mod test {
             .read()
             .await
             .unwrap()
-            .as_ref()
+            .as_mut()
             .load_pruned_height()
             .await
             .unwrap();
@@ -982,7 +982,7 @@ mod test {
                 .read()
                 .await
                 .unwrap()
-                .as_ref()
+                .as_mut()
                 .load_pruned_height()
                 .await
                 .unwrap();
@@ -1015,7 +1015,7 @@ mod test {
             .read()
             .await
             .unwrap()
-            .as_ref()
+            .as_mut()
             .load_pruned_height()
             .await
             .unwrap();

@@ -15,38 +15,44 @@
 use crate::{
     data_source::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
-        update::{ReadOnly, Transaction as _},
+        update::Transaction as _,
         VersionedDataSource,
     },
-    BackgroundTask, QueryError, QueryResult,
-};
-use async_std::{
-    net::ToSocketAddrs,
-    sync::Mutex,
-    task::{Context, Poll},
+    QueryError, QueryResult,
 };
 use async_trait::async_trait;
 use chrono::Utc;
-use futures::{AsyncRead, AsyncWrite};
+use futures::future::FutureExt;
 use itertools::Itertools;
-use postgres_native_tls::TlsConnector;
-use std::{cmp::min, fmt::Debug, pin::Pin, str::FromStr};
-use tokio_postgres::{config::Host, tls::TlsConnect, Client, NoTls};
+use sqlx::{
+    pool::{Pool, PoolOptions},
+    postgres::{PgConnectOptions, PgSslMode},
+    ConnectOptions, Connection, Row,
+};
+use std::{cmp::min, fmt::Debug, str::FromStr};
 
-mod query;
+pub extern crate sqlx;
+pub use sqlx::{Database, Postgres, Sqlite};
+
+mod db;
+mod migrate;
+mod queries;
 mod transaction;
-
-use self::transaction::Connection;
 
 pub use anyhow::Error;
 // This needs to be reexported so that we can reference it by absolute path relative to this crate
 // in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
 // crate which doesn't have `include_dir` as a dependency.
 pub use crate::include_migrations;
+pub use db::Db;
 pub use include_dir::include_dir;
 pub use refinery::Migration;
-pub use tokio_postgres as postgres;
-pub use transaction::Transaction;
+pub use transaction::{query, query_as, Executor, Query, QueryAs, Transaction};
+
+use self::{
+    migrate::Migrator,
+    transaction::{Read, Write},
+};
 
 /// Embed migrations from the given directory into the current binary.
 ///
@@ -167,68 +173,58 @@ fn add_custom_migrations(
 
 /// Postgres client config.
 #[derive(Clone, Debug)]
-pub struct Config {
-    pgcfg: postgres::Config,
-    host: String,
-    port: u16,
+pub struct Config<DB>
+where
+    DB: Database,
+{
+    db_opt: <DB::Connection as Connection>::Options,
+    pool_opt: PoolOptions<Db>,
     schema: String,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
-    tls: bool,
     pruner_cfg: Option<PrunerCfg>,
     archive: bool,
 }
 
-impl Default for Config {
+impl Default for Config<Postgres> {
     fn default() -> Self {
+        PgConnectOptions::default()
+            .host("localhost")
+            .port(5432)
+            .into()
+    }
+}
+
+impl From<PgConnectOptions> for Config<Postgres> {
+    fn from(db_opt: PgConnectOptions) -> Self {
         Self {
-            pgcfg: Default::default(),
-            host: "localhost".into(),
-            port: 5432,
+            db_opt,
+            pool_opt: PoolOptions::default(),
             schema: "hotshot".into(),
             reset: false,
             migrations: vec![],
             no_migrations: false,
-            tls: false,
             pruner_cfg: None,
             archive: false,
         }
     }
 }
 
-impl From<postgres::Config> for Config {
-    fn from(pgcfg: postgres::Config) -> Self {
-        // We connect via TCP manually, without using the host and port from pgcfg. So we need to
-        // pull those out of pgcfg if they have been specified, to override the defaults.
-        let host = match pgcfg.get_hosts().first() {
-            Some(Host::Tcp(host)) => host.to_string(),
-            _ => "localhost".into(),
-        };
-        let port = *pgcfg.get_ports().first().unwrap_or(&5432);
-        Self {
-            pgcfg,
-            host,
-            port,
-            ..Default::default()
-        }
-    }
-}
-
-impl FromStr for Config {
-    type Err = <postgres::Config as FromStr>::Err;
+impl FromStr for Config<Postgres> {
+    type Err = <PgConnectOptions as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(postgres::Config::from_str(s)?.into())
+        Ok(PgConnectOptions::from_str(s)?.into())
     }
 }
 
-impl Config {
+impl Config<Postgres> {
     /// Set the hostname of the database server.
     ///
     /// The default is `localhost`.
     pub fn host(mut self, host: impl Into<String>) -> Self {
-        self.host = host.into();
+        self.db_opt = self.db_opt.host(&host.into());
         self
     }
 
@@ -236,28 +232,40 @@ impl Config {
     ///
     /// The default is 5432, the default Postgres port.
     pub fn port(mut self, port: u16) -> Self {
-        self.port = port;
+        self.db_opt = self.db_opt.port(port);
         self
     }
 
     /// Set the DB user to connect as.
     pub fn user(mut self, user: &str) -> Self {
-        self.pgcfg.user(user);
+        self.db_opt = self.db_opt.username(user);
         self
     }
 
     /// Set a password for connecting to the database.
     pub fn password(mut self, password: &str) -> Self {
-        self.pgcfg.password(password);
+        self.db_opt = self.db_opt.password(password);
         self
     }
 
     /// Set the name of the database to connect to.
     pub fn database(mut self, database: &str) -> Self {
-        self.pgcfg.dbname(database);
+        self.db_opt = self.db_opt.database(database);
         self
     }
 
+    /// Use TLS for an encrypted connection to the database.
+    ///
+    /// Note that an encrypted connection may be established even if this option is not set, as long
+    /// as both the client and server support it. This option merely causes connection to fail if an
+    /// encrypted stream cannot be established.
+    pub fn tls(mut self) -> Self {
+        self.db_opt = self.db_opt.ssl_mode(PgSslMode::Require);
+        self
+    }
+}
+
+impl<DB: Database> Config<DB> {
     /// Set the name of the schema to use for queries.
     ///
     /// The default schema is named `hotshot` and is created via the default migrations.
@@ -293,12 +301,6 @@ impl Config {
         self
     }
 
-    /// Use TLS for an encrypted connection to the database.
-    pub fn tls(mut self) -> Self {
-        self.tls = true;
-        self
-    }
-
     /// Enable pruning with a given configuration.
     ///
     /// If [`archive`](Self::archive) was previously specified, this will override it.
@@ -327,14 +329,7 @@ impl Config {
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
 #[derive(Debug)]
 pub struct SqlStorage {
-    client: Mutex<Connection>,
-    _client_task: BackgroundTask,
-    // We use a separate client for mutable access (database transactions). This allows runtime
-    // serialization of mutable operations while immutable operations can proceed in parallel, which
-    // mimics the lose concurrency semantics provided by Postgres. Eventually we will have a
-    // transaction pool which allows even multiple transactions to happen in parallel.
-    tx_client: Mutex<Connection>,
-    _tx_client_task: BackgroundTask,
+    pool: Pool<Db>,
     pruner_cfg: Option<PrunerCfg>,
 }
 
@@ -347,29 +342,32 @@ pub struct Pruner {
 
 impl SqlStorage {
     /// Connect to a remote database.
-    pub async fn connect(mut config: Config) -> Result<Self, Error> {
-        // Establish a TCP connection to the server.
-        let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
-
-        // Convert the TCP connection into a postgres connection.
-        let (mut client, client_task) = if config.tls {
-            let tls = TlsConnector::new(native_tls::TlsConnector::new()?, config.host.as_str());
-            connect(config.pgcfg.clone(), tcp, tls).await?
-        } else {
-            connect(config.pgcfg.clone(), tcp, NoTls).await?
-        };
+    pub async fn connect<DB: Database>(mut config: Config<DB>) -> Result<Self, Error> {
+        let schema = config.schema.clone();
+        let pool = config
+            .pool_opt
+            .after_connect(move |conn, _| {
+                let schema = schema.clone();
+                async move {
+                    query(&format!("SET search_path TO {schema}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                }
+                .boxed()
+            })
+            .connect(config.db_opt.to_url_lossy().as_ref())
+            .await?;
 
         // Create or connect to the schema for this query service.
+        let mut conn = pool.acquire().await?;
         if config.reset {
-            client
-                .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", config.schema))
+            query(&format!("DROP SCHEMA IF EXISTS {} CASCADE", config.schema))
+                .execute(conn.as_mut())
                 .await?;
         }
-        client
-            .batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {}", config.schema))
-            .await?;
-        client
-            .batch_execute(&format!("SET search_path TO {}", config.schema))
+        query(&format!("CREATE SCHEMA IF NOT EXISTS {}", config.schema))
+            .execute(conn.as_mut())
             .await?;
 
         // Get migrations and interleave with custom migrations, sorting by version number.
@@ -384,7 +382,9 @@ impl SqlStorage {
         if config.no_migrations {
             // We've been asked not to run any migrations. Abort if the DB is not already up to
             // date.
-            let last_applied = runner.get_last_applied_migration_async(&mut client).await?;
+            let last_applied = runner
+                .get_last_applied_migration_async(&mut Migrator::from(&mut conn))
+                .await?;
             let last_expected = migrations.last();
             if last_applied.as_ref() != last_expected {
                 return Err(Error::msg(format!(
@@ -393,7 +393,7 @@ impl SqlStorage {
             }
         } else {
             // Run migrations using `refinery`.
-            match runner.run_async(&mut client).await {
+            match runner.run_async(&mut Migrator::from(&mut conn)).await {
                 Ok(report) => {
                     tracing::info!("ran DB migrations: {report:?}");
                 }
@@ -407,28 +407,13 @@ impl SqlStorage {
         if config.archive {
             // If running in archive mode, ensure the pruned height is set to 0, so the fetcher will
             // reconstruct previously pruned data.
-            client
-                .batch_execute("DELETE FROM pruned_height WHERE id = 1")
+            query("DELETE FROM pruned_height WHERE id = 1")
+                .execute(conn.as_mut())
                 .await?;
         }
 
-        // Open a second connection for mutable transactions.
-        let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
-        let (tx_client, tx_client_task) = if config.tls {
-            let tls = TlsConnector::new(native_tls::TlsConnector::new()?, config.host.as_str());
-            connect(config.pgcfg, tcp, tls).await?
-        } else {
-            connect(config.pgcfg, tcp, NoTls).await?
-        };
-        tx_client
-            .batch_execute(&format!("SET search_path TO {}", config.schema))
-            .await?;
-
         Ok(Self {
-            client: Mutex::new(client.into()),
-            _client_task: client_task,
-            tx_client: Mutex::new(tx_client.into()),
-            _tx_client_task: tx_client_task,
+            pool,
             pruner_cfg: config.pruner_cfg,
         })
     }
@@ -446,20 +431,21 @@ impl PrunerConfig for SqlStorage {
 
 impl SqlStorage {
     async fn get_minimum_height(&self) -> QueryResult<Option<u64>> {
-        let tx = self.read().await.map_err(|err| QueryError::Error {
+        let mut tx = self.read().await.map_err(|err| QueryError::Error {
             message: err.to_string(),
         })?;
-        let row = tx
-            .query_one_static("SELECT MIN(height) as height FROM header")
-            .await?;
-
-        let height = row.get::<_, Option<i64>>(0).map(|h| h as u64);
-
-        Ok(height)
+        let (Some(height),) =
+            query_as::<(Option<i64>,)>("SELECT MIN(height) as height FROM header")
+                .fetch_one(tx.as_mut())
+                .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(height as u64))
     }
 
     async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
-        let tx = self.read().await.map_err(|err| QueryError::Error {
+        let mut tx = self.read().await.map_err(|err| QueryError::Error {
             message: err.to_string(),
         })?;
 
@@ -469,19 +455,19 @@ impl SqlStorage {
         // based on the timestamp index. The remaining sort on height, which guarantees a unique
         // block if multiple blocks have the same timestamp, is very efficient, because there are
         // never more than a handful of blocks with the same timestamp.
-        let row = tx
-            .query_opt(
-                "SELECT height FROM header
-                  WHERE timestamp <= $1
-                  ORDER BY timestamp DESC, height DESC
-                  LIMIT 1",
-                [&timestamp],
-            )
-            .await?;
-
-        let height = row.map(|row| row.get::<_, i64>(0) as u64);
-
-        Ok(height)
+        let Some((height,)) = query_as::<(i64,)>(
+            "SELECT height FROM header
+              WHERE timestamp <= $1
+              ORDER BY timestamp DESC, height DESC
+              LIMIT 1",
+        )
+        .bind(timestamp)
+        .fetch_optional(tx.as_mut())
+        .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(height as u64))
     }
 }
 
@@ -490,9 +476,9 @@ impl PruneStorage for SqlStorage {
     type Pruner = Pruner;
 
     async fn get_disk_usage(&self) -> anyhow::Result<u64> {
-        let tx = self.read().await?;
+        let mut tx = self.read().await?;
         let row = tx
-            .query_one_static("SELECT pg_database_size(current_database())")
+            .fetch_one("SELECT pg_database_size(current_database())")
             .await?;
         let size: i64 = row.get(0);
         Ok(size as u64)
@@ -599,108 +585,19 @@ impl PruneStorage for SqlStorage {
 }
 
 impl VersionedDataSource for SqlStorage {
-    type Transaction<'a> = Transaction<'a>
+    type Transaction<'a> = Transaction<Write>
     where
         Self: 'a;
-    type ReadOnly<'a> = ReadOnly<Transaction<'a>>
+    type ReadOnly<'a> = Transaction<Read>
     where
         Self: 'a;
 
-    async fn write(&self) -> anyhow::Result<Transaction<'_>> {
-        let tx = self.tx_client.lock().await;
-        Transaction::write(tx).await
+    async fn write(&self) -> anyhow::Result<Transaction<Write>> {
+        Transaction::new(&self.pool).await
     }
 
-    async fn read(&self) -> anyhow::Result<ReadOnly<Transaction<'_>>> {
-        let tx = self.client.lock().await;
-        Transaction::read(tx).await
-    }
-}
-
-/// Connect to a Postgres database with a TLS implementation.
-///
-/// Spawns a background task to run the connection. Returns a client and a handle to the spawned
-/// task.
-async fn connect<T>(
-    pgcfg: postgres::Config,
-    tcp: TcpStream,
-    tls: T,
-) -> anyhow::Result<(Client, BackgroundTask)>
-where
-    T: TlsConnect<TcpStream>,
-    T::Stream: Send + 'static,
-{
-    let (client, connection) = pgcfg.connect_raw(tcp, tls).await?;
-    Ok((
-        client,
-        BackgroundTask::spawn("postgres connection", connection),
-    ))
-}
-
-// tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
-// traits do not require any specifics of the tokio runtime. Thus we can implement them using the
-// async_std TcpStream type, and have a stream which is compatible with tokio-postgres but will run
-// on the async_std executor.
-//
-// To avoid orphan impls, we wrap this tream in a new type.
-struct TcpStream(async_std::net::TcpStream);
-
-impl TcpStream {
-    async fn connect<A: ToSocketAddrs>(addrs: A) -> Result<Self, Error> {
-        Ok(Self(async_std::net::TcpStream::connect(addrs).await?))
-    }
-}
-
-impl tokio::io::AsyncRead for TcpStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        // tokio uses this hyper-optimized `ReadBuf` construct, where there is a filled portion, an
-        // unfilled portion where we append new data, and the unfilled portion of the buffer need
-        // not even be initialized. However the async_std implementation we're delegating to just
-        // expects a normal `&mut [u8]` buffer which is entirely unfilled. To simplify the
-        // conversion, we will abandon the uninitialized buffer optimization and force
-        // initialization of the entire buffer, resulting in a plain old `&mut [u8]` representing
-        // the unfilled portion. But first, we need to grab the length of the filled region so we
-        // can increment it after we read new data from async_std.
-        let filled = buf.filled().len();
-
-        // Initialize the buffer and get a slice of the unfilled region. This operation is free
-        // after the first time it is called, so we don't need to worry about maintaining state
-        // between subsequent calls to `poll_read`.
-        let unfilled = buf.initialize_unfilled();
-
-        // Read data into the unfilled portion of the buffer.
-        match Pin::new(&mut self.0).poll_read(cx, unfilled) {
-            Poll::Ready(Ok(bytes_read)) => {
-                // After the read completes, the first `bytes_read` of `unfilled` have now been
-                // filled. Increment the `filled` cursor within the `ReadBuf` to account for this.
-                buf.set_filled(filled + bytes_read);
-                Poll::Ready(Ok(()))
-            }
-            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
-            Poll::Pending => Poll::Pending,
-        }
-    }
-}
-
-impl tokio::io::AsyncWrite for TcpStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_close(cx)
+    async fn read(&self) -> anyhow::Result<Transaction<Read>> {
+        Transaction::new(&self.pool).await
     }
 }
 
@@ -719,7 +616,7 @@ pub mod testing {
     use portpicker::pick_unused_port;
     use refinery::Migration;
 
-    use super::Config;
+    use super::{Config, Postgres};
     use crate::testing::sleep;
 
     #[derive(Debug)]
@@ -786,13 +683,12 @@ pub mod testing {
             self.port
         }
 
-        pub fn config(&self) -> Config {
+        pub fn config(&self) -> Config<Postgres> {
             Config::default()
                 .user("postgres")
                 .password("password")
                 .host(self.host())
                 .port(self.port())
-                .tls()
                 .migrations(vec![Migration::unapplied(
                     "V11__create_test_merkle_tree_table.sql",
                     &TestMerkleTreeMigration::create("test_tree"),
@@ -1019,21 +915,20 @@ mod test {
     #[test]
     fn test_config_from_str() {
         let cfg = Config::from_str("postgresql://user:password@host:8080").unwrap();
-        assert_eq!(cfg.pgcfg.get_user(), Some("user"));
-        assert_eq!(cfg.pgcfg.get_password(), Some("password".as_bytes()));
-        assert_eq!(cfg.host, "host");
-        assert_eq!(cfg.port, 8080);
+        assert_eq!(cfg.db_opt.get_username(), "user");
+        assert_eq!(cfg.db_opt.get_host(), "host");
+        assert_eq!(cfg.db_opt.get_port(), 8080);
     }
 
-    #[test]
-    fn test_config_from_pgcfg() {
-        let mut pgcfg = postgres::Config::default();
-        pgcfg.dbname("db");
-        let cfg = Config::from(pgcfg.clone());
-        assert_eq!(cfg.pgcfg, pgcfg);
-        // Default values.
-        assert_eq!(cfg.host, "localhost");
-        assert_eq!(cfg.port, 5432);
+    async fn vacuum(storage: &SqlStorage) {
+        storage
+            .pool
+            .acquire()
+            .await
+            .unwrap()
+            .execute("VACUUM")
+            .await
+            .unwrap();
     }
 
     #[async_std::test]
@@ -1075,7 +970,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.lock().await.vacuum().await.unwrap();
+        vacuum(&storage).await;
         // Pruned height should be none
         assert!(pruned_height.is_none());
 
@@ -1096,7 +991,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.lock().await.vacuum().await.unwrap();
+        vacuum(&storage).await;
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
@@ -1107,10 +1002,10 @@ mod test {
             .read()
             .await
             .unwrap()
-            .query_one_static("select count(*) as count from header")
+            .fetch_one("select count(*) as count from header")
             .await
             .unwrap()
-            .get::<_, i64>("count");
+            .get::<i64, _>("count");
         // the table should be empty
         assert_eq!(header_rows, 0);
 
@@ -1121,10 +1016,10 @@ mod test {
             .read()
             .await
             .unwrap()
-            .query_one_static("select count(*) as count from leaf")
+            .fetch_one("select count(*) as count from leaf")
             .await
             .unwrap()
-            .get::<_, i64>("count");
+            .get::<i64, _>("count");
         // the table should be empty
         assert_eq!(leaf_rows, 0);
 
@@ -1169,7 +1064,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.lock().await.vacuum().await.unwrap();
+        vacuum(&storage).await;
 
         // Pruned height should be none
         assert!(pruned_height.is_none());
@@ -1193,7 +1088,7 @@ mod test {
         // Vacuum the database to reclaim space.
         // This is necessary to ensure the test passes.
         // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
-        storage.client.lock().await.vacuum().await.unwrap();
+        vacuum(&storage).await;
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
@@ -1203,10 +1098,10 @@ mod test {
             .read()
             .await
             .unwrap()
-            .query_one_static("select count(*) as count from header")
+            .fetch_one("select count(*) as count from header")
             .await
             .unwrap()
-            .get::<_, i64>("count");
+            .get::<i64, _>("count");
         // the table should be empty
         assert_eq!(header_rows, 0);
     }
