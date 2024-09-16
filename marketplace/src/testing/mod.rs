@@ -46,7 +46,7 @@ pub mod order_test;
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
 )]
-struct TestTypes;
+pub struct TestTypes;
 impl NodeType for TestTypes {
     type Time = ViewNumber;
     type BlockHeader = TestBlockHeader;
@@ -112,7 +112,7 @@ async fn start_builder_state(
 
 /// get transactions submitted in previous rounds, [] for genesis
 /// and simulate the block built from those
-async fn calc_proposal_msg(
+pub async fn calc_proposal_msg(
     num_storage_nodes: usize,
     round: usize,
     prev_quorum_proposal: Option<QuorumProposal<TestTypes>>,

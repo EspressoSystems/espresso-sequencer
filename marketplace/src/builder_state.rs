@@ -960,6 +960,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
+    use std::marker::PhantomData;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -968,11 +969,13 @@ mod test {
     use committable::{Commitment, CommitmentBoundsArkless, Committable};
     use hotshot::traits::BlockPayload;
     use hotshot::types::{BLSPubKey, SignatureKey};
-    use hotshot_example_types::block_types::{TestBlockPayload, TestMetadata};
+    use hotshot_example_types::block_types::{TestBlockHeader, TestBlockPayload, TestMetadata};
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_example_types::{block_types::TestTransaction, node_types::TestTypes};
+    use hotshot_example_types::block_types::TestTransaction;
     use hotshot_task_impls::transactions;
-    use hotshot_types::data::Leaf;
+    use hotshot_types::data::{Leaf, QuorumProposal};
+    use hotshot_types::simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold};
+    use hotshot_types::simple_vote::QuorumData;
     use hotshot_types::traits::block_contents::vid_commitment;
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
@@ -987,6 +990,7 @@ mod test {
     use super::DaProposalMessage;
     use super::MessageType;
     use rkyv::{Deserialize, Infallible};
+    use crate::testing::{calc_proposal_msg, TestTypes};
 
     /// This test checkes da_proposal_payload_commit_to_da_proposal and
     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
@@ -1053,34 +1057,17 @@ mod test {
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
-
-        let txn_commitments = transactions.iter().map(Committable::commit).collect();
-        let encoded_transactions = TestTransaction::encode(&transactions);
-        let block_payload = TestBlockPayload { transactions };
-        let block_vid_commitment = vid_commitment(&encoded_transactions, num_storage_nodes);
-        let block_builder_commitment =
-            <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
-                &block_payload,
-                &TestMetadata,
-            );
-
-        let da_proposal = Arc::new(DaProposalMessage {
-            view_number: ViewNumber::new(0),
-            txn_commitments,
-            sender: leader_public_key,
-            builder_commitment: block_builder_commitment.clone(),
-        });
+        let (_quorum_proposal, _quorum_proposal_msg, da_proposal_msg, builder_state_id) =
+            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
 
         // sub-test one
         // call process_da_proposal without matching quorum proposal message
         // da_proposal_payload_commit_to_da_proposal should insert the message
-        let da_msg = MessageType::DaProposalMessage(Arc::clone(&da_proposal));
         let mut correct_da_proposal_payload_commit_to_da_proposal: HashMap<
             (BuilderCommitment, <TestTypes as NodeType>::Time),
             Arc<DaProposalMessage<TestTypes>>,
         > = HashMap::new();
-
-        if let MessageType::DaProposalMessage(practice_da_msg) = da_msg {
+        if let MessageType::DaProposalMessage(practice_da_msg) = da_proposal_msg.clone() {
             builder_state
                 .process_da_proposal(practice_da_msg.clone())
                 .await;
@@ -1094,12 +1081,8 @@ mod test {
         } else {
             tracing::error!("Not a da_proposal_message in correct format");
         }
-        tracing::debug!(
-            "da_proposal_payload_commit_to_da_proposal = {:?}",
-            builder_state.da_proposal_payload_commit_to_da_proposal
-        );
         let deserialized_map: HashMap<_, _> =
-            builder_state.da_proposal_payload_commit_to_da_proposal;
+            builder_state.da_proposal_payload_commit_to_da_proposal.clone();
         for (key, value) in deserialized_map.iter() {
             let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
             assert_eq!(
@@ -1112,10 +1095,6 @@ mod test {
             );
         }
         // check global_state didn't change
-        let builder_state_id = BuilderStateId {
-            parent_commitment: block_vid_commitment,
-            parent_view: ViewNumber::new(0),
-        };
         if let Some(_x) = global_state
             .read_arc()
             .await
@@ -1123,17 +1102,92 @@ mod test {
             .get(&builder_state_id) {
                 panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
         }
-
         
         // sub-test two
         // call process_da_proposal with the same msg again
         // we should skip the process and everything should be the same
-
+        let transactions_1 = transactions.clone();
+        let (_quorum_proposal_1, _quorum_proposal_msg_1, da_proposal_msg_1, builder_state_id_1) =
+            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions_1).await;
+        if let MessageType::DaProposalMessage(practice_da_msg_1) = da_proposal_msg_1.clone() {
+            builder_state
+                .process_da_proposal(practice_da_msg_1.clone())
+                .await;
+        } else {
+            tracing::error!("Not a da_proposal_message in correct format");
+        }
+        let deserialized_map: HashMap<_, _> =
+            builder_state.da_proposal_payload_commit_to_da_proposal.clone();
+        for (key, value) in deserialized_map.iter() {
+            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
+            assert_eq!(
+                value.as_ref().clone(),
+                rkyv::option::ArchivedOption::Some(correct_value)
+                    .unwrap()
+                    .unwrap()
+                    .as_ref()
+                    .clone()
+            );
+        }
+        // check global_state didn't change
+        if let Some(_x) = global_state
+            .read_arc()
+            .await
+            .spawned_builder_states
+            .get(&builder_state_id_1) {
+                panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+        }
 
         // sub-test three
         // add the matching quorum proposal message with different tx
         // and call process_da_proposal with this matching da proposal message and quorum proposal message
         // we should spawn_clone here
         // and check whether global_state has correct BuilderStateId
+        let transactions_2 = vec![TestTransaction::new(vec![1, 2, 3, 4]); 2];
+        let (_quorum_proposal_2, quorum_proposal_msg_2, da_proposal_msg_2, builder_state_id_2) =
+            calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions_2).await;
+
+        // process quorum proposal first, so that later when process_da_proposal we can directly call `build_block` and skip storage 
+        if let MessageType::QuorumProposalMessage(practice_qc_msg_2) = quorum_proposal_msg_2.clone() {
+            builder_state
+                .process_quorum_proposal(practice_qc_msg_2.clone())
+                .await;
+        } else {
+            tracing::error!("Not a quorum_proposal_message in correct format");
+        }
+
+        // process da proposal message and do the check
+        if let MessageType::DaProposalMessage(practice_da_msg_2) = da_proposal_msg_2.clone() {
+            builder_state
+                .process_da_proposal(practice_da_msg_2.clone())
+                .await;
+        } else {
+            tracing::error!("Not a da_proposal_message in correct format");
+        }
+        let deserialized_map_2: HashMap<_, _> =
+            builder_state.da_proposal_payload_commit_to_da_proposal;
+        for (key, value) in deserialized_map_2.iter() {
+            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
+            assert_eq!(
+                value.as_ref().clone(),
+                rkyv::option::ArchivedOption::Some(correct_value)
+                    .unwrap()
+                    .unwrap()
+                    .as_ref()
+                    .clone()
+            );
+        }
+        // check global_state has this new builder_state_id
+        if let Some(_x) = global_state
+            .read_arc()
+            .await
+            .spawned_builder_states
+            .get(&builder_state_id_2) {
+                tracing::debug!("global_state updated successfully");
+        } else {
+            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+        }
+        
+
     }
 }
