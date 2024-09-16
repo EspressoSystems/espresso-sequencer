@@ -173,8 +173,9 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientDefenderScript 
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
-$LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS \
-contracts/src/LightClient.sol:LightClient --watch
+$LIGHT_CLIENT_CONTRACT_ADDRESS \
+contracts/src/LightClient.sol:LightClient \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
 ```
 
 ### 3. Inform Etherscan about your proxy
@@ -316,7 +317,8 @@ forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
 $LIGHT_CLIENT_CONTRACT_ADDRESS \
-contracts/src/LightClient.sol:LightClient
+contracts/src/LightClient.sol:LightClient \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
 ```
 
 ### 4. Inform Etherscan about your proxy
