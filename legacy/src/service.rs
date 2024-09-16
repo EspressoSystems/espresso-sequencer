@@ -2911,7 +2911,7 @@ mod test {
     /// This test checks that the error `AvailableBlocksError::NoBlocksAvailable`
     /// is returned when no blocks are available.
     ///
-    /// To Trigger this condition, we simply submit a request to the
+    /// To trigger this condition, we simply submit a request to the
     /// implementation of get_available_blocks, and we do not provide any
     /// information for the block view number requested.  As a result, the
     /// implementation will ultimately timeout, and return an error that
