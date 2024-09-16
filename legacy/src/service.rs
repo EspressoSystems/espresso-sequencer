@@ -84,51 +84,6 @@ pub struct BlockInfo<Types: NodeType> {
     pub truncated: bool,
 }
 
-// It holds the information for the proposed block
-
-/// [ProposedBlockId] contains information relating to what has been proposed
-/// for a Block.
-///
-/// This is only referenced within [BuilderStatesInfo] and does not seem to be
-/// utilized.
-///
-/// TODO: look into whether it needs to stick around or not.
-#[derive(Debug)]
-pub struct ProposedBlockId<Types: NodeType> {
-    pub parent_commitment: VidCommitment,
-    pub payload_commitment: BuilderCommitment,
-    pub parent_view: Types::Time,
-}
-
-impl<Types: NodeType> ProposedBlockId<Types> {
-    pub fn new(
-        parent_commitment: VidCommitment,
-        payload_commitment: BuilderCommitment,
-        parent_view: Types::Time,
-    ) -> Self {
-        ProposedBlockId {
-            parent_commitment,
-            payload_commitment,
-            parent_view,
-        }
-    }
-}
-
-/// [BuilderStatesInfo] holds information concerning [VidCommitment]s and
-/// [ProposedBlockId]s.
-///
-/// It does not seem to be utilized
-///
-/// TODO: look into whether it needs to stick around or not
-#[derive(Debug, Derivative)]
-#[derivative(Default(bound = ""))]
-pub struct BuilderStatesInfo<Types: NodeType> {
-    // list of all the builder states spawned for a view
-    pub vid_commitments: Vec<VidCommitment>,
-    // list of all the proposed blocks for a view
-    pub block_ids: Vec<ProposedBlockId<Types>>,
-}
-
 /// [ReceivedTransaction] represents receipt information concerning a received
 /// [NodeType::Transaction].
 #[derive(Debug)]
