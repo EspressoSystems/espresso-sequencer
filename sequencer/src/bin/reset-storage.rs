@@ -1,5 +1,4 @@
 use clap::{Parser, Subcommand};
-use hotshot_query_service::data_source::VersionedDataSource;
 use sequencer::{
     api::data_source::{DataSourceOptions, SequencerDataSource},
     persistence,
@@ -46,9 +45,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn reset_storage<O: DataSourceOptions>(opt: O) -> anyhow::Result<()> {
     // Reset query service storage.
-    let mut ds = O::DataSource::create(opt.clone(), Default::default(), true).await?;
-    ds.commit().await?;
-
+    O::DataSource::create(opt.clone(), Default::default(), true).await?;
     // Reset consensus storage.
     opt.reset().await?;
 

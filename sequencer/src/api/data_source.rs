@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
 use anyhow::{bail, Context};
 use async_trait::async_trait;
@@ -15,7 +15,7 @@ use hotshot_orchestrator::config::{
 };
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::{MetricsDataSource, UpdateDataSource, VersionedDataSource},
+    data_source::{MetricsDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
@@ -71,7 +71,6 @@ pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + NodeDataSource<SeqTypes>
     + StatusDataSource
-    + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {
@@ -373,7 +372,7 @@ impl From<NetworkConfig<PubKey>> for PublicNetworkConfig {
             rounds: cfg.rounds,
             indexed_da: cfg.indexed_da,
             transactions_per_round: cfg.transactions_per_round,
-            manual_start_password: cfg.manual_start_password,
+            manual_start_password: Some("*****".into()),
             num_bootrap: cfg.num_bootrap,
             next_view_timeout: cfg.next_view_timeout,
             view_sync_timeout: cfg.view_sync_timeout,
@@ -432,6 +431,8 @@ impl PublicNetworkConfig {
             commit_sha: self.commit_sha,
             builder: self.builder,
             random_builder: self.random_builder,
+            public_keys: HashSet::new(),
+            enable_registration_verification: false,
         })
     }
 }

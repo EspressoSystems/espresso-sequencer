@@ -21,18 +21,17 @@ contract LightClientDefenderDeployScript is Script {
         returns (address proxy, address multisig, LC.LightClientState memory state)
     {
         // TODO for a production deployment provide the right genesis state and value
-        uint32 numBlocksPerEpoch = 5;
         uint32 numInitValidators = 1;
         uint32 stateHistoryRetentionPeriod = 864000;
 
-        string[] memory cmds = new string[](4);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(numBlocksPerEpoch);
-        cmds[3] = vm.toString(uint256(numInitValidators));
+        cmds[2] = vm.toString(uint256(numInitValidators));
 
         bytes memory result = vm.ffi(cmds);
-        (state,,) = abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+        LC.StakeTableState memory stakeState;
+        (state, stakeState) = abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
         ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
         multisig = upgradeApprovalProcess.via;
@@ -54,7 +53,7 @@ contract LightClientDefenderDeployScript is Script {
         proxy = Upgrades.deployUUPSProxy(
             contractName,
             abi.encodeCall(
-                LC.initialize, (state, numBlocksPerEpoch, stateHistoryRetentionPeriod, multisig)
+                LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, multisig)
             ),
             opts
         );

@@ -24,6 +24,7 @@ use futures::FutureExt;
 use genesis::L1Finalized;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
+use libp2p_networking::network::GossipConfig;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -96,7 +97,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<Se
     for Node<N, P>
 {
     type Network = N;
-    type Storage = Arc<RwLock<P>>;
+    type Storage = Arc<P>;
     type AuctionResultsProvider = SolverAuctionResultsProvider;
 }
 
@@ -223,7 +224,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let mut persistence = persistence_opt.clone().create().await?;
+    let persistence = persistence_opt.clone().create().await?;
     let (mut config, wait_for_orchestrator) = match (
         persistence.load_config().await?,
         network_params.config_peers,
@@ -326,6 +327,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
+            GossipConfig::default(),
             network_params.libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair
@@ -424,14 +426,16 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::{collections::HashMap, str::FromStr, time::Duration};
+    use std::{collections::HashMap, time::Duration};
 
+    use async_compatibility_layer::art::async_spawn;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        Event, FeeAccount, MockSequencerVersions, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
+        Upgrade,
     };
     use futures::{
         future::join_all,
@@ -451,8 +455,17 @@ pub mod testing {
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
-        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        traits::{
+            block_contents::{vid_commitment, BlockHeader, EncodeBytes},
+            metrics::NoMetrics,
+            node_implementation::ConsensusTime,
+            stake_table::StakeTableScheme,
+        },
         ExecutionType, HotShotConfig, PeerConfig,
+    };
+    use marketplace_builder_core::{
+        builder_state::{BuilderState, BuiltFromProposedBlock},
+        service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
     };
     use portpicker::pick_unused_port;
     use vbs::version::Version;
@@ -461,6 +474,114 @@ pub mod testing {
     use crate::persistence::no_storage::{self, NoStorage};
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
+    const BUILDER_CHANNEL_CAPACITY_FOR_TEST: usize = 128;
+
+    struct MarketplaceBuilderImplementation {
+        hooks: Arc<NoHooks<SeqTypes>>,
+        senders: BroadcastSenders<SeqTypes>,
+    }
+
+    impl BuilderTask<SeqTypes> for MarketplaceBuilderImplementation {
+        fn start(
+            self: Box<Self>,
+            stream: Box<
+                dyn Stream<Item = hotshot::types::Event<SeqTypes>>
+                    + std::marker::Unpin
+                    + Send
+                    + 'static,
+            >,
+        ) {
+            async_spawn(async move {
+                let res = run_builder_service::<SeqTypes>(self.hooks, self.senders, stream).await;
+                tracing::error!(?res, "Testing marketplace builder service exited");
+            });
+        }
+    }
+
+    pub async fn run_marketplace_builder<const NUM_NODES: usize>(
+        port: Option<u16>,
+        instance_state: NodeState,
+        validated_state: ValidatedState,
+    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
+        let builder_key_pair = EthKeyPair::random();
+        let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
+
+        // This should never fail.
+        let url: Url = format!("http://localhost:{port}")
+            .parse()
+            .expect("Failed to parse builder URL");
+
+        let (senders, receivers) = marketplace_builder_core::service::broadcast_channels(
+            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
+        );
+
+        // builder api request channel
+        let (req_sender, req_receiver) =
+            async_broadcast::broadcast::<_>(BUILDER_CHANNEL_CAPACITY_FOR_TEST);
+
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
+                .expect("genesis payload construction failed");
+
+        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+
+        let vid_commitment = {
+            let payload_bytes = genesis_payload.encode();
+            vid_commitment(&payload_bytes, NUM_NODES)
+        };
+
+        // create the global state
+        let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
+            req_sender,
+            senders.transactions.clone(),
+            vid_commitment,
+            ViewNumber::genesis(),
+        );
+
+        let global_state = Arc::new(RwLock::new(global_state));
+
+        let leaf = Leaf::genesis(&validated_state, &instance_state).await;
+
+        let builder_state = BuilderState::<SeqTypes>::new(
+            BuiltFromProposedBlock {
+                view_number: ViewNumber::genesis(),
+                vid_commitment,
+                leaf_commit: leaf.commit(),
+                builder_commitment,
+            },
+            &receivers,
+            req_receiver,
+            Vec::new(), /* tx_queue */
+            Arc::clone(&global_state),
+            Duration::from_secs(60),
+            10,
+            Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
+        );
+
+        builder_state.event_loop();
+
+        let hooks = Arc::new(NoHooks(PhantomData));
+
+        // create the proxy global state it will server the builder apis
+        let app = ProxyGlobalState::new(
+            global_state.clone(),
+            Arc::clone(&hooks),
+            (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            Duration::from_secs(60),
+        )
+        .into_app()
+        .expect("Failed to create builder tide-disco app");
+
+        async_spawn(app.serve(url.clone(), MarketplaceVersion::instance()));
+
+        (
+            Box::new(MarketplaceBuilderImplementation { hooks, senders }),
+            url,
+        )
+    }
 
     pub async fn run_test_builder<const NUM_NODES: usize>(
         port: Option<u16>,
@@ -494,12 +615,18 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
+        marketplace_builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
     }
 
     impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
         pub fn builder_port(mut self, builder_port: Option<u16>) -> Self {
             self.builder_port = builder_port;
+            self
+        }
+
+        pub fn marketplace_builder_port(mut self, port: Option<u16>) -> Self {
+            self.marketplace_builder_port = port;
             self
         }
 
@@ -513,19 +640,14 @@ pub mod testing {
             self
         }
 
-        pub fn upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+        pub fn upgrades<V: Versions>(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+            let upgrade = upgrades.get(&<V as Versions>::Upgrade::VERSION).unwrap();
+            upgrade.set_hotshot_config_parameters(&mut self.config);
             self.upgrades = upgrades;
             self
         }
 
-        pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrade) = self
-                .upgrades
-                .get(&<MockSequencerVersions as Versions>::Upgrade::VERSION)
-            {
-                upgrade.set_hotshot_config_parameters(&mut self.config)
-            }
-
+        pub fn build(self) -> TestConfig<NUM_NODES> {
             TestConfig {
                 config: self.config,
                 priv_keys: self.priv_keys,
@@ -533,6 +655,7 @@ pub mod testing {
                 master_map: self.master_map,
                 l1_url: self.l1_url,
                 state_relay_url: self.state_relay_url,
+                marketplace_builder_port: self.marketplace_builder_port,
                 builder_port: self.builder_port,
                 upgrades: self.upgrades,
             }
@@ -608,6 +731,7 @@ pub mod testing {
                 l1_url: "http://localhost:8545".parse().unwrap(),
                 state_relay_url: None,
                 builder_port: None,
+                marketplace_builder_port: None,
                 upgrades: Default::default(),
             }
         }
@@ -622,6 +746,7 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
+        marketplace_builder_port: Option<u16>,
         upgrades: BTreeMap<Version, Upgrade>,
     }
 
@@ -636,6 +761,10 @@ pub mod testing {
 
         pub fn set_builder_urls(&mut self, builder_urls: vec1::Vec1<Url>) {
             self.config.builder_urls = builder_urls;
+        }
+
+        pub fn marketplace_builder_port(&self) -> Option<u16> {
+            self.marketplace_builder_port
         }
 
         pub fn builder_port(&self) -> Option<u16> {
@@ -664,6 +793,11 @@ pub mod testing {
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
                     Default::default(),
+                    Url::parse(&format!(
+                        "http://localhost:{}",
+                        self.marketplace_builder_port.unwrap_or_default()
+                    ))
+                    .unwrap(),
                 )
                 .await
             }))
@@ -701,6 +835,7 @@ pub mod testing {
             stake_table_capacity: u64,
             bind_version: V,
             upgrades: BTreeMap<Version, Upgrade>,
+            marketplace_builder_url: Url,
         ) -> SequencerContext<network::Memory, P::Persistence, V> {
             let mut config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
@@ -764,7 +899,7 @@ pub mod testing {
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
                     auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
-                    fallback_builder_url: Url::from_str("https://some.builder").unwrap(),
+                    fallback_builder_url: marketplace_builder_url,
                 },
             )
             .await

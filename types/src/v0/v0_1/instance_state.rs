@@ -8,7 +8,18 @@ use crate::{v0_3::ChainConfig, Timestamp};
 #[serde(rename_all = "snake_case")]
 pub enum UpgradeType {
     Fee { chain_config: ChainConfig },
-    Marketplace {},
+    Marketplace { chain_config: ChainConfig },
+}
+
+impl UpgradeType {
+    /// Get the upgrade data from `UpgradeType`. As of this writing,
+    /// we are only concerned w/ `ChainConfig`.
+    pub fn data(&self) -> ChainConfig {
+        match self {
+            UpgradeType::Fee { chain_config } => *chain_config,
+            UpgradeType::Marketplace { chain_config } => *chain_config,
+        }
+    }
 }
 
 /// Represents an upgrade based on time (unix timestamp).

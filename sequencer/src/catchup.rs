@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use anyhow::{bail, Context};
-use async_std::sync::RwLock;
 use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
@@ -211,12 +210,12 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
 
 #[derive(Debug)]
 pub(crate) struct SqlStateCatchup<T> {
-    db: Arc<RwLock<T>>,
+    db: Arc<T>,
     backoff: BackoffParams,
 }
 
 impl<T> SqlStateCatchup<T> {
-    pub(crate) fn new(db: Arc<RwLock<T>>, backoff: BackoffParams) -> Self {
+    pub(crate) fn new(db: Arc<T>, backoff: BackoffParams) -> Self {
         Self { db, backoff }
     }
 }
@@ -235,8 +234,6 @@ where
         account: FeeAccount,
     ) -> anyhow::Result<AccountQueryData> {
         self.db
-            .read()
-            .await
             .get_account(block_height, view, account.into())
             .await
     }
@@ -252,7 +249,7 @@ where
             return Ok(());
         }
 
-        let proof = self.db.read().await.get_frontier(bh, view).await?;
+        let proof = self.db.get_frontier(bh, view).await?;
         match proof
             .proof
             .first()
@@ -269,7 +266,7 @@ where
         &self,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        self.db.read().await.get_chain_config(commitment).await
+        self.db.get_chain_config(commitment).await
     }
 
     fn backoff(&self) -> &BackoffParams {

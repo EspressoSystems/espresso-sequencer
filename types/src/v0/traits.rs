@@ -3,7 +3,6 @@
 use std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
 
 use anyhow::{bail, ensure, Context};
-use async_std::sync::RwLock;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use futures::{FutureExt, TryFutureExt};
@@ -336,16 +335,16 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>>;
 
     /// Save the orchestrator config to storage.
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()>;
+    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()>;
 
     /// Saves the latest decided leaf.
     ///
     /// If the height of the new leaf is not greater than the height of the previous decided leaf,
     /// storage is not updated.
     async fn save_anchor_leaf(
-        &mut self,
+        &self,
         leaf: &Leaf,
         qc: &QuorumCertificate<SeqTypes>,
     ) -> anyhow::Result<()>;
@@ -437,10 +436,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
         // starting in a view in which we had already voted before the restart, and prevents
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
-        let mut view = max(highest_voted_view, leaf.view_number());
-        if view != ViewNumber::genesis() {
-            view += 1;
-        }
+        let view = max(highest_voted_view, leaf.view_number());
 
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
@@ -470,6 +466,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             state,
             validated_state,
             view,
+            highest_voted_view,
             saved_proposals,
             high_qc,
             undecided_leaves.into_values().collect(),
@@ -478,7 +475,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     }
 
     /// Update storage based on an event from consensus.
-    async fn handle_event(&mut self, event: &Event) {
+    async fn handle_event(&self, event: &Event) {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
                 if qc.view_number != leaf.view_number() {
@@ -505,46 +502,42 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     }
 
     async fn append_vid(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_da(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
-    async fn record_action(
-        &mut self,
-        view: ViewNumber,
-        action: HotShotAction,
-    ) -> anyhow::Result<()>;
+    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
     async fn update_undecided_state(
-        &mut self,
+        &self,
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn append_quorum_proposal(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
-impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
+impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_vid(
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_vid(proposal).await
+        (**self).append_vid(proposal).await
     }
 
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_da(proposal).await
+        (**self).append_da(proposal).await
     }
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        self.write().await.record_action(view, action).await
+        (**self).record_action(view, action).await
     }
     async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
         Ok(())
@@ -555,17 +548,14 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write()
-            .await
-            .update_undecided_state(leaves, state)
-            .await
+        (**self).update_undecided_state(leaves, state).await
     }
 
     async fn append_proposal(
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        self.write().await.append_quorum_proposal(proposal).await
+        (**self).append_quorum_proposal(proposal).await
     }
 }
 

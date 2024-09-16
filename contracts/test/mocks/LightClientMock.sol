@@ -15,20 +15,15 @@ contract LightClientMock is LC {
 
     constructor(
         LC.LightClientState memory genesis,
-        uint32 numBlockPerEpoch,
+        LC.StakeTableState memory genesisStakeTableState,
         uint32 maxHistorySeconds
     ) LC() {
-        _initializeState(genesis, numBlockPerEpoch, maxHistorySeconds);
-    }
-
-    /// @dev Directly mutate currentEpoch variable for test
-    function setCurrentEpoch(uint64 newEpoch) public {
-        currentEpoch = newEpoch;
+        _initializeState(genesis, genesisStakeTableState, maxHistorySeconds);
     }
 
     /// @dev Directly mutate finalizedState variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
-        states[finalizedState] = state;
+        finalizedState = state;
     }
 
     /// @dev override the production-implementation with test VK.
@@ -40,15 +35,14 @@ contract LightClientMock is LC {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
 
         // Prepare the public input
-        uint256[] memory publicInput = new uint256[](8);
-        publicInput[0] = votingThreshold;
-        publicInput[1] = uint256(state.viewNum);
-        publicInput[2] = uint256(state.blockHeight);
-        publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
-        publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
+        uint256[7] memory publicInput;
+        publicInput[0] = uint256(state.viewNum);
+        publicInput[1] = uint256(state.blockHeight);
+        publicInput[2] = BN254.ScalarField.unwrap(state.blockCommRoot);
+        publicInput[3] = BN254.ScalarField.unwrap(genesisStakeTableState.blsKeyComm);
+        publicInput[4] = BN254.ScalarField.unwrap(genesisStakeTableState.schnorrKeyComm);
+        publicInput[5] = BN254.ScalarField.unwrap(genesisStakeTableState.amountComm);
+        publicInput[6] = genesisStakeTableState.threshold;
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();

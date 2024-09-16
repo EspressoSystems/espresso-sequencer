@@ -7,6 +7,7 @@ import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClient as LCV2 } from "../src/LightClient.sol";
 import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
 import { UpgradeLightClientScript } from "../script/UpgradeSameLightClient.s.sol";
+import { BN254 } from "bn254/BN254.sol";
 
 contract LightClientUpgradeSameContractTest is Test {
     LCV1 public lcV1Proxy;
@@ -16,31 +17,44 @@ contract LightClientUpgradeSameContractTest is Test {
     UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
 
     LCV1.LightClientState public stateV1;
+    LCV1.StakeTableState public stakeStateV1;
 
     address public admin;
     address public proxy;
 
-    uint32 constant MAX_HISTORY_SECONDS = 864000; //10 days
+    uint32 public constant MAX_HISTORY_SECONDS = 864000; //10 days
 
     // deploy the first implementation with its proxy
     function setUp() public {
-        (proxy, admin, stateV1) = deployer.run(10, 5, MAX_HISTORY_SECONDS);
+        (proxy, admin, stateV1, stakeStateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
         lcV1Proxy = LCV1(proxy);
     }
 
     function testCorrectInitialization() public view {
-        assert(lcV1Proxy.blocksPerEpoch() == 10);
-        assert(lcV1Proxy.currentEpoch() == 0);
+        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
+            lcV1Proxy.genesisState();
+        assertEq(viewNum, stateV1.viewNum);
+        assertEq(blockHeight, stateV1.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(stateV1.blockCommRoot));
 
-        assertEq(abi.encode(lcV1Proxy.getGenesisState()), abi.encode(stateV1));
+        (viewNum, blockHeight, blockCommRoot) = lcV1Proxy.finalizedState();
+        assertEq(viewNum, stateV1.viewNum);
+        assertEq(blockHeight, stateV1.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(stateV1.blockCommRoot));
 
-        assertEq(abi.encode(lcV1Proxy.getFinalizedState()), abi.encode(stateV1));
+        (
+            uint256 threshold,
+            BN254.ScalarField stakeTableBlsKeyComm,
+            BN254.ScalarField stakeTableSchnorrKeyComm,
+            BN254.ScalarField stakeTableAmountComm
+        ) = lcV1Proxy.genesisStakeTableState();
 
-        bytes32 stakeTableComm = lcV1Proxy.computeStakeTableComm(stateV1);
-        assertEq(lcV1Proxy.votingStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.votingThreshold(), stateV1.threshold);
-        assertEq(lcV1Proxy.frozenThreshold(), stateV1.threshold);
+        assertEq(
+            abi.encode(stakeStateV1),
+            abi.encode(
+                threshold, stakeTableBlsKeyComm, stakeTableSchnorrKeyComm, stakeTableAmountComm
+            )
+        );
     }
 
     // that the data remains the same after upgrading the implementation
@@ -50,21 +64,14 @@ contract LightClientUpgradeSameContractTest is Test {
         // of the upgraded contract is set to 0
         lcV2Proxy = LCV2(upgrader.run(0, proxy));
 
-        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
-        assertEq(lcV2Proxy.currentEpoch(), 0);
+        LCV2.LightClientState memory expectedLightClientState =
+            LCV2.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
 
-        LCV2.LightClientState memory expectedLightClientState = LCV2.LightClientState(
-            stateV1.viewNum,
-            stateV1.blockHeight,
-            stateV1.blockCommRoot,
-            stateV1.feeLedgerComm,
-            stateV1.stakeTableBlsKeyComm,
-            stateV1.stakeTableSchnorrKeyComm,
-            stateV1.stakeTableAmountComm,
-            stateV1.threshold
-        );
-
-        assertEq(abi.encode(lcV2Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
+        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
+            lcV1Proxy.finalizedState();
+        assertEq(viewNum, expectedLightClientState.viewNum);
+        assertEq(blockHeight, expectedLightClientState.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
     }
 
     // check that the proxy address remains the same

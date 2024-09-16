@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
+use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use clap::Parser;
 use espresso_types::{
@@ -61,8 +62,8 @@ impl PersistenceOptions for Options {
 
     async fn create(self) -> anyhow::Result<Persistence> {
         Ok(Persistence {
-            path: self.path,
             store_undecided_state: self.store_undecided_state,
+            inner: Arc::new(RwLock::new(Inner { path: self.path })),
         })
     }
 
@@ -74,11 +75,20 @@ impl PersistenceOptions for Options {
 /// File system backed persistence.
 #[derive(Clone, Debug)]
 pub struct Persistence {
-    path: PathBuf,
     store_undecided_state: bool,
+
+    // We enforce mutual exclusion on access to the data source, as the current file system
+    // implementation does not support transaction isolation for concurrent reads and writes. We can
+    // improve this in the future by switching to a SQLite-based file system implementation.
+    inner: Arc<RwLock<Inner>>,
 }
 
-impl Persistence {
+#[derive(Debug)]
+struct Inner {
+    path: PathBuf,
+}
+
+impl Inner {
     fn config_path(&self) -> PathBuf {
         self.path.join("hotshot.cfg")
     }
@@ -155,7 +165,8 @@ impl Persistence {
 #[async_trait]
 impl SequencerPersistence for Persistence {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
-        let path = self.config_path();
+        let inner = self.inner.read().await;
+        let path = inner.config_path();
         if !path.is_file() {
             tracing::info!("config not found at {}", path.display());
             return Ok(None);
@@ -170,13 +181,15 @@ impl SequencerPersistence for Persistence {
         Ok(Some(config))
     }
 
-    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
-        let path = self.config_path();
+    async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
+        let inner = self.inner.write().await;
+        let path = inner.config_path();
         tracing::info!("saving config to {}", path.display());
         Ok(cfg.to_file(path.display().to_string())?)
     }
 
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+    async fn collect_garbage(&self, view: ViewNumber) -> anyhow::Result<()> {
+        let inner = self.inner.write().await;
         let view_number = view.u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
@@ -200,29 +213,32 @@ impl SequencerPersistence for Persistence {
             Ok(())
         };
 
-        delete_files(self.da_dir_path())?;
-        delete_files(self.vid_dir_path())?;
-        delete_files(self.quorum_proposals_dir_path())
+        delete_files(inner.da_dir_path())?;
+        delete_files(inner.vid_dir_path())?;
+        delete_files(inner.quorum_proposals_dir_path())
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
-        let path = self.voted_view_path();
+        let inner = self.inner.read().await;
+        let path = inner.voted_view_path();
         if !path.is_file() {
             return Ok(None);
         }
-        let bytes = fs::read(self.voted_view_path())?
+        let bytes = fs::read(inner.voted_view_path())?
             .try_into()
             .map_err(|bytes| anyhow!("malformed voted view file: {bytes:?}"))?;
         Ok(Some(ViewNumber::new(u64::from_le_bytes(bytes))))
     }
 
     async fn save_anchor_leaf(
-        &mut self,
+        &self,
         leaf: &Leaf,
         qc: &QuorumCertificate<SeqTypes>,
     ) -> anyhow::Result<()> {
-        self.replace(
-            &self.anchor_leaf_path(),
+        let mut inner = self.inner.write().await;
+        let path = &inner.anchor_leaf_path();
+        inner.replace(
+            path,
             |mut file| {
                 // Check if we already have a later leaf before writing the new one. The height of
                 // the latest saved leaf is in the first 8 bytes of the file.
@@ -263,7 +279,8 @@ impl SequencerPersistence for Persistence {
     async fn load_anchor_leaf(
         &self,
     ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
-        let path = self.anchor_leaf_path();
+        let inner = self.inner.read().await;
+        let path = inner.anchor_leaf_path();
         if !path.is_file() {
             return Ok(None);
         }
@@ -281,7 +298,8 @@ impl SequencerPersistence for Persistence {
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
-        let path = self.undecided_state_path();
+        let inner = self.inner.read().await;
+        let path = inner.undecided_state_path();
         if !path.is_file() {
             return Ok(None);
         }
@@ -293,7 +311,8 @@ impl SequencerPersistence for Persistence {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
-        let dir_path = self.da_dir_path();
+        let inner = self.inner.read().await;
+        let dir_path = inner.da_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
 
@@ -312,7 +331,8 @@ impl SequencerPersistence for Persistence {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
-        let dir_path = self.vid_dir_path();
+        let inner = self.inner.read().await;
+        let dir_path = inner.vid_dir_path();
 
         let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
 
@@ -327,16 +347,17 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn append_vid(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.vid_dir_path();
+        let dir_path = inner.vid_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        self.replace(
+        inner.replace(
             &file_path,
             |_| {
                 // Don't overwrite an existing share, but warn about it as this is likely not intended
@@ -352,16 +373,17 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn append_da(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.da_dir_path();
+        let dir_path = inner.da_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        self.replace(
+        inner.replace(
             &file_path,
             |_| {
                 // Don't overwrite an existing proposal, but warn about it as this is likely not
@@ -376,13 +398,15 @@ impl SequencerPersistence for Persistence {
             },
         )
     }
-    async fn record_action(
-        &mut self,
-        view: ViewNumber,
-        _action: HotShotAction,
-    ) -> anyhow::Result<()> {
-        self.replace(
-            &self.voted_view_path(),
+    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
+        // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
+        if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
+            return Ok(());
+        }
+        let mut inner = self.inner.write().await;
+        let path = &inner.voted_view_path();
+        inner.replace(
+            path,
             |mut file| {
                 let mut bytes = vec![];
                 file.read_to_end(&mut bytes)?;
@@ -401,7 +425,7 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn update_undecided_state(
-        &mut self,
+        &self,
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
@@ -409,8 +433,10 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
-        self.replace(
-            &self.undecided_state_path(),
+        let mut inner = self.inner.write().await;
+        let path = &inner.undecided_state_path();
+        inner.replace(
+            path,
             |_| {
                 // Always overwrite the previous file.
                 Ok(true)
@@ -424,16 +450,17 @@ impl SequencerPersistence for Persistence {
         )
     }
     async fn append_quorum_proposal(
-        &mut self,
+        &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.quorum_proposals_dir_path();
+        let dir_path = inner.quorum_proposals_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create proposals dir")?;
 
         let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        self.replace(
+        inner.replace(
             &file_path,
             |_| {
                 // Always overwrite the previous file
@@ -451,8 +478,10 @@ impl SequencerPersistence for Persistence {
         &self,
     ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
     {
+        let inner = self.inner.read().await;
+
         // First, get the proposal directory.
-        let dir_path = self.quorum_proposals_dir_path();
+        let dir_path = inner.quorum_proposals_dir_path();
 
         // Then, we want to get the entries in this directory since they'll be the
         // key/value pairs for our map.

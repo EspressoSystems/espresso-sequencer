@@ -9,20 +9,28 @@
 //! persistence which is _required_ to run a node.
 
 use async_trait::async_trait;
-use committable::Commitment;
 use espresso_types::v0_3::ChainConfig;
+use hotshot_query_service::data_source::fetching;
+
+use crate::SeqTypes;
 
 pub mod fs;
 pub mod no_storage;
 pub mod sql;
 
 #[async_trait]
-pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
+pub trait ChainConfigPersistence: Sized + Send + Sync {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
-    async fn load_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig>;
+}
+
+#[async_trait]
+impl<'a, T> ChainConfigPersistence for fetching::Transaction<'a, SeqTypes, T>
+where
+    T: ChainConfigPersistence,
+{
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        self.as_mut().insert_chain_config(chain_config).await
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -54,11 +62,13 @@ mod persistence_tests {
         event::HotShotAction,
         message::Proposal,
         simple_certificate::QuorumCertificate,
+        simple_vote::QuorumData,
         traits::{node_implementation::ConsensusTime, EncodeBytes},
         vid::vid_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
+    use std::marker::PhantomData;
     use testing::TestablePersistence;
 
     use super::*;
@@ -68,7 +78,7 @@ mod persistence_tests {
         setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Initially, there is no saved leaf.
         assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
@@ -85,9 +95,16 @@ mod persistence_tests {
         // Store a newer leaf, make sure storage gets updated.
         let mut leaf2 = leaf1.clone();
         *leaf2.block_header_mut().height_mut() += 1;
-        let mut qc2 = qc1.clone();
-        qc2.data.leaf_commit = leaf2.commit();
-        qc2.vote_commitment = qc2.data.commit();
+        let qc2 = QuorumCertificate::new(
+            qc1.data.clone(),
+            QuorumData {
+                leaf_commit: leaf2.commit(),
+            }
+            .commit(),
+            qc1.view_number,
+            qc1.signatures.clone(),
+            PhantomData,
+        );
         storage.save_anchor_leaf(&leaf2, &qc2).await.unwrap();
         assert_eq!(
             storage.load_anchor_leaf().await.unwrap().unwrap(),
@@ -107,7 +124,7 @@ mod persistence_tests {
         setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Initially, there is no saved view.
         assert_eq!(storage.load_latest_acted_view().await.unwrap(), None);
@@ -150,7 +167,7 @@ mod persistence_tests {
         setup_test();
 
         let tmp = P::tmp_storage().await;
-        let mut storage = P::connect(&tmp).await;
+        let storage = P::connect(&tmp).await;
 
         // Test append VID
         assert_eq!(

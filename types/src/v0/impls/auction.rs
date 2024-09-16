@@ -1,4 +1,4 @@
-use super::state::ValidatedState;
+use super::{state::ValidatedState, MarketplaceVersion};
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
@@ -19,7 +19,6 @@ use std::str::FromStr;
 use thiserror::Error;
 use tide_disco::error::ServerError;
 use url::Url;
-use vbs::version::StaticVersion;
 
 impl FullNetworkTx {
     /// Proxy for `execute` method of each transaction variant.
@@ -280,7 +279,7 @@ impl HasUrls for SolverAuctionResults {
     }
 }
 
-type SurfClient = surf_disco::Client<ServerError, StaticVersion<0, 1>>;
+type SurfClient = surf_disco::Client<ServerError, MarketplaceVersion>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 /// Auction Results provider holding the Url of the solver in order to fetch auction results.

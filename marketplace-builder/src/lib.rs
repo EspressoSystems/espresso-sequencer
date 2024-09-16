@@ -19,7 +19,7 @@ use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     v0_3::BidTxBody,
-    MarketplaceVersion, SeqTypes, SequencerVersions,
+    FeeVersion, MarketplaceVersion, SeqTypes, SequencerVersions,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -42,7 +42,7 @@ use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
     config::NetworkConfig,
 };
-use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
+use marketplace_builder_core::service::{BuilderHooks, GlobalState, ProxyGlobalState};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
@@ -68,7 +68,7 @@ use sequencer::{
     context::{Consensus, SequencerContext},
     network,
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node,
+    L1Params, NetworkParams, Node, SequencerApiVersion,
 };
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
@@ -78,31 +78,3 @@ use vbs::version::{StaticVersion, StaticVersionType};
 pub mod builder;
 
 pub mod hooks;
-
-// It runs the api service for the builder
-pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
-    // it is to serve hotshot
-    let builder_api = hotshot_builder_api::v0_3::builder::define_api::<
-        ProxyGlobalState<SeqTypes>,
-        SeqTypes,
-    >(&HotshotBuilderApiOptions::default())
-    .expect("Failed to construct the builder APIs");
-
-    // it enables external clients to submit txn to the builder's private mempool
-    let private_mempool_api = hotshot_builder_api::v0_3::builder::submit_api::<
-        ProxyGlobalState<SeqTypes>,
-        SeqTypes,
-        MarketplaceVersion,
-    >(&HotshotBuilderApiOptions::default())
-    .expect("Failed to construct the builder API for private mempool txns");
-
-    let mut app: App<ProxyGlobalState<SeqTypes>, BuilderApiError> = App::with_state(source);
-
-    app.register_module("block_info", builder_api)
-        .expect("Failed to register the builder API");
-
-    app.register_module("txn_submit", private_mempool_api)
-        .expect("Failed to register the private mempool API");
-
-    async_spawn(app.serve(url, MarketplaceVersion::instance()));
-}

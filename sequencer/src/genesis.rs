@@ -65,8 +65,13 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            if let UpgradeType::Fee { chain_config } = upgrade.upgrade_type {
-                base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+            match upgrade.upgrade_type {
+                UpgradeType::Fee { chain_config } => {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
+                UpgradeType::Marketplace { chain_config } => {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
             }
         }
 
@@ -687,6 +692,14 @@ mod test {
             stop_proposing_view = 10
 
             [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
         }
         .to_string();
 
@@ -728,6 +741,13 @@ mod test {
             stop_proposing_view = 10
 
             [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
 
             [[upgrade]]
             version = "0.2"

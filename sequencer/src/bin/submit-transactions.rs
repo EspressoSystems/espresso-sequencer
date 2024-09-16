@@ -431,7 +431,10 @@ async fn submit_transactions<ApiVer: StaticVersionType>(
                     .send()
                     .await
             } {
-                tracing::error!("failed to submit batch of {txns_batch_count} transactions: {err}");
+                tracing::error!(
+                    ?err,
+                    "failed to submit batch of {txns_batch_count} transactions"
+                );
             } else {
                 tracing::info!("submitted batch of {txns_batch_count} transactions");
                 let submitted_at = Instant::now();

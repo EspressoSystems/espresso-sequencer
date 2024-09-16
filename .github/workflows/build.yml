@@ -73,6 +73,7 @@ jobs:
             target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
+            target/release/utils
             target/release/deploy
             target/release/keygen
             target/release/permissionless-builder
@@ -86,7 +87,7 @@ jobs:
             target/release/dev-rollup
 
   build-arm:
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: buildjet-8vcpu-ubuntu-2204-arm
     steps:
       - name: Fix submodule permissions check
         run: |
@@ -128,6 +129,7 @@ jobs:
             target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
+            target/release/utils
             target/release/deploy
             target/release/keygen
             target/release/permissionless-builder
