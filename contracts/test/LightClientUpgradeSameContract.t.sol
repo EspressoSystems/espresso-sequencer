@@ -2,19 +2,21 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
-import { Test } /*, console2*/ from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClient as LCV2 } from "../src/LightClient.sol";
-import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
-import { UpgradeLightClientScript } from "../script/UpgradeSameLightClient.s.sol";
+import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
+    "./script/LightClientTestScript.s.sol";
+import { UpgradeToSameLightClientWithoutMultisigAdminScript as UpgradeScript } from
+    "./script/LightClientTestScript.s.sol";
 import { BN254 } from "bn254/BN254.sol";
 
 contract LightClientUpgradeSameContractTest is Test {
     LCV1 public lcV1Proxy;
     LCV2 public lcV2Proxy;
 
-    DeployLightClientContractScript public deployer = new DeployLightClientContractScript();
-    UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
+    DeployScript public deployer = new DeployScript();
+    UpgradeScript public upgrader = new UpgradeScript();
 
     LCV1.LightClientState public stateV1;
     LCV1.StakeTableState public stakeStateV1;
@@ -62,7 +64,7 @@ contract LightClientUpgradeSameContractTest is Test {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
         // of the upgraded contract is set to 0
-        lcV2Proxy = LCV2(upgrader.run(0, proxy));
+        lcV2Proxy = LCV2(upgrader.run(proxy));
 
         LCV2.LightClientState memory expectedLightClientState =
             LCV2.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
@@ -82,7 +84,7 @@ contract LightClientUpgradeSameContractTest is Test {
         assertEq(patch, 0);
 
         //upgrade box
-        lcV2Proxy = LCV2(upgrader.run(0, proxy));
+        lcV2Proxy = LCV2(upgrader.run(proxy));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
     }
 
@@ -92,6 +94,6 @@ contract LightClientUpgradeSameContractTest is Test {
         //attempted upgrade as attacker will revert
         vm.prank(attacker);
         vm.expectRevert();
-        lcV2Proxy = LCV2(upgrader.run(0, address(proxy)));
+        lcV2Proxy = LCV2(upgrader.run(address(proxy)));
     }
 }

@@ -11,7 +11,7 @@ import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 // Target contract
 import { LightClient as LC } from "../src/LightClient.sol";
 import { LightClientMock as LCMock } from "./mocks/LightClientMock.sol";
-import { DeployLightClientTestScript } from "./DeployLightClientTestScript.s.sol";
+import { DeployLightClientTestScript } from "./script/LightClientTestScript.s.sol";
 import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
