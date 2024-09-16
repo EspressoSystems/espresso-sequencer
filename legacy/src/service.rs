@@ -201,8 +201,16 @@ impl<Types: NodeType> GlobalState<Types> {
         request_sender: BroadcastSender<MessageType<Types>>,
     ) {
         // register the builder state
-        self.spawned_builder_states
+        let previous_value = self
+            .spawned_builder_states
             .insert(parent_id.clone(), request_sender);
+
+        if let Some(previous_value) = previous_value {
+            tracing::warn!(
+                "builder {parent_id} overwrote previous spawned_builder_state entry: {:?}",
+                previous_value
+            );
+        }
 
         // keep track of the max view number
         if parent_id.view > self.highest_view_num_builder_id.view {
