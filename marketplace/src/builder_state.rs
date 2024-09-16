@@ -1161,8 +1161,7 @@ mod test {
             tracing::error!("Not a da_proposal_message in correct format");
         }
         check_equal_da_proposal_hashmap(
-            builder_state
-                .da_proposal_payload_commit_to_da_proposal,
+            builder_state.da_proposal_payload_commit_to_da_proposal,
             correct_da_proposal_payload_commit_to_da_proposal,
         );
         // check global_state has this new builder_state_id
