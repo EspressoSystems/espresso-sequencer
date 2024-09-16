@@ -241,27 +241,41 @@ impl<Types: NodeType> GlobalState<Types> {
         build_block_info: BuildBlockInfo<Types>,
         response_msg: ResponseMessage,
     ) {
-        if self.blocks.contains(&build_block_info.id) {
-            self.blocks.promote(&build_block_info.id)
-        } else {
-            self.blocks.push(
-                build_block_info.id,
-                BlockInfo {
-                    block_payload: build_block_info.block_payload,
-                    metadata: build_block_info.metadata,
-                    vid_trigger: Arc::new(RwLock::new(Some(build_block_info.vid_trigger))),
-                    vid_receiver: Arc::new(RwLock::new(WaitAndKeep::Wait(
-                        build_block_info.vid_receiver,
-                    ))),
-                    offered_fee: build_block_info.offered_fee,
-                    truncated: build_block_info.truncated,
-                },
-            );
-        }
+        let BuildBlockInfo {
+            id,
+            block_payload,
+            metadata,
+            vid_trigger,
+            vid_receiver,
+            offered_fee,
+            truncated,
+            ..
+        } = build_block_info;
+
+        let previous_cache_entry = self.blocks.put(
+            id.clone(),
+            BlockInfo {
+                block_payload,
+                metadata,
+                vid_trigger: Arc::new(RwLock::new(Some(vid_trigger))),
+                vid_receiver: Arc::new(RwLock::new(WaitAndKeep::Wait(vid_receiver))),
+                offered_fee,
+                truncated,
+            },
+        );
 
         // update the builder state to last built block
-        self.builder_state_to_last_built_block
+        let previous_builder_state_entry = self
+            .builder_state_to_last_built_block
             .insert(state_id, response_msg);
+
+        if let Some(previous_builder_state_entry) = previous_builder_state_entry {
+            tracing::warn!(
+                "block {id} overwrote previous block: {:?}.  previous cache entry: {:?}",
+                previous_builder_state_entry,
+                previous_cache_entry
+            );
+        }
     }
 
     /// [remove_handles] cleans up the [GlobalState] by removing all
