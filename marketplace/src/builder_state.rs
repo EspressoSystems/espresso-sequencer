@@ -969,12 +969,14 @@ mod test {
     use committable::{Commitment, CommitmentBoundsArkless, Committable};
     use hotshot::traits::BlockPayload;
     use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_example_types::block_types::TestTransaction;
     use hotshot_example_types::block_types::{TestBlockHeader, TestBlockPayload, TestMetadata};
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_example_types::block_types::TestTransaction;
     use hotshot_task_impls::transactions;
     use hotshot_types::data::{Leaf, QuorumProposal};
-    use hotshot_types::simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold};
+    use hotshot_types::simple_certificate::{
+        QuorumCertificate, SimpleCertificate, SuccessThreshold,
+    };
     use hotshot_types::simple_vote::QuorumData;
     use hotshot_types::traits::block_contents::vid_commitment;
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
@@ -989,8 +991,8 @@ mod test {
     use super::BuiltFromProposedBlock;
     use super::DaProposalMessage;
     use super::MessageType;
-    use rkyv::{Deserialize, Infallible};
     use crate::testing::{calc_proposal_msg, TestTypes};
+    use rkyv::{Deserialize, Infallible};
 
     /// This test checkes da_proposal_payload_commit_to_da_proposal and
     /// quorum_proposal_payload_commit_to_quorum_proposal change appropriately
@@ -1081,8 +1083,9 @@ mod test {
         } else {
             tracing::error!("Not a da_proposal_message in correct format");
         }
-        let deserialized_map: HashMap<_, _> =
-            builder_state.da_proposal_payload_commit_to_da_proposal.clone();
+        let deserialized_map: HashMap<_, _> = builder_state
+            .da_proposal_payload_commit_to_da_proposal
+            .clone();
         for (key, value) in deserialized_map.iter() {
             let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
             assert_eq!(
@@ -1099,10 +1102,11 @@ mod test {
             .read_arc()
             .await
             .spawned_builder_states
-            .get(&builder_state_id) {
-                panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            .get(&builder_state_id)
+        {
+            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
         }
-        
+
         // sub-test two
         // call process_da_proposal with the same msg again
         // we should skip the process and everything should be the same
@@ -1116,8 +1120,9 @@ mod test {
         } else {
             tracing::error!("Not a da_proposal_message in correct format");
         }
-        let deserialized_map: HashMap<_, _> =
-            builder_state.da_proposal_payload_commit_to_da_proposal.clone();
+        let deserialized_map: HashMap<_, _> = builder_state
+            .da_proposal_payload_commit_to_da_proposal
+            .clone();
         for (key, value) in deserialized_map.iter() {
             let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
             assert_eq!(
@@ -1134,8 +1139,9 @@ mod test {
             .read_arc()
             .await
             .spawned_builder_states
-            .get(&builder_state_id_1) {
-                panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            .get(&builder_state_id_1)
+        {
+            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
         }
 
         // sub-test three
@@ -1147,8 +1153,9 @@ mod test {
         let (_quorum_proposal_2, quorum_proposal_msg_2, da_proposal_msg_2, builder_state_id_2) =
             calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions_2).await;
 
-        // process quorum proposal first, so that later when process_da_proposal we can directly call `build_block` and skip storage 
-        if let MessageType::QuorumProposalMessage(practice_qc_msg_2) = quorum_proposal_msg_2.clone() {
+        // process quorum proposal first, so that later when process_da_proposal we can directly call `build_block` and skip storage
+        if let MessageType::QuorumProposalMessage(practice_qc_msg_2) = quorum_proposal_msg_2.clone()
+        {
             builder_state
                 .process_quorum_proposal(practice_qc_msg_2.clone())
                 .await;
@@ -1182,12 +1189,11 @@ mod test {
             .read_arc()
             .await
             .spawned_builder_states
-            .get(&builder_state_id_2) {
-                tracing::debug!("global_state updated successfully");
+            .get(&builder_state_id_2)
+        {
+            tracing::debug!("global_state updated successfully");
         } else {
             panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
         }
-        
-
     }
 }
