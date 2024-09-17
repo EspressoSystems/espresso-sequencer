@@ -2331,7 +2331,7 @@ mod test {
     /// When given a `BuilderStateId` that already exists in the `blocks` LRU,
     /// and the `builder_state_to_last_built_block` hashmap, the method will
     /// replace the values in the `builder_state_to_last_built_block` hashmap,
-    /// but will not replace the values in the `blocks` LRU.
+    /// and it will also replace the entry in the `block`s LRU.
     #[async_std::test]
     async fn test_global_state_update_global_state_replacement() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
@@ -2391,14 +2391,14 @@ mod test {
         // Now that every object is prepared and setup for storage, we can
         // test the `update_global_state` method.
 
-        // `update_global_state` has not return value from its method, so can
+        // `update_global_state` has no return value from its method, so we can
         // only inspect its "success" based on the mutation of the state object.
         state.update_global_state(builder_state_id.clone(), build_block_info_1, response_msg_1);
 
         // We're going to enter another update_global_state_entry with the same
         // builder_state_id, but with different values for the block info and
-        // response message.  This should highlight what values get replaced
-        // in this update, and which stay the same.
+        // response message.  This should highlight that the values get replaced
+        // in this update.
 
         let block_id_2 = BlockId {
             hash: builder_hash.clone(),
@@ -2435,10 +2435,7 @@ mod test {
         };
 
         // two things should be adjusted by `update_global_state`:
-        // When given the same build_state_ids, the current logic indicates
-        // that the LRU value does **NOT** get replaced, but the response
-        // message does.
-
+        // When given the same build_state_ids.
         state.update_global_state(builder_state_id.clone(), build_block_info_2, response_msg_2);
 
         // start with blocks
@@ -2449,7 +2446,7 @@ mod test {
             "The blocks LRU should have a single entry"
         );
 
-        let retrieved_block_info = state.blocks.get(&block_id_1);
+        let retrieved_block_info = state.blocks.get(&block_id_2);
         assert!(
             retrieved_block_info.is_some(),
             "Retrieval of the block id should result is a valid block info data"
@@ -2458,11 +2455,11 @@ mod test {
         let retrieved_block_info = retrieved_block_info.unwrap();
 
         assert_eq!(
-            retrieved_block_info.block_payload, block_payload_1,
+            retrieved_block_info.block_payload, block_payload_2,
             "The block payloads should match"
         );
         assert_ne!(
-            retrieved_block_info.block_payload, block_payload_2,
+            retrieved_block_info.block_payload, block_payload_1,
             "The block payloads should not match"
         );
         assert_eq!(
@@ -2476,19 +2473,19 @@ mod test {
         // TestMetadata will always match
 
         assert_eq!(
-            retrieved_block_info.offered_fee, offered_fee_1,
+            retrieved_block_info.offered_fee, offered_fee_2,
             "The offered fee should match"
         );
         assert_ne!(
-            retrieved_block_info.offered_fee, offered_fee_2,
+            retrieved_block_info.offered_fee, offered_fee_1,
             "The offered fee should not match"
         );
         assert_eq!(
-            retrieved_block_info.truncated, truncated_1,
+            retrieved_block_info.truncated, truncated_2,
             "The truncated flag should match"
         );
         assert_ne!(
-            retrieved_block_info.truncated, truncated_2,
+            retrieved_block_info.truncated, truncated_1,
             "The truncated flag should not match"
         );
 
@@ -2501,7 +2498,7 @@ mod test {
                 vid_trigger_sender.send(TriggerStatus::Start);
             }
 
-            match vid_trigger_receiver_1.recv().await {
+            match vid_trigger_receiver_2.recv().await {
                 Ok(TriggerStatus::Start) => {
                     // This is expected
                 }
@@ -2511,8 +2508,8 @@ mod test {
             }
 
             assert!(
-                vid_trigger_receiver_2.recv().await.is_err(),
-                "This should not receive anything from vid_trigger_receiver_2"
+                vid_trigger_receiver_1.recv().await.is_err(),
+                "This should not receive anything from vid_trigger_receiver_1"
             );
         }
 
@@ -2521,7 +2518,7 @@ mod test {
             // same, or links to the vid_receiver that we submitted.
             let (vid_commitment, vid_precompute) = precompute_vid_commitment(&[1, 2, 3, 4, 5], 4);
             assert_eq!(
-                vid_sender_1
+                vid_sender_2
                     .send((vid_commitment, vid_precompute.clone()))
                     .await,
                 Ok(()),
@@ -2529,7 +2526,7 @@ mod test {
             );
 
             assert!(
-                vid_sender_2
+                vid_sender_1
                     .send((vid_commitment, vid_precompute.clone()))
                     .await
                     .is_err(),
