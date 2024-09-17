@@ -47,7 +47,6 @@ use async_compatibility_layer::{
 use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use derivative::Derivative;
 use futures::stream::StreamExt;
 use futures::{future::BoxFuture, Stream};
 use hotshot_events_service::{events::Error as EventStreamError, events_source::StartupInfo};
@@ -1727,7 +1726,8 @@ impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> {
         // to encoded length is enough, because we only use this value to estimate
         // our limitations on computing the VID in time.
         let len = bincode::serialized_size(&tx).unwrap_or_default();
-        if len > self.max_txn_len {
+        let max_txn_len = self.max_txn_len;
+        if len > max_txn_len {
             tracing::warn!(%commit, %len, %max_txn_len, "Transaction too big");
             return Some(Err(HandleReceivedTxnsError::TransactionTooBig {
                 estimated_length: len,
