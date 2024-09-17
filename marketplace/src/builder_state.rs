@@ -1081,7 +1081,7 @@ mod test {
                 practice_da_msg,
             );
         } else {
-            tracing::error!("Not a da_proposal_message in correct format");
+            panic!("Not a da_proposal_message in correct format");
         }
         check_equal_da_proposal_hashmap(
             builder_state
@@ -1110,7 +1110,7 @@ mod test {
                 .process_da_proposal(practice_da_msg_1.clone())
                 .await;
         } else {
-            tracing::error!("Not a da_proposal_message in correct format");
+            panic!("Not a da_proposal_message in correct format");
         }
         check_equal_da_proposal_hashmap(
             builder_state
@@ -1153,7 +1153,7 @@ mod test {
                 .process_da_proposal(practice_da_msg_2.clone())
                 .await;
         } else {
-            tracing::error!("Not a da_proposal_message in correct format");
+            panic!("Not a da_proposal_message in correct format");
         }
         check_equal_da_proposal_hashmap(
             builder_state.da_proposal_payload_commit_to_da_proposal,
