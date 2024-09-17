@@ -29,16 +29,20 @@ async fn wait_for_service(url: &str, interval: u64, timeout: u64) -> anyhow::Res
     future::timeout(Duration::from_secs(timeout), async {
         loop {
             if let Ok(body) = blocking::get(url) {
-                return body
-                    .text()
-                    .map_err(|e| anyhow!("Wait for service: ({}) {}", url, e));
+                return body.text().map_err(|e| {
+                    anyhow!(
+                        "Wait for service, could not decode response: ({}) {}",
+                        url,
+                        e
+                    )
+                });
             } else {
                 sleep(Duration::from_millis(interval)).await;
             }
         }
     })
     .await
-    .map_err(|e| anyhow!("Wait for service: ({}) {}", url, e))?
+    .map_err(|e| anyhow!("Wait for service, timeout: ({}) {}", url, e))?
 }
 
 #[derive(Clone, Debug)]
