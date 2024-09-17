@@ -38,7 +38,7 @@ mod tests {
     };
 
     use crate::builder_state::{
-        BuiltFromProposedBlock, DaProposalMessage, DecideMessage, QCMessage, RequestMessage,
+        DaProposalMessage, DecideMessage, ParentBlockReferences, QCMessage, RequestMessage,
         TransactionSource,
     };
     use crate::service::{handle_received_txns, GlobalState, ReceivedTransaction};
@@ -356,14 +356,14 @@ mod tests {
         let arc_rwlock_global_state = Arc::new(RwLock::new(global_state));
         let arc_rwlock_global_state_clone = arc_rwlock_global_state.clone();
         let handle = async_spawn(async move {
-            let built_from_info = BuiltFromProposedBlock {
+            let parent_block_references = ParentBlockReferences {
                 view_number: ViewNumber::new(0),
                 vid_commitment: vid_commitment(&[], 8),
                 leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
                 builder_commitment: BuilderCommitment::from_bytes([]),
             };
             let builder_state = BuilderState::<TestTypes>::new(
-                built_from_info,
+                parent_block_references,
                 decide_receiver,
                 da_receiver,
                 qc_receiver,
