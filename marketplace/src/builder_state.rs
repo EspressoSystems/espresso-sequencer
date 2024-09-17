@@ -967,9 +967,9 @@ mod test {
     use crate::service::{broadcast_channels, GlobalState};
 
     use super::BuilderState;
-    use super::BuiltFromProposedBlock;
     use super::DaProposalMessage;
     use super::MessageType;
+    use super::ParentBlockReferences;
     use crate::testing::{calc_proposal_msg, TestTypes};
 
     /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
@@ -1026,7 +1026,7 @@ mod test {
 
         let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
         let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
-        let built_from_info = BuiltFromProposedBlock {
+        let parent_block_references = ParentBlockReferences {
             view_number: ViewNumber::genesis(),
             vid_commitment: genesis_vid_commitment,
             leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
@@ -1043,7 +1043,7 @@ mod test {
 
         // instantiate the bootstrap builder state
         let mut builder_state = BuilderState::<TestTypes>::new(
-            built_from_info,
+            parent_block_references,
             &receivers,
             bootstrap_receiver,
             Vec::new(),
