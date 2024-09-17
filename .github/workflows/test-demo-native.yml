@@ -56,6 +56,6 @@ jobs:
         run: |
           export PATH="$PWD/target/release:$PATH"
           docker compose pull || docker-compose pull
-          bash -x scripts/demo-native -D
+          bash -x scripts/demo-native --tui=false &
           cargo nextest run --locked --release --workspace --all-features --verbose --nocapture
         timeout-minutes: 40
