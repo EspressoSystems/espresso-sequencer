@@ -9,8 +9,7 @@ use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
-    types::{Address, H160, U256},
-    utils::hex,
+    types::{Address, U256},
 };
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_state_prover::service::{
@@ -29,7 +28,7 @@ use sequencer::{
     SequencerApiVersion,
 };
 use sequencer_utils::{
-    deployer::{deploy, Contract, Contracts},
+    deployer::{deploy, is_proxy_contract, Contract, Contracts},
     logging, AnvilOptions,
 };
 use serde::{Deserialize, Serialize};
@@ -260,18 +259,12 @@ async fn main() -> anyhow::Result<()> {
             .get_contract_address(Contract::LightClientProxy)
             .unwrap();
 
-        // confirm that the light_client_address is a proxy
-        // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
-        let hex_bytes =
-            hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
-                .expect("Failed to decode hex string");
-        let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
-        let storage = provider
-            .clone()
-            .get_storage_at(light_client_address, implementation_slot, None)
-            .await?;
-        let implementation_address = H160::from_slice(&storage[12..]);
-        assert_ne!(implementation_address, H160::zero());
+        if !is_proxy_contract(provider.clone(), light_client_address)
+            .await
+            .expect("Failed to determine if light client contract is a proxy")
+        {
+            panic!("Light Client contract's address is not a proxy");
+        }
 
         mock_contracts.insert(
             chain_id,

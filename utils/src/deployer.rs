@@ -374,17 +374,12 @@ pub async fn deploy(
             .await?;
 
         // confirm that the implementation address is the address of the light client contract deployed above
-        // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
-        let hex_bytes =
-            hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
-                .expect("Failed to decode hex string");
-        let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
-        let storage = provider
-            .clone()
-            .get_storage_at(light_client_proxy_address, implementation_slot, None)
-            .await?;
-        let implementation_address = H160::from_slice(&storage[12..]);
-        assert_eq!(lc_address.clone(), implementation_address);
+        if !is_proxy_contract(provider.clone(), light_client_proxy_address)
+            .await
+            .expect("Failed to determine if light contract is a proxy")
+        {
+            panic!("Light Client contract's address is not a proxy");
+        }
     }
 
     // `FeeContract.sol`
@@ -405,17 +400,12 @@ pub async fn deploy(
             .await?;
 
         // confirm that the implementation address is the address of the fee contract deployed above
-        // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
-        let hex_bytes =
-            hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
-                .expect("Failed to decode hex string");
-        let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
-        let storage = provider
-            .clone()
-            .get_storage_at(fee_contract_proxy_address, implementation_slot, None)
-            .await?;
-        let implementation_address = H160::from_slice(&storage[12..]);
-        assert_eq!(fee_contract_address.clone(), implementation_address);
+        if !is_proxy_contract(provider.clone(), fee_contract_proxy_address)
+            .await
+            .expect("Failed to determine if fee contract is a proxy")
+        {
+            panic!("Fee contract's address is not a proxy");
+        }
     }
 
     Ok(contracts)
@@ -426,6 +416,25 @@ fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> boo
         Some(groups) => groups.contains(&group),
         None => true,
     }
+}
+
+pub async fn is_proxy_contract(
+    provider: Provider<Http>,
+    proxy_address: H160,
+) -> Result<bool, ProviderError> {
+    // confirm that the proxy_address is a proxy
+    // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
+    let hex_bytes = hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+        .expect("Failed to decode hex string");
+    let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
+    let storage = provider
+        .get_storage_at(proxy_address, implementation_slot, None)
+        .await?;
+
+    let implementation_address = H160::from_slice(&storage[12..]);
+
+    // when the implementation address is not equal to zero, it's a proxy
+    Ok(implementation_address != H160::zero())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
