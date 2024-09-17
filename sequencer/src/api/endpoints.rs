@@ -8,7 +8,11 @@ use std::{
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
 use committable::Committable;
-use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{
+    AccountQueryData, FeeAccount, FeeAccountProof, FeeAmount, NamespaceId, NsProof, PubKey,
+    Transaction, ValidatedState,
+};
+use ethers::{abi::Address, types::U256};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
@@ -26,6 +30,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, Versions},
     },
 };
+use jf_merkle_tree::UniversalMerkleTreeScheme;
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
@@ -227,26 +232,38 @@ where
 
     api.get("account", |req, state| {
         async move {
-            let height = req
-                .integer_param("height")
-                .map_err(Error::from_request_error)?;
-            let view = req
-                .integer_param("view")
-                .map_err(Error::from_request_error)?;
-            let account = req
-                .string_param("address")
-                .map_err(Error::from_request_error)?;
-            let account = account.parse().map_err(|err| {
-                Error::catch_all(
-                    StatusCode::BAD_REQUEST,
-                    format!("malformed account {account}: {err}"),
-                )
-            })?;
+            // let height = req
+            //     .integer_param("height")
+            //     .map_err(Error::from_request_error)?;
+            // let view = req
+            //     .integer_param("view")
+            //     .map_err(Error::from_request_error)?;
+            // let account = req
+            //     .string_param("address")
+            //     .map_err(Error::from_request_error)?;
+            // let account = account.parse().map_err(|err| {
+            //     Error::catch_all(
+            //         StatusCode::BAD_REQUEST,
+            //         format!("malformed account {account}: {err}"),
+            //     )
+            // })?;
 
-            state
-                .get_account(height, ViewNumber::new(view), account)
-                .await
-                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+            // state
+            //     .get_account(height, ViewNumber::new(view), account)
+            //     .await
+            //     .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+
+            let mut tree = ValidatedState::default().fee_merkle_tree;
+            let account1 = Address::random();
+
+            let balance1 = U256::from(100);
+            tree.update(FeeAccount(account1), FeeAmount(balance1))
+                .unwrap();
+
+            // Membership proof.
+            let (proof, balance) = FeeAccountProof::prove(&tree, account1).unwrap();
+
+            Ok(AccountQueryData { balance, proof })
         }
         .boxed()
     })?
@@ -259,10 +276,16 @@ where
                 .integer_param("view")
                 .map_err(Error::from_request_error)?;
 
-            state
+            if let Ok(mut frontier) = state
                 .get_frontier(height, ViewNumber::new(view))
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+            {
+                // frontier.pos += 1000;
+                return Ok(frontier);
+            } else {
+                return Err(Error::catch_all(StatusCode::NOT_FOUND, format!("AHHHH")));
+            }
         }
         .boxed()
     })?
@@ -272,10 +295,16 @@ where
                 .blob_param("commitment")
                 .map_err(Error::from_request_error)?;
 
-            state
+            if let Ok(mut config) = state
                 .get_chain_config(commitment)
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+            {
+                // config.fee_recipient = FeeAccount(Address::random());
+                return Ok(config);
+            } else {
+                return Err(Error::catch_all(StatusCode::NOT_FOUND, format!("AHHHH")));
+            }
         }
         .boxed()
     })?;

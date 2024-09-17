@@ -12,7 +12,7 @@
 #
 # Usage: scripts/build-docker-images-native
 #
-set -euo pipefail
+set -euox pipefail
 
 # Check kernel
 case $(uname -s) in
@@ -69,13 +69,14 @@ case $KERNEL in
   #   - PWD is mounted to /work.
   #   - Cargo registry and git directory are mounted to avoid re-downloading
   #     dependencies.
+
   docker run \
     -e RUSTFLAGS \
     -e CARGO_TARGET_DIR=/work/target/docker \
     -v "$(pwd):/work" \
     -v "$CARGO_HOME/registry:/usr/local/cargo/registry" \
     -v "$CARGO_HOME/git:/usr/local/cargo/git" \
-    -it ghcr.io/espressosystems/devops-rust:stable \
+    -it rust-build:latest \
     bash -c "cd /work && cargo build --release"
     ;;
 esac

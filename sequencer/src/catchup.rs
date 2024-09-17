@@ -129,41 +129,41 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
         fee_merkle_tree_root: FeeMerkleCommitment,
         account: FeeAccount,
     ) -> anyhow::Result<AccountQueryData> {
-        let mut tree = ValidatedState::default().fee_merkle_tree;
-        let account1 = Address::random();
-        let account2 = Address::default();
+        // let mut tree = ValidatedState::default().fee_merkle_tree;
+        // let account1 = Address::random();
+        // let account2 = Address::default();
 
-        let balance1 = U256::from(100);
-        tree.update(FeeAccount(account1), FeeAmount(balance1))
-            .unwrap();
+        // let balance1 = U256::from(100);
+        // tree.update(FeeAccount(account1), FeeAmount(balance1))
+        //     .unwrap();
 
-        // Membership proof.
-        let (proof, balance) = FeeAccountProof::prove(&tree, account1).unwrap();
+        // // Membership proof.
+        // let (proof, balance) = FeeAccountProof::prove(&tree, account1).unwrap();
 
-        let data = AccountQueryData { balance, proof };
+        // let data = AccountQueryData { balance, proof };
 
-        Ok(data)
+        // Ok(data)
 
-        // for client in self.clients.iter() {
-        //     tracing::info!("Fetching account {account:?} from {}", client.url);
-        //     match client
-        //         .get::<AccountQueryData>(&format!(
-        //             "catchup/{height}/{}/account/{account}",
-        //             view.u64(),
-        //         ))
-        //         .send()
-        //         .await
-        //     {
-        //         Ok(res) => match res.proof.verify(&fee_merkle_tree_root) {
-        //             Ok(_) => return Ok(res),
-        //             Err(err) => tracing::warn!("Error verifying account proof: {}", err),
-        //         },
-        //         Err(err) => {
-        //             tracing::warn!("Error fetching account from peer: {}", err);
-        //         }
-        //     }
-        // }
-        // bail!("Could not fetch account from any peer");
+        for client in self.clients.iter() {
+            tracing::info!("Fetching account {account:?} from {}", client.url);
+            match client
+                .get::<AccountQueryData>(&format!(
+                    "catchup/{height}/{}/account/{account}",
+                    view.u64(),
+                ))
+                .send()
+                .await
+            {
+                Ok(res) => match res.proof.verify(&fee_merkle_tree_root) {
+                    Ok(_) => return Ok(res),
+                    Err(err) => tracing::warn!("Error verifying account proof: {}", err),
+                },
+                Err(err) => {
+                    tracing::warn!("Error fetching account from peer: {}", err);
+                }
+            }
+        }
+        bail!("Could not fetch account from any peer");
     }
 
     #[tracing::instrument(skip(self, mt), height = mt.num_leaves())]
@@ -217,8 +217,10 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
                 .send()
                 .await
             {
-                Ok(cf) => {
+                Ok(mut cf) => {
                     return Ok(cf);
+                    // cf.fee_recipient = FeeAccount(Address::random());
+                    // return Ok(cf);
                 }
                 Err(err) => {
                     tracing::warn!("Error fetching chain config from peer: {}", err);

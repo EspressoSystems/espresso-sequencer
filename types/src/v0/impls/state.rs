@@ -668,10 +668,12 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
-        let (validated_state, delta) = self
+        let Ok((validated_state, delta)) = self
             .apply_header(instance, parent_leaf, proposed_header, version)
             .await
-            .unwrap();
+        else {
+            panic!("We are dead");
+        };
 
         let chain_config = validated_state
             .chain_config
