@@ -421,7 +421,7 @@ fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> boo
 pub async fn is_proxy_contract(
     provider: Provider<Http>,
     proxy_address: H160,
-) -> Result<bool, ProviderError> {
+) -> anyhow::Result<bool> {
     // confirm that the proxy_address is a proxy
     // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
     let hex_bytes = hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")

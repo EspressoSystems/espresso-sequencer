@@ -24,6 +24,11 @@ async fn main() -> anyhow::Result<()> {
     tracing::warn!(?modules, "sequencer starting up");
 
     let genesis = Genesis::from_file(&opt.genesis_file)?;
+
+    genesis
+        .validate_contract(opt.clone().l1_provider_url.to_string())
+        .await?;
+
     tracing::info!(?genesis, "genesis");
 
     let base = genesis.base_version;
