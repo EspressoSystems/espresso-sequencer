@@ -46,7 +46,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo nextest run --locked --release --workspace --all-features --no-run
+        run: |
+          cargo build --locked --release
+          cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
       - name: Test Demo
