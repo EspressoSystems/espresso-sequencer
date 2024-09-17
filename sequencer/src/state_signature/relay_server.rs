@@ -114,7 +114,7 @@ impl StateRelayServerDataSource for StateRelayServerState {
         //     StatusCode::Unauthorized,
         //     "The posted key is not found in the stake table.".to_owned(),
         // ))?;
-        let state_msg: [FieldType; 7] = (&state).into();
+        let state_msg: [FieldType; 3] = (&state).into();
         if StateSignatureScheme::verify(&(), &key, state_msg, &signature).is_err() {
             return Err(tide_disco::error::ServerError::catch_all(
                 StatusCode::BAD_REQUEST,

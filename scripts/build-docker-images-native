@@ -54,6 +54,11 @@ case $KERNEL in
   # Use a different target directory for docker builds to avoid conflicts with
   # native builds.
   CARGO_TARGET_DIR=target/docker
+  CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+
+  # Pull our latest devops-rust image. Using an older image may cause a failing
+  # rustup channels sync.
+  docker pull ghcr.io/espressosystems/devops-rust:stable
 
   # Build in docker container:
   #   - RUSTFLAGS is needed for compilation.
@@ -87,7 +92,7 @@ mkdir -p ${WORKDIR}/data
 cp -rv data/genesis ${WORKDIR}/data/
 
 mkdir -p "${WORKDIR}/target/$ARCH/release"
-for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "espresso-bridge" "espresso-dev-node" "marketplace-solver" "marketplace-builder" "dev-rollup"; do
+  for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "espresso-bridge" "espresso-dev-node" "marketplace-solver" "marketplace-builder" "dev-rollup" "utils"; do
   cp -v "${CARGO_TARGET_DIR}/release/$binary" "${WORKDIR}/target/$ARCH/release"
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
   if [ $KERNEL == "linux" ]; then

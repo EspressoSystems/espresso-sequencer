@@ -2,20 +2,24 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
-import { Test } /*, console2*/ from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClient as LCV2 } from "../src/LightClient.sol";
-import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
-import { UpgradeLightClientScript } from "../script/UpgradeSameLightClient.s.sol";
+import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
+    "./script/LightClientTestScript.s.sol";
+import { UpgradeToSameLightClientWithoutMultisigAdminScript as UpgradeScript } from
+    "./script/LightClientTestScript.s.sol";
+import { BN254 } from "bn254/BN254.sol";
 
 contract LightClientUpgradeSameContractTest is Test {
     LCV1 public lcV1Proxy;
     LCV2 public lcV2Proxy;
 
-    DeployLightClientContractScript public deployer = new DeployLightClientContractScript();
-    UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
+    DeployScript public deployer = new DeployScript();
+    UpgradeScript public upgrader = new UpgradeScript();
 
     LCV1.LightClientState public stateV1;
+    LCV1.StakeTableState public stakeStateV1;
 
     address public admin;
     address public proxy;
@@ -24,20 +28,35 @@ contract LightClientUpgradeSameContractTest is Test {
 
     // deploy the first implementation with its proxy
     function setUp() public {
-        (proxy, admin, stateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
+        (proxy, admin, stateV1, stakeStateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
         lcV1Proxy = LCV1(proxy);
     }
 
     function testCorrectInitialization() public view {
-        assertEq(abi.encode(lcV1Proxy.getGenesisState()), abi.encode(stateV1));
+        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
+            lcV1Proxy.genesisState();
+        assertEq(viewNum, stateV1.viewNum);
+        assertEq(blockHeight, stateV1.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(stateV1.blockCommRoot));
 
-        assertEq(abi.encode(lcV1Proxy.getFinalizedState()), abi.encode(stateV1));
+        (viewNum, blockHeight, blockCommRoot) = lcV1Proxy.finalizedState();
+        assertEq(viewNum, stateV1.viewNum);
+        assertEq(blockHeight, stateV1.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(stateV1.blockCommRoot));
 
-        bytes32 stakeTableComm = lcV1Proxy.computeStakeTableComm(stateV1);
-        assertEq(lcV1Proxy.votingStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.frozenStakeTableCommitment(), stakeTableComm);
-        assertEq(lcV1Proxy.votingThreshold(), stateV1.threshold);
-        assertEq(lcV1Proxy.frozenThreshold(), stateV1.threshold);
+        (
+            uint256 threshold,
+            BN254.ScalarField stakeTableBlsKeyComm,
+            BN254.ScalarField stakeTableSchnorrKeyComm,
+            BN254.ScalarField stakeTableAmountComm
+        ) = lcV1Proxy.genesisStakeTableState();
+
+        assertEq(
+            abi.encode(stakeStateV1),
+            abi.encode(
+                threshold, stakeTableBlsKeyComm, stakeTableSchnorrKeyComm, stakeTableAmountComm
+            )
+        );
     }
 
     // that the data remains the same after upgrading the implementation
@@ -45,20 +64,16 @@ contract LightClientUpgradeSameContractTest is Test {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
         // of the upgraded contract is set to 0
-        lcV2Proxy = LCV2(upgrader.run(0, proxy));
+        lcV2Proxy = LCV2(upgrader.run(proxy));
 
-        LCV2.LightClientState memory expectedLightClientState = LCV2.LightClientState(
-            stateV1.viewNum,
-            stateV1.blockHeight,
-            stateV1.blockCommRoot,
-            stateV1.feeLedgerComm,
-            stateV1.stakeTableBlsKeyComm,
-            stateV1.stakeTableSchnorrKeyComm,
-            stateV1.stakeTableAmountComm,
-            stateV1.threshold
-        );
+        LCV2.LightClientState memory expectedLightClientState =
+            LCV2.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
 
-        assertEq(abi.encode(lcV2Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
+        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
+            lcV1Proxy.finalizedState();
+        assertEq(viewNum, expectedLightClientState.viewNum);
+        assertEq(blockHeight, expectedLightClientState.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
     }
 
     // check that the proxy address remains the same
@@ -69,7 +84,7 @@ contract LightClientUpgradeSameContractTest is Test {
         assertEq(patch, 0);
 
         //upgrade box
-        lcV2Proxy = LCV2(upgrader.run(0, proxy));
+        lcV2Proxy = LCV2(upgrader.run(proxy));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
     }
 
@@ -79,6 +94,6 @@ contract LightClientUpgradeSameContractTest is Test {
         //attempted upgrade as attacker will revert
         vm.prank(attacker);
         vm.expectRevert();
-        lcV2Proxy = LCV2(upgrader.run(0, address(proxy)));
+        lcV2Proxy = LCV2(upgrader.run(address(proxy)));
     }
 }

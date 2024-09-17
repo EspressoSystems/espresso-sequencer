@@ -118,6 +118,7 @@ async fn main() -> anyhow::Result<()> {
     .unwrap();
 
     let base_fee = genesis.max_base_fee();
+    tracing::info!(?base_fee, "base_fee");
 
     let validated_state = ValidatedState::genesis(&instance_state).0;
 

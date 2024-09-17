@@ -65,6 +65,7 @@ jobs:
             target/release/cli
             target/release/commitment-task
             target/release/submit-transactions
+            target/release/utils
             target/release/reset-storage
             target/release/deploy
             target/release/keygen
@@ -117,6 +118,7 @@ jobs:
             target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
+            target/release/utils
             target/release/deploy
             target/release/keygen
             target/release/permissionless-builder

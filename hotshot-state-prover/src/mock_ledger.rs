@@ -8,19 +8,17 @@ use ark_std::{
     rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
     UniformRand,
 };
-use ethers::{
-    abi,
-    abi::Token,
-    types::{H256, U256},
-    utils,
-};
+use ethers::types::U256;
 use hotshot_contract_adapter::{
-    jellyfish::{field_to_u256, open_key, u256_to_field},
-    light_client::ParsedLightClientState,
+    jellyfish::{open_key, u256_to_field},
+    light_client::{ParsedLightClientState, ParsedStakeTableState},
 };
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::{
-    light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
+    light_client::{
+        GenericLightClientState, GenericPublicInput, GenericStakeTableState, LightClientState,
+        StakeTableState,
+    },
     traits::stake_table::{SnapshotVersion, StakeTableScheme},
 };
 use itertools::izip;
@@ -48,23 +46,17 @@ type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 /// Stake table capacity used for testing
 pub const STAKE_TABLE_CAPACITY: usize = 10;
 
-/// Number of blocks per epoch for testing
-pub const BLOCKS_PER_EPOCH: u32 = 3;
-
 /// Mock for system parameter of `MockLedger`
 pub struct MockSystemParam {
     /// max capacity of stake table
     st_cap: usize,
-    /// number of blocks per epoch
-    blk_per_epoch: u32,
 }
 
 impl MockSystemParam {
     /// Init the system parameters (some fixed, some adjustable)
-    pub fn init(blk_per_epoch: u32) -> Self {
+    pub fn init() -> Self {
         Self {
             st_cap: STAKE_TABLE_CAPACITY,
-            blk_per_epoch,
         }
     }
 }
@@ -76,6 +68,7 @@ pub struct MockLedger {
     pub rng: StdRng,
     epoch: u64,
     state: GenericLightClientState<F>,
+    stake_table_state: GenericStakeTableState<F>,
     pub(crate) st: StakeTable<BLSVerKey, SchnorrVerKey, F>,
     threshold: U256, // quorum threshold for SnapShot::LastEpochStart
     pub(crate) qc_keys: Vec<BLSVerKey>,
@@ -94,25 +87,33 @@ impl MockLedger {
             key_archive.insert(qc_keys[i], state_keys[i].0.clone());
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
+        let (bls_key_comm, schnorr_key_comm, amount_comm) =
+            st.commitment(SnapshotVersion::LastEpochStart).unwrap();
         let threshold =
             one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
 
+        let stake_table_state = StakeTableState {
+            threshold: u256_to_field(threshold),
+            bls_key_comm,
+            schnorr_key_comm,
+            amount_comm,
+        };
+
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
-        let fee_ledger_comm = F::from(5678);
 
         let genesis = LightClientState {
             view_number: 0,
             block_height: 0,
             block_comm_root,
-            fee_ledger_comm,
-            stake_table_comm: st.commitment(SnapshotVersion::LastEpochStart).unwrap(),
         };
+
         Self {
             pp,
             rng,
             epoch: 0,
             state: genesis,
+            stake_table_state,
             st,
             threshold,
             qc_keys,
@@ -124,9 +125,7 @@ impl MockLedger {
     /// Elapse a view with a new finalized block
     pub fn elapse_with_block(&mut self) {
         // if the new block is the first block of an epoch, update epoch
-        if self.state.block_height != 0
-            && self.state.block_height % self.pp.blk_per_epoch as usize == 0
-        {
+        if self.state.block_height != 0 {
             self.epoch += 1;
             self.st.advance();
             self.threshold = one_honest_threshold(
@@ -137,12 +136,11 @@ impl MockLedger {
         }
 
         let new_root = self.new_dummy_comm();
-        let new_fee_ledger_comm = self.new_dummy_comm();
+        // let new_fee_ledger_comm = self.new_dummy_comm();
 
         self.state.view_number += 1;
         self.state.block_height += 1;
         self.state.block_comm_root = new_root;
-        self.state.fee_ledger_comm = new_fee_ledger_comm;
     }
 
     /// Elapse a view without a new finalized block
@@ -190,26 +188,27 @@ impl MockLedger {
         assert!(self.qc_keys.len() == before_st_size + num_reg - num_exit);
     }
 
-    /// Elapse an epoch with `num_reg` of new registration, `num_exit` of key deregistration
-    pub fn elapse_epoch(&mut self, num_reg: usize, num_exit: usize) {
-        assert!(self.qc_keys.len() + num_reg - num_exit <= self.pp.st_cap);
+    // NOTE: uncomment when we add back epoch logic
+    // /// Elapse an epoch with `num_reg` of new registration, `num_exit` of key deregistration
+    // pub fn elapse_epoch(&mut self, num_reg: usize, num_exit: usize) {
+    //     assert!(self.qc_keys.len() + num_reg - num_exit <= self.pp.st_cap);
 
-        // random number of notorized but not finalized block
-        let num_non_blk = self.rng.gen_range(0..10);
-        for _ in 0..num_non_blk {
-            self.elapse_without_block();
-        }
+    //     // random number of notorized but not finalized block
+    //     let num_non_blk = self.rng.gen_range(0..10);
+    //     for _ in 0..num_non_blk {
+    //         self.elapse_without_block();
+    //     }
 
-        for _ in 0..self.pp.blk_per_epoch {
-            self.elapse_with_block();
-        }
+    //     for _ in 0..self.pp.blk_per_epoch {
+    //         self.elapse_with_block();
+    //     }
 
-        self.sync_stake_table(num_reg, num_exit);
-    }
+    //     self.sync_stake_table(num_reg, num_exit);
+    // }
 
     /// Return the light client state and proof of consensus on this finalized state
     pub fn gen_state_proof(&mut self) -> (GenericPublicInput<F>, Proof) {
-        let state_msg: [F; 7] = self.state.clone().into();
+        let state_msg: [F; 3] = self.state.clone().into();
 
         let st: Vec<(BLSVerKey, U256, SchnorrVerKey)> = self
             .st
@@ -278,26 +277,29 @@ impl MockLedger {
             &bit_vec,
             &sigs,
             &self.state,
-            &self.threshold,
+            &self.stake_table_state,
             STAKE_TABLE_CAPACITY,
         )
         .expect("Fail to generate state proof");
+
         (pi, proof)
     }
 
     /// a malicious attack, generating a fake stake table full of adversarial stakers
     /// adv-controlled stakers signed the state and replace the stake table commitment with that of the fake one
     /// in an attempt to hijack the correct stake table.
-    pub fn gen_state_proof_with_fake_stakers(&mut self) -> (GenericPublicInput<F>, Proof) {
-        let mut new_state = self.state.clone();
+    pub fn gen_state_proof_with_fake_stakers(
+        &mut self,
+    ) -> (GenericPublicInput<F>, Proof, GenericStakeTableState<F>) {
+        let new_state = self.state.clone();
 
         let (adv_qc_keys, adv_state_keys) =
             key_pairs_for_testing(STAKE_TABLE_CAPACITY, &mut self.rng);
         let adv_st = stake_table_for_testing(&adv_qc_keys, &adv_state_keys);
 
         // replace new state with adversarial stake table commitment
-        new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
-        let state_msg: [F; 7] = new_state.clone().into();
+        // new_state.stake_table_comm = adv_st.commitment(SnapshotVersion::EpochStart).unwrap();
+        let state_msg: [F; 3] = new_state.clone().into();
 
         // every fake stakers sign on the adverarial new state
         let bit_vec = vec![true; STAKE_TABLE_CAPACITY];
@@ -336,55 +338,30 @@ impl MockLedger {
             &bit_vec,
             &sigs,
             &new_state,
-            &self.threshold, // it's fine to use the old threshold
+            &self.stake_table_state,
             STAKE_TABLE_CAPACITY,
         )
         .expect("Fail to generate state proof");
 
-        (pi, proof)
+        let (bls_key_comm, schnorr_key_comm, amount_comm) =
+            adv_st.commitment(SnapshotVersion::LastEpochStart).unwrap();
+        let stake_table = StakeTableState {
+            threshold: u256_to_field(self.threshold),
+            bls_key_comm,
+            schnorr_key_comm,
+            amount_comm,
+        };
+
+        (pi, proof, stake_table)
     }
     /// Returns the `LightClientState` for solidity
     pub fn get_state(&self) -> ParsedLightClientState {
-        // The ugly conversion due to slight difference of `LightClientState` in solidity containing `threshold`
-        let pi = vec![
-            u256_to_field(self.threshold),
-            F::from(self.state.view_number as u64),
-            F::from(self.state.block_height as u64),
-            self.state.block_comm_root,
-            self.state.fee_ledger_comm,
-            self.state.stake_table_comm.0,
-            self.state.stake_table_comm.1,
-            self.state.stake_table_comm.2,
-        ];
-        let pi: GenericPublicInput<F> = pi.into();
-        pi.into()
+        self.state.clone().into()
     }
 
-    /// Returns the (bytes32 votingStakeTableComm, bytes32 frozenStakeTableComm) used in contract
-    pub fn get_stake_table_comms(&self) -> (H256, H256) {
-        let (bls_key_comm, schnorr_key_comm, amount_comm) =
-            self.st.commitment(SnapshotVersion::EpochStart).unwrap();
-        let frozen_st_comm = utils::keccak256(
-            abi::encode_packed(&[
-                Token::Uint(field_to_u256(bls_key_comm)),
-                Token::Uint(field_to_u256(schnorr_key_comm)),
-                Token::Uint(field_to_u256(amount_comm)),
-            ])
-            .unwrap(),
-        );
-
-        let (bls_key_comm, schnorr_key_comm, amount_comm) =
-            self.st.commitment(SnapshotVersion::LastEpochStart).unwrap();
-        let voting_st_comm = utils::keccak256(
-            abi::encode_packed(&[
-                Token::Uint(field_to_u256(bls_key_comm)),
-                Token::Uint(field_to_u256(schnorr_key_comm)),
-                Token::Uint(field_to_u256(amount_comm)),
-            ])
-            .unwrap(),
-        );
-
-        (voting_st_comm.into(), frozen_st_comm.into())
+    /// Returns the `StakeTableState` in solidity
+    pub fn get_stake_table_state(&self) -> ParsedStakeTableState {
+        self.stake_table_state.into()
     }
 
     // return a dummy commitment value
@@ -522,8 +499,8 @@ pub fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkC
         (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
     )?;
 
-    // Create other public variables so that the number of public inputs is 8
-    for _i in 0..5 {
+    // Create other public variables so that the number of public inputs is 7
+    for _i in 0..4 {
         cs.create_public_variable(F::from(0u64))?;
     }
 

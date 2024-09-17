@@ -11,6 +11,10 @@ demo-native:
     cargo build --release
     scripts/demo-native
 
+demo-native-mp:
+    cargo build --release
+    scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml
+
 demo-native-benchmark:
     cargo build --release --features benchmarking
     scripts/demo-native
@@ -35,14 +39,14 @@ anvil *args:
 
 test:
 	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
+	cargo nextest run --locked --release --workspace --all-features --verbose 
 
 test-slow:
 	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)'
+	cargo nextest run --locked --release --workspace --all-features --verbose --profile slow
 
 test-all:
-	cargo nextest run --locked --release --workspace --all-features --verbose
+	cargo nextest run --locked --release --workspace --all-features --verbose --profile all
 
 clippy:
     cargo clippy --workspace --all-features --all-targets -- -D warnings
@@ -71,10 +75,10 @@ dev-commitment:
      --deploy
 
 build-docker-images:
-    scripts/build-docker-images
+    scripts/build-docker-images-native
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$"
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$"
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
@@ -107,14 +111,16 @@ lc-contract-profiling-sepolia:
     @sh -c 'source ./.env.contracts'
     #!/usr/bin/env bash
     set -euxo pipefail
-    forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod)" {{NUM_INIT_VALIDATORS}} {{MAX_HISTORY_SECONDS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
-    LC_CONTRACT_ADDRESS=`cat contracts/broadcast/DeployLightClientTestScript.s.sol/11155111/runBench-latest.json | jq -r .receipts[-1].contractAddress`
+    forge script contracts/test/script/LightClientTestScript.s.sol --sig "runBench(uint64 numInitValidators, uint32 stateHistoryRetentionPeriod)" {{NUM_INIT_VALIDATORS}} {{MAX_HISTORY_SECONDS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
+    LC_CONTRACT_ADDRESS=`cat contracts/broadcast/LightClientTestScript.s.sol/11155111/runBench-latest.json | jq -r .receipts[-1].contractAddress`
+
     echo $LC_CONTRACT_ADDRESS
     forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numInitValidators, address lcContractAddress)" {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
 
-lc-contract-benchmark:
+gas-benchmarks:
     cargo build --bin diff-test --release
-    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
+    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench"
+    @[ -n "$(git diff --name-only .gas-snapshot)" ] && echo "⚠️ Uncommitted gas benchmarks, please stage them before committing." && exit 1 || exit 0
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.
@@ -134,4 +140,3 @@ download-srs:
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
- 
