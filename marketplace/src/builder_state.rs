@@ -248,9 +248,12 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
     let existing_states: HashSet<_> = global_state_read_lock
         .spawned_builder_states
         .iter()
-        .filter(|(_, (leaf_commit, _))| match leaf_commit {
+        .filter(|(builder_state_id, (leaf_commit, _))| match leaf_commit {
             None => false,
-            Some(leaf_commit) => *leaf_commit == justify_qc.data.leaf_commit,
+            Some(leaf_commit) => {
+                *leaf_commit == justify_qc.data.leaf_commit
+                    && builder_state_id.parent_view == justify_qc.view_number
+            }
         })
         .map(|(builder_state_id, _)| builder_state_id.clone())
         .collect();
