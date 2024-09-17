@@ -1144,7 +1144,7 @@ mod test {
                 .process_quorum_proposal(practice_qc_msg_2.clone())
                 .await;
         } else {
-            tracing::error!("Not a quorum_proposal_message in correct format");
+            panic!("Not a quorum_proposal_message in correct format");
         }
 
         // process da proposal message and do the check
