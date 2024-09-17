@@ -3442,6 +3442,17 @@
 <a href="#3442" id="3442">3442</a>
 <a href="#3443" id="3443">3443</a>
 <a href="#3444" id="3444">3444</a>
+<a href="#3445" id="3445">3445</a>
+<a href="#3446" id="3446">3446</a>
+<a href="#3447" id="3447">3447</a>
+<a href="#3448" id="3448">3448</a>
+<a href="#3449" id="3449">3449</a>
+<a href="#3450" id="3450">3450</a>
+<a href="#3451" id="3451">3451</a>
+<a href="#3452" id="3452">3452</a>
+<a href="#3453" id="3453">3453</a>
+<a href="#3454" id="3454">3454</a>
+<a href="#3455" id="3455">3455</a>
 </pre></div><pre class="rust"><code><span class="kw">pub use </span>light_client_mock::<span class="kw-2">*</span>;
 <span class="doccomment">/// This module was auto-generated with ethers-rs Abigen.
 /// More information at: &lt;https://github.com/gakonst/ethers-rs&gt;
@@ -3633,13 +3644,22 @@
                                 ::std::borrow::ToOwned::to_owned(<span class="string">"uint256"</span>),
                             ),
                         },],
-                        outputs: <span class="macro">::std::vec!</span>[::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned(<span class="string">"hotShotBlockCommRoot"</span>,),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(<span class="number">256usize</span>,),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned(<span class="string">"BN254.ScalarField"</span>),
-                            ),
-                        },],
+                        outputs: <span class="macro">::std::vec!</span>[
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned(<span class="string">"hotShotBlockCommRoot"</span>,),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(<span class="number">256usize</span>,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned(<span class="string">"BN254.ScalarField"</span>),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned(<span class="string">"hotshotBlockHeight"</span>,),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(<span class="number">64usize</span>),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned(<span class="string">"uint64"</span>),
+                                ),
+                            },
+                        ],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
@@ -4546,7 +4566,8 @@
         </span><span class="kw">pub fn </span>get_hot_shot_commitment(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
             hot_shot_block_height: ::ethers::core::types::U256,
-        ) -&gt; ::ethers::contract::builders::ContractCall&lt;M, ::ethers::core::types::U256&gt; {
+        ) -&gt; ::ethers::contract::builders::ContractCall&lt;M, (::ethers::core::types::U256, u64)&gt;
+        {
             <span class="self">self</span>.<span class="number">0
                 </span>.method_hash([<span class="number">133</span>, <span class="number">132</span>, <span class="number">210</span>, <span class="number">63</span>], hot_shot_block_height)
                 .expect(<span class="string">"method not found (this should never happen)"</span>)
@@ -6716,6 +6737,7 @@
     )]
     </span><span class="kw">pub struct </span>GetHotShotCommitmentReturn {
         <span class="kw">pub </span>hot_shot_block_comm_root: ::ethers::core::types::U256,
+        <span class="kw">pub </span>hotshot_block_height: u64,
     }
     <span class="doccomment">///Container type for all return fields from the `getStateHistoryCount` function with signature `getStateHistoryCount()` and selector `0xf9e50d19`
     </span><span class="attr">#[derive(
