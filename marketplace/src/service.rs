@@ -28,7 +28,7 @@ use crate::{
         BuildBlockInfo, DaProposalMessage, DecideMessage, MessageType, QuorumProposalMessage,
         RequestMessage, ResponseMessage, TransactionSource,
     },
-    utils::{BlockId, BuilderStateId, BuiltFromProposedBlock},
+    utils::{BlockId, BuilderStateId, ParentBlockReferences},
 };
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{InactiveReceiver, Sender as BroadcastSender, TrySendError};
@@ -109,12 +109,12 @@ pub struct GlobalState<TYPES: NodeType> {
         (
             // This is provided as an Option for convenience with initialization.
             // When we build the initial state, we don't necessarily want to
-            // have to generate a valid BuiltFromProposedBlock object.  As doing
-            // such would require a bit of setup.  Additionally it would
+            // have to generate a valid `ParentBlockReferences` object and register its leaf
+            // commitment, as doing such would require a bit of setup.  Additionally it would
             // result in the call signature to `GlobalState::new` changing.
             // However for every subsequent BuilderState, we expect this value
             // to be populated.
-            Option<BuiltFromProposedBlock<TYPES>>,
+            Option<Commitment<Leaf<TYPES>>>,
             BroadcastSender<MessageType<TYPES>>,
         ),
     >,
@@ -161,13 +161,13 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
     pub fn register_builder_state(
         &mut self,
         parent_id: BuilderStateId<TYPES>,
-        built_from_proposed_block: BuiltFromProposedBlock<TYPES>,
+        parent_block_references: ParentBlockReferences<TYPES>,
         request_sender: BroadcastSender<MessageType<TYPES>>,
     ) {
         // register the builder state
         self.spawned_builder_states.insert(
             parent_id.clone(),
-            (Some(built_from_proposed_block), request_sender),
+            (Some(parent_block_references.leaf_commit), request_sender),
         );
 
         // keep track of the max view number

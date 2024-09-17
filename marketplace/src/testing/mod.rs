@@ -35,7 +35,7 @@ use hotshot_example_types::{
 use serde::{Deserialize, Serialize};
 
 use crate::service::{broadcast_channels, GlobalState};
-use crate::utils::BuiltFromProposedBlock;
+use crate::utils::ParentBlockReferences;
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use std::sync::Arc;
@@ -75,7 +75,7 @@ async fn start_builder_state(
 
     let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
     let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
-    let built_from_info = BuiltFromProposedBlock {
+    let parent_block_references = ParentBlockReferences {
         view_number: ViewNumber::genesis(),
         vid_commitment: genesis_vid_commitment,
         leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
@@ -92,7 +92,7 @@ async fn start_builder_state(
 
     // instantiate the bootstrap builder state
     let builder_state = BuilderState::<TestTypes>::new(
-        built_from_info,
+        parent_block_references,
         &receivers,
         bootstrap_receiver,
         Vec::new(),

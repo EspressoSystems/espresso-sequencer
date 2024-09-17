@@ -13,7 +13,7 @@ use committable::{Commitment, Committable};
 
 use crate::{
     service::{BroadcastReceivers, GlobalState, ReceivedTransaction},
-    utils::{BlockId, BuilderStateId, BuiltFromProposedBlock, RotatingSet},
+    utils::{BlockId, BuilderStateId, ParentBlockReferences, RotatingSet},
 };
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
@@ -114,8 +114,8 @@ pub struct BuilderState<TYPES: NodeType> {
     pub quorum_proposal_payload_commit_to_quorum_proposal:
         HashMap<(BuilderCommitment, TYPES::Time), Arc<Proposal<TYPES, QuorumProposal<TYPES>>>>,
 
-    /// the spawned from info for a builder state
-    pub built_from_proposed_block: BuiltFromProposedBlock<TYPES>,
+    /// Spawned-from references to the parent block.
+    pub parent_block_references: ParentBlockReferences<TYPES>,
 
     // Channel Receivers for the HotShot events, Tx_receiver could also receive the external transactions
     /// decide receiver
@@ -249,15 +249,13 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
     let existing_states: HashSet<_> = global_state_read_lock
         .spawned_builder_states
         .iter()
-        .filter(
-            |(_, (built_from_proposed_block, _))| match built_from_proposed_block {
-                None => false,
-                Some(built_from_proposed_block) => {
-                    built_from_proposed_block.leaf_commit == justify_qc.data.leaf_commit
-                        && built_from_proposed_block.view_number == justify_qc.view_number
-                }
-            },
-        )
+        .filter(|(builder_state_id, (leaf_commit, _))| match leaf_commit {
+            None => false,
+            Some(leaf_commit) => {
+                *leaf_commit == justify_qc.data.leaf_commit
+                    && builder_state_id.parent_view == justify_qc.view_number
+            }
+        })
         .map(|(builder_state_id, _)| builder_state_id.clone())
         .collect();
 
@@ -334,8 +332,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         tracing::debug!(
             "{}@{} thinks these are the best builder states to extend from: {:?} for proposal {}@{}",
-            self.built_from_proposed_block.vid_commitment,
-            self.built_from_proposed_block.view_number.u64(),
+            self.parent_block_references.vid_commitment,
+            self.parent_block_references.view_number.u64(),
             best_builder_states_to_extend
                 .iter()
                 .map(|builder_state_id| format!(
@@ -351,8 +349,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // We are a best fit if we are contained within the returned set of
         // best [BuilderState]s to extend from.
         best_builder_states_to_extend.contains(&BuilderStateId {
-            parent_commitment: self.built_from_proposed_block.vid_commitment,
-            parent_view: self.built_from_proposed_block.view_number,
+            parent_commitment: self.parent_block_references.vid_commitment,
+            parent_view: self.parent_block_references.view_number,
         })
     }
 
@@ -361,7 +359,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     /// deciding whether we have matching quorum proposal, if so, we remove them from the storage and
     /// spawn a clone
     #[tracing::instrument(skip_all, name = "process da proposal",
-                                    fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
+                                    fields(builder_parent_block_references = %self.parent_block_references))]
     async fn process_da_proposal(&mut self, da_msg: Arc<DaProposalMessage<TYPES>>) {
         tracing::debug!(
             "Builder Received DA message for view {:?}",
@@ -419,7 +417,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     /// processing the quorum proposal
     //#[tracing::instrument(skip_all, name = "Process Quorum Proposal")]
     #[tracing::instrument(skip_all, name = "process quorum proposal",
-                                    fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
+                                    fields(builder_parent_block_references = %self.parent_block_references))]
     async fn process_quorum_proposal(&mut self, qc_msg: QuorumProposalMessage<TYPES>) {
         tracing::debug!(
             "Builder Received QC Message for view {:?}",
@@ -494,7 +492,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         {
             tracing::debug!(
                 "{} is not the best fit for forking, {}@{}, so ignoring the QC proposal, and leaving it to another BuilderState",
-                self.built_from_proposed_block,
+                self.parent_block_references,
                 quorum_proposal.data.block_header.payload_commitment(),
                 quorum_proposal.data.view_number.u64(),
             );
@@ -505,7 +503,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         tracing::debug!(
             "extending BuilderState with a clone from {} with new proposal {}@{}",
-            self.built_from_proposed_block,
+            self.parent_block_references,
             quorum_proposal.data.block_header.payload_commitment(),
             quorum_proposal.data.view_number.u64()
         );
@@ -518,9 +516,9 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
     /// processing the decide event
     #[tracing::instrument(skip_all, name = "process decide event",
-                                   fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
+                                   fields(builder_parent_block_references = %self.parent_block_references))]
     async fn process_decide_event(&mut self, decide_msg: DecideMessage<TYPES>) -> Option<Status> {
-        // Exit out all the builder states if their built_from_proposed_block.view_number is less than the latest_decide_view_number
+        // Exit out all the builder states if their parent_block_references.view_number is less than the latest_decide_view_number
         // The only exception is that we want to keep the highest view number builder state active to ensure that
         // we have a builder state to handle the incoming DA and QC proposals
         let decide_view_number = decide_msg.latest_decide_view_number;
@@ -530,11 +528,11 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             .write_arc()
             .await
             .remove_handles(decide_view_number);
-        if self.built_from_proposed_block.view_number < retained_view_cutoff {
+        if self.parent_block_references.view_number < retained_view_cutoff {
             tracing::info!(
                 "Decide@{:?}; Task@{:?} exiting; views < {:?} being reclaimed",
                 decide_view_number.u64(),
-                self.built_from_proposed_block.view_number.u64(),
+                self.parent_block_references.view_number.u64(),
                 retained_view_cutoff.u64(),
             );
             return Some(Status::ShouldExit);
@@ -542,7 +540,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         tracing::info!(
             "Decide@{:?}; Task@{:?} not exiting; views >= {:?} being retained",
             decide_view_number.u64(),
-            self.built_from_proposed_block.view_number.u64(),
+            self.parent_block_references.view_number.u64(),
             retained_view_cutoff.u64(),
         );
 
@@ -551,7 +549,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
     /// spawn a clone of the builder state
     #[tracing::instrument(skip_all, name = "spawn_clone",
-                                    fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
+                                    fields(builder_parent_block_references = %self.parent_block_references))]
     async fn spawn_clone(
         mut self,
         da_proposal_info: Arc<DaProposalMessage<TYPES>>,
@@ -560,10 +558,10 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     ) {
         let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
 
-        // We replace our built_from_proposed_block with information from the
+        // We replace our parent_block_references with information from the
         // quorum proposal.  This is identifying the block that this specific
         // instance of [BuilderState] is attempting to build for.
-        self.built_from_proposed_block = BuiltFromProposedBlock {
+        self.parent_block_references = ParentBlockReferences {
             view_number: quorum_proposal.data.view_number,
             vid_commitment: quorum_proposal.data.block_header.payload_commitment(),
             leaf_commit: leaf.commit(),
@@ -571,8 +569,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         };
 
         let builder_state_id = BuilderStateId {
-            parent_commitment: self.built_from_proposed_block.vid_commitment,
-            parent_view: self.built_from_proposed_block.view_number,
+            parent_commitment: self.parent_block_references.vid_commitment,
+            parent_view: self.parent_block_references.view_number,
         };
 
         {
@@ -606,7 +604,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // that it can be looked up via the [BuilderStateId] in the future.
         self.global_state.write_arc().await.register_builder_state(
             builder_state_id,
-            self.built_from_proposed_block.clone(),
+            self.parent_block_references.clone(),
             req_sender,
         );
 
@@ -619,7 +617,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     /// insert `builder_hash` to `builder_commitments`
     /// and finally return a struct in `BuildBlockInfo`
     #[tracing::instrument(skip_all, name = "build block",
-                                    fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
+                                    fields(builder_parent_block_references = %self.parent_block_references))]
     async fn build_block(
         &mut self,
         state_id: BuilderStateId<TYPES>,
@@ -661,14 +659,14 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
             tracing::info!(
                 "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
-                self.built_from_proposed_block.view_number,
+                self.parent_block_references.view_number,
                 txn_count,
                 builder_hash
             );
 
             Some(BuildBlockInfo {
                 id: BlockId {
-                    view: self.built_from_proposed_block.view_number,
+                    view: self.parent_block_references.view_number,
                     hash: builder_hash,
                 },
                 block_size,
@@ -685,16 +683,16 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     async fn process_block_request(&mut self, req: RequestMessage<TYPES>) {
         let requested_view_number = req.requested_view_number;
         // If a spawned clone is active then it will handle the request, otherwise the highest view num builder will handle
-        if requested_view_number == self.built_from_proposed_block.view_number {
+        if requested_view_number == self.parent_block_references.view_number {
             tracing::info!(
                 "Request handled by builder with view {}@{:?} for (view_num: {:?})",
-                self.built_from_proposed_block.vid_commitment,
-                self.built_from_proposed_block.view_number,
+                self.parent_block_references.vid_commitment,
+                self.parent_block_references.view_number,
                 requested_view_number
             );
             let response = self
                 .build_block(BuilderStateId {
-                    parent_commitment: self.built_from_proposed_block.vid_commitment,
+                    parent_commitment: self.parent_block_references.vid_commitment,
                     parent_view: requested_view_number,
                 })
                 .await;
@@ -715,7 +713,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                     let builder_hash = response.id.hash.clone();
                     self.global_state.write_arc().await.update_global_state(
                         BuilderStateId {
-                            parent_commitment: self.built_from_proposed_block.vid_commitment,
+                            parent_commitment: self.parent_block_references.vid_commitment,
                             parent_view: requested_view_number,
                         },
                         response,
@@ -727,7 +725,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                         Ok(_sent) => {
                             tracing::info!(
                                 "Builder {:?} Sent response to the request{:?} with builder hash {:?}",
-                                self.built_from_proposed_block.view_number,
+                                self.parent_block_references.view_number,
                                 req,
                                 builder_hash
                             );
@@ -735,7 +733,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                         Err(e) => {
                             tracing::warn!(
                                 "Builder {:?} failed to send response to {:?} with builder hash {:?}, Err: {:?}",
-                                self.built_from_proposed_block.view_number,
+                                self.parent_block_references.view_number,
                                 req,
                                 builder_hash,
                                 e
@@ -750,27 +748,27 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         } else {
             tracing::debug!(
                 "Builder {:?} Requested Builder commitment does not match the built_from_view, so ignoring it",
-                 self.built_from_proposed_block.view_number);
+                 self.parent_block_references.view_number);
         }
     }
     #[tracing::instrument(skip_all, name = "event loop",
-                                    fields(builder_built_from_proposed_block = %self.built_from_proposed_block))]
+                                    fields(builder_parent_block_references = %self.parent_block_references))]
     pub fn event_loop(mut self) {
         let _builder_handle = async_spawn(async move {
             loop {
                 tracing::debug!(
                     "Builder {:?} event loop",
-                    self.built_from_proposed_block.view_number
+                    self.parent_block_references.view_number
                 );
                 futures::select! {
                     req = self.req_receiver.next() => {
-                        tracing::debug!("Received request msg in builder {:?}: {:?}", self.built_from_proposed_block.view_number, req);
+                        tracing::debug!("Received request msg in builder {:?}: {:?}", self.parent_block_references.view_number, req);
                         match req {
                             Some(req) => {
                                 if let MessageType::RequestMessage(req) = req {
                                     tracing::debug!(
                                         "Received request msg in builder {:?}: {:?}",
-                                        self.built_from_proposed_block.view_number,
+                                        self.parent_block_references.view_number,
                                         req
                                     );
                                     self.process_block_request(req).await;
@@ -787,7 +785,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                         match da {
                             Some(da) => {
                                 if let MessageType::DaProposalMessage(rda_msg) = da {
-                                    tracing::debug!("Received da proposal msg in builder {:?}:\n {:?}", self.built_from_proposed_block, rda_msg.view_number);
+                                    tracing::debug!("Received da proposal msg in builder {:?}:\n {:?}", self.parent_block_references, rda_msg.view_number);
                                     self.process_da_proposal(rda_msg).await;
                                 } else {
                                     tracing::warn!("Unexpected message on da proposals channel: {:?}", da);
@@ -802,7 +800,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                         match qc {
                             Some(qc) => {
                                 if let MessageType::QuorumProposalMessage(rqc_msg) = qc {
-                                    tracing::debug!("Received quorum proposal msg in builder {:?}:\n {:?} for view ", self.built_from_proposed_block, rqc_msg.proposal.data.view_number);
+                                    tracing::debug!("Received quorum proposal msg in builder {:?}:\n {:?} for view ", self.parent_block_references, rqc_msg.proposal.data.view_number);
                                     self.process_quorum_proposal(rqc_msg).await;
                                 } else {
                                     tracing::warn!("Unexpected message on quorum proposals channel: {:?}", qc);
@@ -820,23 +818,23 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                                     let latest_decide_view_num = rdecide_msg.latest_decide_view_number;
                                     tracing::debug!("Received decide msg view {:?} in builder {:?}",
                                         &latest_decide_view_num,
-                                        self.built_from_proposed_block);
+                                        self.parent_block_references);
                                     let decide_status = self.process_decide_event(rdecide_msg).await;
                                     match decide_status{
                                         Some(Status::ShouldExit) => {
                                             tracing::info!("Exiting builder {:?} with decide view {:?}",
-                                                self.built_from_proposed_block,
+                                                self.parent_block_references,
                                                 &latest_decide_view_num);
                                             return;
                                         }
                                         Some(Status::ShouldContinue) => {
                                             tracing::debug!("Continuing builder {:?}",
-                                                self.built_from_proposed_block);
+                                                self.parent_block_references);
                                             continue;
                                         }
                                         None => {
                                             tracing::warn!("decide_status was None; Continuing builder {:?}",
-                                                self.built_from_proposed_block);
+                                                self.parent_block_references);
                                             continue;
                                         }
                                     }
@@ -866,7 +864,7 @@ pub enum MessageType<TYPES: NodeType> {
 #[allow(clippy::too_many_arguments)]
 impl<TYPES: NodeType> BuilderState<TYPES> {
     pub fn new(
-        built_from_proposed_block: BuiltFromProposedBlock<TYPES>,
+        parent_block_references: ParentBlockReferences<TYPES>,
         receivers: &BroadcastReceivers<TYPES>,
         req_receiver: BroadcastReceiver<MessageType<TYPES>>,
         tx_queue: Vec<Arc<ReceivedTransaction<TYPES>>>,
@@ -880,7 +878,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         let txns_in_queue: HashSet<_> = tx_queue.iter().map(|tx| tx.commit).collect();
         BuilderState {
             txns_in_queue,
-            built_from_proposed_block,
+            parent_block_references,
             req_receiver,
             tx_queue,
             global_state,
@@ -905,7 +903,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         BuilderState {
             included_txns,
             txns_in_queue: self.txns_in_queue.clone(),
-            built_from_proposed_block: self.built_from_proposed_block.clone(),
+            parent_block_references: self.parent_block_references.clone(),
             decide_receiver: self.decide_receiver.clone(),
             da_proposal_receiver: self.da_proposal_receiver.clone(),
             qc_receiver: self.qc_receiver.clone(),
