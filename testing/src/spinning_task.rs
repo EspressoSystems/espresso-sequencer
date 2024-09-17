@@ -16,6 +16,7 @@ use futures::future::join_all;
 use hotshot::{traits::TestableNodeImplementation, types::EventType, HotShotInitializer};
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
+    block_types::TestBlockHeader,
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
     testable_delay::DelayConfig,
@@ -65,7 +66,11 @@ pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V
 
 #[async_trait]
 impl<
-        TYPES: NodeType<InstanceState = TestInstanceState, ValidatedState = TestValidatedState>,
+        TYPES: NodeType<
+            InstanceState = TestInstanceState,
+            ValidatedState = TestValidatedState,
+            BlockHeader = TestBlockHeader,
+        >,
         I: TestableNodeImplementation<TYPES>,
         N: ConnectedNetwork<TYPES::SignatureKey>,
         V: Versions,

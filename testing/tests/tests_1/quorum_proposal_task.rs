@@ -107,7 +107,9 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                TestMetadata,
+                TestMetadata {
+                    num_transactions: 0
+                },
                 ViewNumber::new(1),
                 vec1![builder_fee.clone()],
                 None,
@@ -212,7 +214,9 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(1)),
                 builder_commitment.clone(),
-                TestMetadata,
+                TestMetadata {
+                    num_transactions: 0
+                },
                 ViewNumber::new(1),
                 vec1![builder_fee.clone()],
                 None,
@@ -229,7 +233,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(2)),
                 builder_commitment.clone(),
-                TestMetadata,
+                proposals[0].data.block_header.metadata,
                 ViewNumber::new(2),
                 vec1![builder_fee.clone()],
                 None,
@@ -246,7 +250,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(3)),
                 builder_commitment.clone(),
-                TestMetadata,
+                proposals[1].data.block_header.metadata,
                 ViewNumber::new(3),
                 vec1![builder_fee.clone()],
                 None,
@@ -263,7 +267,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(4)),
                 builder_commitment.clone(),
-                TestMetadata,
+                proposals[2].data.block_header.metadata,
                 ViewNumber::new(4),
                 vec1![builder_fee.clone()],
                 None,
@@ -280,7 +284,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(5)),
                 builder_commitment,
-                TestMetadata,
+                proposals[3].data.block_header.metadata,
                 ViewNumber::new(5),
                 vec1![builder_fee.clone()],
                 None,
@@ -386,7 +390,9 @@ async fn test_quorum_proposal_task_qc_timeout() {
         SendPayloadCommitmentAndMetadata(
             payload_commitment,
             builder_commitment,
-            TestMetadata,
+            TestMetadata {
+                num_transactions: 0
+            },
             ViewNumber::new(3),
             vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                 quorum_membership.total_nodes(),
@@ -476,7 +482,9 @@ async fn test_quorum_proposal_task_view_sync() {
         SendPayloadCommitmentAndMetadata(
             payload_commitment,
             builder_commitment,
-            TestMetadata,
+            TestMetadata {
+                num_transactions: 0
+            },
             ViewNumber::new(2),
             vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                 quorum_membership.total_nodes(),
@@ -576,7 +584,9 @@ async fn test_quorum_proposal_task_liveness_check() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(1)),
                 builder_commitment.clone(),
-                TestMetadata,
+                TestMetadata {
+                    num_transactions: 0
+                },
                 ViewNumber::new(1),
                 vec1![builder_fee.clone()],
                 None,
@@ -593,7 +603,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(2)),
                 builder_commitment.clone(),
-                TestMetadata,
+                proposals[0].data.block_header.metadata,
                 ViewNumber::new(2),
                 vec1![builder_fee.clone()],
                 None,
@@ -610,7 +620,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(3)),
                 builder_commitment.clone(),
-                TestMetadata,
+                proposals[1].data.block_header.metadata,
                 ViewNumber::new(3),
                 vec1![builder_fee.clone()],
                 None,
@@ -627,7 +637,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(4)),
                 builder_commitment.clone(),
-                TestMetadata,
+                proposals[2].data.block_header.metadata,
                 ViewNumber::new(4),
                 vec1![builder_fee.clone()],
                 None,
@@ -644,7 +654,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(5)),
                 builder_commitment,
-                TestMetadata,
+                proposals[3].data.block_header.metadata,
                 ViewNumber::new(5),
                 vec1![builder_fee.clone()],
                 None,

@@ -18,8 +18,6 @@ use std::{
     time::Duration,
 };
 
-use parking_lot::RwLock as PlRwLock;
-
 use async_broadcast::{broadcast, InactiveReceiver, Sender};
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
@@ -47,6 +45,7 @@ use hotshot_types::{
     BoxSyncFuture,
 };
 use lru::LruCache;
+use parking_lot::RwLock as PlRwLock;
 use tracing::{debug, warn};
 
 use super::{push_cdn_network::PushCdnNetwork, NetworkError};

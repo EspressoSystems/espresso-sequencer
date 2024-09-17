@@ -22,6 +22,7 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::{VidCommitment, VidCommon},
 };
+use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use snafu::Snafu;
@@ -157,7 +158,9 @@ impl<TYPES: NodeType> TestableBlock<TYPES> for TestBlockPayload {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TestMetadata;
+pub struct TestMetadata {
+    pub num_transactions: u64,
+}
 
 impl EncodeBytes for TestMetadata {
     fn encode(&self) -> Arc<[u8]> {
@@ -185,11 +188,14 @@ impl<TYPES: NodeType> BlockPayload<TYPES> for TestBlockPayload {
         _instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         let txns_vec: Vec<TestTransaction> = transactions.into_iter().collect();
+        let metadata = TestMetadata {
+            num_transactions: txns_vec.len() as u64,
+        };
         Ok((
             Self {
                 transactions: txns_vec,
             },
-            TestMetadata,
+            metadata,
         ))
     }
 
@@ -215,7 +221,12 @@ impl<TYPES: NodeType> BlockPayload<TYPES> for TestBlockPayload {
     }
 
     fn empty() -> (Self, Self::Metadata) {
-        (Self::genesis(), TestMetadata)
+        (
+            Self::genesis(),
+            TestMetadata {
+                num_transactions: 0,
+            },
+        )
     }
 
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
@@ -243,15 +254,20 @@ pub struct TestBlockHeader {
     pub payload_commitment: VidCommitment,
     /// Fast commitment for builder verification
     pub builder_commitment: BuilderCommitment,
+    /// block metdata
+    pub metadata: TestMetadata,
     /// Timestamp when this header was created.
     pub timestamp: u64,
+    /// random
+    pub random: u64,
 }
 
 impl TestBlockHeader {
-    fn new<TYPES: NodeType<BlockHeader = Self>>(
+    pub fn new<TYPES: NodeType<BlockHeader = Self>>(
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
+        metadata: TestMetadata,
     ) -> Self {
         let parent = parent_leaf.block_header();
 
@@ -261,11 +277,15 @@ impl TestBlockHeader {
             timestamp = parent.timestamp;
         }
 
+        let random = thread_rng().gen_range(0..=u64::MAX);
+
         Self {
             block_number: parent.block_number + 1,
             payload_commitment,
             builder_commitment,
+            metadata,
             timestamp,
+            random,
         }
     }
 }
@@ -287,7 +307,7 @@ impl<
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
+        metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: BuilderFee<TYPES>,
         _vid_common: VidCommon,
         _version: Version,
@@ -297,6 +317,7 @@ impl<
             parent_leaf,
             payload_commitment,
             builder_commitment,
+            metadata,
         ))
     }
 
@@ -306,7 +327,7 @@ impl<
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
+        metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: Vec<BuilderFee<TYPES>>,
         _vid_common: VidCommon,
         _auction_results: Option<TYPES::AuctionResult>,
@@ -317,6 +338,7 @@ impl<
             parent_leaf,
             payload_commitment,
             builder_commitment,
+            metadata,
         ))
     }
 
@@ -326,11 +348,17 @@ impl<
         builder_commitment: BuilderCommitment,
         _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> Self {
+        let metadata = TestMetadata {
+            num_transactions: 0,
+        };
+
         Self {
             block_number: 0,
             payload_commitment,
             builder_commitment,
+            metadata,
             timestamp: 0,
+            random: 0,
         }
     }
 
@@ -343,7 +371,7 @@ impl<
     }
 
     fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata {
-        &TestMetadata
+        &self.metadata
     }
 
     fn builder_commitment(&self) -> BuilderCommitment {

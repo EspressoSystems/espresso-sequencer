@@ -6,6 +6,7 @@
 
 use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 
+use anyhow::{ensure, Result};
 use hotshot::{
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
@@ -34,6 +35,9 @@ use crate::{
     test_launcher::{Network, ResourceGenerators, TestLauncher},
     view_sync_task::ViewSyncTaskDescription,
 };
+
+pub type TransactionValidator = Arc<dyn Fn(&Vec<(u64, u64)>) -> Result<()> + Send + Sync>;
+
 /// data describing how a round should be timed.
 #[derive(Clone, Debug, Copy)]
 pub struct TimingData {
@@ -85,6 +89,8 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
     pub view_sync_properties: ViewSyncTaskDescription,
     /// description of builders to run
     pub builders: Vec1<BuilderDescription>,
+    /// description of fallback builder to run
+    pub fallback_builder: BuilderDescription,
     /// description of the solver to run
     pub solver: FakeSolverApiDescription,
     /// nodes with byzantine behaviour
@@ -93,6 +99,68 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
     pub async_delay_config: DelayConfig,
     /// view in which to propose an upgrade
     pub upgrade_view: Option<u64>,
+    /// whether to initialize the solver on startup
+    pub start_solver: bool,
+    /// boxed closure used to validate the resulting transactions
+    pub validate_transactions: TransactionValidator,
+}
+
+pub fn nonempty_block_threshold(threshold: (u64, u64)) -> TransactionValidator {
+    Arc::new(move |transactions| {
+        if matches!(threshold, (0, _)) {
+            return Ok(());
+        }
+
+        let blocks: Vec<_> = transactions.iter().filter(|(view, _)| *view != 0).collect();
+
+        let num_blocks = blocks.len() as u64;
+        let mut num_nonempty_blocks = 0;
+
+        ensure!(num_blocks > 0, "Failed to commit any non-genesis blocks");
+
+        for (_, num_transactions) in blocks {
+            if *num_transactions > 0 {
+                num_nonempty_blocks += 1;
+            }
+        }
+
+        ensure!(
+          // i.e. num_nonempty_blocks / num_blocks >= threshold.0 / threshold.1
+          num_nonempty_blocks * threshold.1 >= threshold.0 * num_blocks,
+          "Failed to meet nonempty block threshold of {}/{}; got {num_nonempty_blocks} nonempty blocks out of a total of {num_blocks}", threshold.0, threshold.1
+        );
+
+        Ok(())
+    })
+}
+
+pub fn nonempty_block_limit(limit: (u64, u64)) -> TransactionValidator {
+    Arc::new(move |transactions| {
+        if matches!(limit, (_, 0)) {
+            return Ok(());
+        }
+
+        let blocks: Vec<_> = transactions.iter().filter(|(view, _)| *view != 0).collect();
+
+        let num_blocks = blocks.len() as u64;
+        let mut num_nonempty_blocks = 0;
+
+        ensure!(num_blocks > 0, "Failed to commit any non-genesis blocks");
+
+        for (_, num_transactions) in blocks {
+            if *num_transactions > 0 {
+                num_nonempty_blocks += 1;
+            }
+        }
+
+        ensure!(
+          // i.e. num_nonempty_blocks / num_blocks <= limit.0 / limit.1
+          num_nonempty_blocks * limit.1 <= limit.0 * num_blocks,
+          "Exceeded nonempty block limit of {}/{}; got {num_nonempty_blocks} nonempty blocks out of a total of {num_blocks}", limit.0, limit.1
+        );
+
+        Ok(())
+    })
 }
 
 #[derive(Debug)]
@@ -202,7 +270,7 @@ pub enum BuilderChange {
 }
 
 /// Metadata describing builder behaviour during a test
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BuilderDescription {
     /// view number -> change to builder status
     pub changes: HashMap<u64, BuilderChange>,
@@ -353,14 +421,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Default
             ),
             unreliable_network: None,
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
-            builders: vec1::vec1![
-                BuilderDescription {
-                    changes: HashMap::new()
-                },
-                BuilderDescription {
-                    changes: HashMap::new()
-                }
-            ],
+            builders: vec1::vec1![BuilderDescription::default(), BuilderDescription::default(),],
+            fallback_builder: BuilderDescription::default(),
             solver: FakeSolverApiDescription {
                 // Default to a 10% error rate.
                 error_pct: 0.1,
@@ -368,6 +430,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Default
             behaviour: Rc::new(|_| Behaviour::Standard),
             async_delay_config: DelayConfig::default(),
             upgrade_view: None,
+            start_solver: true,
+            validate_transactions: Arc::new(|_| Ok(())),
         }
     }
 }

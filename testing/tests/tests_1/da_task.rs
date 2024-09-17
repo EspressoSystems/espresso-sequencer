@@ -90,8 +90,10 @@ async fn test_da_task() {
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
             BlockRecv(PackedBundle::new(
-                encoded_transactions,
-                TestMetadata,
+                encoded_transactions.clone(),
+                TestMetadata {
+                    num_transactions: transactions.len() as u64
+                },
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(),
@@ -167,7 +169,7 @@ async fn test_da_task_storage_failure() {
         vids.push(view.vid_proposal.clone());
     }
 
-    generator.add_transactions(transactions);
+    generator.add_transactions(transactions.clone());
 
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.da_proposal.clone());
@@ -185,8 +187,10 @@ async fn test_da_task_storage_failure() {
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
             BlockRecv(PackedBundle::new(
-                encoded_transactions,
-                TestMetadata,
+                encoded_transactions.clone(),
+                TestMetadata {
+                    num_transactions: transactions.len() as u64
+                },
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(),

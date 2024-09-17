@@ -9,6 +9,7 @@ use std::{collections::BTreeMap, marker::PhantomData};
 
 use anyhow::{bail, ensure, Context, Result};
 use async_trait::async_trait;
+use hotshot_example_types::block_types::TestBlockHeader;
 use hotshot_types::{
     data::Leaf,
     event::{Event, EventType},
@@ -18,6 +19,7 @@ use hotshot_types::{
 
 use crate::{
     overall_safety_task::OverallSafetyPropertiesDescription,
+    test_builder::TransactionValidator,
     test_task::{TestResult, TestTaskState},
 };
 
@@ -207,9 +209,11 @@ pub struct ConsistencyTask<TYPES: NodeType, V: Versions> {
     pub ensure_upgrade: bool,
     /// phantom marker
     pub _pd: PhantomData<V>,
+    /// function used to validate the number of transactions committed in each block
+    pub validate_transactions: TransactionValidator,
 }
 
-impl<TYPES: NodeType, V: Versions> ConsistencyTask<TYPES, V> {
+impl<TYPES: NodeType<BlockHeader = TestBlockHeader>, V: Versions> ConsistencyTask<TYPES, V> {
     pub async fn validate(&self) -> Result<()> {
         let sanitized_network_map = sanitize_network_map(&self.consensus_leaves)?;
 
@@ -222,8 +226,21 @@ impl<TYPES: NodeType, V: Versions> ConsistencyTask<TYPES, V> {
             acc || leaf.upgrade_certificate().is_some()
         });
 
-        ensure!(expected_upgrade == actual_upgrade,
-        "Mismatch between expected and actual upgrade. Expected upgrade: {expected_upgrade}. Actual upgrade: {actual_upgrade}"
+        let mut transactions = Vec::new();
+
+        transactions = sanitized_view_map
+            .iter()
+            .fold(transactions, |mut acc, (view, leaf)| {
+                acc.push((**view, leaf.block_header().metadata.num_transactions));
+
+                acc
+            });
+
+        (self.validate_transactions)(&transactions)?;
+
+        ensure!(
+          expected_upgrade == actual_upgrade,
+          "Mismatch between expected and actual upgrade. Expected upgrade: {expected_upgrade}. Actual upgrade: {actual_upgrade}"
         );
 
         Ok(())
@@ -231,7 +248,9 @@ impl<TYPES: NodeType, V: Versions> ConsistencyTask<TYPES, V> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType, V: Versions> TestTaskState for ConsistencyTask<TYPES, V> {
+impl<TYPES: NodeType<BlockHeader = TestBlockHeader>, V: Versions> TestTaskState
+    for ConsistencyTask<TYPES, V>
+{
     type Event = Event<TYPES>;
 
     /// Handles an event from one of multiple receivers.

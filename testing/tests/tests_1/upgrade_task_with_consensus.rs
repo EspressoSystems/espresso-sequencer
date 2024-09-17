@@ -14,7 +14,7 @@ use std::time::Duration;
 use futures::StreamExt;
 use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
-    block_types::{TestMetadata, TestTransaction},
+    block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes, TestVersions},
     state_types::TestInstanceState,
 };
@@ -291,7 +291,7 @@ async fn test_upgrade_task_propose() {
             SendPayloadCommitmentAndMetadata(
                 vids[2].0[0].data.payload_commitment,
                 proposals[2].data.block_header.builder_commitment.clone(),
-                TestMetadata,
+                proposals[2].data.block_header.metadata,
                 ViewNumber::new(3),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(),
@@ -489,7 +489,7 @@ async fn test_upgrade_task_blank_blocks() {
             SendPayloadCommitmentAndMetadata(
                 vids[1].0[0].data.payload_commitment,
                 proposals[1].data.block_header.builder_commitment.clone(),
-                TestMetadata,
+                proposals[1].data.block_header.metadata,
                 ViewNumber::new(2),
                 vec1![builder_fee.clone()],
                 None,
@@ -501,7 +501,7 @@ async fn test_upgrade_task_blank_blocks() {
             SendPayloadCommitmentAndMetadata(
                 vids[2].0[0].data.payload_commitment,
                 proposals[2].data.block_header.builder_commitment.clone(),
-                TestMetadata,
+                proposals[2].data.block_header.metadata,
                 ViewNumber::new(3),
                 vec1![builder_fee.clone()],
                 None,
@@ -514,7 +514,7 @@ async fn test_upgrade_task_blank_blocks() {
             SendPayloadCommitmentAndMetadata(
                 vids[3].0[0].data.payload_commitment,
                 proposals[3].data.block_header.builder_commitment.clone(),
-                TestMetadata,
+                proposals[3].data.block_header.metadata,
                 ViewNumber::new(4),
                 vec1![builder_fee.clone()],
                 None,
@@ -527,7 +527,7 @@ async fn test_upgrade_task_blank_blocks() {
             SendPayloadCommitmentAndMetadata(
                 vids[4].0[0].data.payload_commitment,
                 proposals[4].data.block_header.builder_commitment.clone(),
-                TestMetadata,
+                proposals[4].data.block_header.metadata,
                 ViewNumber::new(5),
                 vec1![builder_fee.clone()],
                 None,
@@ -540,7 +540,7 @@ async fn test_upgrade_task_blank_blocks() {
             SendPayloadCommitmentAndMetadata(
                 vids[5].0[0].data.payload_commitment,
                 proposals[5].data.block_header.builder_commitment.clone(),
-                TestMetadata,
+                proposals[5].data.block_header.metadata,
                 ViewNumber::new(6),
                 vec1![builder_fee.clone()],
                 None,
@@ -554,7 +554,7 @@ async fn test_upgrade_task_blank_blocks() {
             SendPayloadCommitmentAndMetadata(
                 vids[6].0[0].data.payload_commitment,
                 proposals[6].data.block_header.builder_commitment.clone(),
-                TestMetadata,
+                proposals[6].data.block_header.metadata,
                 ViewNumber::new(7),
                 vec1![builder_fee],
                 None,

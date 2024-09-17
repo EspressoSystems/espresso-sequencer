@@ -24,6 +24,7 @@ use hotshot::{
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
+    block_types::TestBlockHeader,
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
@@ -68,7 +69,11 @@ pub trait TaskErr: std::error::Error + Sync + Send + 'static {}
 impl<T: std::error::Error + Sync + Send + 'static> TaskErr for T {}
 
 impl<
-        TYPES: NodeType<InstanceState = TestInstanceState, ValidatedState = TestValidatedState>,
+        TYPES: NodeType<
+            InstanceState = TestInstanceState,
+            ValidatedState = TestValidatedState,
+            BlockHeader = TestBlockHeader,
+        >,
         I: TestableNodeImplementation<TYPES>,
         V: Versions,
         N: ConnectedNetwork<TYPES::SignatureKey>,
@@ -209,6 +214,7 @@ where
             consensus_leaves: BTreeMap::new(),
             safety_properties: self.launcher.metadata.overall_safety_properties,
             ensure_upgrade: self.launcher.metadata.upgrade_view.is_some(),
+            validate_transactions: self.launcher.metadata.validate_transactions,
             _pd: PhantomData,
         };
 
@@ -335,14 +341,14 @@ where
 
     pub async fn init_builders<B: TestBuilderImplementation<TYPES>>(
         &self,
-    ) -> (Vec<Box<dyn BuilderTask<TYPES>>>, Vec<Url>) {
+    ) -> (Vec<Box<dyn BuilderTask<TYPES>>>, Vec<Url>, Url) {
         let config = self.launcher.resource_generator.config.clone();
         let mut builder_tasks = Vec::new();
         let mut builder_urls = Vec::new();
         for metadata in &self.launcher.metadata.builders {
             let builder_port = portpicker::pick_unused_port().expect("No free ports");
             let builder_url =
-                Url::parse(&format!("http://localhost:{builder_port}")).expect("Valid URL");
+                Url::parse(&format!("http://localhost:{builder_port}")).expect("Invalid URL");
             let builder_task = B::start(
                 config.num_nodes_with_stake.into(),
                 builder_url.clone(),
@@ -354,11 +360,25 @@ where
             builder_urls.push(builder_url);
         }
 
-        (builder_tasks, builder_urls)
+        let fallback_builder_port = portpicker::pick_unused_port().expect("No free ports");
+        let fallback_builder_url =
+            Url::parse(&format!("http://localhost:{fallback_builder_port}")).expect("Invalid URL");
+
+        let fallback_builder_task = B::start(
+            config.num_nodes_with_stake.into(),
+            fallback_builder_url.clone(),
+            B::Config::default(),
+            self.launcher.metadata.fallback_builder.changes.clone(),
+        )
+        .await;
+
+        builder_tasks.push(fallback_builder_task);
+
+        (builder_tasks, builder_urls, fallback_builder_url)
     }
 
-    /// Add servers.
-    pub async fn add_servers(&mut self, builder_urls: Vec<Url>) {
+    /// Add auction solver.
+    pub async fn add_solver(&mut self, builder_urls: Vec<Url>) {
         let solver_error_pct = self.launcher.metadata.solver.error_pct;
         let solver_port = portpicker::pick_unused_port().expect("No available ports");
 
@@ -395,8 +415,12 @@ where
         let mut results = vec![];
         let config = self.launcher.resource_generator.config.clone();
 
-        let (mut builder_tasks, builder_urls) = self.init_builders::<B>().await;
-        self.add_servers(builder_urls.clone()).await;
+        let (mut builder_tasks, builder_urls, fallback_builder_url) =
+            self.init_builders::<B>().await;
+
+        if self.launcher.metadata.start_solver {
+            self.add_solver(builder_urls.clone()).await;
+        }
 
         // Collect uninitialized nodes because we need to wait for all networks to be ready before starting the tasks
         let mut uninitialized_nodes = Vec::new();
@@ -448,7 +472,7 @@ where
                 marketplace_config.auction_results_provider = new_auction_results_provider.into();
             }
 
-            marketplace_config.fallback_builder_url = builder_urls.first().unwrap().clone();
+            marketplace_config.fallback_builder_url = fallback_builder_url.clone();
 
             let network_clone = network.clone();
             let networks_ready_future = async move {

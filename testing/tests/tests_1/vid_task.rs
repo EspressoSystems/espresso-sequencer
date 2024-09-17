@@ -74,7 +74,9 @@ async fn test_vid_task() {
     .expect("Failed to sign block payload!");
     let proposal: DaProposal<TestTypes> = DaProposal {
         encoded_transactions: encoded_transactions.clone(),
-        metadata: TestMetadata,
+        metadata: TestMetadata {
+            num_transactions: encoded_transactions.len() as u64,
+        },
         view_number: ViewNumber::new(2),
     };
     let message = Proposal {
@@ -96,8 +98,10 @@ async fn test_vid_task() {
         serial![
             ViewChange(ViewNumber::new(2)),
             BlockRecv(PackedBundle::new(
-                encoded_transactions,
-                TestMetadata,
+                encoded_transactions.clone(),
+                TestMetadata {
+                    num_transactions: transactions.len() as u64
+                },
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(),
@@ -116,7 +120,9 @@ async fn test_vid_task() {
             exact(SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                TestMetadata,
+                TestMetadata {
+                    num_transactions: transactions.len() as u64,
+                },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(),

@@ -106,7 +106,9 @@ async fn test_consensus_task() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                TestMetadata,
+                TestMetadata {
+                    num_transactions: 0,
+                },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(),
@@ -308,7 +310,9 @@ async fn test_view_sync_finalize_propose() {
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
-                TestMetadata,
+                TestMetadata {
+                    num_transactions: 0,
+                },
                 ViewNumber::new(4),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     4,
