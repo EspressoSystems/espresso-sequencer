@@ -9,6 +9,7 @@ resolver = "2"
 
 members = [
   "builder",
+  "client",
   "contract-bindings",
   "contracts/rust/adapter",
   "contracts/rust/diff-test",
@@ -18,10 +19,9 @@ members = [
   "marketplace-solver",
   "node-metrics",
   "sequencer",
+  "tests",
   "types",
   "utils",
-  "tests",
-  "client",
 ]
 
 [workspace.dependencies]
