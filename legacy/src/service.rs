@@ -2630,6 +2630,12 @@ mod test {
         }
 
         assert_eq!(
+            state.spawned_builder_states.len(),
+            11,
+            "The spawned_builder_states should have the expected number of entries",
+        );
+
+        assert_eq!(
             state.remove_handles(ViewNumber::new(100)),
             ViewNumber::new(10),
             "It should only be able to prune up to what has been stored"
