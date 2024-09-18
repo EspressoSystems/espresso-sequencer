@@ -15,9 +15,6 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
 
-  inputs.fenix.url = "github:nix-community/fenix";
-  inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
-
   inputs.nixpkgs-cross-overlay.url =
     "github:alekseysidorov/nixpkgs-cross-overlay";
 
@@ -39,7 +36,6 @@
     , nixpkgs-cross-overlay
     , flake-utils
     , pre-commit-hooks
-    , fenix
     , foundry
     , solc-bin
     , ...
@@ -176,6 +172,9 @@
           stableToolchain = pkgs.rust-bin.stable.latest.minimal.override {
             extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
           };
+          nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
+            extensions = [ "rust-analyzer" ];
+          });
           # nixWithFlakes allows pre v2.4 nix installations to use
           # flake commands (like `nix flake update`)
           nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
@@ -200,7 +199,7 @@
             cargo-nextest
             typos
             just
-            fenix.packages.${system}.rust-analyzer
+            nightlyToolchain.passthru.availableComponents.rust-analyzer
 
             # Tools
             nixWithFlakes
