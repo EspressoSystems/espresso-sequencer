@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Result};
 use async_std::{future, task::sleep};
 use client::SequencerClient;
 use espresso_types::FeeAmount;
@@ -25,7 +25,7 @@ const SEQUENCER_BLOCKS_TIMEOUT: u64 = 120;
 // const BASE_HOST: &str = "localhost";
 // const BASE_PROTOCOL: &str = "http";
 
-async fn wait_for_service(url: &str, interval: u64, timeout: u64) -> anyhow::Result<String> {
+async fn wait_for_service(url: &str, interval: u64, timeout: u64) -> Result<String> {
     future::timeout(Duration::from_secs(timeout), async {
         loop {
             if let Ok(body) = blocking::get(url) {
@@ -90,7 +90,7 @@ impl fmt::Display for TestState {
 }
 
 impl TestConfig {
-    async fn new() -> anyhow::Result<Self> {
+    async fn new() -> Result<Self> {
         let mut load_generator_url = format!(
             "http://localhost:{}/healthcheck",
             dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT")?
@@ -195,7 +195,7 @@ impl TestConfig {
             light_client_update,
         }
     }
-    async fn readiness(&self) -> anyhow::Result<Vec<String>> {
+    async fn readiness(&self) -> Result<Vec<String>> {
         join_all(vec![
             wait_for_service(&self.load_generator_url, 1000, 600),
             wait_for_service(&self.builder_url, 1000, 60),
@@ -203,12 +203,12 @@ impl TestConfig {
         ])
         .await
         .into_iter()
-        .collect::<anyhow::Result<Vec<String>>>()
+        .collect::<Result<Vec<String>>>()
     }
 }
 
 #[async_std::test]
-async fn test_smoke() -> anyhow::Result<()> {
+async fn test_smoke() -> Result<()> {
     let start = Instant::now();
     dotenvy::dotenv()?;
 
