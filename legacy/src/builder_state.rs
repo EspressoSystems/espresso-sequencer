@@ -15,7 +15,7 @@ use committable::{Commitment, Committable};
 
 use crate::{
     service::{GlobalState, ReceivedTransaction},
-    BlockId, BuilderStateId,
+    BlockId, BuilderStateId, ParentBlockReferences,
 };
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
@@ -103,21 +103,6 @@ pub struct ResponseMessage {
 pub enum Status {
     ShouldExit,
     ShouldContinue,
-}
-
-/// References to the parent block that is extended to spawn the new builder state.
-#[derive(Debug, Clone)]
-pub struct ParentBlockReferences<TYPES: NodeType> {
-    pub view_number: TYPES::Time,
-    pub vid_commitment: VidCommitment,
-    pub leaf_commit: Commitment<Leaf<TYPES>>,
-    pub builder_commitment: BuilderCommitment,
-}
-// implement display for the referenced info
-impl<TYPES: NodeType> std::fmt::Display for ParentBlockReferences<TYPES> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "View Number: {:?}", self.view_number)
-    }
 }
 
 #[derive(Debug, Clone)]

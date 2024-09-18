@@ -38,11 +38,10 @@ mod tests {
     };
 
     use crate::builder_state::{
-        DaProposalMessage, DecideMessage, ParentBlockReferences, QCMessage, RequestMessage,
-        TransactionSource,
+        DaProposalMessage, DecideMessage, QCMessage, RequestMessage, TransactionSource,
     };
     use crate::service::{handle_received_txns, GlobalState, ReceivedTransaction};
-    use crate::BuilderStateId;
+    use crate::{BuilderStateId, ParentBlockReferences};
     use async_lock::RwLock;
     use async_std::task;
     use committable::{Commitment, CommitmentBoundsArkless, Committable};
