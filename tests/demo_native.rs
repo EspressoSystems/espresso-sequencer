@@ -29,7 +29,6 @@ async fn wait_for_service(url: &str, interval: u64, timeout: u64) -> Result<Stri
     future::timeout(Duration::from_secs(timeout), async {
         loop {
             if let Ok(body) = blocking::get(url) {
-                dbg!(&body, &url);
                 return body.text().map_err(|e| {
                     anyhow!(
                         "Wait for service, could not decode response: ({}) {}",
