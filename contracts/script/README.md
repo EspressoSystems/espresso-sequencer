@@ -132,6 +132,14 @@ forge script contracts/script/FeeContract.s.sol:DeployFeeContractWithDefenderScr
 
 Verify the Implementation contract on Etherscan (Use another window as step would not have completed yet)
 
+### 2. Verify the Contract
+
+Set the following variables in `.env.contracts`
+
+- `ETHERSCAN_API_KEY`
+- `SOLC_VERSION`
+- `FEE_CONTRACT_ADDRESS` (the implementation address)
+
 ```bash
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
@@ -246,6 +254,12 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientDefenderScript 
 
 ### 2. Verify the Contract
 
+Set the following variables in `.env.contracts`
+
+- `ETHERSCAN_API_KEY`
+- `SOLC_VERSION`
+- `LIGHT_CLIENT_CONTRACT_ADDRESS` (the implementation address)
+
 ```bash
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
@@ -257,8 +271,9 @@ contracts/src/LightClient.sol:LightClient \
 
 ### 3. Inform Etherscan about your proxy
 
-Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options and
-select the `is this a proxy?` option. You should then be able to interact with the implementation contract via a proxy.
+Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to `Contract > Code > More Options`
+and select the `is this a proxy?` option. You should then be able to interact with the implementation contract via a
+proxy.
 
 ### 4. Set Permissioned Prover
 
@@ -268,6 +283,12 @@ in the `.env.contracts` file:
 - `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `APPROVED_PROVER_ADDRESS`
 - `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
+
+If you don't have typescript installed run the following commands:
+
+- `npm install typescript`
+- `npm install ts-node`
+- `npm install`
 
 Assuming you're in the root folder, run the following command:
 
