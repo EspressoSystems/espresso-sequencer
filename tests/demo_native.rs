@@ -28,7 +28,7 @@ const SEQUENCER_BLOCKS_TIMEOUT: u64 = 120;
 async fn wait_for_service(url: &str, interval: u64, timeout: u64) -> Result<String> {
     future::timeout(Duration::from_secs(timeout), async {
         loop {
-            if let Ok(body) = blocking::get(url) {
+            if let Ok(body) = blocking::get(format!("{url}/healthcheck")) {
                 return body.text().map_err(|e| {
                     anyhow!(
                         "Wait for service, could not decode response: ({}) {}",
@@ -89,46 +89,41 @@ impl fmt::Display for TestState {
     }
 }
 
+fn url_from_port(port: String) -> Result<String> {
+    Ok(format!(
+        "{}://{}:{}",
+        dotenvy::var("INTEGRATION_TEST_PROTO")?,
+        dotenvy::var("INTEGRATION_TEST_HOST")?,
+        port
+    ))
+}
+
 impl TestConfig {
     async fn new() -> Result<Self> {
-        let mut load_generator_url = format!(
-            "http://localhost:{}/healthcheck",
-            dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT")?
-        );
+        let mut load_generator_url =
+            url_from_port(dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT")?)?;
 
         if dotenvy::var("MARKETPLACE_SMOKE_TEST")
             .map_err(|e| anyhow!(e))
             .and_then(|var| var.parse::<bool>().map_err(|e| anyhow!(e)))
-            .is_ok()
+            .ok()
+            .is_some_and(|val| val == true)
         {
-            load_generator_url = format!(
-                "http://localhost:{}",
-                dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT")?
-            );
+            load_generator_url = url_from_port(dotenvy::var(
+                "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT",
+            )?)?;
         }
 
-        let l1_provider_url = format!(
-            "http://localhost:{}",
-            dotenvy::var("ESPRESSO_SEQUENCER_L1_PORT")?
-        );
-        let sequencer_api_url = format!(
-            "http://localhost:{}",
-            dotenvy::var("ESPRESSO_SEQUENCER1_API_PORT")?
-        );
-        let builder_url = format!(
-            "http://localhost:{}/healthcheck",
-            dotenvy::var("ESPRESSO_BUILDER_SERVER_PORT")?
-        );
-        let prover_url = format!(
-            "http://localhost:{}/healthcheck",
-            dotenvy::var("ESPRESSO_PROVER_SERVICE_PORT")?
-        );
+        let l1_provider_url = url_from_port(dotenvy::var("ESPRESSO_SEQUENCER_L1_PORT")?)?;
+        let sequencer_api_url = url_from_port(dotenvy::var("ESPRESSO_SEQUENCER1_API_PORT")?)?;
+        let builder_url = url_from_port(dotenvy::var("ESPRESSO_BUILDER_SERVER_PORT")?)?;
+        let prover_url = url_from_port(dotenvy::var("ESPRESSO_PROVER_SERVICE_PORT")?)?;
 
         let light_client_proxy_address =
             dotenvy::var("ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")?;
 
         // Number of blocks to wait before deeming the test successful
-        let expected_block_height = dotenvy::var("SMOKE_TEST_EXPECTED_BLOCK_HEIGHT")?
+        let expected_block_height = dotenvy::var("INTEGRATION_TEST_EXPECTED_BLOCK_HEIGHT")?
             .parse::<u64>()
             .unwrap();
 
@@ -161,7 +156,7 @@ impl TestConfig {
     fn expected_block_height(&self) -> u64 {
         self.expected_block_height
     }
-
+    /// Get the latest block where we see a light client update
     async fn latest_light_client_update(&self) -> u64 {
         let filter = Filter::new()
             .from_block(BlockNumber::Earliest)
@@ -178,6 +173,8 @@ impl TestConfig {
 
         latest_light_client_update.unwrap().as_u64()
     }
+
+    /// Return current state  of the test
     async fn test_state(&self) -> TestState {
         let block_height = self.espresso.get_height().await.ok();
         let txn_count = self.espresso.get_transaction_count().await.unwrap();
@@ -203,6 +200,8 @@ impl TestConfig {
             light_client_update,
         }
     }
+
+    /// Check if services are healthy
     async fn readiness(&self) -> Result<Vec<String>> {
         join_all(vec![
             wait_for_service(&self.load_generator_url, 1000, 600),
