@@ -22,12 +22,19 @@
 3. **Enter Nix Shell**  
    In the home folder of this repo, start a nix shell by entering `nix-shell` in the terminal.
 4. **Compile Contracts (if necessary)** If the contracts have never been compiled, run `forge build`.
-5. **Set Environment Variables**  
+5. **Set up docker images** Run the following:
+   - `just pull`
+   - `just test`
+6. **Set Environment Variables**  
    Set the values for
    - `STATE_HISTORY_RETENTION_PERIOD`
    - `NUM_INIT_VALIDATORS`
    - `FEE_CONTRACT_ORIGINAL_NAME`
-   - `LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME` in the `.env.contracts` file.
+   - `LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME` in the `.env.contracts` file. If you're deploying with a hardware wallet set
+     this variable:
+   - `DEPLOYER_HARDWARE_WALLET_ADDRESS` Otherwise, set the mnemonic variables:
+   - `DEPLOYER_MNEMONIC`
+   - `DEPLOYER_MNEMONIC_OFFSET`
 
 ### If Not Using OpenZeppelin Defender (current method)
 
