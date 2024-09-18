@@ -56,6 +56,7 @@ struct TestConfig {
     prover_url: String,
     builder_url: String,
     expected_block_height: u64,
+    timeout: f64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -135,6 +136,13 @@ impl TestConfig {
             Provider::<Http>::try_from(l1_provider_url)?.interval(L1_PROVIDER_RETRY_INTERVAL);
 
         let espresso = SequencerClient::new(Url::from_str(&sequencer_api_url).unwrap());
+
+        // Set the time out. Give a little more leeway when we have a
+        // large `expected_block_height`.
+        let timeout = expected_block_height as f64
+            + SEQUENCER_BLOCKS_TIMEOUT as f64
+            + (expected_block_height as f64).sqrt();
+
         Ok(Self {
             load_generator_url,
             provider,
@@ -145,6 +153,7 @@ impl TestConfig {
             builder_url,
             prover_url,
             expected_block_height,
+            timeout,
         })
     }
 
@@ -233,7 +242,8 @@ async fn test_smoke() -> Result<()> {
             panic!("Balance not conserved");
         }
 
-        if start.elapsed().as_secs() > SEQUENCER_BLOCKS_TIMEOUT {
+        // Timeout if tests take too long.
+        if start.elapsed().as_secs() as f64 > testing.timeout {
             panic!("Timeout waiting for block height, transaction count, and light client updates to increase.");
         }
 
