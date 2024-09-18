@@ -718,77 +718,92 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         }
     }
 
+    /// [process_block_request] is a method that is used to handle incoming
+    /// [RequestMessage]s.  These [RequestMessage]s are looking for a bundle
+    /// of transactions to be included in the next block. Instead of returning
+    /// a value, this method's response will be provided to the [Sender] that
+    /// is included in the [RequestMessage].
+    ///
+    /// At this point this particular [BuilderState] has already been deemed
+    /// as the [BuilderState] that should handle this request, and it is up
+    /// to this [BuilderState] to provide the response, if it is able to do
+    /// so.
+    ///
+    /// The response will be a [ResponseMessage] that contains the transactions
+    /// the `Builder` wants to include in the next block in addition to the
+    /// expected block size, offered fee, and the
+    /// Builder's commit block of the data being returned.
     async fn process_block_request(&mut self, req: RequestMessage<TYPES>) {
         let requested_view_number = req.requested_view_number;
         // If a spawned clone is active then it will handle the request, otherwise the highest view num builder will handle
-        if requested_view_number == self.parent_block_references.view_number {
-            tracing::info!(
-                "Request handled by builder with view {}@{:?} for (view_num: {:?})",
-                self.parent_block_references.vid_commitment,
-                self.parent_block_references.view_number,
-                requested_view_number
-            );
-            let response = self
-                .build_block(BuilderStateId {
-                    parent_commitment: self.parent_block_references.vid_commitment,
-                    parent_view: requested_view_number,
-                })
-                .await;
-
-            match response {
-                Some(response) => {
-                    // form the response message
-                    let response_msg = ResponseMessage {
-                        builder_hash: response.id.hash.clone(),
-                        block_size: response.block_size,
-                        offered_fee: response.offered_fee,
-                        transactions: response
-                            .block_payload
-                            .transactions(&response.metadata)
-                            .collect(),
-                    };
-
-                    let builder_hash = response.id.hash.clone();
-                    self.global_state.write_arc().await.update_global_state(
-                        BuilderStateId {
-                            parent_commitment: self.parent_block_references.vid_commitment,
-                            parent_view: requested_view_number,
-                        },
-                        response,
-                        response_msg.clone(),
-                    );
-
-                    // ... and finally, send the response
-                    match req.response_channel.send(response_msg).await {
-                        Ok(_sent) => {
-                            tracing::info!(
-                                "Builder {:?} Sent response to the request{:?} with builder hash {:?}",
-                                self.parent_block_references.view_number,
-                                req,
-                                builder_hash
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Builder {:?} failed to send response to {:?} with builder hash {:?}, Err: {:?}",
-                                self.parent_block_references.view_number,
-                                req,
-                                builder_hash,
-                                e
-                            );
-                        }
-                    }
-                }
-                None => {
-                    tracing::debug!("No response to send");
-                }
-            }
-        } else {
+        if requested_view_number != self.parent_block_references.view_number {
             tracing::debug!(
-                "Builder {:?} Requested Builder commitment does not match the built_from_view, so ignoring it",
-                 self.parent_block_references.view_number);
+                "Builder {:?} Requested view number does not match the built_from_view, so ignoring it",
+                self.parent_block_references.view_number
+            );
+            return;
         }
+
+        tracing::info!(
+            "Request handled by builder with view {}@{:?} for (view_num: {:?})",
+            self.parent_block_references.vid_commitment,
+            self.parent_block_references.view_number,
+            requested_view_number
+        );
+
+        let response = self
+            .build_block(BuilderStateId {
+                parent_commitment: self.parent_block_references.vid_commitment,
+                parent_view: requested_view_number,
+            })
+            .await;
+
+        let Some(response) = response else {
+            tracing::debug!("No response to send");
+            return;
+        };
+
+        // form the response message
+        let response_msg = ResponseMessage {
+            builder_hash: response.id.hash.clone(),
+            block_size: response.block_size,
+            offered_fee: response.offered_fee,
+            transactions: response
+                .block_payload
+                .transactions(&response.metadata)
+                .collect(),
+        };
+
+        let builder_hash = response.id.hash.clone();
+        self.global_state.write_arc().await.update_global_state(
+            BuilderStateId {
+                parent_commitment: self.parent_block_references.vid_commitment,
+                parent_view: requested_view_number,
+            },
+            response,
+            response_msg.clone(),
+        );
+
+        // ... and finally, send the response
+        if let Err(e) = req.response_channel.send(response_msg).await {
+            tracing::warn!(
+                "Builder {:?} failed to send response to {:?} with builder hash {:?}, Err: {:?}",
+                self.parent_block_references.view_number,
+                req,
+                builder_hash,
+                e
+            );
+            return;
+        }
+
+        tracing::info!(
+            "Builder {:?} Sent response to the request{:?} with builder hash {:?}",
+            self.parent_block_references.view_number,
+            req,
+            builder_hash
+        );
     }
+
     #[tracing::instrument(skip_all, name = "event loop",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     pub fn event_loop(mut self) {
