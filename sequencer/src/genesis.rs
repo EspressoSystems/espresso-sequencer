@@ -87,10 +87,7 @@ impl Genesis {
             {
                 panic!("Fee contract's address is not a proxy");
             }
-        } else {
-            panic!("Fee contract's address is missing from the chain config!");
         }
-
         Ok(())
     }
 }
