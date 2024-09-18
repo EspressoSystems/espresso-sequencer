@@ -357,6 +357,8 @@ fn charge_fee(
 /// Validate builder accounts by verifying signatures. All fees are
 /// verified against signature by index.
 fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
+    let version = proposed_header.version();
+
     // TODO since we are iterating, should we include account/amount in errors?
     for (fee_info, signature) in proposed_header
         .fee_info()
@@ -369,26 +371,32 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
             .as_u64()
             .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
 
-        // verify signature, accept any verification that succeeds
-        fee_info
-            .account()
-            .validate_sequencing_fee_signature_marketplace(
-                &signature,
-                fee_info.amount().as_u64().unwrap(),
-            )
-            .then_some(())
-            .or_else(|| {
-                fee_info
-                    .account()
-                    .validate_fee_signature(
-                        &signature,
-                        fee_info.amount().as_u64().unwrap(),
-                        proposed_header.metadata(),
-                        &proposed_header.payload_commitment(),
-                    )
-                    .then_some(())
-            })
-            .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        // Verify signatures.
+
+        // TODO Marketplace signatures are placeholders for now. In
+        // finished Marketplace signatures will cover the full
+        // transaction.
+        if version.minor >= 3 {
+            fee_info
+                .account()
+                .validate_sequencing_fee_signature_marketplace(
+                    &signature,
+                    fee_info.amount().as_u64().unwrap(),
+                )
+                .then_some(())
+                .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        } else {
+            fee_info
+                .account()
+                .validate_fee_signature(
+                    &signature,
+                    fee_info.amount().as_u64().unwrap(),
+                    proposed_header.metadata(),
+                    &proposed_header.payload_commitment(),
+                )
+                .then_some(())
+                .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        }
     }
 
     Ok(())
