@@ -575,6 +575,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             );
             return Some(Status::ShouldExit);
         }
+
         tracing::info!(
             "Decide@{:?}; Task@{:?} not exiting; views >= {:?} being retained",
             decide_view_number.u64(),
@@ -631,9 +632,15 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         for tx in da_proposal_info.txn_commitments.iter() {
             self.txn_commits_in_queue.remove(tx);
         }
+
+        // We add the included transactions to the included_txns set, so we can
+        // also filter them should they be included in a future transaction
+        // submission.
         self.included_txns
             .extend(da_proposal_info.txn_commitments.iter().cloned());
 
+        // We wish to keep only the transactions in the tx_queue to those that
+        // also exist in the txns_in_queue set.
         self.tx_queue
             .retain(|tx| self.txn_commits_in_queue.contains(&tx.commit));
 
@@ -1058,18 +1065,31 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         while Instant::now() <= timeout_after {
             match self.tx_receiver.try_recv() {
                 Ok(tx) => {
-                    if self.included_txns.contains(&tx.commit)
-                        || self.txn_commits_in_queue.contains(&tx.commit)
-                    {
+                    if self.included_txns.contains(&tx.commit) {
+                        // We've included this transaction in one of our
+                        // recent blocks, and we do not wish to include it
+                        // again.
                         continue;
                     }
+
+                    if self.txn_commits_in_queue.contains(&tx.commit) {
+                        // We already have this transaction in our current
+                        // queue, so we do not want to include it again
+                        continue;
+                    }
+
                     self.txn_commits_in_queue.insert(tx.commit);
                     self.tx_queue.push(tx);
                 }
+
                 Err(async_broadcast::TryRecvError::Empty)
                 | Err(async_broadcast::TryRecvError::Closed) => {
+                    // The transaction receiver is empty, or it's been closed.
+                    // If it's closed that's a big problem and we should
+                    // probably indicate it as such.
                     break;
                 }
+
                 Err(async_broadcast::TryRecvError::Overflowed(lost)) => {
                     tracing::warn!("Missed {lost} transactions due to backlog");
                     continue;
