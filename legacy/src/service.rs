@@ -2647,17 +2647,6 @@ mod test {
             "The spawned_builder_states should only have a single entry in it"
         );
 
-        for i in 0..10 {
-            let builder_state_id = BuilderStateId {
-                parent_commitment: vid_commitment(&[i], 4),
-                view: ViewNumber::new(i as u64),
-            };
-            assert!(
-                !state.spawned_builder_states.contains_key(&builder_state_id),
-                "the spawned builder states should not contain the builder state id, {builder_state_id}"
-            );
-        }
-
         let builder_state_id = BuilderStateId {
             parent_commitment: vid_commitment(&[10], 4),
             view: ViewNumber::new(10),
