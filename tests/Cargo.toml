@@ -1,22 +1,21 @@
 [package]
 name = "tests"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
 publish = false
 
 [[test]]
 name = "test_demo_native"
 path = "demo_native.rs"
 
-
 [dev-dependencies]
-client = { path = "../client"  }
-async-std = { workspace = true }
-dotenvy = { workspace = true }
 anyhow = { workspace = true }
-ethers = { workspace = true }
-reqwest = { workspace = true,  features = ["json", "blocking"]}
+async-std = { workspace = true }
+client = { path = "../client" }
+dotenvy = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
-surf-disco = { workspace = true }
+ethers = { workspace = true }
 futures = { workspace = true }
+reqwest = { workspace = true, features = ["json", "blocking"] }
+surf-disco = { workspace = true }

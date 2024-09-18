@@ -1,8 +1,8 @@
 [package]
 name = "client"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
 publish = false
 
 [dependencies]
