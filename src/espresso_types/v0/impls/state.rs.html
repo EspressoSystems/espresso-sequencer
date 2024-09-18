@@ -1142,6 +1142,39 @@
 <a href="#1142" id="1142">1142</a>
 <a href="#1143" id="1143">1143</a>
 <a href="#1144" id="1144">1144</a>
+<a href="#1145" id="1145">1145</a>
+<a href="#1146" id="1146">1146</a>
+<a href="#1147" id="1147">1147</a>
+<a href="#1148" id="1148">1148</a>
+<a href="#1149" id="1149">1149</a>
+<a href="#1150" id="1150">1150</a>
+<a href="#1151" id="1151">1151</a>
+<a href="#1152" id="1152">1152</a>
+<a href="#1153" id="1153">1153</a>
+<a href="#1154" id="1154">1154</a>
+<a href="#1155" id="1155">1155</a>
+<a href="#1156" id="1156">1156</a>
+<a href="#1157" id="1157">1157</a>
+<a href="#1158" id="1158">1158</a>
+<a href="#1159" id="1159">1159</a>
+<a href="#1160" id="1160">1160</a>
+<a href="#1161" id="1161">1161</a>
+<a href="#1162" id="1162">1162</a>
+<a href="#1163" id="1163">1163</a>
+<a href="#1164" id="1164">1164</a>
+<a href="#1165" id="1165">1165</a>
+<a href="#1166" id="1166">1166</a>
+<a href="#1167" id="1167">1167</a>
+<a href="#1168" id="1168">1168</a>
+<a href="#1169" id="1169">1169</a>
+<a href="#1170" id="1170">1170</a>
+<a href="#1171" id="1171">1171</a>
+<a href="#1172" id="1172">1172</a>
+<a href="#1173" id="1173">1173</a>
+<a href="#1174" id="1174">1174</a>
+<a href="#1175" id="1175">1175</a>
+<a href="#1176" id="1176">1176</a>
+<a href="#1177" id="1177">1177</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
@@ -1501,6 +1534,8 @@
 <span class="doccomment">/// Validate builder accounts by verifying signatures. All fees are
 /// verified against signature by index.
 </span><span class="kw">fn </span>validate_builder_fee(proposed_header: <span class="kw-2">&amp;</span>Header) -&gt; <span class="prelude-ty">Result</span>&lt;(), BuilderValidationError&gt; {
+    <span class="kw">let </span>version = proposed_header.version();
+
     <span class="comment">// TODO since we are iterating, should we include account/amount in errors?
     </span><span class="kw">for </span>(fee_info, signature) <span class="kw">in </span>proposed_header
         .fee_info()
@@ -1513,26 +1548,32 @@
             .as_u64()
             .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))<span class="question-mark">?</span>;
 
-        <span class="comment">// verify signature, accept any verification that succeeds
-        </span>fee_info
-            .account()
-            .validate_sequencing_fee_signature_marketplace(
-                <span class="kw-2">&amp;</span>signature,
-                fee_info.amount().as_u64().unwrap(),
-            )
-            .then_some(())
-            .or_else(|| {
-                fee_info
-                    .account()
-                    .validate_fee_signature(
-                        <span class="kw-2">&amp;</span>signature,
-                        fee_info.amount().as_u64().unwrap(),
-                        proposed_header.metadata(),
-                        <span class="kw-2">&amp;</span>proposed_header.payload_commitment(),
-                    )
-                    .then_some(())
-            })
-            .ok_or(BuilderValidationError::InvalidBuilderSignature)<span class="question-mark">?</span>;
+        <span class="comment">// Verify signatures.
+
+        // TODO Marketplace signatures are placeholders for now. In
+        // finished Marketplace signatures will cover the full
+        // transaction.
+        </span><span class="kw">if </span>version.minor &gt;= <span class="number">3 </span>{
+            fee_info
+                .account()
+                .validate_sequencing_fee_signature_marketplace(
+                    <span class="kw-2">&amp;</span>signature,
+                    fee_info.amount().as_u64().unwrap(),
+                )
+                .then_some(())
+                .ok_or(BuilderValidationError::InvalidBuilderSignature)<span class="question-mark">?</span>;
+        } <span class="kw">else </span>{
+            fee_info
+                .account()
+                .validate_fee_signature(
+                    <span class="kw-2">&amp;</span>signature,
+                    fee_info.amount().as_u64().unwrap(),
+                    proposed_header.metadata(),
+                    <span class="kw-2">&amp;</span>proposed_header.payload_commitment(),
+                )
+                .then_some(())
+                .ok_or(BuilderValidationError::InvalidBuilderSignature)<span class="question-mark">?</span>;
+        }
     }
 
     <span class="prelude-val">Ok</span>(())
@@ -2247,6 +2288,31 @@
         };
 
         validate_builder_fee(<span class="kw-2">&amp;</span>header).unwrap();
+    }
+
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_validate_builder_fee_marketplace() {
+        setup_logging();
+        setup_backtrace();
+
+        <span class="kw">let </span>max_block_size = <span class="number">10</span>;
+
+        <span class="kw">let </span>validated_state = ValidatedState::default();
+        <span class="kw">let </span>instance_state = NodeState::mock_v3().with_chain_config(ChainConfig {
+            base_fee: <span class="number">1000</span>.into(), <span class="comment">// High base fee
+            </span>max_block_size: max_block_size.into(),
+            ..validated_state.chain_config.resolve().unwrap()
+        });
+
+        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance_state.genesis_state, <span class="kw-2">&amp;</span>instance_state).<span class="kw">await</span>;
+        <span class="kw">let </span>header = parent.block_header().clone();
+
+        <span class="macro">debug!</span>(<span class="string">"{:?}"</span>, header.version());
+
+        <span class="kw">let </span>key_pair = EthKeyPair::random();
+        <span class="kw">let </span>account = key_pair.fee_account();
+
+        <span class="kw">let </span>data = header.fee_info()[<span class="number">0</span>].amount().as_u64().unwrap();
 
         <span class="comment">// test v3 sig
         </span><span class="kw">let </span>sig = FeeAccount::sign_sequencing_fee_marketplace(<span class="kw-2">&amp;</span>key_pair, data).unwrap();
