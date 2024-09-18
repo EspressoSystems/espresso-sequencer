@@ -45,6 +45,7 @@ cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
 
 clap = { workspace = true }
+client = { path = "../client" }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 csv = "1"
@@ -52,7 +53,6 @@ derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
-client = { path = "../client"  }
 ethers = { workspace = true }
 futures = { workspace = true }
 

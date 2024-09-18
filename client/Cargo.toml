@@ -5,17 +5,15 @@ authors.workspace = true
 edition.workspace = true
 publish = false
 
-
 [dependencies]
-ethers = { workspace = true }
-# espresso-types = { path = "../types", features = ["testing"] }
-surf-disco = { workspace = true }
 anyhow = { workspace = true }
 async-std = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 espresso-types = { path = "../types", features = ["testing"] }
+ethers = { workspace = true }
 futures = { workspace = true }
 jf-merkle-tree = { workspace = true }
 sequencer-utils = { path = "../utils" }
+surf-disco = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
