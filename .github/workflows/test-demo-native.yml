@@ -46,9 +46,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
+        env:
+          NEXTEST_PROFILE: integration
         run: |
+          cargo nextest run --locked --release --all-features --no-run
           cargo build --locked --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
       - name: Test Demo
@@ -59,5 +61,5 @@ jobs:
           export PATH="$PWD/target/release:$PATH"
           docker compose pull || docker-compose pull
           bash -x scripts/demo-native --tui=false &
-          cargo nextest run --locked --release --workspace --all-features --verbose --nocapture
+          cargo nextest run --locked --release --all-features --verbose --nocapture
         timeout-minutes: 40
