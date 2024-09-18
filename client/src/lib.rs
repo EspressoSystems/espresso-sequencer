@@ -28,6 +28,7 @@ impl EspressoClient {
         Self(surf_disco::Client::new(provider))
     }
 
+    /// GET Block Height from the node
     pub async fn get_height(&self) -> anyhow::Result<u64> {
         self.0
             .get::<u64>("node/block-height")
@@ -36,6 +37,7 @@ impl EspressoClient {
             .context("getting Espresso block height")
     }
 
+    /// Get the Number of Transactions
     pub async fn get_transaction_count(&self) -> anyhow::Result<u64> {
         self.0
             .get::<u64>("node/transactions/count")
@@ -44,6 +46,7 @@ impl EspressoClient {
             .context("getting Espresso transaction count")
     }
 
+    /// Subscribe to a stream to Block Headers
     pub async fn subscribe_headers<FromServer: DeserializeOwned>(
         &self,
         connect: &str,
@@ -55,6 +58,7 @@ impl EspressoClient {
             .context("subscribing to Espresso headers")
     }
 
+    /// Get the balance for a given account at a given block height, defaulting to current balance.
     pub async fn get_espresso_balance(
         &self,
         address: Address,
