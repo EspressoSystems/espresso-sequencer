@@ -813,6 +813,157 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         );
     }
 
+    // MARK: event loop processing for [BuilderState]
+
+    /// [event_loop_helper_handle_request] is a helper function that is used
+    /// to handle incoming [MessageType]s, specifically [RequestMessage]s, that
+    /// are received by the [BuilderState::req_receiver] channel.
+    ///
+    /// This method is used to process block requests.
+    async fn event_loop_helper_handle_request(&mut self, req: Option<MessageType<TYPES>>) {
+        tracing::debug!(
+            "Received request msg in builder {:?}: {:?}",
+            self.parent_block_references.view_number,
+            req
+        );
+
+        let Some(req) = req else {
+            tracing::warn!("No more request messages to consume");
+            return;
+        };
+
+        let MessageType::RequestMessage(req) = req else {
+            tracing::warn!("Unexpected message on requests channel: {:?}", req);
+            return;
+        };
+
+        tracing::debug!(
+            "Received request msg in builder {:?}: {:?}",
+            self.parent_block_references.view_number,
+            req
+        );
+
+        self.process_block_request(req).await;
+    }
+
+    /// [event_loop_helper_handle_da_proposal] is a helper function that is used
+    /// to handle incoming [MessageType]s, specifically [DaProposalMessage]s,
+    /// that are received by the [BuilderState::da_proposal_receiver] channel.
+    async fn event_loop_helper_handle_da_proposal(&mut self, da: Option<MessageType<TYPES>>) {
+        let Some(da) = da else {
+            tracing::warn!("No more da proposal messages to consume");
+            return;
+        };
+
+        let MessageType::DaProposalMessage(rda_msg) = da else {
+            tracing::warn!("Unexpected message on da proposals channel: {:?}", da);
+            return;
+        };
+
+        tracing::debug!(
+            "Received da proposal msg in builder {:?}:\n {:?}",
+            self.parent_block_references,
+            rda_msg.view_number
+        );
+
+        self.process_da_proposal(rda_msg).await;
+    }
+
+    /// [event_loop_helper_handle_qc_proposal] is a helper function that is used
+    /// to handle incoming [MessageType]s, specifically [QuorumProposalMessage]s,
+    /// that are received by the [BuilderState::qc_receiver] channel.
+    async fn event_loop_helper_handle_qc_proposal(&mut self, qc: Option<MessageType<TYPES>>) {
+        let Some(qc) = qc else {
+            tracing::warn!("No more quorum proposal messages to consume");
+            return;
+        };
+
+        let MessageType::QuorumProposalMessage(rqc_msg) = qc else {
+            tracing::warn!("Unexpected message on quorum proposals channel: {:?}", qc);
+            return;
+        };
+
+        tracing::debug!(
+            "Received quorum proposal msg in builder {:?}:\n {:?} for view ",
+            self.parent_block_references,
+            rqc_msg.proposal.data.view_number
+        );
+
+        self.process_quorum_proposal(rqc_msg).await;
+    }
+
+    /// [event_loop_helper_handle_decide] is a helper function that is used to
+    /// handle incoming [MessageType]s, specifically [DecideMessage]s, that are
+    /// received by the [BuilderState::decide_receiver] channel.
+    ///
+    /// This method can trigger the exit of the [BuilderState::event_loop] async
+    /// task via the returned [std::ops::ControlFlow] type.  If the returned
+    /// value is a [std::ops::ControlFlow::Break], then the
+    /// [BuilderState::event_loop]
+    /// async task should exit.
+    async fn event_loop_helper_handle_decide(
+        &mut self,
+        decide: Option<MessageType<TYPES>>,
+    ) -> std::ops::ControlFlow<()> {
+        let Some(decide) = decide else {
+            tracing::warn!("No more decide messages to consume");
+            return std::ops::ControlFlow::Continue(());
+        };
+
+        let MessageType::DecideMessage(rdecide_msg) = decide else {
+            tracing::warn!("Unexpected message on decide channel: {:?}", decide);
+            return std::ops::ControlFlow::Continue(());
+        };
+
+        let latest_decide_view_num = rdecide_msg.latest_decide_view_number;
+        tracing::debug!(
+            "Received decide msg view {:?} in builder {:?}",
+            &latest_decide_view_num,
+            self.parent_block_references
+        );
+        let decide_status = self.process_decide_event(rdecide_msg).await;
+
+        let Some(decide_status) = decide_status else {
+            tracing::warn!(
+                "decide_status was None; Continuing builder {:?}",
+                self.parent_block_references
+            );
+            return std::ops::ControlFlow::Continue(());
+        };
+
+        match decide_status {
+            Status::ShouldContinue => {
+                tracing::debug!("Continuing builder {:?}", self.parent_block_references);
+                std::ops::ControlFlow::Continue(())
+            }
+            _ => {
+                tracing::info!(
+                    "Exiting builder {:?} with decide view {:?}",
+                    self.parent_block_references,
+                    &latest_decide_view_num
+                );
+                std::ops::ControlFlow::Break(())
+            }
+        }
+    }
+
+    /// [event_loop] is a method that spawns an async task that attempts to
+    /// handle messages being received across the [BuilderState]s various
+    /// channels.
+    ///
+    /// This async task will continue to run until it receives a message that
+    /// indicates that it should exit.  This exit message is sent via the
+    /// [DecideMessage] channel.
+    ///
+    /// The main body of the loop listens to four channels at once, and when
+    /// a message is received it will process the message with the appropriate
+    /// handler accordingly.
+    ///
+    /// > Note: There is potential for improvement in typing here, as each of
+    /// > these receivers returns the exact same type despite being separate
+    /// > Channels.  These channels may want to convey separate types so that
+    /// > the contained message can pertain to its specific channel
+    /// > accordingly.
     #[tracing::instrument(skip_all, name = "event loop",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     pub fn event_loop(mut self) {
@@ -822,93 +973,12 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                     "Builder {:?} event loop",
                     self.parent_block_references.view_number
                 );
+
                 futures::select! {
-                    req = self.req_receiver.next() => {
-                        tracing::debug!("Received request msg in builder {:?}: {:?}", self.parent_block_references.view_number, req);
-                        match req {
-                            Some(req) => {
-                                if let MessageType::RequestMessage(req) = req {
-                                    tracing::debug!(
-                                        "Received request msg in builder {:?}: {:?}",
-                                        self.parent_block_references.view_number,
-                                        req
-                                    );
-                                    self.process_block_request(req).await;
-                                } else {
-                                    tracing::warn!("Unexpected message on requests channel: {:?}", req);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more request messages to consume");
-                            }
-                        }
-                    },
-                    da = self.da_proposal_receiver.next() => {
-                        match da {
-                            Some(da) => {
-                                if let MessageType::DaProposalMessage(rda_msg) = da {
-                                    tracing::debug!("Received da proposal msg in builder {:?}:\n {:?}", self.parent_block_references, rda_msg.view_number);
-                                    self.process_da_proposal(rda_msg).await;
-                                } else {
-                                    tracing::warn!("Unexpected message on da proposals channel: {:?}", da);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more da proposal messages to consume");
-                            }
-                        }
-                    },
-                    qc = self.qc_receiver.next() => {
-                        match qc {
-                            Some(qc) => {
-                                if let MessageType::QuorumProposalMessage(rqc_msg) = qc {
-                                    tracing::debug!("Received quorum proposal msg in builder {:?}:\n {:?} for view ", self.parent_block_references, rqc_msg.proposal.data.view_number);
-                                    self.process_quorum_proposal(rqc_msg).await;
-                                } else {
-                                    tracing::warn!("Unexpected message on quorum proposals channel: {:?}", qc);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more quorum proposal messages to consume");
-                            }
-                        }
-                    },
-                    decide = self.decide_receiver.next() => {
-                        match decide {
-                            Some(decide) => {
-                                if let MessageType::DecideMessage(rdecide_msg) = decide {
-                                    let latest_decide_view_num = rdecide_msg.latest_decide_view_number;
-                                    tracing::debug!("Received decide msg view {:?} in builder {:?}",
-                                        &latest_decide_view_num,
-                                        self.parent_block_references);
-                                    let decide_status = self.process_decide_event(rdecide_msg).await;
-                                    match decide_status{
-                                        Some(Status::ShouldExit) => {
-                                            tracing::info!("Exiting builder {:?} with decide view {:?}",
-                                                self.parent_block_references,
-                                                &latest_decide_view_num);
-                                            return;
-                                        }
-                                        Some(Status::ShouldContinue) => {
-                                            tracing::debug!("Continuing builder {:?}",
-                                                self.parent_block_references);
-                                            continue;
-                                        }
-                                        None => {
-                                            tracing::warn!("decide_status was None; Continuing builder {:?}",
-                                                self.parent_block_references);
-                                            continue;
-                                        }
-                                    }
-                                } else {
-                                    tracing::warn!("Unexpected message on decide channel: {:?}", decide);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more decide messages to consume");
-                            }
-                        }
-                    },
+                    req = self.req_receiver.next() => self.event_loop_helper_handle_request(req).await,
+                    da = self.da_proposal_receiver.next() => self.event_loop_helper_handle_da_proposal(da).await,
+                    qc = self.qc_receiver.next() => self.event_loop_helper_handle_qc_proposal(qc).await,
+                    decide = self.decide_receiver.next() => if let std::ops::ControlFlow::Break(_) = self.event_loop_helper_handle_decide(decide).await { return; },
                 };
             }
         });
