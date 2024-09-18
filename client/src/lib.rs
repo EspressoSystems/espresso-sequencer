@@ -15,7 +15,7 @@ use surf_disco::{
 };
 use vbs::version::StaticVersion;
 
-type SequencerApiVersion = StaticVersion<0, 1>;
+pub type SequencerApiVersion = StaticVersion<0, 1>;
 // pub type EspressoClient = surf_disco::Client<ClientError, SequencerApiVersion>;
 
 #[derive(Clone, Debug)]
