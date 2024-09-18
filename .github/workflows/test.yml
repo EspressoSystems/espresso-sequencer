@@ -49,7 +49,7 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo build --locked --bin diff-test --release
+          cargo build --locked --release
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
@@ -75,8 +75,9 @@ jobs:
           CARGO_TERM_COLOR: always
           NEXTEST_PROFILE: integration
         run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           docker compose pull || docker-compose pull
-          bash scripts/demo-native -D
+          bash -x scripts/demo-native -D
           cargo nextest run --locked --release --all-features --verbose --nocapture
         timeout-minutes: 40
