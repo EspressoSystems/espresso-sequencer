@@ -44,7 +44,7 @@ impl EspressoClient {
             .context("getting Espresso transaction count")
     }
 
-    pub async fn subscribe<FromServer: DeserializeOwned>(
+    pub async fn subscribe_headers<FromServer: DeserializeOwned>(
         &self,
         connect: &str,
     ) -> anyhow::Result<Connection<FromServer, Unsupported, ClientError, SequencerApiVersion>> {
