@@ -27,8 +27,9 @@ async fn main() -> anyhow::Result<()> {
 
     // validate that the fee contract is a proxy
     genesis
-        .validate_fee_contract(opt.clone().l1_provider_url.to_string())
-        .await?;
+        .validate_fee_contract(opt.l1_provider_url.to_string())
+        .await
+        .unwrap();
 
     tracing::info!(?genesis, "genesis");
 
