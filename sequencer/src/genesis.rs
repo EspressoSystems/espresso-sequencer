@@ -81,11 +81,8 @@ impl Genesis {
         let provider = Provider::<Http>::try_from(l1_rpc_url)?;
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
-            if !is_proxy_contract(provider, fee_contract_address)
-                .await
-                .expect("Failed to determine if fee contract is a proxy")
-            {
-                panic!("Fee contract's address is not a proxy");
+            if !is_proxy_contract(provider, fee_contract_address).await? {
+                anyhow::bail!("Fee contract's address is not a proxy");
             }
         }
         Ok(())
@@ -440,6 +437,83 @@ mod test {
         assert_eq!(
             genesis.l1_finalized,
             Some(L1Finalized::Number { number: 42 })
+        );
+    }
+
+    #[async_std::test]
+    async fn test_genesis_fee_contract_is_not_a_proxy() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+
+        // Check if the result is an error
+        if let Err(e) = result {
+            // Assert that the error message contains "Fee contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Fee contract's address is not a proxy"));
+        } else {
+            panic!("Expected the fee contract to not be a proxy, but the validated succeeded");
+        }
+    }
+
+    #[async_std::test]
+    async fn test_genesis_fee_contract_is_a_proxy() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x00AeE426f8558929102df1eBA983B5C439E37D18"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+
+        assert!(
+            result.is_ok(),
+            "Expected Fee Contract to be a proxy, but it was not"
         );
     }
 
