@@ -35,8 +35,6 @@ jobs:
         run: |
           nix profile install nixpkgs#process-compose
 
-      - uses: taiki-e/install-action@nextest
-
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -46,20 +44,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        env:
-          NEXTEST_PROFILE: integration
-        run: |
-          cargo nextest run --locked --release --all-features --no-run
-          cargo build --locked --release
-        timeout-minutes: 90
+        run: cargo build --locked --release
 
       - name: Test Demo
-        env:
-          CARGO_TERM_COLOR: always
-          NEXTEST_PROFILE: integration
         run: |
           export PATH="$PWD/target/release:$PATH"
-          docker compose pull || docker-compose pull
-          bash -x scripts/demo-native --tui=false &
-          cargo nextest run --locked --release --all-features --verbose --nocapture
-        timeout-minutes: 40
+          set -o pipefail
+          scripts/demo-native --tui=false &
+          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
