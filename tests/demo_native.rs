@@ -20,11 +20,6 @@ const RECIPIENT_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 /// Duration in seconds to wait before declaring the chain deceased.
 const SEQUENCER_BLOCKS_TIMEOUT: u64 = 120;
 
-// TODO maybe add these to env in order to run test against a remote host
-// /// Host services will be running on
-// const BASE_HOST: &str = "localhost";
-// const BASE_PROTOCOL: &str = "http";
-
 async fn wait_for_service(url: &str, interval: u64, timeout: u64) -> Result<String> {
     future::timeout(Duration::from_secs(timeout), async {
         loop {
@@ -127,11 +122,6 @@ impl TestConfig {
             .parse::<u64>()
             .unwrap();
 
-        let provider =
-            Provider::<Http>::try_from(l1_provider_url)?.interval(L1_PROVIDER_RETRY_INTERVAL);
-
-        let espresso = SequencerClient::new(Url::from_str(&sequencer_api_url).unwrap());
-
         // Set the time out. Give a little more leeway when we have a
         // large `expected_block_height`.
         let timeout = expected_block_height as f64
@@ -140,8 +130,9 @@ impl TestConfig {
 
         Ok(Self {
             load_generator_url,
-            provider,
-            espresso,
+            provider: Provider::<Http>::try_from(l1_provider_url)?
+                .interval(L1_PROVIDER_RETRY_INTERVAL),
+            espresso: SequencerClient::new(Url::from_str(&sequencer_api_url).unwrap()),
             light_client_address: light_client_proxy_address.parse::<Address>().unwrap(),
             builder_address: BUILDER_ADDRESS.parse::<Address>().unwrap(),
             recipient_address: RECIPIENT_ADDRESS.parse::<Address>().unwrap(),
