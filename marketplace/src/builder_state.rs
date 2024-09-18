@@ -99,10 +99,22 @@ pub enum Status {
 /// Builder State to hold the state of the builder
 #[derive(Debug)]
 pub struct BuilderState<TYPES: NodeType> {
+    /// txns that have been included in recent blocks that have
+    /// been built.  This is used to try and guarantee that a transaction
+    /// isn't duplicated.
+    /// Keeps a history of the last 3 proposals.
     pub included_txns: RotatingSet<Commitment<TYPES::Transaction>>,
 
-    /// txns currently in the tx_queue
-    pub txns_in_queue: HashSet<Commitment<TYPES::Transaction>>,
+    /// txn commits currently in the tx_queue.  This is used as a quick
+    /// check for whether a transaction is already in the tx_queue or
+    /// not.
+    ///
+    /// This should be kept up-to-date with the tx_queue as it acts as an
+    /// accessory to the tx_queue.
+    pub txn_commits_in_queue: HashSet<Commitment<TYPES::Transaction>>,
+
+    /// filtered queue of available transactions, taken from tx_receiver
+    pub tx_queue: Vec<Arc<ReceivedTransaction<TYPES>>>,
 
     /// da_proposal_payload_commit to (da_proposal, node_count)
     #[allow(clippy::type_complexity)]
@@ -132,9 +144,6 @@ pub struct BuilderState<TYPES: NodeType> {
 
     /// incoming stream of transactions
     pub tx_receiver: BroadcastReceiver<Arc<ReceivedTransaction<TYPES>>>,
-
-    /// filtered queue of available transactions, taken from tx_receiver
-    pub tx_queue: Vec<Arc<ReceivedTransaction<TYPES>>>,
 
     /// global state handle, defined in the service.rs
     pub global_state: Arc<RwLock<GlobalState<TYPES>>>,
@@ -591,13 +600,13 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         }
 
         for tx in da_proposal_info.txn_commitments.iter() {
-            self.txns_in_queue.remove(tx);
+            self.txn_commits_in_queue.remove(tx);
         }
         self.included_txns
             .extend(da_proposal_info.txn_commitments.iter().cloned());
 
         self.tx_queue
-            .retain(|tx| self.txns_in_queue.contains(&tx.commit));
+            .retain(|tx| self.txn_commits_in_queue.contains(&tx.commit));
 
         // register the spawned builder state to spawned_builder_states in the
         // global state We register this new child within the global_state, so
@@ -877,7 +886,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     ) -> Self {
         let txns_in_queue: HashSet<_> = tx_queue.iter().map(|tx| tx.commit).collect();
         BuilderState {
-            txns_in_queue,
+            txn_commits_in_queue: txns_in_queue,
             parent_block_references,
             req_receiver,
             tx_queue,
@@ -902,7 +911,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         BuilderState {
             included_txns,
-            txns_in_queue: self.txns_in_queue.clone(),
+            txn_commits_in_queue: self.txn_commits_in_queue.clone(),
             parent_block_references: self.parent_block_references.clone(),
             decide_receiver: self.decide_receiver.clone(),
             da_proposal_receiver: self.da_proposal_receiver.clone(),
@@ -927,11 +936,11 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             match self.tx_receiver.try_recv() {
                 Ok(tx) => {
                     if self.included_txns.contains(&tx.commit)
-                        || self.txns_in_queue.contains(&tx.commit)
+                        || self.txn_commits_in_queue.contains(&tx.commit)
                     {
                         continue;
                     }
-                    self.txns_in_queue.insert(tx.commit);
+                    self.txn_commits_in_queue.insert(tx.commit);
                     self.tx_queue.push(tx);
                 }
                 Err(async_broadcast::TryRecvError::Empty)
