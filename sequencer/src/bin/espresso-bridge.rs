@@ -1,7 +1,7 @@
 use anyhow::{bail, ensure, Context};
 use async_std::sync::Arc;
 use clap::{Parser, Subcommand};
-use client::EspressoClient;
+use client::SequencerClient;
 use contract_bindings::fee_contract::FeeContract;
 use espresso_types::{eth_signature_key::EthKeyPair, Header};
 use ethers::{
@@ -140,7 +140,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     let contract = FeeContract::new(opt.contract_address, l1.clone());
 
     // Connect to Espresso.
-    let espresso = EspressoClient::new(opt.espresso_provider);
+    let espresso = SequencerClient::new(opt.espresso_provider);
 
     // Validate deposit.
     let amount = U256::from(opt.amount);
@@ -240,7 +240,7 @@ async fn balance(opt: Balance) -> anyhow::Result<()> {
         bail!("address or mnemonic must be provided");
     };
 
-    let espresso = EspressoClient::new(opt.espresso_provider);
+    let espresso = SequencerClient::new(opt.espresso_provider);
     let balance = espresso.get_espresso_balance(address, opt.block).await?;
 
     // Output the balance on regular standard out, rather than as a log message, to make scripting

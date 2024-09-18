@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use async_std::{future, task::sleep};
-use client::EspressoClient;
+use client::SequencerClient;
 use espresso_types::FeeAmount;
 use ethers::prelude::*;
 use futures::future::join_all;
@@ -50,7 +50,7 @@ async fn wait_for_service(url: &str, interval: u64, timeout: u64) -> anyhow::Res
 struct TestConfig {
     load_generator_url: String,
     provider: Provider<Http>,
-    espresso: EspressoClient,
+    espresso: SequencerClient,
     builder_address: Address,
     recipient_address: Address,
     light_client_address: Address,
@@ -135,7 +135,7 @@ impl TestConfig {
         let provider =
             Provider::<Http>::try_from(l1_provider_url)?.interval(L1_PROVIDER_RETRY_INTERVAL);
 
-        let espresso = EspressoClient::new(Url::from_str(&sequencer_api_url).unwrap());
+        let espresso = SequencerClient::new(Url::from_str(&sequencer_api_url).unwrap());
         Ok(Self {
             load_generator_url,
             provider,

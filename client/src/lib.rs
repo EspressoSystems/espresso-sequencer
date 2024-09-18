@@ -19,11 +19,11 @@ pub type SequencerApiVersion = StaticVersion<0, 1>;
 // pub type EspressoClient = surf_disco::Client<ClientError, SequencerApiVersion>;
 
 #[derive(Clone, Debug)]
-pub struct EspressoClient(surf_disco::Client<ClientError, SequencerApiVersion>);
+pub struct SequencerClient(surf_disco::Client<ClientError, SequencerApiVersion>);
 
 pub type FeeMerkleProof = MerkleProof<FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }>;
 
-impl EspressoClient {
+impl SequencerClient {
     pub fn new(provider: Url) -> Self {
         Self(surf_disco::Client::new(provider))
     }
