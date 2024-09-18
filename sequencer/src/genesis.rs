@@ -79,18 +79,18 @@ impl Genesis {
 impl Genesis {
     pub async fn validate_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
         let provider = Provider::<Http>::try_from(l1_rpc_url)?;
-        let accounts_vec: Vec<_> = self.accounts.keys().collect();
-        // Check if there is a FeeAccount at the desired index (e.g., index 1)
-        if let Some(fee_account) = accounts_vec.first() {
-            if !is_proxy_contract(provider, fee_account.address())
+
+        if let Some(fee_contract_address) = self.chain_config.fee_contract {
+            if !is_proxy_contract(provider, fee_contract_address)
                 .await
                 .expect("Failed to determine if fee contract is a proxy")
             {
                 panic!("Fee contract's address is not a proxy");
             }
         } else {
-            panic!("FeeAccount at index 0 not found in genesis.");
+            panic!("Fee contract's address is missing from the chain config!");
         }
+
         Ok(())
     }
 }
