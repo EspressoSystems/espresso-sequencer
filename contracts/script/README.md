@@ -76,7 +76,7 @@
    --broadcast
 ```
 
-#### Without OpenZeppelin Defender and with a ledger hardware wallet
+#### Without OpenZeppelin Defender and with a Ledger Hardware Wallet
 
 - set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` in `.env.contracts`
 
@@ -202,6 +202,24 @@ The Light Client contract is currently in permissioned mode so please follow thr
    --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS \
    --build-info true \
    --legacy \
+   --broadcast
+```
+
+#### Without OpenZeppelin Defender and with a Ledger Hardware Wallet
+
+1. Run the following command in the home directory:
+
+```bash
+   source .env.contracts && \
+   forge clean && \
+   forge script contracts/script/LightClient.s.sol:DeployLightClientWithHDWalletScript $NUM_INIT_VALIDATORS $STATE_HISTORY_RETENTION_PERIOD $SAFE_MULTISIG_ADDRESS \
+   --sig 'run(uint32, uint32, address)' \
+   --ffi \
+   --rpc-url https://ethereum-sepolia.publicnode.com  \
+   --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS \
+   --build-info true \
+   --legacy \
+   --ledger \
    --broadcast
 ```
 

@@ -61,6 +61,52 @@ contract DeployLightClientScript is Script {
     }
 }
 
+contract DeployLightClientWithHDWalletScript is Script {
+    string public contractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
+
+    /// @dev Deploys both the proxy and the implementation contract.
+    /// The proxy admin is set as the owner of the contract upon deployment.
+    /// The `owner` parameter should be the address of the multisig wallet to ensure proper
+    /// ownership management.
+    /// @param numInitValidators number of the validators initially
+    /// @param owner The address that will be set as the owner of the proxy (typically a multisig
+    /// wallet).
+    function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
+        public
+        returns (
+            address proxyAddress,
+            address implementationAddress,
+            LC.LightClientState memory lightClientState
+        )
+    {
+        // get the deployer info from the environment and start broadcast as the deployer
+        address admin = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+
+        string[] memory cmds = new string[](3);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-genesis";
+        cmds[2] = vm.toString(uint256(numInitValidators));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
+            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
+
+        vm.startBroadcast(admin);
+
+        proxyAddress = Upgrades.deployUUPSProxy(
+            contractName,
+            abi.encodeCall(LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, owner))
+        );
+
+        // Get the implementation address
+        implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
+
+        vm.stopBroadcast();
+
+        return (proxyAddress, implementationAddress, state);
+    }
+}
+
 /// @notice Upgrades the light client contract first by deploying the new implementation
 /// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 contract LightClientContractUpgradeScript is Script {
