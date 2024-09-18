@@ -1111,6 +1111,31 @@ mod test {
         };
 
         validate_builder_fee(&header).unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validate_builder_fee_marketplace() {
+        setup_logging();
+        setup_backtrace();
+
+        let max_block_size = 10;
+
+        let validated_state = ValidatedState::default();
+        let instance_state = NodeState::mock_v3().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High base fee
+            max_block_size: max_block_size.into(),
+            ..validated_state.chain_config.resolve().unwrap()
+        });
+
+        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let header = parent.block_header().clone();
+
+        debug!("{:?}", header.version());
+
+        let key_pair = EthKeyPair::random();
+        let account = key_pair.fee_account();
+
+        let data = header.fee_info()[0].amount().as_u64().unwrap();
 
         // test v3 sig
         let sig = FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data).unwrap();
