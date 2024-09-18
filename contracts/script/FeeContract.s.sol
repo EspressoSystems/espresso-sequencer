@@ -41,6 +41,36 @@ contract DeployFeeContractScript is Script {
     }
 }
 
+/// @notice Deploys an upgradeable Fee Contract with a hardware wallet and using the OpenZeppelin
+/// Upgrades plugin.
+contract DeployFeeContractWithHDWalletScript is Script {
+    string internal contractName = vm.envString("FEE_CONTRACT_ORIGINAL_NAME");
+
+    /// @dev Deploys both the proxy and the implementation contract.
+    /// The proxy admin is set as the owner of the contract upon deployment.
+    /// The `owner` parameter should be the address of the multisig wallet to ensure proper
+    /// ownership management.
+    /// @param owner The address that will be set as the owner of the proxy (typically a multisig
+    /// wallet).
+    function run(address owner)
+        public
+        returns (address payable proxy, address implementationAddress)
+    {
+        address admin = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        vm.startBroadcast(admin);
+
+        address proxyAddress =
+            Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (owner)));
+
+        // Get the implementation address
+        implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
+
+        vm.stopBroadcast();
+
+        return (payable(proxyAddress), implementationAddress);
+    }
+}
+
 /// @notice Upgrades the fee contract first by deploying the new implementation
 /// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 contract UpgradeFeeContractScript is Script {

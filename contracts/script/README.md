@@ -18,11 +18,16 @@
 1. **Create a Multisig Wallet**  
    Use [Safe](https://app.safe.global/welcome/accounts) to create a multisig wallet on the network you'd like to deploy
    to.
-2. **Enter Nix Shell**  
+2. Install `npx` e.g. `brew install npx`
+3. **Enter Nix Shell**  
    In the home folder of this repo, start a nix shell by entering `nix-shell` in the terminal.
-3. **Compile Contracts (if necessary)** If the contracts have never been compiled, run `forge build`.
-4. **Set Environment Variables**  
-   Set the values for `STATE_HISTORY_RETENTION_PERIOD` and `NUM_INIT_VALIDATORS` in the `.env.contracts` file.
+4. **Compile Contracts (if necessary)** If the contracts have never been compiled, run `forge build`.
+5. **Set Environment Variables**  
+   Set the values for
+   - `STATE_HISTORY_RETENTION_PERIOD`
+   - `NUM_INIT_VALIDATORS`
+   - `FEE_CONTRACT_ORIGINAL_NAME`
+   - `LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME` in the `.env.contracts` file.
 
 ### If Not Using OpenZeppelin Defender (current method)
 
@@ -68,6 +73,25 @@
    --rpc-url https://ethereum-sepolia.publicnode.com  \
    --build-info true \
    --legacy \
+   --broadcast
+```
+
+#### Without OpenZeppelin Defender and with a ledger hardware wallet
+
+- set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` in `.env.contracts`
+
+1. Run the following command in the home directory:
+
+```bash
+   source .env.contracts && \
+   forge clean && \
+   forge script contracts/script/FeeContract.s.sol:DeployFeeContractWithHDWalletScript $SAFE_MULTISIG_ADDRESS \
+   --sig 'run(address)' \
+   --ffi \
+   --rpc-url https://ethereum-sepolia.publicnode.com  \
+   --build-info true \
+   --legacy \
+   --ledger \
    --broadcast
 ```
 
