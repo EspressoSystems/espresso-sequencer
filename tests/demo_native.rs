@@ -96,16 +96,16 @@ impl TestConfig {
             dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT")?
         );
 
-        // if dotenvy::var("MARKETPLACE_SMOKE_TEST")
-        //     .map_err(|e| anyhow!(e))
-        //     .and_then(|var| var.parse::<bool>().map_err(|e| anyhow!(e)))
-        //     .is_ok()
-        // {
-        //     load_generator_url = format!(
-        //         "http://localhost:{}",
-        //         dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT")?
-        //     );
-        // }
+        if dotenvy::var("MARKETPLACE_SMOKE_TEST")
+            .map_err(|e| anyhow!(e))
+            .and_then(|var| var.parse::<bool>().map_err(|e| anyhow!(e)))
+            .is_ok()
+        {
+            load_generator_url = format!(
+                "http://localhost:{}",
+                dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT")?
+            );
+        }
 
         let l1_provider_url = format!(
             "http://localhost:{}",
