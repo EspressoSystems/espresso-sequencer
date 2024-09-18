@@ -193,7 +193,7 @@ impl MockLedger {
     // pub fn elapse_epoch(&mut self, num_reg: usize, num_exit: usize) {
     //     assert!(self.qc_keys.len() + num_reg - num_exit <= self.pp.st_cap);
 
-    //     // random number of notarized but not finalized block
+    //     // random number of notorized but not finalized block
     //     let num_non_blk = self.rng.gen_range(0..10);
     //     for _ in 0..num_non_blk {
     //         self.elapse_without_block();

@@ -396,7 +396,7 @@ fn main() {
             let mut proofs: Vec<ParsedPlonkProof> = vec![];
 
             for _ in 1..4 {
-                // random number of notarized but not finalized block
+                // random number of notorized but not finalized block
                 if ledger.rng.gen_bool(0.5) {
                     let num_non_blk = ledger.rng.gen_range(0..5);
                     for _ in 0..num_non_blk {

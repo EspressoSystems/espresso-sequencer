@@ -1,9 +1,8 @@
 [files]
 extend-exclude = [
   "*.json",
-  ".env",
-  "contract-bindings",
-  "contracts/lib",
   "doc/*.svg",
+  "contracts/lib",
+  "contract-bindings",
   "node-metrics/src/api/node_validator/v0/example_prometheus_metrics_output.txt",
 ]
