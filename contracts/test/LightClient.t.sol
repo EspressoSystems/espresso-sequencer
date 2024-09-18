@@ -11,7 +11,7 @@ import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 // Target contract
 import { LightClient as LC } from "../src/LightClient.sol";
 import { LightClientMock as LCMock } from "./mocks/LightClientMock.sol";
-import { DeployLightClientTestScript } from "./DeployLightClientTestScript.s.sol";
+import { DeployLightClientTestScript } from "./script/LightClientTestScript.s.sol";
 import { BN254 } from "bn254/BN254.sol";
 
 /// @dev Common helpers for LightClient tests
@@ -1149,8 +1149,10 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         lc.newFinalizedState(newState, newProof);
 
         // Test for a smaller hotShotBlockHeight
-        BN254.ScalarField blockComm = lc.getHotShotCommitment(newState.blockHeight - 1);
+        (BN254.ScalarField blockComm, uint64 blockHeight) =
+            lc.getHotShotCommitment(newState.blockHeight - 1);
         assertEqBN254(blockComm, newState.blockCommRoot);
+        assertEq(blockHeight, newState.blockHeight);
     }
 
     function test_revertWhenGetHotShotCommitmentInvalidHigh() public {

@@ -3,7 +3,7 @@ use std::{net::ToSocketAddrs, sync::Arc};
 use clap::Parser;
 use espresso_types::{
     traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
-    SolverAuctionResultsProvider, V0_1,
+    SolverAuctionResultsProvider, V0_0, V0_1,
 };
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
@@ -47,6 +47,33 @@ async fn main() -> anyhow::Result<()> {
                 modules,
                 opt,
                 SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+            )
+            .await
+        }
+        (V0_1::VERSION, _) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<V0_1, V0_0>::new(),
+            )
+            .await
+        }
+        (FeeVersion::VERSION, _) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<FeeVersion, V0_0>::new(),
+            )
+            .await
+        }
+        (MarketplaceVersion::VERSION, _) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<MarketplaceVersion, V0_0>::new(),
             )
             .await
         }

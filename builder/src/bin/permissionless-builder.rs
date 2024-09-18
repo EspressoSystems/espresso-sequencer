@@ -4,7 +4,7 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
-    SequencerVersions, V0_1,
+    SequencerVersions, V0_0, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -109,6 +109,11 @@ async fn main() -> anyhow::Result<()> {
         }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
+        }
+        (V0_1::VERSION, _) => run::<SequencerVersions<V0_1, V0_0>>(genesis, opt).await,
+        (FeeVersion::VERSION, _) => run::<SequencerVersions<FeeVersion, V0_0>>(genesis, opt).await,
+        (MarketplaceVersion::VERSION, _) => {
+            run::<SequencerVersions<MarketplaceVersion, V0_0>>(genesis, opt).await
         }
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
