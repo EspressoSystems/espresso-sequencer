@@ -77,7 +77,7 @@ impl Genesis {
 }
 
 impl Genesis {
-    pub async fn validate_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
+    pub async fn validate_fee_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
         let provider = Provider::<Http>::try_from(l1_rpc_url)?;
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {

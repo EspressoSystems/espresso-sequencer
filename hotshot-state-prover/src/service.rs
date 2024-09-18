@@ -42,6 +42,7 @@ use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::errors::PlonkError;
 use jf_relation::Circuit as _;
 use jf_signature::constants::CS_ID_SCHNORR;
+use sequencer_utils::deployer::is_proxy_contract;
 use serde::Deserialize;
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
@@ -78,6 +79,21 @@ pub struct StateProverConfig {
     pub port: Option<u16>,
     /// Stake table capacity for the prover circuit.
     pub stake_table_capacity: usize,
+}
+
+impl StateProverConfig {
+    pub async fn validate_light_client_contract(&self) -> anyhow::Result<()> {
+        let provider = Provider::<Http>::try_from(self.provider.to_string())?;
+
+        if !is_proxy_contract(provider, self.light_client_address)
+            .await
+            .expect("Failed to determine if the light client contract is a proxy")
+        {
+            panic!("The Light Client contract's address is not a proxy");
+        }
+
+        Ok(())
+    }
 }
 
 #[inline]
@@ -727,6 +743,7 @@ mod test {
             config.light_client_address,
         )
         .await?;
+
         assert_eq!(state, genesis.into());
         assert_eq!(st_state, stake_genesis.into());
         Ok(())
