@@ -1008,6 +1008,13 @@
 <a href="#1008" id="1008">1008</a>
 <a href="#1009" id="1009">1009</a>
 <a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
@@ -1038,7 +1045,7 @@
     SequencerApiVersion,
 };
 <span class="kw">use </span>sequencer_utils::{
-    deployer::{deploy, Contract, Contracts},
+    deployer::{deploy, is_proxy_contract, Contract, Contracts},
     logging, AnvilOptions,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -1268,6 +1275,13 @@
         <span class="kw">let </span>light_client_address = contracts
             .get_contract_address(Contract::LightClientProxy)
             .unwrap();
+
+        <span class="kw">if </span>!is_proxy_contract(provider.clone(), light_client_address)
+            .<span class="kw">await
+            </span>.expect(<span class="string">"Failed to determine if light client contract is a proxy"</span>)
+        {
+            <span class="macro">panic!</span>(<span class="string">"Light Client contract's address is not a proxy"</span>);
+        }
 
         mock_contracts.insert(
             chain_id,

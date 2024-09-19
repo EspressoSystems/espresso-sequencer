@@ -770,6 +770,68 @@
 <a href="#770" id="770">770</a>
 <a href="#771" id="771">771</a>
 <a href="#772" id="772">772</a>
+<a href="#773" id="773">773</a>
+<a href="#774" id="774">774</a>
+<a href="#775" id="775">775</a>
+<a href="#776" id="776">776</a>
+<a href="#777" id="777">777</a>
+<a href="#778" id="778">778</a>
+<a href="#779" id="779">779</a>
+<a href="#780" id="780">780</a>
+<a href="#781" id="781">781</a>
+<a href="#782" id="782">782</a>
+<a href="#783" id="783">783</a>
+<a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a>
+<a href="#788" id="788">788</a>
+<a href="#789" id="789">789</a>
+<a href="#790" id="790">790</a>
+<a href="#791" id="791">791</a>
+<a href="#792" id="792">792</a>
+<a href="#793" id="793">793</a>
+<a href="#794" id="794">794</a>
+<a href="#795" id="795">795</a>
+<a href="#796" id="796">796</a>
+<a href="#797" id="797">797</a>
+<a href="#798" id="798">798</a>
+<a href="#799" id="799">799</a>
+<a href="#800" id="800">800</a>
+<a href="#801" id="801">801</a>
+<a href="#802" id="802">802</a>
+<a href="#803" id="803">803</a>
+<a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
+<a href="#818" id="818">818</a>
+<a href="#819" id="819">819</a>
+<a href="#820" id="820">820</a>
+<a href="#821" id="821">821</a>
+<a href="#822" id="822">822</a>
+<a href="#823" id="823">823</a>
+<a href="#824" id="824">824</a>
+<a href="#825" id="825">825</a>
+<a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
+<a href="#829" id="829">829</a>
+<a href="#830" id="830">830</a>
+<a href="#831" id="831">831</a>
+<a href="#832" id="832">832</a>
+<a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -814,6 +876,7 @@
 <span class="kw">use </span>jf_plonk::errors::PlonkError;
 <span class="kw">use </span>jf_relation::Circuit <span class="kw">as _</span>;
 <span class="kw">use </span>jf_signature::constants::CS_ID_SCHNORR;
+<span class="kw">use </span>sequencer_utils::deployer::is_proxy_contract;
 <span class="kw">use </span>serde::Deserialize;
 <span class="kw">use </span>surf_disco::Client;
 <span class="kw">use </span>tide_disco::{error::ServerError, Api};
@@ -850,6 +913,18 @@
     </span><span class="kw">pub </span>port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
     <span class="doccomment">/// Stake table capacity for the prover circuit.
     </span><span class="kw">pub </span>stake_table_capacity: usize,
+}
+
+<span class="kw">impl </span>StateProverConfig {
+    <span class="kw">pub async fn </span>validate_light_client_contract(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(<span class="self">self</span>.provider.to_string())<span class="question-mark">?</span>;
+
+        <span class="kw">if </span>!is_proxy_contract(provider, <span class="self">self</span>.light_client_address).<span class="kw">await</span><span class="question-mark">? </span>{
+            <span class="macro">anyhow::bail!</span>(<span class="string">"Light Client contract's address is not a proxy"</span>);
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
 }
 
 <span class="attr">#[inline]
@@ -1313,7 +1388,10 @@
 
     <span class="kw">use </span>anyhow::Result;
     <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig;
-    <span class="kw">use </span>ethers::utils::{Anvil, AnvilInstance};
+    <span class="kw">use </span>ethers::{
+        types::H160,
+        utils::{Anvil, AnvilInstance},
+    };
     <span class="kw">use </span>hotshot_contract_adapter::light_client::{
         LightClientConstructorArgs, ParsedStakeTableState,
     };
@@ -1322,6 +1400,7 @@
     <span class="kw">use </span>jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     <span class="kw">use </span>jf_utils::test_rng;
     <span class="kw">use </span>sequencer_utils::{deployer, test_utils::setup_test};
+    <span class="kw">use </span>std::str::FromStr;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::mock_ledger::{MockLedger, MockSystemParam};
@@ -1474,6 +1553,50 @@
     }
 
     <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_validate_light_contract_is_proxy() {
+        <span class="comment">// set the light client address to an address known to be a proxy
+        </span><span class="kw">let </span>config = StateProverConfig {
+            light_client_address: H160::from_str(<span class="string">"0x5B17D2d923E27341FC2753251f11aC08fDC20E0d"</span>)
+                .expect(<span class="string">"Invalid Ethereum address"</span>),
+            provider: Url::from_str(<span class="string">"https://ethereum-sepolia.publicnode.com"</span>)
+                .expect(<span class="string">"Invalid URL"</span>),
+            ..Default::default()
+        };
+
+        <span class="kw">let </span>result = config.validate_light_client_contract().<span class="kw">await</span>;
+
+        <span class="comment">// check if the result was ok
+        </span><span class="macro">assert!</span>(
+            result.is_ok(),
+            <span class="string">"Expected Light Client contract to be a proxy, but it was not"
+        </span>);
+    }
+
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_validate_light_contract_is_not_a_proxy() {
+        <span class="comment">// set the light client address to an address known not to be a proxy
+        </span><span class="kw">let </span>config = StateProverConfig {
+            light_client_address: H160::from_str(<span class="string">"0xa15bb66138824a1c7167f5e85b957d04dd34e468"</span>)
+                .expect(<span class="string">"Invalid Ethereum address"</span>),
+            provider: Url::from_str(<span class="string">"https://ethereum-sepolia.publicnode.com"</span>)
+                .expect(<span class="string">"Invalid URL"</span>),
+            ..Default::default()
+        };
+
+        <span class="kw">let </span>result = config.validate_light_client_contract().<span class="kw">await</span>;
+
+        <span class="comment">// check if the result is an error
+        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) = result {
+            <span class="comment">// assert that the error message contains "Light Client contract's address is not a proxy"
+            </span><span class="macro">assert!</span>(e
+                .to_string()
+                .contains(<span class="string">"Light Client contract's address is not a proxy"</span>));
+        } <span class="kw">else </span>{
+            <span class="macro">panic!</span>(<span class="string">"Expected the light contract to not be a proxy, but the validation succeeded"</span>);
+        }
+    }
+
+    <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_read_contract_state() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         setup_test();
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -1499,6 +1622,7 @@
             config.light_client_address,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
+
         <span class="macro">assert_eq!</span>(state, genesis.into());
         <span class="macro">assert_eq!</span>(st_state, stake_genesis.into());
         <span class="prelude-val">Ok</span>(())

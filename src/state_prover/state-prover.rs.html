@@ -123,6 +123,9 @@
 <a href="#123" id="123">123</a>
 <a href="#124" id="124">124</a>
 <a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use </span>clap::Parser;
@@ -235,6 +238,9 @@
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
     };
+
+    <span class="comment">// validate that the light client contract is a proxy, panics otherwise
+    </span>config.validate_light_client_contract().<span class="kw">await</span>.unwrap();
 
     <span class="kw">if </span>args.daemon {
         <span class="comment">// Launching the prover service daemon
