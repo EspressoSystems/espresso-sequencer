@@ -311,7 +311,7 @@ pub async fn deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
-    multisig_address: H160,
+    multisig_address: Option<H160>,
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
@@ -390,7 +390,7 @@ pub async fn deploy(
             .await?;
         let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
         let data = fee_contract
-            .initialize(multisig_address) //set the owner of the fee contract as the multisig address
+            .initialize(deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         let fee_contract_proxy_address = contracts
@@ -406,6 +406,19 @@ pub async fn deploy(
             .expect("Failed to determine if fee contract is a proxy")
         {
             panic!("Fee contract's address is not a proxy");
+        }
+
+        // Instantiate a wrapper with the proxy address and fee contract ABI.
+        let proxy = FeeContract::new(fee_contract_proxy_address, l1.clone());
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %fee_contract_proxy_address,
+                %owner,
+                "transferring proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?;
         }
     }
 

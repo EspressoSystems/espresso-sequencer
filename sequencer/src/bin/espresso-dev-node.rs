@@ -263,7 +263,7 @@ async fn main() -> anyhow::Result<()> {
             url.clone(),
             mnemonic.clone(),
             account_index,
-            multisig_address,
+            Some(multisig_address),
             true,
             None,
             async { Ok(lc_genesis.clone()) }.boxed(),
