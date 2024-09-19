@@ -37,13 +37,18 @@ pub enum L1Finalized {
     Number { number: u64 },
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GenesisSequencerVersions {
+    #[serde(with = "version_ser")]
+    pub base: Version,
+    #[serde(with = "version_ser")]
+    pub upgrade: Version,
+}
+
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
-    #[serde(with = "version_ser")]
-    pub base_version: Version,
-    #[serde(with = "version_ser")]
-    pub upgrade_version: Version,
+    pub versions: GenesisSequencerVersions,
     pub chain_config: ChainConfig,
     pub stake_table: StakeTableConfig,
     #[serde(default)]
@@ -306,8 +311,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
@@ -384,8 +390,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_without_optional_fields() {
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
@@ -427,8 +434,10 @@ mod test {
     #[test]
     fn test_genesis_l1_finalized_number_only() {
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
+
 
             [stake_table]
             capacity = 10
@@ -665,8 +674,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_units() {
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
@@ -699,8 +709,9 @@ mod test {
         // without optional fields
         // with view settings
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
@@ -767,8 +778,9 @@ mod test {
         // without optional fields
         // with time settings
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
@@ -836,8 +848,9 @@ mod test {
         // set both time and view parameters
         // this should err
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
@@ -885,8 +898,9 @@ mod test {
     #[test]
     fn test_marketplace_upgrade_toml() {
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
@@ -933,8 +947,9 @@ mod test {
     #[test]
     fn test_marketplace_and_fee_upgrade_toml() {
         let toml = toml! {
-            base_version = "0.1"
-            upgrade_version = "0.2"
+            [versions]
+            base = "0.1"
+            upgrade = "0.2"
 
             [stake_table]
             capacity = 10
