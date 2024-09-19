@@ -315,6 +315,7 @@ pub async fn deploy(
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
+    permissioned_prover: Option<Address>,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;
@@ -385,6 +386,12 @@ pub async fn deploy(
         // Instantiate a wrapper with the proxy address and light client ABI.
         let proxy = LightClient::new(light_client_proxy_address, l1.clone());
 
+        // Perission the light client prover.
+        if let Some(prover) = permissioned_prover {
+            tracing::info!(%light_client_proxy_address, %prover, "setting permissioned prover");
+            proxy.set_permissioned_prover(prover).send().await?.await?;
+        }
+
         // Transfer ownership to the multisig wallet if provided.
         if let Some(owner) = multisig_address {
             tracing::info!(
@@ -392,7 +399,7 @@ pub async fn deploy(
                 %owner,
                 "transferring light client proxy ownership to multisig",
             );
-            proxy.transfer_ownership(owner).send().await?;
+            proxy.transfer_ownership(owner).send().await?.await?;
         }
     }
 
@@ -431,7 +438,7 @@ pub async fn deploy(
                 %owner,
                 "transferring fee contract proxy ownership to multisig",
             );
-            proxy.transfer_ownership(owner).send().await?;
+            proxy.transfer_ownership(owner).send().await?.await?;
         }
     }
 

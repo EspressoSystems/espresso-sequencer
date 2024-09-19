@@ -267,6 +267,7 @@ async fn main() -> anyhow::Result<()> {
             true,
             None,
             async { Ok(lc_genesis.clone()) }.boxed(),
+            None,
             contracts.clone(),
         )
         .await?;
