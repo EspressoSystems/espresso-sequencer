@@ -9,7 +9,7 @@ chain_id = 888888888
 base_fee = '1 wei'
 max_block_size = '1mb'
 fee_recipient = '0x0000000000000000000000000000000000000000'
-fee_contract = '0x0c8e79f3534b00d9a3d4a856b665bf4ebc22f2ba'
+fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 
 [header]
 timestamp = "1970-01-01T00:00:00Z"
