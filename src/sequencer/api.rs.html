@@ -1879,8 +1879,6 @@
 <a href="#1879" id="1879">1879</a>
 <a href="#1880" id="1880">1880</a>
 <a href="#1881" id="1881">1881</a>
-<a href="#1882" id="1882">1882</a>
-<a href="#1883" id="1883">1883</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -2412,14 +2410,13 @@
         ) -&gt; <span class="self">Self </span>{
             <span class="kw">let </span><span class="kw-2">mut </span>cfg = cfg;
             <span class="kw">let </span><span class="kw-2">mut </span>builder_tasks = Vec::new();
-            <span class="kw">let </span><span class="kw-2">mut </span>legacy_builder_url = <span class="string">"http://example.com"</span>.parse().unwrap();
             <span class="kw">let </span><span class="kw-2">mut </span>marketplace_builder_url = <span class="string">"http://example.com"</span>.parse().unwrap();
 
             <span class="kw">if </span>&lt;V <span class="kw">as </span>Versions&gt;::Base::VERSION &lt; MarketplaceVersion::VERSION {
                 <span class="kw">let </span>(task, url) =
                     run_test_builder::&lt;{ NUM_NODES }&gt;(cfg.network_config.builder_port()).<span class="kw">await</span>;
                 builder_tasks.push(task);
-                legacy_builder_url = url;
+                cfg.network_config.set_builder_urls(<span class="macro">vec1::vec1!</span>[url]);
             };
 
             <span class="kw">if </span>&lt;V <span class="kw">as </span>Versions&gt;::Upgrade::VERSION &gt;= MarketplaceVersion::VERSION
@@ -2427,16 +2424,15 @@
             {
                 <span class="kw">let </span>(task, url) = run_marketplace_builder::&lt;{ NUM_NODES }&gt;(
                     cfg.network_config.marketplace_builder_port(),
-                    NodeState::default(),
+                    NodeState::default().with_current_version(V::Base::VERSION),
                     cfg.state[<span class="number">0</span>].clone(),
                 )
                 .<span class="kw">await</span>;
                 builder_tasks.push(task);
+                cfg.network_config
+                    .set_builder_urls(<span class="macro">vec1::vec1!</span>[url.clone()]);
                 marketplace_builder_url = url;
             }
-
-            cfg.network_config
-                .set_builder_urls(<span class="macro">vec1::vec1!</span>[legacy_builder_url]);
 
             <span class="kw">let </span><span class="kw-2">mut </span>nodes = join_all(
                 <span class="macro">izip!</span>(cfg.state, cfg.persistence, cfg.catchup)

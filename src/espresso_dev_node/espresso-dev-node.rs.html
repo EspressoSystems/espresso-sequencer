@@ -1011,17 +1011,13 @@
 <a href="#1011" id="1011">1011</a>
 <a href="#1012" id="1012">1012</a>
 <a href="#1013" id="1013">1013</a>
-<a href="#1014" id="1014">1014</a>
-<a href="#1015" id="1015">1015</a>
-<a href="#1016" id="1016">1016</a>
-<a href="#1017" id="1017">1017</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>contract_bindings::light_client_mock::LightClientMock;
-<span class="kw">use </span>espresso_types::{parse_duration, MockSequencerVersions};
+<span class="kw">use </span>espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions, V0_1};
 <span class="kw">use </span>ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -1194,7 +1190,7 @@
         .unwrap();
 
     <span class="kw">let </span>network_config = TestConfigBuilder::default()
-        .builder_port(builder_port)
+        .marketplace_builder_port(builder_port)
         .state_relay_url(relay_server_url.clone())
         .l1_url(l1_url.clone())
         .build();
@@ -1205,7 +1201,8 @@
         .network_config(network_config)
         .build();
 
-    <span class="kw">let </span>network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
+    <span class="kw">let </span>network =
+        TestNetwork::new(config, SequencerVersions::&lt;MarketplaceVersion, V0_1&gt;::new()).<span class="kw">await</span>;
     <span class="kw">let </span>st = network.cfg.stake_table();
     <span class="kw">let </span>total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     <span class="kw">let </span>config = network.cfg.hotshot_config();
@@ -1340,6 +1337,7 @@
 
     </span><span class="kw">let </span>dev_info = DevInfo {
         builder_url: network.cfg.hotshot_config().builder_urls[<span class="number">0</span>].clone(),
+        sequencer_api_port,
         l1_prover_port,
         l1_url,
         l1_light_client_address: l1_lc,
@@ -1490,6 +1488,7 @@
 <span class="attr">#[derive(Debug, Clone, Serialize, Deserialize)]
 </span><span class="kw">struct </span>DevInfo {
     <span class="kw">pub </span>builder_url: Url,
+    <span class="kw">pub </span>sequencer_api_port: u16,
     <span class="kw">pub </span>l1_prover_port: u16,
     <span class="kw">pub </span>l1_url: Url,
     <span class="kw">pub </span>l1_light_client_address: Address,
@@ -1621,18 +1620,10 @@
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{builder_port}"</span>).parse().unwrap());
         builder_api_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
-        <span class="kw">let </span>builder_address = builder_api_client
-            .get::&lt;String&gt;(<span class="string">"block_info/builderaddress"</span>)
-            .send()
-            .<span class="kw">await
-            </span>.unwrap();
-
-        <span class="macro">assert!</span>(!builder_address.is_empty());
-
         <span class="kw">let </span>tx = Transaction::new(<span class="number">100_u32</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
 
-        <span class="kw">let </span>hash: Commitment&lt;Transaction&gt; = api_client
-            .post(<span class="string">"submit/submit"</span>)
+        <span class="kw">let </span>hash: Commitment&lt;Transaction&gt; = builder_api_client
+            .post(<span class="string">"txn_submit/submit"</span>)
             .body_json(<span class="kw-2">&amp;</span>tx)
             .unwrap()
             .send()
@@ -1650,6 +1641,7 @@
             .<span class="kw">await</span>;
         <span class="kw">while </span>tx_result.is_err() {
             sleep(Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
+            <span class="macro">tracing::warn!</span>(<span class="string">"waiting for tx"</span>);
 
             tx_result = api_client
                 .get::&lt;TransactionQueryData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
