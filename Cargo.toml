@@ -149,3 +149,6 @@ hotshot-task-impls = { git = "https://www.github.com/EspressoSystems/HotShot.git
 hotshot-testing = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
 hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
 hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.72-patch3" }
+
+[patch.crates-io]
+tide-disco = { git = "https://github.com/EspressoSystems/tide-disco", branch = "to-home" }

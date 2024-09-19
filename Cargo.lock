@@ -7529,7 +7529,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.76",
@@ -9854,8 +9854,7 @@ dependencies = [
 [[package]]
 name = "tide-disco"
 version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01e81752cd71cc517973c6ff743919848d7c9890331f38c43abadfb49eede3a6"
+source = "git+https://github.com/EspressoSystems/tide-disco?branch=to-home#0d5469b66a34f0b52cbcd120cd7a608e43d71b30"
 dependencies = [
  "anyhow",
  "async-h1",
