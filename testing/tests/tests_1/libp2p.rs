@@ -11,7 +11,7 @@ use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     overall_safety_task::OverallSafetyPropertiesDescription,
-    spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+    spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
     test_builder::{TestDescription, TimingData},
 };
 use tracing::instrument;
@@ -73,7 +73,7 @@ async fn libp2p_network_failures_2() {
 
     let dead_nodes = vec![ChangeNode {
         idx: 11,
-        updown: UpDown::Down,
+        updown: NodeAction::Down,
     }];
 
     metadata.spinning_properties = SpinningTaskDescription {

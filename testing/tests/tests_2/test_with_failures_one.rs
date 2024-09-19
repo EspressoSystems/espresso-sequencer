@@ -11,7 +11,7 @@ use hotshot_example_types::{
 use hotshot_macros::cross_tests;
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
-    spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+    spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
     test_builder::TestDescription,
 };
 
@@ -32,7 +32,7 @@ cross_tests!(
         // <https://github.com/EspressoSystems/HotShot/issues/1567>
         let dead_nodes = vec![ChangeNode {
             idx: 19,
-            updown: UpDown::Down,
+            updown: NodeAction::Down,
         }];
 
         metadata.spinning_properties = SpinningTaskDescription {

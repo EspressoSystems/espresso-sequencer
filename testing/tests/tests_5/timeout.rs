@@ -17,7 +17,7 @@ async fn test_timeout() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
     async_compatibility_layer::logging::setup_logging();
@@ -34,7 +34,7 @@ async fn test_timeout() {
     };
     let dead_nodes = vec![ChangeNode {
         idx: 0,
-        updown: UpDown::Down,
+        updown: NodeAction::Down,
     }];
 
     metadata.timing_data = timing_data;
@@ -77,7 +77,7 @@ async fn test_timeout_libp2p() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
 
@@ -98,7 +98,7 @@ async fn test_timeout_libp2p() {
     };
     let dead_nodes = vec![ChangeNode {
         idx: 9,
-        updown: UpDown::Down,
+        updown: NodeAction::Down,
     }];
 
     metadata.timing_data = timing_data;

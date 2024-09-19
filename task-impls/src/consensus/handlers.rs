@@ -140,8 +140,9 @@ pub async fn create_and_send_proposal<TYPES: NodeType, V: Versions>(
     };
 
     debug!(
-        "Sending proposal for view {:?}",
+        "Sending proposal for view {:?} ID: {}",
         proposed_leaf.view_number(),
+        id,
     );
 
     async_sleep(Duration::from_millis(round_start_delay)).await;

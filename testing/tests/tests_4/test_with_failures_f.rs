@@ -11,7 +11,7 @@ use hotshot_example_types::{
 use hotshot_macros::cross_tests;
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
-    spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+    spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
     test_builder::TestDescription,
 };
 // Test f nodes leaving the network.
@@ -35,27 +35,27 @@ cross_tests!(
         let dead_nodes = vec![
             ChangeNode {
                 idx: 14,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
             ChangeNode {
                 idx: 15,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
             ChangeNode {
                 idx: 16,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
             ChangeNode {
                 idx: 17,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
             ChangeNode {
                 idx: 18,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
             ChangeNode {
                 idx: 19,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
             ];
 

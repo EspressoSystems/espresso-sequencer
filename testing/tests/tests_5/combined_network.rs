@@ -11,7 +11,7 @@ use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     overall_safety_task::OverallSafetyPropertiesDescription,
-    spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+    spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
     test_builder::{TestDescription, TimingData},
 };
 use rand::Rng;
@@ -86,7 +86,7 @@ async fn test_combined_network_cdn_crash() {
     for node in 0..metadata.num_nodes_with_stake {
         all_nodes.push(ChangeNode {
             idx: node,
-            updown: UpDown::NetworkDown,
+            updown: NodeAction::NetworkDown,
         });
     }
 
@@ -136,11 +136,11 @@ async fn test_combined_network_reup() {
     for node in 0..metadata.num_nodes_with_stake {
         all_down.push(ChangeNode {
             idx: node,
-            updown: UpDown::NetworkDown,
+            updown: NodeAction::NetworkDown,
         });
         all_up.push(ChangeNode {
             idx: node,
-            updown: UpDown::NetworkUp,
+            updown: NodeAction::NetworkUp,
         });
     }
 
@@ -188,7 +188,7 @@ async fn test_combined_network_half_dc() {
     for node in 0..metadata.num_nodes_with_stake / 2 {
         half.push(ChangeNode {
             idx: node,
-            updown: UpDown::NetworkDown,
+            updown: NodeAction::NetworkDown,
         });
     }
 
@@ -212,9 +212,9 @@ fn generate_random_node_changes(
 
     for _ in 0..total_nodes * 2 {
         let updown = if rng.gen::<bool>() {
-            UpDown::NetworkUp
+            NodeAction::NetworkUp
         } else {
-            UpDown::NetworkDown
+            NodeAction::NetworkDown
         };
 
         let node_change = ChangeNode {

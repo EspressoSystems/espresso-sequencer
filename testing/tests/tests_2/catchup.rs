@@ -15,7 +15,7 @@ async fn test_catchup() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
 
@@ -32,7 +32,7 @@ async fn test_catchup() {
         TestDescription::default();
     let catchup_node = vec![ChangeNode {
         idx: 19,
-        updown: UpDown::Up,
+        updown: NodeAction::Up,
     }];
 
     metadata.timing_data = timing_data;
@@ -78,7 +78,7 @@ async fn test_catchup_cdn() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
 
@@ -92,7 +92,7 @@ async fn test_catchup_cdn() {
         TestDescription::default();
     let catchup_nodes = vec![ChangeNode {
         idx: 18,
-        updown: UpDown::Up,
+        updown: NodeAction::Up,
     }];
     metadata.timing_data = timing_data;
     metadata.start_nodes = 19;
@@ -133,7 +133,7 @@ async fn test_catchup_one_node() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
     async_compatibility_layer::logging::setup_logging();
@@ -146,7 +146,7 @@ async fn test_catchup_one_node() {
         TestDescription::default();
     let catchup_nodes = vec![ChangeNode {
         idx: 18,
-        updown: UpDown::Up,
+        updown: NodeAction::Up,
     }];
     metadata.timing_data = timing_data;
     metadata.start_nodes = 19;
@@ -189,7 +189,7 @@ async fn test_catchup_in_view_sync() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
     async_compatibility_layer::logging::setup_logging();
@@ -203,11 +203,11 @@ async fn test_catchup_in_view_sync() {
     let catchup_nodes = vec![
         ChangeNode {
             idx: 18,
-            updown: UpDown::Up,
+            updown: NodeAction::Up,
         },
         ChangeNode {
             idx: 19,
-            updown: UpDown::Up,
+            updown: NodeAction::Up,
         },
     ];
 
@@ -252,7 +252,7 @@ async fn test_catchup_reload() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
 
@@ -266,7 +266,7 @@ async fn test_catchup_reload() {
         TestDescription::default();
     let catchup_node = vec![ChangeNode {
         idx: 19,
-        updown: UpDown::Up,
+        updown: NodeAction::Up,
     }];
 
     metadata.timing_data = timing_data;
@@ -312,7 +312,7 @@ async fn test_all_restart() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
 
@@ -328,7 +328,7 @@ async fn test_all_restart() {
     for i in 0..20 {
         catchup_nodes.push(ChangeNode {
             idx: i,
-            updown: UpDown::Restart,
+            updown: NodeAction::RestartDown(0),
         })
     }
 
@@ -374,7 +374,7 @@ async fn test_all_restart_cdn() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
 
@@ -390,7 +390,7 @@ async fn test_all_restart_cdn() {
     for i in 0..20 {
         catchup_nodes.push(ChangeNode {
             idx: i,
-            updown: UpDown::Restart,
+            updown: NodeAction::RestartDown(0),
         })
     }
 
@@ -440,7 +440,7 @@ async fn test_all_restart_one_da() {
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
         overall_safety_task::OverallSafetyPropertiesDescription,
-        spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
 
@@ -457,7 +457,7 @@ async fn test_all_restart_one_da() {
     for i in 0..20 {
         catchup_nodes.push(ChangeNode {
             idx: i,
-            updown: UpDown::Restart,
+            updown: NodeAction::RestartDown(0),
         })
     }
 
@@ -485,6 +485,81 @@ async fn test_all_restart_one_da() {
         // Make sure we keep committing rounds after the catchup, but not the full 50.
         num_successful_views: 22,
         num_failed_views: 15,
+        ..Default::default()
+    };
+
+    metadata
+        .gen_launcher(0)
+        .launch()
+        .run_test::<SimpleBuilderImplementation>()
+        .await;
+}
+
+#[cfg(test)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+async fn test_staggered_restart() {
+    use std::time::Duration;
+
+    use hotshot_example_types::node_types::{CombinedImpl, TestTypes, TestVersions};
+    use hotshot_testing::{
+        block_builder::SimpleBuilderImplementation,
+        completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
+        overall_safety_task::OverallSafetyPropertiesDescription,
+        spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
+        test_builder::TestDescription,
+    };
+
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+    let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> =
+        TestDescription::default();
+
+    let mut down_da_nodes = vec![];
+    for i in 1..4 {
+        down_da_nodes.push(ChangeNode {
+            idx: i,
+            updown: NodeAction::RestartDown(20),
+        });
+    }
+
+    let mut down_regular_nodes = vec![];
+    for i in 4..10 {
+        down_regular_nodes.push(ChangeNode {
+            idx: i,
+            updown: NodeAction::RestartDown(0),
+        });
+    }
+    // restart the last da so it gets the new libp2p routing table
+    down_regular_nodes.push(ChangeNode {
+        idx: 0,
+        updown: NodeAction::RestartDown(0),
+    });
+
+    metadata.start_nodes = 10;
+    metadata.num_nodes_with_stake = 10;
+
+    // Explicitly make the DA small to simulate real network.
+    metadata.da_staked_committee_size = 4;
+
+    metadata.spinning_properties = SpinningTaskDescription {
+        // Restart all the nodes in view 13
+        node_changes: vec![(13, down_da_nodes), (33, down_regular_nodes)],
+    };
+    metadata.view_sync_properties =
+        hotshot_testing::view_sync_task::ViewSyncTaskDescription::Threshold(0, 50);
+
+    // Give the test some extra time because we are purposely timing out views
+    metadata.completion_task_description =
+        CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+            TimeBasedCompletionTaskDescription {
+                duration: Duration::from_secs(240),
+            },
+        );
+    metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
+        // Make sure we keep committing rounds after the catchup, but not the full 50.
+        num_successful_views: 22,
+        num_failed_views: 30,
         ..Default::default()
     };
 

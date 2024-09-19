@@ -15,7 +15,7 @@ use hotshot_example_types::{
 use hotshot_macros::cross_tests;
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
-    spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
+    spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
     test_builder::TestDescription,
     view_sync_task::ViewSyncTaskDescription,
 };
@@ -51,11 +51,11 @@ cross_tests!(
         let dead_nodes = vec![
             ChangeNode {
                 idx: 10,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
             ChangeNode {
                 idx: 11,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
         ];
 
@@ -87,7 +87,7 @@ cross_tests!(
         let dead_nodes = vec![
             ChangeNode {
                 idx: 3,
-                updown: UpDown::Down,
+                updown: NodeAction::Down,
             },
         ];
 
