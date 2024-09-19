@@ -58,7 +58,7 @@ hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74", 
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.74" }
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.47" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.47" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.48" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.46" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.57" }

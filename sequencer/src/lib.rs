@@ -503,7 +503,7 @@ pub mod testing {
         instance_state: NodeState,
         validated_state: ValidatedState,
     ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let builder_key_pair = EthKeyPair::random();
+        let builder_key_pair = TestConfig::<0>::builder_key();
         let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
 
         // This should never fail.
@@ -575,7 +575,14 @@ pub mod testing {
         .into_app()
         .expect("Failed to create builder tide-disco app");
 
-        async_spawn(app.serve(url.clone(), MarketplaceVersion::instance()));
+        async_spawn(
+            app.serve(
+                format!("http://0.0.0.0:{port}")
+                    .parse::<Url>()
+                    .expect("Failed to parse builder listener"),
+                MarketplaceVersion::instance(),
+            ),
+        );
 
         (
             Box::new(MarketplaceBuilderImplementation { hooks, senders }),
