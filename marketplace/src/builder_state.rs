@@ -363,10 +363,27 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         })
     }
 
-    /// processing the DA proposal
-    /// pending whether it's processed already, if so, skip, or else, process it
-    /// deciding whether we have matching quorum proposal, if so, we remove them from the storage and
-    /// spawn a clone
+    /// [process_da_proposal] is a method that is used to handle incoming DA
+    /// proposal messages from an incoming HotShot [Event]. A DA Proposals is
+    /// a proposals that is meant to be voted on by consensus nodes in order to
+    /// determine which transactions should be included for this view.
+    ///
+    /// A DA Proposal in conjunction with a Quorum Proposal is an indicator
+    /// that a new Block / Leaf is being proposed for the HotShot network. So
+    /// we need to be able to propose new Bundles on top of these proposals.
+    ///
+    /// In order to do so we must first wait until we have both a DA Proposal
+    /// and a Quorum Proposal.  If we do not, then we can just record the
+    /// proposal we have and wait for the other to arrive.
+    ///
+    /// If we do have a matching Quorum Proposal, then we can proceed to make
+    /// a decision about extending the current [BuilderState] via
+    /// [BuilderState::spawn_clone_that_extends_self].
+    ///
+    /// > Note: In the case of `process_da_proposal` if we don't have a corresponding
+    /// > Quorum Proposal, then we will have to wait for `process_quorum_proposal`
+    /// > to be called with the matching Quorum Proposal.  Until that point we
+    /// > exit knowing we have fulfilled the DA proposal portion.
     #[tracing::instrument(skip_all, name = "process da proposal",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     async fn process_da_proposal(&mut self, da_msg: Arc<DaProposalMessage<TYPES>>) {
@@ -383,44 +400,33 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             da_msg.builder_commitment
         );
 
-        // If we've never processed this da proposal before, process it
-        if let std::collections::hash_map::Entry::Vacant(e) = self
+        let Entry::Vacant(e) = self
             .da_proposal_payload_commit_to_da_proposal
             .entry((da_msg.builder_commitment.clone(), da_msg.view_number))
-        {
-            // if we have matching da and quorum proposals, we can skip storing the one, and remove
-            // the other from storage, and call build_block with both, to save a little space.
-            if let Entry::Occupied(quorum_proposal) = self
-                .quorum_proposal_payload_commit_to_quorum_proposal
-                .entry((da_msg.builder_commitment.clone(), da_msg.view_number))
-            {
-                let quorum_proposal = quorum_proposal.remove();
-
-                // if we have a matching quorum proposal
-                // which means they have matching BuilderCommitment and view number
-                //  if (this is the correct parent or
-                //      (the correct parent is missing and this is the highest view))
-                //    spawn a clone
-                if quorum_proposal.data.view_number == da_msg.view_number {
-                    tracing::info!(
-                        "Spawning a clone from process DA proposal for view number: {:?}",
-                        da_msg.view_number
-                    );
-                    // remove this entry from quorum_proposal_payload_commit_to_quorum_proposal
-                    self.quorum_proposal_payload_commit_to_quorum_proposal
-                        .remove(&(da_msg.builder_commitment.clone(), da_msg.view_number));
-
-                    self.spawn_clone_that_extends_self(da_msg, quorum_proposal)
-                        .await;
-                } else {
-                    tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
-                }
-            } else {
-                e.insert(da_msg);
-            }
-        } else {
+        else {
             tracing::debug!("Payload commitment already exists in the da_proposal_payload_commit_to_da_proposal hashmap, so ignoring it");
+            return;
+        };
+
+        // if we have matching da and quorum proposals, we can skip storing the one, and remove
+        // the other from storage, and call build_block with both, to save a little space.
+        let Entry::Occupied(quorum_proposal) = self
+            .quorum_proposal_payload_commit_to_quorum_proposal
+            .entry((da_msg.builder_commitment.clone(), da_msg.view_number))
+        else {
+            e.insert(da_msg);
+            return;
+        };
+
+        let quorum_proposal = quorum_proposal.remove();
+
+        if quorum_proposal.data.view_number != da_msg.view_number {
+            tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
+            return;
         }
+
+        self.spawn_clone_that_extends_self(da_msg, quorum_proposal.clone())
+            .await;
     }
 
     /// processing the quorum proposal
