@@ -85,6 +85,7 @@ impl Genesis {
                 anyhow::bail!("Fee contract's address is not a proxy");
             }
         }
+        // TODO: it's optional for the fee contract to be included in a proxy in v1 so no need to panic but revisit this after v1 https://github.com/EspressoSystems/espresso-sequencer/pull/2000#discussion_r1765174702
         Ok(())
     }
 }
@@ -477,7 +478,7 @@ mod test {
                 .to_string()
                 .contains("Fee contract's address is not a proxy"));
         } else {
-            panic!("Expected the fee contract to not be a proxy, but the validated succeeded");
+            panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
         }
     }
 

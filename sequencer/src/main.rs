@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
 
     let genesis = Genesis::from_file(&opt.genesis_file)?;
 
-    // validate that the fee contract is a proxy
+    // validate that the fee contract is a proxy and panic otherwise
     genesis
         .validate_fee_contract(opt.l1_provider_url.to_string())
         .await

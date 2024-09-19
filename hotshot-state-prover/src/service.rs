@@ -85,11 +85,8 @@ impl StateProverConfig {
     pub async fn validate_light_client_contract(&self) -> anyhow::Result<()> {
         let provider = Provider::<Http>::try_from(self.provider.to_string())?;
 
-        if !is_proxy_contract(provider, self.light_client_address)
-            .await
-            .expect("Failed to determine if the light client contract is a proxy")
-        {
-            panic!("The Light Client contract's address is not a proxy");
+        if !is_proxy_contract(provider, self.light_client_address).await? {
+            anyhow::bail!("Light Client contract's address is not a proxy");
         }
 
         Ok(())
@@ -557,7 +554,10 @@ mod test {
 
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
-    use ethers::utils::{Anvil, AnvilInstance};
+    use ethers::{
+        types::H160,
+        utils::{Anvil, AnvilInstance},
+    };
     use hotshot_contract_adapter::light_client::{
         LightClientConstructorArgs, ParsedStakeTableState,
     };
@@ -566,6 +566,7 @@ mod test {
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::{deployer, test_utils::setup_test};
+    use std::str::FromStr;
 
     use super::*;
     use crate::mock_ledger::{MockLedger, MockSystemParam};
@@ -714,6 +715,50 @@ mod test {
                 port: None,
                 stake_table_capacity: 10,
             }
+        }
+    }
+
+    #[async_std::test]
+    async fn test_validate_light_contract_is_proxy() {
+        // set the light client address to an address known to be a proxy
+        let config = StateProverConfig {
+            light_client_address: H160::from_str("0x5B17D2d923E27341FC2753251f11aC08fDC20E0d")
+                .expect("Invalid Ethereum address"),
+            provider: Url::from_str("https://ethereum-sepolia.publicnode.com")
+                .expect("Invalid URL"),
+            ..Default::default()
+        };
+
+        let result = config.validate_light_client_contract().await;
+
+        // check if the result was ok
+        assert!(
+            result.is_ok(),
+            "Expected Light Client contract to be a proxy, but it was not"
+        );
+    }
+
+    #[async_std::test]
+    async fn test_validate_light_contract_is_not_a_proxy() {
+        // set the light client address to an address known not to be a proxy
+        let config = StateProverConfig {
+            light_client_address: H160::from_str("0xa15bb66138824a1c7167f5e85b957d04dd34e468")
+                .expect("Invalid Ethereum address"),
+            provider: Url::from_str("https://ethereum-sepolia.publicnode.com")
+                .expect("Invalid URL"),
+            ..Default::default()
+        };
+
+        let result = config.validate_light_client_contract().await;
+
+        // check if the result is an error
+        if let Err(e) = result {
+            // assert that the error message contains "Light Client contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Light Client contract's address is not a proxy"));
+        } else {
+            panic!("Expected the light contract to not be a proxy, but the validation succeeded");
         }
     }
 
