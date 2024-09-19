@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, MockSequencerVersions};
+use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions, V0_1};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -177,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let network_config = TestConfigBuilder::default()
-        .builder_port(builder_port)
+        .marketplace_builder_port(builder_port)
         .state_relay_url(relay_server_url.clone())
         .l1_url(l1_url.clone())
         .build();
@@ -188,7 +188,8 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+    let network =
+        TestNetwork::new(config, SequencerVersions::<MarketplaceVersion, V0_1>::new()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
@@ -323,6 +324,7 @@ async fn main() -> anyhow::Result<()> {
 
     let dev_info = DevInfo {
         builder_url: network.cfg.hotshot_config().builder_urls[0].clone(),
+        sequencer_api_port,
         l1_prover_port,
         l1_url,
         l1_light_client_address: l1_lc,
@@ -473,6 +475,7 @@ async fn run_dev_node_server<ApiVer: StaticVersionType + 'static, S: Signer + Cl
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DevInfo {
     pub builder_url: Url,
+    pub sequencer_api_port: u16,
     pub l1_prover_port: u16,
     pub l1_url: Url,
     pub l1_light_client_address: Address,
@@ -604,18 +607,10 @@ mod tests {
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
 
-        let builder_address = builder_api_client
-            .get::<String>("block_info/builderaddress")
-            .send()
-            .await
-            .unwrap();
-
-        assert!(!builder_address.is_empty());
-
         let tx = Transaction::new(100_u32.into(), vec![1, 2, 3]);
 
-        let hash: Commitment<Transaction> = api_client
-            .post("submit/submit")
+        let hash: Commitment<Transaction> = builder_api_client
+            .post("txn_submit/submit")
             .body_json(&tx)
             .unwrap()
             .send()
@@ -633,6 +628,7 @@ mod tests {
             .await;
         while tx_result.is_err() {
             sleep(Duration::from_secs(1)).await;
+            tracing::warn!("waiting for tx");
 
             tx_result = api_client
                 .get::<TransactionQueryData<SeqTypes>>(&format!(
