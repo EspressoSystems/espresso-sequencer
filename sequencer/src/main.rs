@@ -26,6 +26,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::warn!(?modules, "sequencer starting up");
 
     let genesis = Genesis::from_file(&opt.genesis_file)?;
+
+    // validate that the fee contract is a proxy and panic otherwise
+    genesis
+        .validate_fee_contract(opt.l1_provider_url.to_string())
+        .await
+        .unwrap();
+
     tracing::info!(?genesis, "genesis");
 
     let base = genesis.base_version;
