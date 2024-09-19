@@ -357,6 +357,8 @@ fn charge_fee(
 /// Validate builder accounts by verifying signatures. All fees are
 /// verified against signature by index.
 fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
+    let version = proposed_header.version();
+
     // TODO since we are iterating, should we include account/amount in errors?
     for (fee_info, signature) in proposed_header
         .fee_info()
@@ -369,26 +371,32 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
             .as_u64()
             .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
 
-        // verify signature, accept any verification that succeeds
-        fee_info
-            .account()
-            .validate_sequencing_fee_signature_marketplace(
-                &signature,
-                fee_info.amount().as_u64().unwrap(),
-            )
-            .then_some(())
-            .or_else(|| {
-                fee_info
-                    .account()
-                    .validate_fee_signature(
-                        &signature,
-                        fee_info.amount().as_u64().unwrap(),
-                        proposed_header.metadata(),
-                        &proposed_header.payload_commitment(),
-                    )
-                    .then_some(())
-            })
-            .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        // Verify signatures.
+
+        // TODO Marketplace signatures are placeholders for now. In
+        // finished Marketplace signatures will cover the full
+        // transaction.
+        if version.minor >= 3 {
+            fee_info
+                .account()
+                .validate_sequencing_fee_signature_marketplace(
+                    &signature,
+                    fee_info.amount().as_u64().unwrap(),
+                )
+                .then_some(())
+                .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        } else {
+            fee_info
+                .account()
+                .validate_fee_signature(
+                    &signature,
+                    fee_info.amount().as_u64().unwrap(),
+                    proposed_header.metadata(),
+                    &proposed_header.payload_commitment(),
+                )
+                .then_some(())
+                .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        }
     }
 
     Ok(())
@@ -1103,6 +1111,31 @@ mod test {
         };
 
         validate_builder_fee(&header).unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validate_builder_fee_marketplace() {
+        setup_logging();
+        setup_backtrace();
+
+        let max_block_size = 10;
+
+        let validated_state = ValidatedState::default();
+        let instance_state = NodeState::mock_v3().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High base fee
+            max_block_size: max_block_size.into(),
+            ..validated_state.chain_config.resolve().unwrap()
+        });
+
+        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let header = parent.block_header().clone();
+
+        debug!("{:?}", header.version());
+
+        let key_pair = EthKeyPair::random();
+        let account = key_pair.fee_account();
+
+        let data = header.fee_info()[0].amount().as_u64().unwrap();
 
         // test v3 sig
         let sig = FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data).unwrap();
