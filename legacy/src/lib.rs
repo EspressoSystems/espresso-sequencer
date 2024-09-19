@@ -18,6 +18,7 @@ pub mod builder_state;
 pub mod service;
 
 // tracking the testing
+#[cfg(test)]
 pub mod testing;
 
 use async_compatibility_layer::channel::UnboundedReceiver;
