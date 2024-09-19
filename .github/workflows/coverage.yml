@@ -52,6 +52,7 @@ jobs:
           CARGO_INCREMENTAL: "0"
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
           RUSTDOCFLAGS: ${{ env.COVERAGE_RUSTDOCFLAGS }}
+        timeout-minutes: 90
 
       # TODO investigate why `uint_bytes` fail in coverage runs
       - name: Run tests with coverage
@@ -61,6 +62,7 @@ jobs:
           CARGO_INCREMENTAL: "0"
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
           RUSTDOCFLAGS: ${{ env.COVERAGE_RUSTDOCFLAGS }}
+        timeout-minutes: 90
 
       - uses: alekitto/grcov@v0.2
         with:
