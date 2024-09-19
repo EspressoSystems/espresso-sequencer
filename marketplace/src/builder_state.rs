@@ -649,11 +649,19 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.event_loop();
     }
 
-    /// build a block from the BuilderStateId
-    /// This function collects available transactions not already in `included_txns` from near future
-    /// then form them into a block and calculate the block's `builder_hash` `block_payload` and `metadata`
-    /// insert `builder_hash` to `builder_commitments`
-    /// and finally return a struct in `BuildBlockInfo`
+    /// [build_block] is a method that will return a [BuildBlockInfo] if it is
+    /// able to build a block.  If it encounters an error building a block, then
+    /// it will return None.
+    ///
+    /// This first starts by collecting transactions to include in the block. It
+    /// will wait until it has at least one transaction to include in the block,
+    /// or up to the configured `maximize_txn_capture_timeout` duration elapses.
+    /// At which point it will attempt to build a block with the transactions it
+    /// has collected.
+    ///
+    /// Upon successfully building a block, a commitment for the [BuilderStateId]
+    /// and Block payload pair are stored, and a [BuildBlockInfo] is created
+    /// and returned.
     #[tracing::instrument(skip_all, name = "build block",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     async fn build_block(
@@ -675,47 +683,48 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
             async_sleep(sleep_interval).await
         }
-        if let Ok((payload, metadata)) =
+
+        let Ok((payload, metadata)) =
             <TYPES::BlockPayload as BlockPayload<TYPES>>::from_transactions(
                 self.tx_queue.iter().map(|tx| tx.tx.clone()),
                 &self.validated_state,
                 &self.instance_state,
             )
             .await
-        {
-            let builder_hash = payload.builder_commitment(&metadata);
-            // count the number of txns
-            let txn_count = payload.num_transactions(&metadata);
+        else {
+            tracing::warn!("Failed to build block payload");
+            return None;
+        };
 
-            // insert the recently built block into the builder commitments
-            self.builder_commitments
-                .insert((state_id, builder_hash.clone()));
+        let builder_hash = payload.builder_commitment(&metadata);
+        // count the number of txns
+        let txn_count = payload.num_transactions(&metadata);
 
-            let encoded_txns: Vec<u8> = payload.encode().to_vec();
-            let block_size: u64 = encoded_txns.len() as u64;
-            let offered_fee: u64 = self.base_fee * block_size;
+        // insert the recently built block into the builder commitments
+        self.builder_commitments
+            .insert((state_id, builder_hash.clone()));
 
-            tracing::info!(
-                "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
-                self.parent_block_references.view_number,
-                txn_count,
-                builder_hash
-            );
+        let encoded_txns: Vec<u8> = payload.encode().to_vec();
+        let block_size: u64 = encoded_txns.len() as u64;
+        let offered_fee: u64 = self.base_fee * block_size;
 
-            Some(BuildBlockInfo {
-                id: BlockId {
-                    view: self.parent_block_references.view_number,
-                    hash: builder_hash,
-                },
-                block_size,
-                offered_fee,
-                block_payload: payload,
-                metadata,
-            })
-        } else {
-            tracing::warn!("build block, returning None");
-            None
-        }
+        tracing::info!(
+            "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
+            self.parent_block_references.view_number,
+            txn_count,
+            builder_hash
+        );
+
+        Some(BuildBlockInfo {
+            id: BlockId {
+                view: self.parent_block_references.view_number,
+                hash: builder_hash,
+            },
+            block_size,
+            offered_fee,
+            block_payload: payload,
+            metadata,
+        })
     }
 
     /// [process_block_request] is a method that is used to handle incoming
