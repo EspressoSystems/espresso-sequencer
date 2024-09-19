@@ -381,6 +381,19 @@ pub async fn deploy(
         {
             panic!("Light Client contract's address is not a proxy");
         }
+
+        // Instantiate a wrapper with the proxy address and light client ABI.
+        let proxy = LightClient::new(light_client_proxy_address, l1.clone());
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %light_client_proxy_address,
+                %owner,
+                "transferring light client proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?;
+        }
     }
 
     // `FeeContract.sol`
@@ -416,7 +429,7 @@ pub async fn deploy(
             tracing::info!(
                 %fee_contract_proxy_address,
                 %owner,
-                "transferring proxy ownership to multisig",
+                "transferring fee contract proxy ownership to multisig",
             );
             proxy.transfer_ownership(owner).send().await?;
         }
