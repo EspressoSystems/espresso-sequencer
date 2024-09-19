@@ -308,6 +308,7 @@ pub async fn deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
+    multisig_address: H160,
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
@@ -320,17 +321,17 @@ pub async fn deploy(
         .index(account_index)?
         .build()?
         .with_chain_id(chain_id);
-    let owner = wallet.address();
+    let deployer = wallet.address();
     let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
 
     // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
     // gas.
-    let balance = l1.get_balance(owner, None).await?;
+    let balance = l1.get_balance(deployer, None).await?;
     ensure!(
         balance > 0.into(),
-        "deployer account {owner:#x} is not funded!"
+        "deployer account {deployer:#x} is not funded!"
     );
-    tracing::info!(%balance, "deploying from address {owner:#x}");
+    tracing::info!(%balance, "deploying from address {deployer:#x}");
 
     // `HotShot.sol`
     if should_deploy(ContractGroup::HotShot, &only) {
@@ -360,7 +361,7 @@ pub async fn deploy(
         let (genesis_lc, genesis_stake) = genesis.await?.clone();
 
         let data = light_client
-            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, owner)
+            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts
@@ -378,7 +379,7 @@ pub async fn deploy(
             .await?;
         let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
         let data = fee_contract
-            .initialize(owner)
+            .initialize(multisig_address) //set the owner of the fee contract as the multisig address
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts
@@ -402,7 +403,7 @@ fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> boo
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ContractGroup {
     #[clap(name = "hotshot")]
-    HotShot,
+    HotShot, // TODO: confirm whether we keep HotShot in the contract group
     FeeContract,
     LightClient,
 }
