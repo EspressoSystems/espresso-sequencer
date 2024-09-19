@@ -429,7 +429,30 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             .await;
     }
 
-    /// processing the quorum proposal
+    /// [process_quorum_proposal] is a method that is used to handle incoming
+    /// Quorum Proposal messages from an incoming HotShot [Event]. A Quorum
+    /// Proposal is a proposal that indicates the next potential Block of the
+    /// chain is being proposed for the HotShot network.  This proposal is
+    /// voted on by the consensus nodes in order to determine if whether this
+    /// will be the next Block of the chain or not.
+    ///
+    /// A Quorum Proposal in conjunction with a DA Proposal is an indicator
+    /// that a new Block / Leaf is being proposed for the HotShot network. So
+    /// we need to be able to propose new Bundles on top of these proposals.
+    ///
+    /// In order to do so we must first wait until we have both a DA Proposal
+    /// and a Quorum Proposal.  If we do not, then we can just record the
+    /// proposal we have and wait for the other to arrive.
+    ///
+    /// If we do have a matching DA Proposal, then we can proceed to make
+    /// a decision about extending the current [BuilderState] via
+    /// [BuilderState::spawn_clone_that_extends_self].
+    ///
+    /// > Note: In the case of `process_quorum_proposal` if we don't have a
+    /// > corresponding DA Proposal, then we will have to wait for
+    /// > `process_da_proposal` to be called with the matching DA Proposal.
+    /// > Until that point we exit knowing we have fulfilled the Quorum proposal
+    /// > portion.
     //#[tracing::instrument(skip_all, name = "Process Quorum Proposal")]
     #[tracing::instrument(skip_all, name = "process quorum proposal",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
@@ -442,9 +465,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // Two cases to handle:
         // Case 1: Bootstrapping phase
         // Case 2: No intended builder state exist
-        // To handle both cases, we can have the highest view number builder state running
-        // and only doing the insertion if and only if intended builder state for a particular view is not present
-        // check the presence of quorum_proposal.data.view_number-1 in the spawned_builder_states list
         let quorum_proposal = &qc_msg.proposal;
         let view_number = quorum_proposal.data.view_number;
         let payload_builder_commitment = quorum_proposal.data.block_header.builder_commitment();
@@ -454,39 +474,42 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             payload_builder_commitment
         );
 
-        // first check whether vid_commitment exists in the qc_payload_commit_to_qc hashmap, if yer, ignore it, otherwise validate it and later insert in
-        if let std::collections::hash_map::Entry::Vacant(e) = self
+        // first check whether vid_commitment exists in the
+        // qc_payload_commit_to_qc hashmap, if yes, ignore it, otherwise
+        // validate it and later insert in
+
+        let Entry::Vacant(e) = self
             .quorum_proposal_payload_commit_to_quorum_proposal
             .entry((payload_builder_commitment.clone(), view_number))
-        {
-            // if we have matching da and quorum proposals, we can skip storing the one, and remove the other from storage, and call build_block with both, to save a little space.
-            if let Entry::Occupied(da_proposal) = self
-                .da_proposal_payload_commit_to_da_proposal
-                .entry((payload_builder_commitment.clone(), view_number))
-            {
-                let da_proposal_info = da_proposal.remove();
-                // remove the entry from the da_proposal_payload_commit_to_da_proposal hashmap
-                self.da_proposal_payload_commit_to_da_proposal
-                    .remove(&(payload_builder_commitment.clone(), view_number));
-
-                // also make sure we clone for the same view number( check incase payload commitments are same)
-                if da_proposal_info.view_number == view_number {
-                    tracing::info!(
-                        "Spawning a clone from process QC proposal for view number: {:?}",
-                        view_number
-                    );
-
-                    self.spawn_clone_that_extends_self(da_proposal_info, quorum_proposal.clone())
-                        .await;
-                } else {
-                    tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
-                }
-            } else {
-                e.insert(quorum_proposal.clone());
-            }
-        } else {
+        else {
             tracing::debug!("Payload commitment already exists in the quorum_proposal_payload_commit_to_quorum_proposal hashmap, so ignoring it");
+            return;
+        };
+
+        // if we have matching da and quorum proposals, we can skip storing
+        // the one, and remove the other from storage, and call build_block
+        // with both, to save a little space.
+        let Entry::Occupied(da_proposal) = self
+            .da_proposal_payload_commit_to_da_proposal
+            .entry((payload_builder_commitment.clone(), view_number))
+        else {
+            e.insert(quorum_proposal.clone());
+            return;
+        };
+
+        let da_proposal_info = da_proposal.remove();
+        // remove the entry from the da_proposal_payload_commit_to_da_proposal hashmap
+        self.da_proposal_payload_commit_to_da_proposal
+            .remove(&(payload_builder_commitment.clone(), view_number));
+
+        // also make sure we clone for the same view number
+        // (check incase payload commitments are same)
+        if da_proposal_info.view_number != view_number {
+            tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
         }
+
+        self.spawn_clone_that_extends_self(da_proposal_info, quorum_proposal.clone())
+            .await;
     }
 
     /// [spawn_a_clone_that_extends_self] is a helper function that is used by
