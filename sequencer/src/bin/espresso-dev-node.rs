@@ -70,7 +70,7 @@ struct Args {
         name = "MULTISIG_ADDRESS",
         env = "ESPRESSO_SEQUENCER_ETH_MULTISIG_ADDRESS"
     )]
-    multisig_address: H160,
+    multisig_address: Option<H160>,
 
     /// The frequency of updating the light client state, expressed in update interval
     #[clap( long, value_parser = parse_duration, default_value = "20s", env = "ESPRESSO_STATE_PROVER_UPDATE_INTERVAL")]
@@ -241,6 +241,7 @@ async fn main() -> anyhow::Result<()> {
             .zip(
                 alt_multisig_addresses
                     .into_iter()
+                    .map(Some)
                     .chain(std::iter::repeat(multisig_address)),
             )
             .zip(
@@ -263,7 +264,7 @@ async fn main() -> anyhow::Result<()> {
             url.clone(),
             mnemonic.clone(),
             account_index,
-            Some(multisig_address),
+            multisig_address,
             true,
             None,
             async { Ok(lc_genesis.clone()) }.boxed(),
