@@ -12,7 +12,9 @@ use contract_bindings::{
     plonk_verifier_2::PlonkVerifier2,
 };
 use derive_more::Display;
-use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
+use ethers::{
+    prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject, utils::hex,
+};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
@@ -300,6 +302,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
         .deploy(constructor_args)?
         .send()
         .await?;
+
     Ok(contract.address())
 }
 
@@ -322,7 +325,7 @@ pub async fn deploy(
         .build()?
         .with_chain_id(chain_id);
     let deployer = wallet.address();
-    let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
+    let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
 
     // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
     // gas.
@@ -364,12 +367,20 @@ pub async fn deploy(
             .initialize(genesis_lc.into(), genesis_stake.into(), 864000, deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
-        contracts
+        let light_client_proxy_address = contracts
             .deploy_tx(
                 Contract::LightClientProxy,
                 ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
             )
             .await?;
+
+        // confirm that the implementation address is the address of the light client contract deployed above
+        if !is_proxy_contract(provider.clone(), light_client_proxy_address)
+            .await
+            .expect("Failed to determine if light contract is a proxy")
+        {
+            panic!("Light Client contract's address is not a proxy");
+        }
     }
 
     // `FeeContract.sol`
@@ -382,12 +393,20 @@ pub async fn deploy(
             .initialize(multisig_address) //set the owner of the fee contract as the multisig address
             .calldata()
             .context("calldata for initialize transaction not available")?;
-        contracts
+        let fee_contract_proxy_address = contracts
             .deploy_tx(
                 Contract::FeeContractProxy,
                 ERC1967Proxy::deploy(l1.clone(), (fee_contract_address, data))?,
             )
             .await?;
+
+        // confirm that the implementation address is the address of the fee contract deployed above
+        if !is_proxy_contract(provider.clone(), fee_contract_proxy_address)
+            .await
+            .expect("Failed to determine if fee contract is a proxy")
+        {
+            panic!("Fee contract's address is not a proxy");
+        }
     }
 
     Ok(contracts)
@@ -398,6 +417,25 @@ fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> boo
         Some(groups) => groups.contains(&group),
         None => true,
     }
+}
+
+pub async fn is_proxy_contract(
+    provider: Provider<Http>,
+    proxy_address: H160,
+) -> anyhow::Result<bool> {
+    // confirm that the proxy_address is a proxy
+    // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
+    let hex_bytes = hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+        .expect("Failed to decode hex string");
+    let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
+    let storage = provider
+        .get_storage_at(proxy_address, implementation_slot, None)
+        .await?;
+
+    let implementation_address = H160::from_slice(&storage[12..]);
+
+    // when the implementation address is not equal to zero, it's a proxy
+    Ok(implementation_address != H160::zero())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]

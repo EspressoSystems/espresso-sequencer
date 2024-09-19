@@ -29,7 +29,7 @@ use sequencer::{
     SequencerApiVersion,
 };
 use sequencer_utils::{
-    deployer::{deploy, Contract, Contracts},
+    deployer::{deploy, is_proxy_contract, Contract, Contracts},
     logging, AnvilOptions,
 };
 use serde::{Deserialize, Serialize};
@@ -285,6 +285,13 @@ async fn main() -> anyhow::Result<()> {
         let light_client_address = contracts
             .get_contract_address(Contract::LightClientProxy)
             .unwrap();
+
+        if !is_proxy_contract(provider.clone(), light_client_address)
+            .await
+            .expect("Failed to determine if light client contract is a proxy")
+        {
+            panic!("Light Client contract's address is not a proxy");
+        }
 
         mock_contracts.insert(
             chain_id,
