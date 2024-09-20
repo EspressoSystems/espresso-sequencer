@@ -12,10 +12,14 @@ To enable the permissioned prover on the light client contract, ensure that the 
 in the `.env.contracts` file:
 
 - `RPC_URL`
-- `SAFE_ORCHESTRATOR_PRIVATE_KEY`
+- `SAFE_ORCHESTRATOR_PRIVATE_KEY` (if not using a hardware wallet)
 - `SAFE_MULTISIG_ADDRESS`
 - `APPROVED_PROVER_ADDRESS`
 - `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
+- `USE_HARDWARE_WALLET` (if yes, put "true", otherwise "false")
+
+> **_NOTE:_** the signer for this transaction must be one of the signers in the **Safe Multisig Wallet**, whether the
+> ledger hardware wallet or the address owned by `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 
 Assuming you're in the root folder, run the following command:
 
