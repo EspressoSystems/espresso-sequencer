@@ -5,7 +5,6 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 use std::{
-    collections::HashSet,
     env, fs,
     net::SocketAddr,
     num::NonZeroUsize,
@@ -17,8 +16,8 @@ use std::{
 
 use clap::ValueEnum;
 use hotshot_types::{
-    constants::REQUEST_DATA_DELAY, traits::signature_key::SignatureKey, ExecutionType,
-    HotShotConfig, PeerConfig, ValidatorConfig,
+    constants::REQUEST_DATA_DELAY, light_client::StateVerKey, traits::signature_key::SignatureKey,
+    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use libp2p::{Multiaddr, PeerId};
 use serde_inline_default::serde_inline_default;
@@ -84,6 +83,20 @@ pub enum BuilderType {
     Simple,
     /// Random integrated builder will be started and used by each hotshot node
     Random,
+}
+
+/// Node PeerConfig keys
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(bound(deserialize = ""))]
+pub struct PeerConfigKeys<KEY: SignatureKey> {
+    /// The peer's public key
+    pub stake_table_key: KEY,
+    /// the peer's state public key
+    pub state_ver_key: StateVerKey,
+    /// the peer's stake
+    pub stake: u64,
+    /// whether the node is a DA node
+    pub da: bool,
 }
 
 /// Options controlling how the random builder generates blocks
@@ -157,9 +170,7 @@ pub struct NetworkConfig<KEY: SignatureKey> {
     /// random builder config
     pub random_builder: Option<RandomBuilderConfig>,
     /// The list of public keys that are allowed to connect to the orchestrator
-    pub public_keys: HashSet<KEY>,
-    /// Whether or not to disable registration verification.
-    pub enable_registration_verification: bool,
+    pub public_keys: Vec<PeerConfigKeys<KEY>>,
 }
 
 /// the source of the network config
@@ -391,8 +402,7 @@ impl<K: SignatureKey> Default for NetworkConfig<K> {
             commit_sha: String::new(),
             builder: BuilderType::default(),
             random_builder: None,
-            public_keys: HashSet::new(),
-            enable_registration_verification: true,
+            public_keys: vec![],
         }
     }
 }
@@ -443,11 +453,10 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     #[serde(default)]
     pub random_builder: Option<RandomBuilderConfig>,
     /// The list of public keys that are allowed to connect to the orchestrator
+    ///
+    /// If nonempty, this list becomes the stake table and is used to determine DA membership (ignoring the node's request).
     #[serde(default)]
-    pub public_keys: HashSet<KEY>,
-    /// Whether or not to disable registration verification.
-    #[serde(default)]
-    pub enable_registration_verification: bool,
+    pub public_keys: Vec<PeerConfigKeys<KEY>>,
 }
 
 impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
@@ -480,7 +489,6 @@ impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
             builder: val.builder,
             random_builder: val.random_builder,
             public_keys: val.public_keys,
-            enable_registration_verification: val.enable_registration_verification,
         }
     }
 }

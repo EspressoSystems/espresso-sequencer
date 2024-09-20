@@ -880,8 +880,8 @@ pub async fn main_entry_point<
     let my_own_validator_config =
         NetworkConfig::<TYPES::SignatureKey>::generate_init_validator_config(
             &orchestrator_client,
-            // This is false for now, we only use it to generate the keypair
-            false,
+            // we assign nodes to the DA committee by default
+            true,
         )
         .await;
 
