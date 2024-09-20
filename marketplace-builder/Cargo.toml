@@ -30,7 +30,7 @@ hotshot-types = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true, features = ["bls"] }
 marketplace-builder-core = { workspace = true }
-marketplace-solver = { path = "../marketplace-solver" }
+marketplace-solver = { path = "../marketplace-solver", features = ["testing"] }
 portpicker = { workspace = true }
 sequencer = { path = "../sequencer", features = ["testing"] }
 surf = "2.3.1"
