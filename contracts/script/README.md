@@ -22,26 +22,21 @@
 3. **Enter Nix Shell**  
    In the home folder of this repo, start a nix shell by entering `nix-shell` in the terminal.
 4. **Compile Contracts (if necessary)** If the contracts have never been compiled, run `forge build`.
-5. **Set up docker images** Run the following:
-   - `just pull`
-   - `just test`
+5. **Build diff-test library** Run the following:
+   - `cargo build --bin diff-test --release`
 6. **Set Environment Variables**  
-   Set the values for
+   Set the following values in the `.env.contracts`
    - `STATE_HISTORY_RETENTION_PERIOD`
    - `NUM_INIT_VALIDATORS`
    - `FEE_CONTRACT_ORIGINAL_NAME`
-   - `LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME` in the `.env.contracts` file. If you're deploying with a hardware wallet set
-     this variable:
+   - `LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME`
+   - `PERMISSIONED_PROVER_ADDRESS`
+   - `USE_HARDWARE_WALLET` If you're deploying with a hardware wallet set these variables:
    - `DEPLOYER_HARDWARE_WALLET_ADDRESS` Otherwise, set the mnemonic variables:
    - `DEPLOYER_MNEMONIC`
    - `DEPLOYER_MNEMONIC_OFFSET`
 
-### If Not Using OpenZeppelin Defender (current method)
-
-1. **Set Deployment Values**  
-   Set the values for `DEPLOYER_MNEMONIC` and `DEPLOYER_MNEMONIC_OFFSET` in the `.env.contracts` file.
-
-### If Using OpenZeppelin Defender
+### If Using OpenZeppelin Defender (deprecated)
 
 1. **Create an Approval Process**  
    Create an Approval Process that requires the multisig wallet you created above by navigating to
@@ -83,16 +78,16 @@
    --broadcast
 ```
 
-#### Without OpenZeppelin Defender and with a Ledger Hardware Wallet
+#### Without OpenZeppelin Defender and via Ledger Hardware Wallet
 
-- set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` in `.env.contracts`
+- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
 
 1. Run the following command in the home directory:
 
 ```bash
    source .env.contracts && \
    forge clean && \
-   forge script contracts/script/FeeContract.s.sol:DeployFeeContractWithHDWalletScript $SAFE_MULTISIG_ADDRESS \
+   forge script contracts/script/FeeContract.s.sol:DeployFeeContractScript $SAFE_MULTISIG_ADDRESS \
    --sig 'run(address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
@@ -100,6 +95,19 @@
    --legacy \
    --ledger \
    --broadcast
+```
+
+Example successful deployment response
+
+```bash
+[⠒] Compiling...
+No files changed, compilation skipped
+2024-03-11T16:41:29.919133Z  WARN foundry_evm_core::fork::cache: Failed to read cache file err=Os { code: 2, kind: NotFound, message: "No such file or directory" } path="/Users/alysiahuggins/.foundry/cache/rpc/sepolia/5464723"
+Script ran successfully.
+
+== Return ==
+proxy: address payable 0x61B4C96475B99A6ce01AfF0da7910605D048c125
+multisig: address 0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE
 ```
 
 #### With OpenZeppelin Defender
@@ -128,10 +136,6 @@ forge script contracts/script/FeeContract.s.sol:DeployFeeContractWithDefenderScr
    repeat steps 2 & 3. You may need to refresh the OpenZeppelin Defender "deploy" tab a few times until the second
    transaction appears.
 
-### 2. Contract Verification
-
-Verify the Implementation contract on Etherscan (Use another window as step would not have completed yet)
-
 ### 2. Verify the Contract
 
 Set the following variables in `.env.contracts`
@@ -139,6 +143,8 @@ Set the following variables in `.env.contracts`
 - `ETHERSCAN_API_KEY`
 - `SOLC_VERSION`
 - `FEE_CONTRACT_ADDRESS` (the implementation address)
+
+You can get the SOLC_VERSION by running `solc --version` in command line.
 
 ```bash
 forge verify-contract --chain-id 11155111 \
@@ -148,48 +154,21 @@ $FEE_CONTRACT_ADDRESS \
 contracts/src/FeeContract.sol:FeeContract
 ```
 
-You can get the `$SOLC_VERSION` by running the command `solc --version`.
-
-3. Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options
-   and select the 'is this a proxy?' option. You should then be able to interact with the implementation contract via a
-   proxy.
-
-Example successful deployment response
-
-```bash
-[⠒] Compiling...
-No files changed, compilation skipped
-2024-03-11T16:41:29.919133Z  WARN foundry_evm_core::fork::cache: Failed to read cache file err=Os { code: 2, kind: NotFound, message: "No such file or directory" } path="/Users/alysiahuggins/.foundry/cache/rpc/sepolia/5464723"
-Script ran successfully.
-
-== Return ==
-proxy: address payable 0x61B4C96475B99A6ce01AfF0da7910605D048c125
-multisig: address 0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE
-```
-
 ### 3. Inform Etherscan about your proxy
 
-Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options and
-select the `is this a proxy?` option. You should then be able to interact with the implementation contract via a proxy.
+Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to `Contract > Code > More Options`
+and select the `is this a proxy?` option. You should then be able to interact with the implementation contract via a
+proxy.
 
 ---
 
 ## Deploying the Light Client Contract
 
-Read Deploying the Fee Contract for a more detailed version of this. Since the LightClient contract uses the
-PlonkVerifier library, the PlonkVerifier library has to be deployed and then referenced at deployment time. Thus ensure
-you've deployed the PlonkVerifier ([see steps below](#deploy-the-plonk-verifier-library-with-defender)) and set the
-`$PLONK_VERIFIER_ADDRESS` variable in the command below. Each time modifications are made to the Plonk Verifier,
-contracts that depend on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier
-contract address as part of the deployment. Read Deploying the Fee Contract for a more detailed version of this. Since
-the LightClient contract uses the PlonkVerifier library, the PlonkVerifier library has to be deployed and then
-referenced at deployment time. Thus ensure you've deployed the PlonkVerifier
-([see steps below](#deploy-the-plonk-verifier-library-with-defender)) and set the `$PLONK_VERIFIER_ADDRESS` variable in
-the command below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light
-Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
-
-The Light Client contract is currently in permissioned mode so please follow through steps 4 to ensure that the
-`permissionedProver` has been set.
+Since the LightClient contract uses the `PlonkVerifier` library, the `PlonkVerifier` library has to be **deployed** and
+then referenced at deployment time. Ensure you've deployed the PlonkVerifier
+[see steps below](#deploy-the-plonk-verifier-library) and set the`$PLONK_VERIFIER_ADDRESS` variable in the command
+below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light Client
+contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
 
 ### Prerequisites:
 
@@ -222,12 +201,14 @@ The Light Client contract is currently in permissioned mode so please follow thr
 
 #### Without OpenZeppelin Defender and with a Ledger Hardware Wallet
 
+- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
+
 1. Run the following command in the home directory:
 
 ```bash
    source .env.contracts && \
    forge clean && \
-   forge script contracts/script/LightClient.s.sol:DeployLightClientWithHDWalletScript $NUM_INIT_VALIDATORS $STATE_HISTORY_RETENTION_PERIOD $SAFE_MULTISIG_ADDRESS \
+   forge script contracts/script/LightClient.s.sol:DeployLightClientScript $NUM_INIT_VALIDATORS $STATE_HISTORY_RETENTION_PERIOD $SAFE_MULTISIG_ADDRESS \
    --sig 'run(uint32, uint32, address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
@@ -280,31 +261,6 @@ proxy.
 To enable the permissioned prover on the light client contract, ensure that the following environment variables are set
 in the `.env.contracts` file:
 
-- `SAFE_ORCHESTRATOR_PRIVATE_KEY`
-- `APPROVED_PROVER_ADDRESS`
-- `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
-
-If you don't have typescript installed run the following commands:
-
-- `npm install typescript`
-- `npm install ts-node`
-- `npm install`
-
-Assuming you're in the root folder, run the following command:
-
-```bash
-source .env.contracts && \
-ts-node contracts/script/multisigTransactionProposals/safeSDK/modifyProverModeProposal.ts setProver
-```
-
-Open the URL shown in the console to sign the transaction in the Safe UI.
-
-Once successful, all signers will see a transaction request on the SAFE UI e.g.
-`https://app.safe.global/transactions/queue?safe=$SAFE_MULTISIG_ADDRESS`
-
-Once the transaction has been signed by all signers and executed by one, you should be able to go to the light client
-proxy and read the permissioned prover address on etherscan.
-
 ---
 
 <br/>
@@ -326,6 +282,24 @@ forge script contracts/script/FeeContract.s.sol:UpgradeFeeContractScript \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
 --legacy \
+--broadcast
+```
+
+### Without OpenZeppelin Defender and via a Hardware Wallet
+
+- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
+
+1. Run the following command in the home directory:
+
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/FeeContract.s.sol:UpgradeFeeContractScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true \
+--legacy \
+--ledger \
 --broadcast
 ```
 
@@ -364,6 +338,24 @@ the command below. Each time modifications are made to the Plonk Verifier, contr
 Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
 
 ### Without OpenZeppelin Defender (current method)
+
+1. Run the following command in the home directory:
+
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/LightClient.s.sol:LightClientContractUpgradeScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS \
+--build-info true \
+--legacy \
+--broadcast
+```
+
+### Without OpenZeppelin Defender and via a Hardware Wallet
+
+- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
 
 1. Run the following command in the home directory:
 
@@ -446,10 +438,11 @@ contracts/src/LightClient.sol:LightClient \
 
 ## 4. [Inform Etherscan about your proxy](#3-inform-etherscan-about-your-proxy)
 
-## 5. [Set The Permissioned Prover](#4-set-permissioned-prover)
+---
 
-Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options and
-select the `is this a proxy?` option. You should then be able to interact with the implementation contract via a proxy.
+<br/>
+<br/>
+<br/>
 
 # Deploy the Plonk Verifier Library
 
@@ -470,6 +463,23 @@ forge script contracts/script/PlonkVerifier.s.sol:DeployPlonkVerifierScript \
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --build-info true \
 --legacy \
+--broadcast
+```
+
+## Without Defender and via a hardware wallet (current method)
+
+- Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` file before each deployment.
+- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
+
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/PlonkVerifier.s.sol:DeployPlonkVerifierScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com \
+--build-info true \
+--legacy \
+--ledger \
 --broadcast
 ```
 

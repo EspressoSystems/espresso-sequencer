@@ -22,6 +22,7 @@ contract DeployLightClientScript is Script {
     /// The `owner` parameter should be the address of the multisig wallet to ensure proper
     /// ownership management.
     /// @param numInitValidators number of the validators initially
+    /// @param stateHistoryRetentionPeriod state history retention period in seconds
     /// @param owner The address that will be set as the owner of the proxy (typically a multisig
     /// wallet).
     function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
@@ -32,6 +33,19 @@ contract DeployLightClientScript is Script {
             LC.LightClientState memory lightClientState
         )
     {
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
+
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
@@ -41,61 +55,33 @@ contract DeployLightClientScript is Script {
         (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
             abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
-        // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
-
         proxyAddress = Upgrades.deployUUPSProxy(
             contractName,
-            abi.encodeCall(LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, owner))
+            abi.encodeCall(
+                LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, deployer)
+            )
         );
 
-        // Get the implementation address
-        implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
+        LC lightClientProxy = LC(proxyAddress);
 
-        vm.stopBroadcast();
+        // Currently, the light client is in prover mode so set the permissioned prover
+        address permissionedProver = vm.envAddress("PERMISSIONED_PROVER_ADDRESS");
+        lightClientProxy.setPermissionedProver(permissionedProver);
 
-        return (proxyAddress, implementationAddress, state);
-    }
-}
+        // transfer ownership to the multisig
+        lightClientProxy.transferOwnership(owner);
 
-contract DeployLightClientWithHDWalletScript is Script {
-    string public contractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
-
-    /// @dev Deploys both the proxy and the implementation contract.
-    /// The proxy admin is set as the owner of the contract upon deployment.
-    /// The `owner` parameter should be the address of the multisig wallet to ensure proper
-    /// ownership management.
-    /// @param numInitValidators number of the validators initially
-    /// @param owner The address that will be set as the owner of the proxy (typically a multisig
-    /// wallet).
-    function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
-        public
-        returns (
-            address proxyAddress,
-            address implementationAddress,
-            LC.LightClientState memory lightClientState
-        )
-    {
-        // get the deployer info from the environment and start broadcast as the deployer
-        address admin = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
-
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "mock-genesis";
-        cmds[2] = vm.toString(uint256(numInitValidators));
-
-        bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
-            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
-
-        vm.startBroadcast(admin);
-
-        proxyAddress = Upgrades.deployUUPSProxy(
-            contractName,
-            abi.encodeCall(LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, owner))
+        // verify post deployment details
+        require(
+            lightClientProxy.permissionedProver() == owner,
+            "Post Deployment Verification: Set permissioned prover failed"
+        );
+        require(
+            lightClientProxy.owner() == owner, "Post Deployment Verification: Owner transfer failed"
+        );
+        require(
+            lightClientProxy.stateHistoryRetentionPeriod() == stateHistoryRetentionPeriod,
+            "Post Deployment Verification: stateHistoryRetentionPeriod is not as expected"
         );
 
         // Get the implementation address
@@ -123,11 +109,19 @@ contract LightClientContractUpgradeScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        // get the deployer to depley the new implementation contract
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         // deploy the new implementation contract
         LCV2 implementationContract = new LCV2();
@@ -174,11 +168,19 @@ contract UpgradeLightClientContractWithSameContractScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        // get the deployer to depley the new implementation contract
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         // deploy the new implementation contract
         LC implementationContract = new LC();
@@ -430,10 +432,18 @@ contract UpgradeLightClientWithoutMultisigAdminScript is Script {
     /// TODO get the most recent deployment from the devops tooling
     function run(address mostRecentlyDeployedProxy) external returns (address) {
         // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()));
         return proxy;

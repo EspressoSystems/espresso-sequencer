@@ -24,43 +24,29 @@ contract DeployFeeContractScript is Script {
         public
         returns (address payable proxy, address implementationAddress)
     {
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         address proxyAddress =
             Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (owner)));
 
-        // Get the implementation address
-        implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
+        FC feeContractProxy = FC(payable(proxyAddress));
 
-        vm.stopBroadcast();
-
-        return (payable(proxyAddress), implementationAddress);
-    }
-}
-
-/// @notice Deploys an upgradeable Fee Contract with a hardware wallet and using the OpenZeppelin
-/// Upgrades plugin.
-contract DeployFeeContractWithHDWalletScript is Script {
-    string internal contractName = vm.envString("FEE_CONTRACT_ORIGINAL_NAME");
-
-    /// @dev Deploys both the proxy and the implementation contract.
-    /// The proxy admin is set as the owner of the contract upon deployment.
-    /// The `owner` parameter should be the address of the multisig wallet to ensure proper
-    /// ownership management.
-    /// @param owner The address that will be set as the owner of the proxy (typically a multisig
-    /// wallet).
-    function run(address owner)
-        public
-        returns (address payable proxy, address implementationAddress)
-    {
-        address admin = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
-        vm.startBroadcast(admin);
-
-        address proxyAddress =
-            Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (owner)));
+        // verify post deployment details
+        require(
+            feeContractProxy.owner() == owner,
+            "Post Deployment Verification: The contract owner is the one you specified"
+        );
 
         // Get the implementation address
         implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
@@ -87,11 +73,19 @@ contract UpgradeFeeContractScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        // get the deployer to depley the new implementation contract
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         // deploy the new implementation contract
         FC implementationContract = new FC();
