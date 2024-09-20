@@ -36,33 +36,13 @@
    - `DEPLOYER_MNEMONIC`
    - `DEPLOYER_MNEMONIC_OFFSET`
 
-### If Using OpenZeppelin Defender (deprecated)
-
-1. **Create an Approval Process**  
-   Create an Approval Process that requires the multisig wallet you created above by navigating to
-   `Manage > Approval Processes` in OpenZeppelin Defender.
-
-   - Enter a name for your approval process.
-   - Enter the multisig address shown in the Safe UI.
-   - Enter one of the multisig owner addresses.
-   - Save the changes.
-
-2. **Create a Deployment Environment**  
-   In OpenZeppelin Defender, create a deployment environment by clicking on "Setup" in the
-   [deploy tab](https://defender.openzeppelin.com/v2/#/deploy).
-   - Use "Test Environment" for deploying to testnets (e.g., Sepolia) and "Production Environment" for mainnet.
-   - Choose a network.
-   - Select the approval process created in Step 1.
-   - Save the `DEFENDER_SECRET` ("Team Secret key") and `DEFENDER_KEY` ("Team API Key") shown at the end of this step
-     into the `.env.contracts` file. These keys won't be available later.
-
 ## Deployments
 
 ## Deploying the Fee Contract
 
 ### 1. Deploy
 
-#### Without OpenZeppelin Defender (current method)
+#### Via a Software Wallet
 
 1. Run the following command in the home directory:
 
@@ -78,7 +58,7 @@
    --broadcast
 ```
 
-#### Without OpenZeppelin Defender and via Ledger Hardware Wallet
+#### Via Ledger Hardware Wallet
 
 - Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
 
@@ -109,32 +89,6 @@ Script ran successfully.
 proxy: address payable 0x61B4C96475B99A6ce01AfF0da7910605D048c125
 multisig: address 0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE
 ```
-
-#### With OpenZeppelin Defender
-
-1. Run the following command in the home directory:
-
-```bash
-source .env.contracts && \
-forge clean && \
-forge script contracts/script/FeeContract.s.sol:DeployFeeContractWithDefenderScript \
---ffi \
---rpc-url https://ethereum-sepolia.publicnode.com  \
---build-info true \
-```
-
-2. **View Submitted Transactions**: Go to the [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab OpenZeppelin
-   Defender's UI and click on the current environment to see the transaction. The transaction should be visible with
-   status "SUBMITTED". The page may need to be refreshed a few times. It occasionally may take minutes for transactions
-   to appear.
-3. **Sign & Execute Transactions**: Click that transaction, then "Open in Safe App" which opens up the Safe UI where
-   your signers for that Safe multi-sig wallet can confirm the transaction. The two transactions to be confirmed are:
-   (i) deployment of implementation contract (ii) deployment of proxy contract.
-   - If the transaction looks correct, each signer clicks "confirm".
-   - once we have all signatures, any signer can submit the transactions to the blockchain by clicking, "Execute".
-4. Refresh the OpenZeppelin Defender UI to see the transaction for the deployment of the proxy. For which you'll need to
-   repeat steps 2 & 3. You may need to refresh the OpenZeppelin Defender "deploy" tab a few times until the second
-   transaction appears.
 
 ### 2. Verify the Contract
 
@@ -172,7 +126,7 @@ contract have to be upgraded and should use the new PlonkVerifier contract addre
 
 ### Prerequisites:
 
-- Deploy the PlonkVerifier ([see steps below](#deploy-the-plonk-verifier-library-with-defender)
+- Deploy the PlonkVerifier ([see steps below](#deploy-the-plonk-verifier-library)
 - Ensure the following are in the `.env.contracts` file.
   - `RPC_URL`
   - `SAFE_MULTISIG_ADDRESS`
@@ -182,7 +136,7 @@ contract have to be upgraded and should use the new PlonkVerifier contract addre
 
 ### 1. Deploy
 
-#### Without OpenZeppelin Defender (current method)
+#### Via a Software Wallet
 
 1. Run the following command in the home directory:
 
@@ -199,7 +153,7 @@ contract have to be upgraded and should use the new PlonkVerifier contract addre
    --broadcast
 ```
 
-#### Without OpenZeppelin Defender and with a Ledger Hardware Wallet
+#### Via a Hardware Wallet
 
 - Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
 
@@ -217,20 +171,6 @@ contract have to be upgraded and should use the new PlonkVerifier contract addre
    --legacy \
    --ledger \
    --broadcast
-```
-
-#### With OpenZeppelin Defender
-
-1. Run the following command in the home directory:
-
-```bash
-source .env.contracts && \
-forge clean && \
-forge script contracts/script/LightClient.s.sol:DeployLightClientDefenderScript $STATE_HISTORY_RETENTION_PERIOD \
---sig 'run(uint32)' \
---ffi --rpc-url https://ethereum-sepolia.publicnode.com  \
---build-info true \
---libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
 ```
 
 ### 2. Verify the Contract
@@ -270,7 +210,7 @@ in the `.env.contracts` file:
 
 ## Upgrading the Fee Contract
 
-### Without OpenZeppelin Defender (current method)
+### Via a Software Wallet
 
 1. Run the following command in the home directory:
 
@@ -285,7 +225,7 @@ forge script contracts/script/FeeContract.s.sol:UpgradeFeeContractScript \
 --broadcast
 ```
 
-### Without OpenZeppelin Defender and via a Hardware Wallet
+### Via a Hardware Wallet
 
 - Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
 
@@ -303,41 +243,17 @@ forge script contracts/script/FeeContract.s.sol:UpgradeFeeContractScript \
 --broadcast
 ```
 
-### With OpenZeppelin Defender
-
-1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
-    from the previous deployment by reading a file in the following path:
-    `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
-    deployment by reading the `saltHistory.json` file. Run the following command:
-
-2.  Run the following command in the home directory:
-
-```bash
-source .env.contracts && \
-forge script contracts/script/FeeContract.s.sol:UpgradeFeeContractWithDefenderScript \
---ffi \
---rpc-url https://ethereum-sepolia.publicnode.com  \
---build-info true
-```
-
-3. **Sign and Execute the transaction**: This command requires you to go to OpenZeppelin Defender's UI to see the
-   transaction. Click that transaction which opens up the Safe UI where your signers for that Safe multi-sig wallet can
-   confirm the transaction.
-
-The transactions being confirmed are: (i) the deployment of the new fee contract (ii) the execution of the
-`upgradeToAndCall` method which updates the implementation contract that the proxy contract is referencing.
-
 ## Upgrading the Light Client Contract
 
 Ensure that you update the version in the `getVersion()` method of the latest implementation contract.
 
 Since the LightClient contract uses the PlonkVerifier library, the PlonkVerifier library has to be deployed and then
 referenced at deployment time. Thus ensure you've deployed the PlonkVerifier
-([see steps below](#deploy-the-plonk-verifier-library-with-defender)) and set the `$PLONK_VERIFIER_ADDRESS` variable in
-the command below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light
-Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
+([see steps below](#deploy-the-plonk-verifier-library)) and set the `$PLONK_VERIFIER_ADDRESS` variable in the command
+below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light Client
+contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
 
-### Without OpenZeppelin Defender (current method)
+### Via a Software Wallet
 
 1. Run the following command in the home directory:
 
@@ -353,7 +269,7 @@ forge script contracts/script/LightClient.s.sol:LightClientContractUpgradeScript
 --broadcast
 ```
 
-### Without OpenZeppelin Defender and via a Hardware Wallet
+### Via a Hardware Wallet
 
 - Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
 
@@ -370,31 +286,6 @@ forge script contracts/script/LightClient.s.sol:LightClientContractUpgradeScript
 --legacy \
 --broadcast
 ```
-
-### With OpenZeppelin Defender
-
-1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
-    from the previous deployment by reading a file in the following path:
-    `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
-    deployment by reading the `saltHistory.json` file. Run the following command:
-
-2.  Run the following command in the home directory:
-
-```bash
-source .env.contracts && \
-forge script contracts/script/LightClient.s.sol:UpgradeLightClientWithDefenderScript \
---ffi \
---rpc-url https://ethereum-sepolia.publicnode.com  \
---build-info true \
---libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
-```
-
-3. **Sign and Execute the transaction**: This command requires you to go to OpenZeppelin Defender's UI to see the
-   transaction. Click that transaction which opens up the Safe UI where your signers for that Safe multi-sig wallet can
-   confirm the transaction.
-
-The transactions being confirmed are: (i) the deployment of the new fee contract (ii) the execution of the
-`upgradeToAndCall` method which updates the implementation contract that the proxy contract is referencing.
 
 # Deploying Upgradable Contracts without a Safe Multisig Wallet Admin
 
@@ -446,12 +337,11 @@ contracts/src/LightClient.sol:LightClient \
 
 # Deploy the Plonk Verifier Library
 
-## Without Defender (current method)
+## Via a Software Wallet
 
-The Plonk Verifier contract is not upgradeable and deploying we deploy with defender as part of our workflow so that we
-can also deploy it with a multisig wallet. Each time modifications are made to the Plonk Verifier, contracts that depend
-on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier contract address as
-part of the deployment.
+The Plonk Verifier contract is not upgradeable. Each time modifications are made to the Plonk Verifier, contracts that
+depend on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier contract address
+as part of the deployment.
 
 Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` file before each deployment.
 
@@ -466,7 +356,7 @@ forge script contracts/script/PlonkVerifier.s.sol:DeployPlonkVerifierScript \
 --broadcast
 ```
 
-## Without Defender and via a hardware wallet (current method)
+## Via a Hardware Wallet
 
 - Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` file before each deployment.
 - Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
@@ -481,24 +371,6 @@ forge script contracts/script/PlonkVerifier.s.sol:DeployPlonkVerifierScript \
 --legacy \
 --ledger \
 --broadcast
-```
-
-## With OpenZepplin Defender
-
-The Plonk Verifier contract is not upgradeable and deploying we deploy with defender as part of our workflow so that we
-can also deploy it with a multisig wallet. Each time modifications are made to the Plonk Verifier, contracts that depend
-on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier contract address as
-part of the deployment.
-
-Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` file before each deployment.
-
-```bash
-source .env.contracts && \
-forge clean && \
-forge script contracts/script/PlonkVerifierWithDefender.s.sol:DeployPlonkVerifierWithDefenderScript \
---ffi \
---rpc-url https://ethereum-sepolia.publicnode.com \
---build-info true
 ```
 
 # Known Errors
