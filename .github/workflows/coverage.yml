@@ -21,7 +21,7 @@ env:
   COVERAGE_RUSTDOCFLAGS: >
     -Z threads=8 -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
   CARGO_TEST_CMD: >
-    cargo +nightly test --locked --all-features --no-fail-fast --workspace --exclude contract-bindings
+    cargo +nightly test --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
     --exclude gen-vk-contract --exclude hotshot-contract-adapter --exclude diff-test-hotshot
 
 jobs:
