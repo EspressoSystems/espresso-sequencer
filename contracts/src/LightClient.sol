@@ -406,7 +406,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         public
         view
         virtual
-        returns (BN254.ScalarField hotShotBlockCommRoot)
+        returns (BN254.ScalarField hotShotBlockCommRoot, uint64 hotshotBlockHeight)
     {
         uint256 commitmentsHeight = stateHistoryCommitments.length;
         if (hotShotBlockHeight >= stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
@@ -417,11 +417,17 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
             if (stateHistoryCommitments[i].hotShotBlockHeight > hotShotBlockHeight) {
-                return stateHistoryCommitments[i].hotShotBlockCommRoot;
+                return (
+                    stateHistoryCommitments[i].hotShotBlockCommRoot,
+                    stateHistoryCommitments[i].hotShotBlockHeight
+                );
             }
         }
 
-        return stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockCommRoot;
+        return (
+            stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockCommRoot,
+            stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight
+        );
     }
 
     /// @notice get the number of state history commitments
