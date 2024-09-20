@@ -22,3 +22,6 @@ retries = 2
 slow-timeout = "2m"
 default-filter = 'package(tests)'
 retries = 2
+
+[profile.coverage]
+default-filter = '!test(slow_) | !test(service::test::test_) | !test(uint_bytes) | !package(contract-bindings) | !package(gen-vk-contract) | !package(hotshot-contract-adapter) | !test(diff-test-hotshot)'

@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - release-*
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -14,15 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
+
+  CARGO_TERM_COLOR: always
+  NEXTEST_PROFILE: coverage
   COVERAGE_RUSTFLAGS: >
-    -Z threads=8 -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cllvm-args=--inline-threshold=0
-    -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg
+    -Z threads=8 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg
     hotshot_example
-  COVERAGE_RUSTDOCFLAGS: >
-    -Z threads=8 -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
-  CARGO_TEST_CMD: >
-    cargo +nightly test --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
-    --exclude gen-vk-contract --exclude hotshot-contract-adapter --exclude diff-test-hotshot
 
 jobs:
   code-coverage:
@@ -36,18 +34,23 @@ jobs:
         with:
           version: nightly
 
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
+
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@nextest
+
       # Separate build step for easier identification of failures and timings.
       - name: Build tests for coverage
         run: |
-          $CARGO_TEST_CMD --no-run
+          cargo llvm-cov --no-report nextest --all-features
+          cargo llvm-cov --no-report --doc --all-features
         env:
-          # Do not exceed the memory limit of the public github runner during cargo build.
-          # CARGO_BUILD_JOBS: "2"
           CARGO_INCREMENTAL: "0"
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
           RUSTDOCFLAGS: ${{ env.COVERAGE_RUSTDOCFLAGS }}
@@ -56,20 +59,13 @@ jobs:
       # TODO investigate why `uint_bytes` fail in coverage runs
       - name: Run tests with coverage
         run: |
-          $CARGO_TEST_CMD -- --skip service::test::test_ --skip slow_ --skip uint_bytes
+          cargo llvm-cov report --doctests --lcov --output-path lcov.info
         env:
-          CARGO_INCREMENTAL: "0"
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
-          RUSTDOCFLAGS: ${{ env.COVERAGE_RUSTDOCFLAGS }}
         timeout-minutes: 120
-
-      - uses: alekitto/grcov@v0.2
-        with:
-          config: .github/grcov.yml
-        id: coverage
 
       - name: Coveralls upload
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ${{ steps.coverage.outputs.report }}
+          files: lcov.info
