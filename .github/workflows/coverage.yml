@@ -15,14 +15,13 @@ concurrency:
 
 env:
   COVERAGE_RUSTFLAGS: >
-    -Z threads=8 -Zprofile -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Cllvm-args=--inline-threshold=0
+    -Z threads=8 -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cllvm-args=--inline-threshold=0
     -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg
     hotshot_example
   COVERAGE_RUSTDOCFLAGS: >
-    -Z threads=8 -Zprofile -Ccodegen-units=1 -Cllvm-args=--inline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
-    -Zpanic_abort_tests
+    -Z threads=8 -Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
   CARGO_TEST_CMD: >
-    cargo +nightly test --locked --all-features --no-fail-fast --release --workspace --exclude contract-bindings
+    cargo +nightly test --locked --all-features --no-fail-fast --workspace --exclude contract-bindings
     --exclude gen-vk-contract --exclude hotshot-contract-adapter --exclude diff-test-hotshot
 
 jobs:
