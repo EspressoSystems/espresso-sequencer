@@ -114,7 +114,7 @@ strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
 sqlx = { version = "^0.8", features = ["postgres", "macros"] }
 tagged-base64 = "0.4"
-tide-disco = "0.9"
+tide-disco = "0.9.1"
 thiserror = "1.0.61"
 tracing = "0.1"
 bytesize = "1.3"
