@@ -29,7 +29,7 @@
    - `STATE_HISTORY_RETENTION_PERIOD`
    - `NUM_INIT_VALIDATORS`
    - `FEE_CONTRACT_ORIGINAL_NAME`
-   - `LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME`
+   - `LIGHT_CLIENT_CONTRACT_ORIGINAL_NAME`
    - `PERMISSIONED_PROVER_ADDRESS`
    - `USE_HARDWARE_WALLET` If you're deploying with a hardware wallet set these variables:
    - `DEPLOYER_HARDWARE_WALLET_ADDRESS` Otherwise, set the mnemonic variables:
@@ -138,6 +138,10 @@ contract have to be upgraded and should use the new PlonkVerifier contract addre
 
 #### Via a Software Wallet
 
+In `.env.contracts` set:
+
+- `USE_HARDWARE_WALLET=false`
+
 1. Run the following command in the home directory:
 
 ```bash
@@ -155,7 +159,10 @@ contract have to be upgraded and should use the new PlonkVerifier contract addre
 
 #### Via a Hardware Wallet
 
-- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
+In `.env.contracts` set:
+
+- `DEPLOYER_HARDWARE_WALLET_ADDRESS`
+- `USE_HARDWARE_WALLET=true`
 
 1. Run the following command in the home directory:
 
@@ -212,22 +219,9 @@ in the `.env.contracts` file:
 
 ### Via a Software Wallet
 
-1. Run the following command in the home directory:
+In `.env.contracts` set:
 
-```bash
-source .env.contracts && \
-forge clean && \
-forge script contracts/script/FeeContract.s.sol:UpgradeFeeContractScript \
---ffi \
---rpc-url https://ethereum-sepolia.publicnode.com  \
---build-info true \
---legacy \
---broadcast
-```
-
-### Via a Hardware Wallet
-
-- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
+- `USE_HARDWARE_WALLET=false`
 
 1. Run the following command in the home directory:
 
@@ -239,7 +233,6 @@ forge script contracts/script/FeeContract.s.sol:UpgradeFeeContractScript \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
 --legacy \
---ledger \
 --broadcast
 ```
 
@@ -255,23 +248,9 @@ contract have to be upgraded and should use the new PlonkVerifier contract addre
 
 ### Via a Software Wallet
 
-1. Run the following command in the home directory:
+In `.env.contracts` set:
 
-```bash
-source .env.contracts && \
-forge clean && \
-forge script contracts/script/LightClient.s.sol:LightClientContractUpgradeScript \
---ffi \
---rpc-url https://ethereum-sepolia.publicnode.com  \
---libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS \
---build-info true \
---legacy \
---broadcast
-```
-
-### Via a Hardware Wallet
-
-- Set the `DEPLOYER_HARDWARE_WALLET_ADDRESS` and `USE_HARDWARE_WALLET=true` in `.env.contracts`
+- `USE_HARDWARE_WALLET=false`
 
 1. Run the following command in the home directory:
 
@@ -313,8 +292,8 @@ forge script contracts/script/LightClient.s.sol:UpgradeLightClientWithoutMultisi
 --rpc-url https://ethereum-sepolia.publicnode.com
 ```
 
-_Note_: the `$MNEMONIC_OFFSET` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is the
-first address in that wallet. Otherwise, please specify the correct `$MNEMONIC_OFFSET`
+\*\*_Note_: the `$MNEMONIC_OFFSET` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is
+the first address in that wallet. Otherwise, please specify the correct `$MNEMONIC_OFFSET`
 
 ## 3. Verify the Contract
 
