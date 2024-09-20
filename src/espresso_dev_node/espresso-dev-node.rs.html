@@ -1011,6 +1011,34 @@
 <a href="#1011" id="1011">1011</a>
 <a href="#1012" id="1012">1012</a>
 <a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a>
+<a href="#1023" id="1023">1023</a>
+<a href="#1024" id="1024">1024</a>
+<a href="#1025" id="1025">1025</a>
+<a href="#1026" id="1026">1026</a>
+<a href="#1027" id="1027">1027</a>
+<a href="#1028" id="1028">1028</a>
+<a href="#1029" id="1029">1029</a>
+<a href="#1030" id="1030">1030</a>
+<a href="#1031" id="1031">1031</a>
+<a href="#1032" id="1032">1032</a>
+<a href="#1033" id="1033">1033</a>
+<a href="#1034" id="1034">1034</a>
+<a href="#1035" id="1035">1035</a>
+<a href="#1036" id="1036">1036</a>
+<a href="#1037" id="1037">1037</a>
+<a href="#1038" id="1038">1038</a>
+<a href="#1039" id="1039">1039</a>
+<a href="#1040" id="1040">1040</a>
+<a href="#1041" id="1041">1041</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
@@ -1022,7 +1050,7 @@
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
-    types::{Address, U256},
+    types::{Address, H160, U256},
 };
 <span class="kw">use </span>futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 <span class="kw">use </span>hotshot_state_prover::service::{
@@ -1075,6 +1103,16 @@
     </span>)]
     </span>account_index: u32,
 
+    <span class="doccomment">/// Address for the multisig wallet that will be the admin
+    ///
+    /// This the multisig wallet that will be upgrade contracts and execute admin only functions on contracts
+    </span><span class="attr">#[clap(
+        long,
+        name = <span class="string">"MULTISIG_ADDRESS"</span>,
+        env = <span class="string">"ESPRESSO_SEQUENCER_ETH_MULTISIG_ADDRESS"
+    </span>)]
+    </span>multisig_address: <span class="prelude-ty">Option</span>&lt;H160&gt;,
+
     <span class="doccomment">/// The frequency of updating the light client state, expressed in update interval
     </span><span class="attr">#[clap( long, value_parser = parse_duration, default_value = <span class="string">"20s"</span>, env = <span class="string">"ESPRESSO_STATE_PROVER_UPDATE_INTERVAL"</span>)]
     </span>update_interval: Duration,
@@ -1099,6 +1137,11 @@
     /// If there are fewer indices provided than chains, the base ACCOUNT_INDEX will be used.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_DEPLOYER_ALT_INDICES"</span>)]
     </span>alt_account_indices: Vec&lt;u32&gt;,
+
+    <span class="doccomment">/// Optional list of multisig addresses for the alternate chains.
+    /// If there are fewer multisig addresses provided than chains, the base MULTISIG_ADDRESS will be used.
+    </span><span class="attr">#[arg(long, env = <span class="string">"ESPRESSO_DEPLOYER_ALT_MULTISIG_ADDRESSES"</span>, num_args = <span class="number">1</span>.., value_delimiter = <span class="string">','</span>)]
+    </span>alt_multisig_addresses: Vec&lt;H160&gt;,
 
     <span class="doccomment">/// The frequency of updating the light client state for alt chains.
     /// If there are fewer intervals provided than chains, the base update interval will be used.
@@ -1147,9 +1190,11 @@
         rpc_url,
         mnemonic,
         account_index,
+        multisig_address,
         alt_chain_providers,
         alt_mnemonics,
         alt_account_indices,
+        alt_multisig_addresses,
         sequencer_api_port,
         sequencer_api_max_connections,
         builder_port,
@@ -1217,10 +1262,11 @@
     <span class="kw">let </span><span class="kw-2">mut </span>mock_contracts = BTreeMap::new();
     <span class="kw">let </span><span class="kw-2">mut </span>handles = FuturesUnordered::new();
     <span class="comment">// deploy contract for L1 and each alt chain
-    </span><span class="kw">for </span>(url, mnemonic, account_index, update_interval, retry_interval) <span class="kw">in </span>once((
+    </span><span class="kw">for </span>(url, mnemonic, account_index, multisig_address, update_interval, retry_interval) <span class="kw">in </span>once((
         l1_url.clone(),
         mnemonic.clone(),
         account_index,
+        multisig_address,
         update_interval,
         retry_interval,
     ))
@@ -1234,6 +1280,12 @@
                     .chain(std::iter::repeat(account_index)),
             )
             .zip(
+                alt_multisig_addresses
+                    .into_iter()
+                    .map(<span class="prelude-val">Some</span>)
+                    .chain(std::iter::repeat(multisig_address)),
+            )
+            .zip(
                 alt_prover_update_intervals
                     .into_iter()
                     .chain(std::iter::repeat(update_interval)),
@@ -1243,7 +1295,9 @@
                     .into_iter()
                     .chain(std::iter::repeat(retry_interval)),
             )
-            .map(|((((url, mnc), idx), update), retry)| (url.clone(), mnc, idx, update, retry)),
+            .map(|(((((url, mnc), idx), mlts), update), retry)| {
+                (url.clone(), mnc, idx, mlts, update, retry)
+            }),
     ) {
         <span class="macro">tracing::info!</span>(<span class="string">"deploying the contract for provider: {url:?}"</span>);
 
@@ -1251,9 +1305,11 @@
             url.clone(),
             mnemonic.clone(),
             account_index,
+            multisig_address,
             <span class="bool-val">true</span>,
             <span class="prelude-val">None</span>,
             <span class="kw">async </span>{ <span class="prelude-val">Ok</span>(lc_genesis.clone()) }.boxed(),
+            <span class="prelude-val">None</span>,
             contracts.clone(),
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
