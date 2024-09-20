@@ -3,11 +3,8 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, createSafeTransaction, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
+import { getEnvVar, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
 const UPGRADE_PROXY_CMD = "upgradeProxy" as const;
-
-// declaring the type returned by the createTransaction method in the safe package locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
-type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
 
 interface UpgradeData {
   proxyAddress: string;

@@ -3,10 +3,7 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, createSafeTransaction, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
-
-// declaring the type returned by the createTransaction method in the safe package locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
-type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
+import { getEnvVar, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
 
 async function main() {
   dotenv.config();

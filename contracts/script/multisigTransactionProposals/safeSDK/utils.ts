@@ -1,5 +1,6 @@
 import { ethers } from "ethers"; // Import ethers from the ethers library
 import Safe from "@safe-global/protocol-kit";
+// declaring types locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
 type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
 type SafeSignature = Awaited<ReturnType<Safe["signHash"]>>;
 

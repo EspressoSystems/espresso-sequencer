@@ -3,12 +3,9 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, createSafeTransaction, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
+import { getEnvVar, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
 const SET_PROVER_CMD = "setProver" as const;
 const DISABLE_PROVER_CMD = "disableProver" as const;
-
-// declaring the type returned by the createTransaction method in the safe package locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
-type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
 
 async function main() {
   dotenv.config();
@@ -95,14 +92,12 @@ export async function proposeSetProverTransaction(
   const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
-  // Create the Safe Transaction Object
-  const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
-
-  // Get the transaction hash and sign the transaction
-  const safeTxHash = await safeSDK.getTransactionHash(safeTransaction);
-
-  // Sign the transaction with orchestrator signer that was specified when we created the safeSDK
-  const senderSignature = await safeSDK.signHash(safeTxHash);
+  // Create & Sign the Safe Transaction Object
+  const { safeTransaction, safeTxHash, senderSignature } = await createAndSignSafeTransaction(
+    safeSDK,
+    contractAddress,
+    data,
+  );
 
   // Propose the transaction which can be signed by other owners via the Safe UI
   await safeService.proposeTransaction({
