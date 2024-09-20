@@ -96,7 +96,7 @@ export async function proposeSetProverTransaction(
   // Prepare the transaction data to set the permissioned prover
   let data = createPermissionedProverTxData(proverAddress);
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
@@ -148,7 +148,7 @@ export async function proposeDisableProverTransaction(
   // Prepare the transaction data to disable permissioned prover mode
   let data = createDisablePermissionedProverTxData();
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
