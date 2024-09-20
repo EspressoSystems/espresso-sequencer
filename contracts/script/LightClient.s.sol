@@ -1,15 +1,8 @@
 pragma solidity ^0.8.20;
 
 import { Script } from "forge-std/Script.sol";
-
-import {
-    Defender,
-    ApprovalProcessResponse,
-    ProposeUpgradeResponse
-} from "openzeppelin-foundry-upgrades/Defender.sol";
 import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
-import { UtilsScript } from "./Utils.s.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 

@@ -57,15 +57,15 @@ proxy and read the permissioned prover address. It will be equal to the 0 ETH ad
 
 ## Demonstrating the setPermissionedProver workflow
 
-1. Follow the steps in the deployment script [readme](../../contracts/script/README.md) to set up OpenZeppelin Defender,
-   a Multisig Wallet and deploy the Light Client contract
+1. Follow the steps in the deployment script [readme](../../contracts/script/README.md) to set up a Multisig Wallet and
+   deploy the Light Client contract
 2. Set the environment variables mentioned in the section, [Set Permissioned Prover](#set-permissioned-prover)
 3. Run the `ts-node` command as mentioned in the section, [Set Permissioned Prover](#set-permissioned-prover)
 
 ## Demonstrating the disablePermissionedProver workflow
 
-1. Follow the steps in the deployment script [readme](../../contracts/script/README.md) to set up OpenZeppelin Defender,
-   a Multisig Wallet and deploy the Light Client contract
+1. Follow the steps in the deployment script [readme](../../contracts/script/README.md) to set up a Multisig Wallet and
+   deploy the Light Client contract
 2. Set the environment variables mentioned in the section, [Disable Permissioned Prover](#disable-permissioned-prover)
 3. Run the `ts-node` command as mentioned in the section, [Disable Permissioned Prover](#disable-permissioned-prover)
 
