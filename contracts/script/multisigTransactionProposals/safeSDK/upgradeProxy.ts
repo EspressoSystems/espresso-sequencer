@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
+import { getEnvVar, validateEthereumAddress, getSigner, createAndSignSafeTransaction } from "./utils";
 const UPGRADE_PROXY_CMD = "upgradeProxy" as const;
 
 interface UpgradeData {
@@ -20,8 +20,9 @@ async function main() {
 
     // Initialize web3 provider using the RPC URL from environment variables
     const web3Provider = new ethers.JsonRpcProvider(getEnvVar("RPC_URL"));
-    // Create a signer using the orchestrator's private key and the web3 provider
-    const orchestratorSigner = new ethers.Wallet(getEnvVar("SAFE_ORCHESTRATOR_PRIVATE_KEY"), web3Provider);
+
+    // Get the signer, this signer must be one of the signers on the Safe Multisig Wallet
+    const orchestratorSigner = getSigner(web3Provider);
 
     // Set up Eth Adapter with ethers and the signer
     const ethAdapter = new EthersAdapter({
@@ -72,7 +73,7 @@ function processCommandLineArguments(): UpgradeData {
 }
 
 /**
- * Function to propose the transaction data for upgrading the new implemeantation
+ * Function to propose the transaction data for upgrading the new implementation
  * @param {string} safeSDK - An instance of the Safe SDK
  * @param {string} safeService - An instance of the Safe Service
  * @param {string} signerAddress - The address of the address signing the transaction

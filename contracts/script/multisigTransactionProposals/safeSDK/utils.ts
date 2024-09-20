@@ -1,4 +1,6 @@
 import { ethers } from "ethers"; // Import ethers from the ethers library
+import { LedgerSigner } from "@ethers-ext/signer-ledger";
+import HIDTransport from "@ledgerhq/hw-transport-node-hid";
 import Safe from "@safe-global/protocol-kit";
 // declaring types locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
 type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
@@ -56,6 +58,25 @@ export function createSafeTransactionData(to: string, data: string, value: strin
 }
 
 /**
+ * Function to check if a given string is a valid Ethereum address
+ * @param {string} address - The Ethereum address to validate
+ * @throws {Error} - Throws an error if the address is invalid and doesn't follow Ethereum address standards
+ */
+export function getSigner(web3Provider: ethers.Provider): ethers.Signer {
+  let orchestratorSigner;
+  const use_hardware_wallet = getEnvVar("USE_HARDWARE_WALLET");
+  if (use_hardware_wallet == "true") {
+    // Create a signer using the ledger
+    orchestratorSigner = new LedgerSigner(HIDTransport, web3Provider);
+  } else {
+    // Create a signer using the orchestrator's private key and the web3 provider
+    orchestratorSigner = new ethers.Wallet(getEnvVar("SAFE_ORCHESTRATOR_PRIVATE_KEY"), web3Provider);
+  }
+
+  return orchestratorSigner;
+}
+
+/**
  * Creates a Safe transaction object
  *
  * @param {Safe} safeSDK - An instance of the Safe SDK
@@ -72,9 +93,13 @@ export async function createSafeTransaction(
 ): Promise<LocalSafeTransaction> {
   // Prepare the safe transaction data with the contract address, data, and value
   let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
-  console.log("Safe Transaction Data hex: ", data);
+  if (getEnvVar("USE_HARDWARE_WALLET")) {
+    console.log(`Please sign the message on your connected Ledger device`);
+  }
+
   // Create the safe transaction using the Safe SDK
   const safeTransaction = await safeSDK.createTransaction({ transactions: [safeTransactionData] });
+  console.log("Safe Transaction Data hex: ", data);
 
   return safeTransaction;
 }
