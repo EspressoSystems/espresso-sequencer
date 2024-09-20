@@ -34,13 +34,12 @@ jobs:
         with:
           version: nightly
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
-
 
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@nextest
