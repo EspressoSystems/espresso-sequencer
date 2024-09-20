@@ -3,10 +3,13 @@ pragma solidity ^0.8.20;
 import { Script } from "forge-std/Script.sol";
 
 import { Defender, ApprovalProcessResponse } from "openzeppelin-foundry-upgrades/Defender.sol";
-import { Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import { Options, Upgrades } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
-contract PlonkVerifierDefenderDeployScript is Script {
+/// @notice Deployed the PlonkVerifier library Contract using OpenZeppelin Defender.
+/// the deployment environment details are set in OpenZeppelin Defender which is
+/// identified via the Defender Key and Secret in the environment file
+contract DeployPlonkVerifierWithDefenderScript is Script {
     string public contractName = "PlonkVerifier.sol";
     UtilsScript public utils = new UtilsScript();
     uint256 public contractSalt = uint256(vm.envInt("PLONK_VERIFIER_SALT"));
@@ -49,5 +52,27 @@ contract PlonkVerifierDefenderDeployScript is Script {
         utils.writeJson(saltFilePath, saltFileData);
 
         return (contractAddress, multisig);
+    }
+}
+
+/// @notice Deploys an upgradeable Plonk Verifier Contract using the OpenZeppelin Upgrades plugin.
+/// @dev The Upgrades library has a deployImplementation function which is used here
+contract DeployPlonkVerifierScript is Script {
+    string public contractName = "PlonkVerifier.sol";
+
+    function run() public returns (address contractAddress) {
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
+
+        // Deploy the library
+        Options memory opts;
+        address plonkVeriifer = Upgrades.deployImplementation(contractName, opts);
+
+        vm.stopBroadcast();
+
+        return (plonkVeriifer);
     }
 }

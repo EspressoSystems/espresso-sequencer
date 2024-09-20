@@ -526,7 +526,7 @@ mod test {
             if let Ok(bundle) = builder_client
                 .get::<Bundle<SeqTypes>>(
                     format!(
-                        "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                        "bundle_info/bundle/{parent_view_number}/{parent_commitment}/{}",
                         parent_view_number + 1
                     )
                     .as_str(),

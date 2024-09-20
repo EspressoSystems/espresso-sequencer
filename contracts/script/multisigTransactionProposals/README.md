@@ -9,9 +9,9 @@ wallet.
 ## Set Permissioned Prover
 
 To enable the permissioned prover on the light client contract, ensure that the following environment variables are set
-in the `.env` file:
+in the `.env.contracts` file:
 
-- `SEPOLIA_RPC_URL`
+- `RPC_URL`
 - `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
 - `APPROVED_PROVER_ADDRESS`
@@ -20,6 +20,7 @@ in the `.env` file:
 Assuming you're in the root folder, run the following command:
 
 ```bash
+source .env.contracts && \
 ts-node contracts/script/multisigTransactionProposals/safeSDK/modifyProverModeProposal.ts setProver
 ```
 
@@ -34,9 +35,9 @@ proxy and read the permissioned prover address on etherscan.
 ## Disable Permissioned Prover
 
 To disable the permissioned prover on the light client contract, ensure that the following environment variables are set
-in the `.env` file:
+in the `.env.contracts` file:
 
-- `SEPOLIA_RPC_URL`
+- `RPC_URL`
 - `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
 - `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
@@ -44,6 +45,7 @@ in the `.env` file:
 Assuming you're in the root folder, run the following command:
 
 ```bash
+source .env.contracts && \
 ts-node contracts/script/multisigTransactionProposals/safeSDK/modifyProverModeProposal.ts disableProver
 ```
 

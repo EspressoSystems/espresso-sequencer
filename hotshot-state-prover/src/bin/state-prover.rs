@@ -111,6 +111,9 @@ async fn main() {
         stake_table_capacity: args.stake_table_capacity,
     };
 
+    // validate that the light client contract is a proxy, panics otherwise
+    config.validate_light_client_contract().await.unwrap();
+
     if args.daemon {
         // Launching the prover service daemon
         if let Err(err) = run_prover_service(config, StaticVersion::<0, 1> {}).await {

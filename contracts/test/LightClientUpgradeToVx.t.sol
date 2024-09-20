@@ -2,13 +2,17 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
-import { Test } /*, console2*/ from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { LightClientV3 as LCV3 } from "../test/LightClientV3.sol";
-import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
-import { UpgradeLightClientScript } from "./UpgradeLightClientToV2.s.sol";
-import { UpgradeLightClientScript as ULCV3 } from "./UpgradeLightClientToV3.s.sol";
+// import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
+//     "../script/LightClient.s.sol";
+
+import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
+    "./script/LightClientTestScript.s.sol";
+import { UpgradeLightClientScript as UpgradeScript } from "./script/UpgradeLightClientToV2.s.sol";
+import { UpgradeLightClientScript as ULCV3 } from "./script/UpgradeLightClientToV3.s.sol";
 import { OwnableUpgradeable } from
     "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -20,8 +24,8 @@ contract LightClientUpgradeToVxTest is Test {
     LCV2 public lcV2Proxy;
     LCV3 public lcV3Proxy;
 
-    DeployLightClientContractScript public deployer = new DeployLightClientContractScript();
-    UpgradeLightClientScript public upgraderV2 = new UpgradeLightClientScript();
+    DeployScript public deployer = new DeployScript();
+    UpgradeScript public upgraderV2 = new UpgradeScript();
     ULCV3 public upgraderV3 = new ULCV3();
 
     LCV1.LightClientState public stateV1;

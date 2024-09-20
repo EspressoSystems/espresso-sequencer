@@ -7,7 +7,7 @@ use builder::permissioned::init_node;
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
-    SequencerVersions, V0_1,
+    SequencerVersions, V0_0, V0_1,
 };
 use ethers::types::Address;
 use hotshot_types::{
@@ -322,6 +322,18 @@ async fn main() -> anyhow::Result<()> {
                 genesis,
                 opt,
                 SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+            )
+            .await
+        }
+        (V0_1::VERSION, _) => run(genesis, opt, SequencerVersions::<V0_1, V0_0>::new()).await,
+        (FeeVersion::VERSION, _) => {
+            run(genesis, opt, SequencerVersions::<FeeVersion, V0_0>::new()).await
+        }
+        (MarketplaceVersion::VERSION, _) => {
+            run(
+                genesis,
+                opt,
+                SequencerVersions::<MarketplaceVersion, V0_0>::new(),
             )
             .await
         }
