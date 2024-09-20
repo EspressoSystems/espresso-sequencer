@@ -71,7 +71,7 @@ export async function createSafeTransaction(
 ): Promise<LocalSafeTransaction> {
   // Prepare the safe transaction data with the contract address, data, and value
   let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
-  console.log("data hex: ", data);
+  console.log("Safe Transaction Data hex: ", data);
   // Create the safe transaction using the Safe SDK
   const safeTransaction = await safeSDK.createTransaction({ transactions: [safeTransactionData] });
 
