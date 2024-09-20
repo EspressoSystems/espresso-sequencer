@@ -665,7 +665,6 @@
 <a href="#665" id="665">665</a>
 <a href="#666" id="666">666</a>
 <a href="#667" id="667">667</a>
-<a href="#668" id="668">668</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     alloc::System,
     any,
@@ -711,8 +710,8 @@
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, KeyPair,
-            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, GossipConfig,
+            KeyPair, Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -764,7 +763,6 @@
 };
 <span class="kw">use </span>jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 <span class="kw">use </span>jf_signature::bls_over_bn254::VerKey;
-<span class="kw">use </span>libp2p_networking::network::GossipConfig;
 <span class="kw">use </span>sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
