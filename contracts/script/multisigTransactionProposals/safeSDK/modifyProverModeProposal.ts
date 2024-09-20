@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, createSafeTransactionData, validateEthereumAddress } from "./utils";
+import { getEnvVar, createSafeTransaction, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
 const SET_PROVER_CMD = "setProver" as const;
 const DISABLE_PROVER_CMD = "disableProver" as const;
 
@@ -52,7 +52,7 @@ async function main() {
     }
 
     console.log(
-      `The other owners of the Safe Multisig wallet need to sign the transaction via the Safe UI https://app.safe.global/transactions/queue?safe=sep:${safeAddress}`,
+      `Proposal created successfully. The other owners of the Safe Multisig wallet need to sign the transaction via the Safe UI https://app.safe.global/transactions/queue?safe=sep:${safeAddress}`,
     );
   } catch (error) {
     throw new Error("An error occurred: " + error);
@@ -142,19 +142,21 @@ export async function proposeDisableProverTransaction(
   safeAddress: string,
 ) {
   // Prepare the transaction data to disable permissioned prover mode
-  let data = createDisablePermissionedProverTxData();
+  // Define the ABI of the function to be called
+  const abi = ["function disablePermissionedProverMode()"];
+
+  // Encode the function call with the provided prover address
+  const data = new ethers.Interface(abi).encodeFunctionData("disablePermissionedProverMode", []);
 
   const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
-  // Create the Safe Transaction Object
-  const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
-
-  // Get the transaction hash and sign the transaction
-  const safeTxHash = await safeSDK.getTransactionHash(safeTransaction);
-
-  // Sign the transaction with orchestrator signer that was specified when we created the safeSDK
-  const senderSignature = await safeSDK.signHash(safeTxHash);
+  // Create & Sign the Safe Transaction Object
+  const { safeTransaction, safeTxHash, senderSignature } = await createAndSignSafeTransaction(
+    safeSDK,
+    contractAddress,
+    data,
+  );
 
   // Propose the transaction which can be signed by other owners via the Safe UI
   await safeService.proposeTransaction({
@@ -164,43 +166,6 @@ export async function proposeDisableProverTransaction(
     senderAddress: signerAddress,
     senderSignature: senderSignature.data,
   });
-}
-
-/**
- * Function to create the transaction data for disabling permissioned prover mode
- * @returns {string} - Encoded transaction data
- */
-function createDisablePermissionedProverTxData(): string {
-  // Define the ABI of the function to be called
-  const abi = ["function disablePermissionedProverMode()"];
-
-  // Encode the function call with the provided prover address
-  const data = new ethers.Interface(abi).encodeFunctionData("disablePermissionedProverMode", []);
-  return data; // Return the encoded transaction data
-}
-
-/**
- * Creates a Safe transaction object
- *
- * @param {Safe} safeSDK - An instance of the Safe SDK
- * @param {string} contractAddress - The address of the contract to interact with
- * @param {string} data - The data payload for the transaction
- * @param {string} value - The value to be sent with the transaction
- * @returns {Promise<any>} - A promise that resolves to the Safe transaction object
- */
-async function createSafeTransaction(
-  safeSDK: Safe,
-  contractAddress: string,
-  data: string,
-  value: string,
-): Promise<LocalSafeTransaction> {
-  // Prepare the safe transaction data with the contract address, data, and value
-  let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
-
-  // Create the safe transaction using the Safe SDK
-  const safeTransaction = await safeSDK.createTransaction({ transactions: [safeTransactionData] });
-
-  return safeTransaction;
 }
 
 main();

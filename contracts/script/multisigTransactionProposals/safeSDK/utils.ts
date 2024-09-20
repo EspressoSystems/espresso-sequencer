@@ -1,4 +1,7 @@
 import { ethers } from "ethers"; // Import ethers from the ethers library
+import Safe from "@safe-global/protocol-kit";
+type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
+type SafeSignature = Awaited<ReturnType<Safe["signHash"]>>;
 
 /**
  * Function to check if a given string is a valid Ethereum address
@@ -49,4 +52,56 @@ export function createSafeTransactionData(to: string, data: string, value: strin
     value: value,
   };
   return safeTransactionData; // Return the safe transaction data object
+}
+
+/**
+ * Creates a Safe transaction object
+ *
+ * @param {Safe} safeSDK - An instance of the Safe SDK
+ * @param {string} contractAddress - The address of the contract to interact with
+ * @param {string} data - The data payload for the transaction
+ * @param {string} value - The value to be sent with the transaction
+ * @returns {Promise<any>} - A promise that resolves to the Safe transaction object
+ */
+export async function createSafeTransaction(
+  safeSDK: Safe,
+  contractAddress: string,
+  data: string,
+  value: string,
+): Promise<LocalSafeTransaction> {
+  // Prepare the safe transaction data with the contract address, data, and value
+  let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
+  console.log("data hex: ", data);
+  // Create the safe transaction using the Safe SDK
+  const safeTransaction = await safeSDK.createTransaction({ transactions: [safeTransactionData] });
+
+  return safeTransaction;
+}
+
+/**
+ * Creates and signs a Safe transaction object
+ *
+ * @param {Safe} safeSDK - An instance of the Safe SDK used to interact with the Gnosis Safe
+ * @param {string} contractAddress - The address of the contract to interact with
+ * @param {string} data - The data payload encoded with the ABI for the transaction
+ * @returns {Promise<{ safeTransaction: SafeTransaction; safeTxHash: string; senderSignature: SafeSignature }>} -
+ *          A promise that resolves to an object containing the Safe transaction, transaction hash, and the signature
+ */
+export async function createAndSignSafeTransaction(
+  safeSDK: Safe,
+  contractAddress: string,
+  data: string,
+): Promise<{ safeTransaction: LocalSafeTransaction; safeTxHash: string; senderSignature: SafeSignature }> {
+  validateEthereumAddress(contractAddress);
+
+  // Create the Safe Transaction Object
+  const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
+
+  // Get the transaction hash
+  const safeTxHash = await safeSDK.getTransactionHash(safeTransaction);
+
+  // Sign the transaction
+  const senderSignature = await safeSDK.signHash(safeTxHash);
+
+  return { safeTransaction, safeTxHash, senderSignature };
 }

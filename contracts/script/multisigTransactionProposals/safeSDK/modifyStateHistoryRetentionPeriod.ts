@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, createSafeTransactionData, validateEthereumAddress } from "./utils";
+import { getEnvVar, createSafeTransaction, validateEthereumAddress, createAndSignSafeTransaction } from "./utils";
 
 // declaring the type returned by the createTransaction method in the safe package locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
 type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
@@ -64,20 +64,23 @@ export async function proposeSetStateHistoryRetentionTransaction(
   safeAddress: string,
   stateHistoryRetentionPeriod: number,
 ) {
-  // Prepare the transaction data to set the stateHistoryRetentionPeriod (seconds)
-  let data = createStateHistoryRetentionPeriodTxData(stateHistoryRetentionPeriod);
+  // Define the ABI of the function to be called
+  const abi = ["function setstateHistoryRetentionPeriod(uint32)"];
+
+  // Encode the function call with the provided stateHistoryRetentionPeriod
+  const data = new ethers.Interface(abi).encodeFunctionData("setstateHistoryRetentionPeriod", [
+    stateHistoryRetentionPeriod,
+  ]);
 
   const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
-  // Create the Safe Transaction Object
-  const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
-
-  // Get the transaction hash and sign the transaction
-  const safeTxHash = await safeSDK.getTransactionHash(safeTransaction);
-
-  // Sign the transaction with orchestrator signer that was specified when we created the safeSDK
-  const senderSignature = await safeSDK.signHash(safeTxHash);
+  // Create & Sign the Safe Transaction Object
+  const { safeTransaction, safeTxHash, senderSignature } = await createAndSignSafeTransaction(
+    safeSDK,
+    contractAddress,
+    data,
+  );
 
   // Propose the transaction which can be signed by other owners via the Safe UI
   await safeService.proposeTransaction({
@@ -87,44 +90,6 @@ export async function proposeSetStateHistoryRetentionTransaction(
     senderAddress: signerAddress,
     senderSignature: senderSignature.data,
   });
-}
-
-/**
- * Function to create the transaction data for setting the stateHistoryRetentionPeriod
- * @param {number} retention_period - The state history retention period in seconds
- * @returns {string} - Encoded transaction data
- */
-function createStateHistoryRetentionPeriodTxData(retention_period: number): string {
-  // Define the ABI of the function to be called
-  const abi = ["function setstateHistoryRetentionPeriod(uint32)"];
-
-  // Encode the function call with the provided stateHistoryRetentionPeriod
-  const data = new ethers.Interface(abi).encodeFunctionData("setstateHistoryRetentionPeriod", [retention_period]);
-  return data; // Return the encoded transaction data
-}
-
-/**
- * Creates a Safe transaction object
- *
- * @param {Safe} safeSDK - An instance of the Safe SDK
- * @param {string} contractAddress - The address of the contract to interact with
- * @param {string} data - The data payload for the transaction
- * @param {string} value - The value to be sent with the transaction
- * @returns {Promise<any>} - A promise that resolves to the Safe transaction object
- */
-async function createSafeTransaction(
-  safeSDK: Safe,
-  contractAddress: string,
-  data: string,
-  value: string,
-): Promise<LocalSafeTransaction> {
-  // Prepare the safe transaction data with the contract address, data, and value
-  let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
-  console.log("data hex: ", data);
-  // Create the safe transaction using the Safe SDK
-  const safeTransaction = await safeSDK.createTransaction({ transactions: [safeTransactionData] });
-
-  return safeTransaction;
 }
 
 main();
