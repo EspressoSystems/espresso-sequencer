@@ -70,7 +70,7 @@ hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5
 libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74-patch1" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
@@ -140,3 +140,14 @@ paste = "1.0"
 rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch1" }
