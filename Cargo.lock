@@ -1322,7 +1322,7 @@ dependencies = [
  "jf-merkle-tree",
  "jf-signature",
  "libp2p",
- "libp2p-networking",
+ "libp2p-networking 0.5.74 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.74)",
  "portpicker",
  "rand 0.8.5",
  "sequencer",
@@ -4080,7 +4080,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4108,7 +4108,7 @@ dependencies = [
  "hotshot-types",
  "jf-signature",
  "libp2p-identity",
- "libp2p-networking",
+ "libp2p-networking 0.5.74 (git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1)",
  "lru 0.12.4",
  "num_enum",
  "portpicker",
@@ -4127,7 +4127,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "async-trait",
  "clap",
@@ -4228,7 +4228,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4261,7 +4261,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
@@ -4280,7 +4280,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4291,7 +4291,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4377,7 +4377,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4439,7 +4439,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4454,7 +4454,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4491,7 +4491,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.74"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4537,7 +4537,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5795,6 +5795,41 @@ dependencies = [
 name = "libp2p-networking"
 version = "0.5.74"
 source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.74#b08660bf9e01d4d59a79009d67100ba13895e4b2"
+dependencies = [
+ "anyhow",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bincode",
+ "blake3",
+ "custom_debug 0.5.1",
+ "delegate",
+ "derive_builder",
+ "either",
+ "futures",
+ "hotshot-types",
+ "lazy_static",
+ "libp2p",
+ "libp2p-identity",
+ "libp2p-swarm-derive",
+ "pin-project",
+ "portpicker",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "snafu 0.8.4",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "void",
+]
+
+[[package]]
+name = "libp2p-networking"
+version = "0.5.74"
+source = "git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.74-patch1#4136ca05ea4fb7ee6a398da1c206572a2b230384"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -8627,7 +8662,7 @@ dependencies = [
  "jf-signature",
  "jf-vid",
  "libp2p",
- "libp2p-networking",
+ "libp2p-networking 0.5.74 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.74)",
  "marketplace-builder-core",
  "marketplace-solver",
  "num_enum",
