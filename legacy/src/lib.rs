@@ -18,12 +18,14 @@ pub mod builder_state;
 pub mod service;
 
 // tracking the testing
+#[cfg(test)]
 pub mod testing;
 
 use async_compatibility_layer::channel::UnboundedReceiver;
+use committable::Commitment;
 use hotshot_builder_api::v0_1::builder::BuildError;
 use hotshot_types::{
-    traits::node_implementation::NodeType, utils::BuilderCommitment, vid::VidCommitment,
+    data::Leaf, traits::node_implementation::NodeType, utils::BuilderCommitment, vid::VidCommitment,
 };
 
 /// WaitAndKeep is a helper enum that allows for the lazy polling of a single
@@ -105,13 +107,17 @@ impl<Types: NodeType> std::fmt::Display for BuilderStateId<Types> {
     }
 }
 
-// TODO use new commitment
-trait LegacyCommit<T: NodeType> {
-    fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>>;
+/// References to the parent block that is extended to spawn the new builder state.
+#[derive(Debug, Clone)]
+pub struct ParentBlockReferences<TYPES: NodeType> {
+    pub view_number: TYPES::Time,
+    pub vid_commitment: VidCommitment,
+    pub leaf_commit: Commitment<Leaf<TYPES>>,
+    pub builder_commitment: BuilderCommitment,
 }
-
-impl<T: NodeType> LegacyCommit<T> for hotshot_types::data::Leaf<T> {
-    fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>> {
-        <hotshot_types::data::Leaf<T> as committable::Committable>::commit(self)
+// implement display for the referenced info
+impl<TYPES: NodeType> std::fmt::Display for ParentBlockReferences<TYPES> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "View Number: {:?}", self.view_number)
     }
 }

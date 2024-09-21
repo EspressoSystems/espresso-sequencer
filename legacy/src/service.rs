@@ -33,7 +33,7 @@ use crate::{
 };
 use crate::{
     builder_state::{MessageType, RequestMessage, ResponseMessage},
-    BuilderStateId,
+    BuilderStateId, ParentBlockReferences,
 };
 use crate::{WaitAndKeep, WaitAndKeepGetError};
 use anyhow::anyhow;
@@ -108,7 +108,20 @@ pub struct GlobalState<Types: NodeType> {
     pub blocks: lru::LruCache<BlockId<Types>, BlockInfo<Types>>,
 
     // registered builder states
-    pub spawned_builder_states: HashMap<BuilderStateId<Types>, BroadcastSender<MessageType<Types>>>,
+    pub spawned_builder_states: HashMap<
+        BuilderStateId<Types>,
+        (
+            // This is provided as an Option for convenience with initialization.
+            // When we build the initial state, we don't necessarily want to
+            // have to generate a valid ParentBlockReferences object.  As doing
+            // such would require a bit of setup.  Additionally it would
+            // result in the call signature to `GlobalState::new` changing.
+            // However for every subsequent BuilderState, we expect this value
+            // to be populated.
+            Option<ParentBlockReferences<Types>>,
+            BroadcastSender<MessageType<Types>>,
+        ),
+    >,
 
     // builder state -> last built block , it is used to respond the client
     // if the req channel times out during get_available_blocks
@@ -170,7 +183,7 @@ impl<Types: NodeType> GlobalState<Types> {
             parent_commitment: bootstrapped_builder_state_id,
             view: bootstrapped_view_num,
         };
-        spawned_builder_states.insert(bootstrap_id.clone(), bootstrap_sender.clone());
+        spawned_builder_states.insert(bootstrap_id.clone(), (None, bootstrap_sender.clone()));
         GlobalState {
             blocks: LruCache::new(NonZeroUsize::new(256).unwrap()),
             spawned_builder_states,
@@ -197,12 +210,14 @@ impl<Types: NodeType> GlobalState<Types> {
     pub fn register_builder_state(
         &mut self,
         parent_id: BuilderStateId<Types>,
+        built_from_proposed_block: ParentBlockReferences<Types>,
         request_sender: BroadcastSender<MessageType<Types>>,
     ) {
         // register the builder state
-        let previous_value = self
-            .spawned_builder_states
-            .insert(parent_id.clone(), request_sender);
+        let previous_value = self.spawned_builder_states.insert(
+            parent_id.clone(),
+            (Some(built_from_proposed_block), request_sender),
+        );
 
         if let Some(previous_value) = previous_value {
             tracing::warn!(
@@ -328,9 +343,9 @@ impl<Types: NodeType> GlobalState<Types> {
         &self,
         key: &BuilderStateId<Types>,
     ) -> Result<&BroadcastSender<MessageType<Types>>, GetChannelForMatchingBuilderError> {
-        if let Some(channel) = self.spawned_builder_states.get(key) {
+        if let Some(id_and_sender) = self.spawned_builder_states.get(key) {
             tracing::info!("Got matching builder for parent {}", key);
-            Ok(channel)
+            Ok(&id_and_sender.1)
         } else {
             tracing::warn!(
                 "failed to recover builder for parent {}, using highest view num builder with {}",
@@ -340,6 +355,7 @@ impl<Types: NodeType> GlobalState<Types> {
             // get the sender for the highest view number builder
             self.spawned_builder_states
                 .get(&self.highest_view_num_builder_id)
+                .map(|(_, sender)| sender)
                 .ok_or(GetChannelForMatchingBuilderError::NoBuilderStateFound)
         }
     }
@@ -582,12 +598,13 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
                     .cloned()
             };
 
-            if let Some(builder) = found_builder_state {
+            if let Some(id_and_sender) = found_builder_state {
                 tracing::info!(
                     "Got matching BlockBuilder for {state_id}, sending get_available_blocks request",
                 );
 
-                if let Err(e) = builder
+                if let Err(e) = id_and_sender
+                    .1
                     .broadcast(MessageType::RequestMessage(req_msg.clone()))
                     .await
                 {
@@ -1767,6 +1784,7 @@ mod test {
 
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
+    use committable::{Commitment, Committable};
     use futures::{
         channel::mpsc::{channel, Receiver},
         StreamExt,
@@ -1805,7 +1823,7 @@ mod test {
             connect_to_events_service, ConnectToEventsServiceError, HandleReceivedTxnsError,
             INITIAL_MAX_BLOCK_SIZE,
         },
-        BlockId, BuilderStateId, LegacyCommit,
+        BlockId, BuilderStateId, ParentBlockReferences,
     };
 
     use super::{
@@ -1906,7 +1924,16 @@ mod test {
                 view: ViewNumber::new(5),
             };
 
-            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+            state.register_builder_state(
+                builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: ViewNumber::new(5),
+                    vid_commitment: parent_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                req_sender.clone(),
+            );
 
             assert_eq!(
                 state.spawned_builder_states.len(),
@@ -1930,7 +1957,16 @@ mod test {
                 view: ViewNumber::new(6),
             };
 
-            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+            state.register_builder_state(
+                builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: ViewNumber::new(6),
+                    vid_commitment: parent_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                req_sender.clone(),
+            );
 
             assert_eq!(
                 state.spawned_builder_states.len(),
@@ -1975,7 +2011,16 @@ mod test {
                 view: ViewNumber::new(5),
             };
 
-            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+            state.register_builder_state(
+                builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: ViewNumber::new(5),
+                    vid_commitment: parent_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                req_sender.clone(),
+            );
 
             assert_eq!(
                 state.spawned_builder_states.len(),
@@ -2000,7 +2045,16 @@ mod test {
             // This is the same BuilderStateId as the previous one, so it should
             // replace the previous one.  Which means that the previous one
             // may no longer be published to.
-            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+            state.register_builder_state(
+                builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: ViewNumber::new(5),
+                    vid_commitment: parent_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                req_sender.clone(),
+            );
 
             assert_eq!(
                 state.spawned_builder_states.len(),
@@ -2018,11 +2072,12 @@ mod test {
                 view: ViewNumber::new(5),
             };
 
-            let req_sender = state.spawned_builder_states.get(&builder_state_id).unwrap();
+            let req_id_and_sender = state.spawned_builder_states.get(&builder_state_id).unwrap();
             let (response_sender, _) = unbounded();
 
             assert!(
-                req_sender
+                req_id_and_sender
+                    .1
                     .broadcast(MessageType::RequestMessage(RequestMessage {
                         state_id: builder_state_id,
                         response_channel: response_sender,
@@ -2070,7 +2125,16 @@ mod test {
                 view: ViewNumber::new(6),
             };
 
-            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+            state.register_builder_state(
+                builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: ViewNumber::new(6),
+                    vid_commitment: parent_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                req_sender.clone(),
+            );
 
             assert_eq!(
                 state.spawned_builder_states.len(),
@@ -2094,7 +2158,16 @@ mod test {
                 view: ViewNumber::new(5),
             };
 
-            state.register_builder_state(builder_state_id.clone(), req_sender.clone());
+            state.register_builder_state(
+                builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: ViewNumber::new(5),
+                    vid_commitment: parent_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                req_sender.clone(),
+            );
 
             assert_eq!(
                 state.spawned_builder_states.len(),
@@ -2611,10 +2684,19 @@ mod test {
 
         // We register a few builder states.
         for i in 1..=10 {
+            let vid_commit = vid_commitment(&[i], 4);
+            let view = ViewNumber::new(i as u64);
+
             state.register_builder_state(
                 BuilderStateId {
-                    parent_commitment: vid_commitment(&[i], 4),
-                    view: ViewNumber::new(i as u64),
+                    parent_commitment: vid_commit,
+                    view,
+                },
+                ParentBlockReferences {
+                    view_number: view,
+                    vid_commitment: vid_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2694,10 +2776,19 @@ mod test {
 
         // We register a few builder states.
         for i in 1..=10 {
+            let vid_commit = vid_commitment(&[i], 4);
+            let view = ViewNumber::new(i as u64);
+
             state.register_builder_state(
                 BuilderStateId {
-                    parent_commitment: vid_commitment(&[i], 4),
-                    view: ViewNumber::new(i as u64),
+                    parent_commitment: vid_commit,
+                    view,
+                },
+                ParentBlockReferences {
+                    view_number: view,
+                    vid_commitment: vid_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2762,10 +2853,19 @@ mod test {
 
         // We register a few builder states.
         for i in 1..=10 {
+            let vid_commit = vid_commitment(&[i], 4);
+            let view = ViewNumber::new(i as u64);
+
             state.register_builder_state(
                 BuilderStateId {
-                    parent_commitment: vid_commitment(&[i], 4),
-                    view: ViewNumber::new(i as u64),
+                    parent_commitment: vid_commit,
+                    view,
+                },
+                ParentBlockReferences {
+                    view_number: view,
+                    vid_commitment: vid_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2794,10 +2894,19 @@ mod test {
 
         // We re-add these removed builder_state_ids
         for i in 1..10 {
+            let vid_commit = vid_commitment(&[i], 4);
+            let view = ViewNumber::new(i as u64);
+
             state.register_builder_state(
                 BuilderStateId {
-                    parent_commitment: vid_commitment(&[i], 4),
-                    view: ViewNumber::new(i as u64),
+                    parent_commitment: vid_commit,
+                    view,
+                },
+                ParentBlockReferences {
+                    view_number: view,
+                    vid_commitment: vid_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2841,10 +2950,19 @@ mod test {
 
         // We register a few builder states.
         for i in 1..=10 {
+            let vid_commit = vid_commitment(&[i], 4);
+            let view = ViewNumber::new(i as u64);
+
             state.register_builder_state(
                 BuilderStateId {
-                    parent_commitment: vid_commitment(&[i], 4),
-                    view: ViewNumber::new(i as u64),
+                    parent_commitment: vid_commit,
+                    view,
+                },
+                ParentBlockReferences {
+                    view_number: view,
+                    vid_commitment: vid_commit,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -3220,8 +3338,16 @@ mod test {
             // We insert a sender so that the next time this stateId is requested,
             // it will be available to send data back.
             let (response_sender, response_receiver) = async_broadcast::broadcast(10);
-            write_locked_global_state
-                .register_builder_state(expected_builder_state_id.clone(), response_sender);
+            write_locked_global_state.register_builder_state(
+                expected_builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: expected_builder_state_id.view,
+                    vid_commitment: expected_builder_state_id.parent_commitment,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                response_sender,
+            );
 
             response_receiver
         };
@@ -3333,8 +3459,16 @@ mod test {
             // We insert a sender so that the next time this stateId is requested,
             // it will be available to send data back.
             let (response_sender, response_receiver) = async_broadcast::broadcast(10);
-            write_locked_global_state
-                .register_builder_state(expected_builder_state_id.clone(), response_sender);
+            write_locked_global_state.register_builder_state(
+                expected_builder_state_id.clone(),
+                ParentBlockReferences {
+                    view_number: expected_builder_state_id.view,
+                    vid_commitment: expected_builder_state_id.parent_commitment,
+                    leaf_commit: Commitment::from_raw([0; 32]),
+                    builder_commitment: BuilderCommitment::from_bytes([]),
+                },
+                response_sender,
+            );
 
             response_receiver
         };
