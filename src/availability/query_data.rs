@@ -213,10 +213,12 @@ impl<Types: NodeType> LeafQueryData<Types> {
         leaf: Leaf<Types>,
         qc: QuorumCertificate<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
+        // TODO: Replace with the new `commit`.
+        let leaf_commit = <Leaf<Types> as Committable>::commit(&leaf);
         ensure!(
-            qc.data.leaf_commit == leaf.commit(),
+            qc.data.leaf_commit == leaf_commit,
             InconsistentLeafSnafu {
-                leaf: leaf.commit(),
+                leaf: leaf_commit,
                 qc_leaf: qc.data.leaf_commit
             }
         );
@@ -246,7 +248,8 @@ impl<Types: NodeType> LeafQueryData<Types> {
     }
 
     pub fn hash(&self) -> LeafHash<Types> {
-        self.leaf.commit()
+        // TODO: Replace with the new `commit`.
+        <Leaf<Types> as Committable>::commit(&self.leaf)
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {
