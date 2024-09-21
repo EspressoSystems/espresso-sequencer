@@ -121,3 +121,14 @@ impl<TYPES: NodeType> std::fmt::Display for ParentBlockReferences<TYPES> {
         write!(f, "View Number: {:?}", self.view_number)
     }
 }
+
+// TODO use new commitment
+trait LegacyCommit<T: NodeType> {
+    fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>>;
+}
+
+impl<T: NodeType> LegacyCommit<T> for hotshot_types::data::Leaf<T> {
+    fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>> {
+        <hotshot_types::data::Leaf<T> as committable::Committable>::commit(self)
+    }
+}

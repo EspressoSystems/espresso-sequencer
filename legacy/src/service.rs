@@ -1784,7 +1784,7 @@ mod test {
 
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
-    use committable::{Commitment, Committable};
+    use committable::Commitment;
     use futures::{
         channel::mpsc::{channel, Receiver},
         StreamExt,
@@ -1818,12 +1818,10 @@ mod test {
         builder_state::{
             BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TransactionSource,
             TriggerStatus,
-        },
-        service::{
+        }, service::{
             connect_to_events_service, ConnectToEventsServiceError, HandleReceivedTxnsError,
             INITIAL_MAX_BLOCK_SIZE,
-        },
-        BlockId, BuilderStateId, ParentBlockReferences,
+        }, BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences
     };
 
     use super::{

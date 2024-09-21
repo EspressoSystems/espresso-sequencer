@@ -43,7 +43,7 @@ mod tests {
     use crate::service::{
         handle_received_txns, GlobalState, ProxyGlobalState, ReceivedTransaction,
     };
-    use crate::ParentBlockReferences;
+    use crate::{LegacyCommit, ParentBlockReferences};
     use async_lock::RwLock;
     use committable::{Commitment, CommitmentBoundsArkless, Committable};
     use sha2::{Digest, Sha256};
@@ -153,7 +153,7 @@ mod tests {
         let mut previous_commitment = vid_commitment(&[], 8);
         let mut previous_view = ViewNumber::new(0);
         let mut previous_qc_proposal = {
-            let previous_jc = QuorumCertificate::<TestTypes>::genesis(
+            let previous_jc = QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -165,6 +165,8 @@ mod tests {
                     payload_commitment: previous_commitment,
                     builder_commitment: BuilderCommitment::from_bytes([]),
                     timestamp: 0,
+                    metadata: TestMetadata { num_transactions: 0 },
+                    random: 1, // arbitrary
                 },
                 view_number: ViewNumber::new(0),
                 justify_qc: previous_jc.clone(),
@@ -268,7 +270,7 @@ mod tests {
                 let da_proposal_message = {
                     let da_proposal = DaProposal {
                         encoded_transactions: encoded_transactions.clone().into(),
-                        metadata: TestMetadata,
+                        metadata: TestMetadata { num_transactions: encoded_transactions.len() as u64 },
                         view_number: ViewNumber::new(round as u64),
                     };
                     let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
@@ -324,6 +326,8 @@ mod tests {
                         payload_commitment: block_payload_commitment,
                         builder_commitment,
                         timestamp: round as u64,
+                        metadata,
+                        random: 1, // arbitrary
                     };
 
                     let justify_qc = {
@@ -335,7 +339,7 @@ mod tests {
                         let leaf = Leaf::from_quorum_proposal(&previous_qc_proposal);
 
                         let q_data = QuorumData::<TestTypes> {
-                            leaf_commit: leaf.commit(),
+                            leaf_commit: leaf.legacy_commit(),
                         };
 
                         let previous_qc_view_number = previous_qc_proposal.view_number.u64();
