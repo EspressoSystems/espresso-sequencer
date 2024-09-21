@@ -165,7 +165,9 @@ mod tests {
                     payload_commitment: previous_commitment,
                     builder_commitment: BuilderCommitment::from_bytes([]),
                     timestamp: 0,
-                    metadata: TestMetadata { num_transactions: 0 },
+                    metadata: TestMetadata {
+                        num_transactions: 0,
+                    },
                     random: 1, // arbitrary
                 },
                 view_number: ViewNumber::new(0),
@@ -270,7 +272,9 @@ mod tests {
                 let da_proposal_message = {
                     let da_proposal = DaProposal {
                         encoded_transactions: encoded_transactions.clone().into(),
-                        metadata: TestMetadata { num_transactions: encoded_transactions.len() as u64 },
+                        metadata: TestMetadata {
+                            num_transactions: encoded_transactions.len() as u64,
+                        },
                         view_number: ViewNumber::new(round as u64),
                     };
                     let encoded_transactions_hash = Sha256::digest(&encoded_transactions);

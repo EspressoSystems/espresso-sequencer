@@ -1818,10 +1818,12 @@ mod test {
         builder_state::{
             BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TransactionSource,
             TriggerStatus,
-        }, service::{
+        },
+        service::{
             connect_to_events_service, ConnectToEventsServiceError, HandleReceivedTxnsError,
             INITIAL_MAX_BLOCK_SIZE,
-        }, BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences
+        },
+        BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences,
     };
 
     use super::{

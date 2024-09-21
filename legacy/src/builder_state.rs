@@ -14,7 +14,8 @@ use hotshot_types::{
 use committable::Commitment;
 
 use crate::{
-    service::{GlobalState, ReceivedTransaction}, BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences
+    service::{GlobalState, ReceivedTransaction},
+    BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences,
 };
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
