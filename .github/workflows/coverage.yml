@@ -44,21 +44,14 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@nextest
 
-      # Separate build step for easier identification of failures and timings.
+      # TODO investigate why `uint_bytes` fail in coverage runs
       - name: Build tests for coverage
         run: |
           cargo llvm-cov --no-report nextest --all-features
-        env:
-          RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
-        timeout-minutes: 90
-
-      # TODO investigate why `uint_bytes` fail in coverage runs
-      - name: Run tests with coverage
-        run: |
           cargo llvm-cov report --lcov --output-path lcov.info
         env:
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
-        timeout-minutes: 120
+        timeout-minutes: 90
 
       - name: Coveralls upload
         uses: coverallsapp/github-action@master
