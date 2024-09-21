@@ -25,6 +25,7 @@ mod tests {
     use async_compatibility_layer::{art::async_spawn, channel::UnboundedReceiver};
     use hotshot::types::SignatureKey;
     use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         signature_key::BuilderKey,
         simple_vote::QuorumData,
@@ -80,7 +81,7 @@ mod tests {
             type Transaction = TestTransaction;
             type ValidatedState = TestValidatedState;
             type InstanceState = TestInstanceState;
-            type Membership = GeneralStaticCommittee<TestTypes, Self::SignatureKey>;
+            type Membership = GeneralStaticCommittee<Self>;
             type BuilderSignatureKey = BuilderKey;
             type AuctionResult = TestAuctionResult;
         }
@@ -139,7 +140,9 @@ mod tests {
             // Prepare the DA proposal message
             let da_proposal = DaProposal {
                 encoded_transactions: encoded_transactions.clone().into(),
-                metadata: TestMetadata,
+                metadata: TestMetadata {
+                    num_transactions: 1,
+                },
                 view_number: ViewNumber::new(i as u64),
             };
             let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
@@ -198,11 +201,13 @@ mod tests {
                 payload_commitment: block_payload_commitment,
                 builder_commitment,
                 timestamp: i as u64,
+                metadata,
+                random: 1, // arbitrary
             };
 
             let justify_qc = match i {
                 0 => {
-                    QuorumCertificate::<TestTypes>::genesis(
+                    QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
                         &TestValidatedState::default(),
                         &TestInstanceState::default(),
                     )
@@ -218,9 +223,9 @@ mod tests {
                     let leaf =
                         Leaf::from_quorum_proposal(&sqc_msgs[(i - 1) as usize].proposal.data);
 
-                    let q_data = QuorumData::<TestTypes> {
-                        leaf_commit: leaf.commit(),
-                    };
+                    // TODO: Replace with the new `commit`.
+                    let leaf_commit = <Leaf<TestTypes> as Committable>::commit(&leaf);
+                    let q_data = QuorumData::<TestTypes> { leaf_commit };
 
                     let previous_qc_view_number =
                         sqc_msgs[(i - 1) as usize].proposal.data.view_number.u64();

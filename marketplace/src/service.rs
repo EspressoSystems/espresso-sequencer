@@ -28,7 +28,7 @@ use crate::{
         BuildBlockInfo, DaProposalMessage, DecideMessage, MessageType, QuorumProposalMessage,
         RequestMessage, ResponseMessage, TransactionSource,
     },
-    utils::{BlockId, BuilderStateId, ParentBlockReferences},
+    utils::{BlockId, BuilderStateId, LegacyCommit as _, ParentBlockReferences},
 };
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{InactiveReceiver, Sender as BroadcastSender, TrySendError};
@@ -743,7 +743,7 @@ async fn handle_qc_event<TYPES: NodeType>(
     let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
 
     // check if the sender is the leader and the signature is valid; if yes, broadcast the QC proposal
-    if !sender.validate(&quorum_proposal.signature, leaf.commit().as_ref()) {
+    if !sender.validate(&quorum_proposal.signature, leaf.legacy_commit().as_ref()) {
         error!("Validation Failure on QCProposal");
         return;
     };

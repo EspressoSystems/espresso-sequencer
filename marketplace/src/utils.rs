@@ -234,3 +234,14 @@ impl<TYPES: NodeType, V: StaticVersionType + 'static> Stream for EventServiceStr
         }
     }
 }
+
+// TODO use new commitment
+pub trait LegacyCommit<T: NodeType> {
+    fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>>;
+}
+
+impl<T: NodeType> LegacyCommit<T> for hotshot_types::data::Leaf<T> {
+    fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>> {
+        <hotshot_types::data::Leaf<T> as committable::Committable>::commit(self)
+    }
+}

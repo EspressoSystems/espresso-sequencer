@@ -6,7 +6,7 @@ use crate::{
         ResponseMessage,
     },
     service::BroadcastSenders,
-    utils::BuilderStateId,
+    utils::{BuilderStateId, LegacyCommit},
 };
 use async_broadcast::broadcast;
 use async_compatibility_layer::channel::{unbounded, UnboundedReceiver};
@@ -30,6 +30,7 @@ use hotshot_types::{
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResult,
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
+    node_types::TestVersions,
     state_types::{TestInstanceState, TestValidatedState},
 };
 use serde::{Deserialize, Serialize};
@@ -55,7 +56,7 @@ impl NodeType for TestTypes {
     type Transaction = TestTransaction;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
-    type Membership = GeneralStaticCommittee<TestTypes, Self::SignatureKey>;
+    type Membership = GeneralStaticCommittee<Self>;
     type BuilderSignatureKey = BuilderKey;
     type AuctionResult = TestAuctionResult;
 }
@@ -125,14 +126,16 @@ pub async fn calc_proposal_msg(
 ) {
     // get transactions submitted in previous rounds, [] for genesis
     // and simulate the block built from those
+    let num_transactions = transactions.len() as u64;
     let txn_commitments = transactions.iter().map(Committable::commit).collect();
     let encoded_transactions = TestTransaction::encode(&transactions);
     let block_payload = TestBlockPayload { transactions };
     let block_vid_commitment = vid_commitment(&encoded_transactions, num_storage_nodes);
+    let metadata = TestMetadata { num_transactions };
     let block_builder_commitment =
         <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
             &block_payload,
-            &TestMetadata,
+            &metadata,
         );
 
     // generate key for leader of this round
@@ -151,11 +154,13 @@ pub async fn calc_proposal_msg(
         payload_commitment: block_vid_commitment,
         builder_commitment: block_builder_commitment,
         timestamp: round as u64,
+        metadata,
+        random: 1, // arbitrary
     };
 
     let justify_qc = match prev_quorum_proposal.as_ref() {
         None => {
-            QuorumCertificate::<TestTypes>::genesis(
+            QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -164,7 +169,7 @@ pub async fn calc_proposal_msg(
         Some(prev_proposal) => {
             let prev_justify_qc = &prev_proposal.justify_qc;
             let quorum_data = QuorumData::<TestTypes> {
-                leaf_commit: Leaf::from_quorum_proposal(prev_proposal).commit(),
+                leaf_commit: Leaf::from_quorum_proposal(prev_proposal).legacy_commit(),
             };
 
             // form a justify qc
