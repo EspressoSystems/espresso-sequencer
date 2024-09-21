@@ -991,6 +991,9 @@
 <a href="#991" id="991">991</a>
 <a href="#992" id="992">992</a>
 <a href="#993" id="993">993</a>
+<a href="#994" id="994">994</a>
+<a href="#995" id="995">995</a>
+<a href="#996" id="996">996</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::{BTreeMap, HashMap},
     path::Path,
@@ -1041,7 +1044,7 @@
     <span class="kw">pub </span>stake_table: StakeTableConfig,
     <span class="attr">#[serde(default)]
     </span><span class="kw">pub </span>accounts: HashMap&lt;FeeAccount, FeeAmount&gt;,
-    <span class="kw">pub </span>l1_finalized: <span class="prelude-ty">Option</span>&lt;L1Finalized&gt;,
+    <span class="kw">pub </span>l1_finalized: L1Finalized,
     <span class="kw">pub </span>header: GenesisHeader,
     <span class="attr">#[serde(rename = <span class="string">"upgrade"</span>, with = <span class="string">"upgrade_ser"</span>)]
     #[serde(default)]
@@ -1362,7 +1365,7 @@
         );
         <span class="macro">assert_eq!</span>(
             genesis.l1_finalized,
-            <span class="prelude-val">Some</span>(L1Finalized::Block(L1BlockInfo {
+            L1Finalized::Block(L1BlockInfo {
                 number: <span class="number">64</span>,
                 timestamp: <span class="number">0x123def</span>.into(),
                 hash: H256([
@@ -1370,7 +1373,7 @@
                     <span class="number">0xf3</span>, <span class="number">0x0a</span>, <span class="number">0x47</span>, <span class="number">0xde</span>, <span class="number">0x02</span>, <span class="number">0xcf</span>, <span class="number">0x28</span>, <span class="number">0xad</span>, <span class="number">0x68</span>, <span class="number">0xc8</span>, <span class="number">0x9e</span>, <span class="number">0x10</span>, <span class="number">0x4c</span>,
                     <span class="number">0x00</span>, <span class="number">0xc4</span>, <span class="number">0xe5</span>, <span class="number">0x1b</span>, <span class="number">0xb7</span>, <span class="number">0xa5
                 </span>])
-            }))
+            })
         );
     }
 
@@ -1391,6 +1394,9 @@
 
             </span>[header]
             timestamp = <span class="number">123456
+
+            </span>[l1_finalized]
+            number = <span class="number">0
         </span>}
         .to_string();
 
@@ -1414,7 +1420,7 @@
             }
         );
         <span class="macro">assert_eq!</span>(genesis.accounts, HashMap::default());
-        <span class="macro">assert_eq!</span>(genesis.l1_finalized, <span class="prelude-val">None</span>);
+        <span class="macro">assert_eq!</span>(genesis.l1_finalized, L1Finalized::Number { number: <span class="number">0 </span>});
     }
 
     <span class="attr">#[test]
@@ -1441,10 +1447,7 @@
         .to_string();
 
         <span class="kw">let </span>genesis: Genesis = toml::from_str(<span class="kw-2">&amp;</span>toml).unwrap_or_else(|err| <span class="macro">panic!</span>(<span class="string">"{err:#}"</span>));
-        <span class="macro">assert_eq!</span>(
-            genesis.l1_finalized,
-            <span class="prelude-val">Some</span>(L1Finalized::Number { number: <span class="number">42 </span>})
-        );
+        <span class="macro">assert_eq!</span>(genesis.l1_finalized, L1Finalized::Number { number: <span class="number">42 </span>});
     }
 
     <span class="attr">#[async_std::test]
@@ -1672,6 +1675,9 @@
 
             </span>[header]
             timestamp = <span class="string">"2024-05-16T11:20:28-04:00"
+
+            </span>[l1_finalized]
+            number = <span class="number">0
         </span>}
         .to_string();
 
