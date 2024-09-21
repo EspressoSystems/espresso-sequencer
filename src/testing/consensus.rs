@@ -92,17 +92,15 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             })
             .collect::<Vec<_>>();
 
-        let da_membership = MockMembership::create_election(
+        let da_membership = MockMembership::new(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake.clone(),
             Topic::Da,
-            0,
         );
-        let non_da_membership = MockMembership::create_election(
+        let non_da_membership = MockMembership::new(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake.clone(),
             Topic::Global,
-            0,
         );
         let memberships = Memberships {
             quorum_membership: non_da_membership.clone(),
@@ -130,7 +128,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             builder_urls: vec1::vec1![builder_url.clone()],
             fixed_leader_for_gpuvid: 0,
             num_nodes_with_stake: num_staked_nodes,
-            num_nodes_without_stake: 0,
             known_nodes_with_stake: known_nodes_with_stake.clone(),
             known_nodes_without_stake: vec![],
             my_own_validator_config: Default::default(),
@@ -142,7 +139,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             execution_type: ExecutionType::Continuous,
             da_staked_committee_size: pub_keys.len(),
             known_da_nodes: known_nodes_with_stake.clone(),
-            da_non_staked_committee_size: 0,
             data_request_delay: Duration::from_millis(200),
             view_sync_timeout: Duration::from_millis(250),
             start_threshold: (
@@ -200,9 +196,11 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             config,
                             memberships,
                             network,
-                            HotShotInitializer::from_genesis(TestInstanceState::default())
-                                .await
-                                .unwrap(),
+                            HotShotInitializer::from_genesis::<MockVersions>(
+                                TestInstanceState::default(),
+                            )
+                            .await
+                            .unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                             hs_storage,
                             MarketplaceConfig {

@@ -163,17 +163,15 @@ async fn init_consensus(
     // Get the number of nodes with stake
     let num_nodes_with_stake = NonZeroUsize::new(pub_keys.len()).unwrap();
 
-    let da_membership = MockMembership::create_election(
+    let da_membership = MockMembership::new(
         known_nodes_with_stake.clone(),
         known_nodes_with_stake.clone(),
         Topic::Da,
-        0,
     );
-    let non_da_membership = MockMembership::create_election(
+    let non_da_membership = MockMembership::new(
         known_nodes_with_stake.clone(),
         known_nodes_with_stake.clone(),
         Topic::Global,
-        0,
     );
     let memberships = Memberships {
         quorum_membership: non_da_membership.clone(),
@@ -201,7 +199,6 @@ async fn init_consensus(
         builder_urls: vec1::vec1![builder_url],
         fixed_leader_for_gpuvid: 0,
         num_nodes_with_stake,
-        num_nodes_without_stake: 0,
         known_nodes_with_stake: known_nodes_with_stake.clone(),
         known_nodes_without_stake: vec![],
         start_delay: 0,
@@ -212,7 +209,6 @@ async fn init_consensus(
         execution_type: ExecutionType::Continuous,
         known_da_nodes: known_nodes_with_stake.clone(),
         da_staked_committee_size: pub_keys.len(),
-        da_non_staked_committee_size: 0,
         my_own_validator_config: Default::default(),
         data_request_delay: Duration::from_millis(200),
         view_sync_timeout: Duration::from_millis(250),
@@ -268,7 +264,7 @@ async fn init_consensus(
                     config,
                     memberships,
                     network,
-                    HotShotInitializer::from_genesis(TestInstanceState::default())
+                    HotShotInitializer::from_genesis::<MockVersions>(TestInstanceState::default())
                         .await
                         .unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),

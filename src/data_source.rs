@@ -917,6 +917,10 @@ pub mod node_tests {
                     <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
                         &payload, &metadata,
                     ),
+                metadata: TestMetadata {
+                    num_transactions: 7, // arbitrary
+                },
+                random: 1, // arbitrary
             };
 
             let mut leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
@@ -1082,7 +1086,12 @@ pub mod node_tests {
         // Recover payload.
         tracing::info!("recovering payload");
         let bytes = vid.recover_payload(&shares, common).unwrap();
-        let recovered = <MockPayload as BlockPayload<TestTypes>>::from_bytes(&bytes, &TestMetadata);
+        let recovered = <MockPayload as BlockPayload<TestTypes>>::from_bytes(
+            &bytes,
+            &TestMetadata {
+                num_transactions: 7, // arbitrary
+            },
+        );
         assert_eq!(recovered, *block.payload());
         assert_eq!(recovered.transactions, vec![txn]);
     }

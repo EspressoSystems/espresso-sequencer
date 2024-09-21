@@ -949,7 +949,10 @@ pub mod testing {
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use async_std::task::sleep;
-    use hotshot_example_types::{node_types::TestVersions, state_types::{TestInstanceState, TestValidatedState}};
+    use hotshot_example_types::{
+        node_types::TestVersions,
+        state_types::{TestInstanceState, TestValidatedState},
+    };
     use std::time::Duration;
 
     use super::{testing::TmpDb, *};
