@@ -28,7 +28,6 @@ use async_std::{
 use async_trait::async_trait;
 use chrono::Utc;
 use futures::{AsyncRead, AsyncWrite};
-use hotshot_example_types::node_types::TestVersions;
 use itertools::Itertools;
 use postgres_native_tls::TlsConnector;
 use std::{cmp::min, fmt::Debug, pin::Pin, str::FromStr};
@@ -950,7 +949,7 @@ pub mod testing {
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use async_std::task::sleep;
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
+    use hotshot_example_types::{node_types::TestVersions, state_types::{TestInstanceState, TestValidatedState}};
     use std::time::Duration;
 
     use super::{testing::TmpDb, *};
