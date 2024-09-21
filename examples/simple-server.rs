@@ -178,8 +178,6 @@ async fn init_consensus(
     let memberships = Memberships {
         quorum_membership: non_da_membership.clone(),
         da_membership: da_membership.clone(),
-        vid_membership: non_da_membership.clone(),
-        view_sync_membership: non_da_membership.clone(),
     };
 
     // Pick a random, unused port for the builder server

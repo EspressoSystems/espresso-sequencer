@@ -18,7 +18,7 @@ use hotshot_types::{
     traits::{
         self,
         block_contents::{BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::NodeType,
+        node_implementation::{NodeType, Versions},
         EncodeBytes,
     },
     vid::{vid_scheme, VidCommitment},
@@ -225,13 +225,13 @@ impl<Types: NodeType> LeafQueryData<Types> {
         Ok(Self { leaf, qc })
     }
 
-    pub async fn genesis(
+    pub async fn genesis<HsVer: Versions>(
         validated_state: &Types::ValidatedState,
         instance_state: &Types::InstanceState,
     ) -> Self {
         Self {
             leaf: Leaf::genesis(validated_state, instance_state).await,
-            qc: QuorumCertificate::genesis(validated_state, instance_state).await,
+            qc: QuorumCertificate::genesis::<HsVer>(validated_state, instance_state).await,
         }
     }
 

@@ -128,6 +128,7 @@ pub mod availability_tests {
     };
     use committable::Committable;
     use futures::stream::StreamExt;
+    use hotshot_types::data::Leaf;
     use std::collections::HashMap;
     use std::fmt::Debug;
     use std::ops::{Bound, RangeBounds};
@@ -140,7 +141,10 @@ pub mod availability_tests {
         let mut leaves = leaf_range(ds, ..).await.enumerate();
         while let Some((i, leaf)) = leaves.next().await {
             assert_eq!(leaf.height(), i as u64);
-            assert_eq!(leaf.hash(), leaf.leaf().commit());
+            assert_eq!(
+                leaf.hash(),
+                <Leaf<MockTypes> as Committable>::commit(&leaf.leaf)
+            );
 
             // Check indices.
             tracing::info!("looking up leaf {i} various ways");
@@ -467,13 +471,15 @@ pub mod persistence_tests {
             + NodeDataSource<MockTypes>
             + AvailabilityStorage<MockTypes>,
     {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let storage = D::create(0).await;
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis(
+        let mut qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -486,7 +492,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
-        qc.data.leaf_commit = leaf.commit();
+        qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&leaf);
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
@@ -539,13 +545,15 @@ pub mod persistence_tests {
     where
         for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
     {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let storage = D::create(0).await;
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis(
+        let mut qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -558,7 +566,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
-        qc.data.leaf_commit = leaf.commit();
+        qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&leaf);
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
@@ -600,13 +608,15 @@ pub mod persistence_tests {
             + AvailabilityStorage<MockTypes>,
         for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
     {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let storage = D::create(0).await;
         let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut mock_qc = QuorumCertificate::<MockTypes>::genesis(
+        let mut mock_qc = QuorumCertificate::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -619,7 +629,7 @@ pub mod persistence_tests {
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         mock_leaf.block_header_mut().block_number += 1;
-        mock_qc.data.leaf_commit = mock_leaf.commit();
+        mock_qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&mock_leaf);
 
         let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(mock_leaf.clone(), mock_qc.clone()).unwrap();
@@ -645,7 +655,7 @@ pub mod persistence_tests {
 
         // Get a mutable transaction again, insert different data.
         mock_leaf.block_header_mut().block_number += 1;
-        mock_qc.data.leaf_commit = mock_leaf.commit();
+        mock_qc.data.leaf_commit = <Leaf<MockTypes> as Committable>::commit(&mock_leaf);
         let block = BlockQueryData::new(mock_leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(mock_leaf, mock_qc).unwrap();
 
@@ -712,6 +722,8 @@ pub mod node_tests {
     where
         for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
     {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let storage = D::create(0).await;
@@ -722,7 +734,7 @@ pub mod node_tests {
 
         // Generate some mock leaves and blocks to insert.
         let mut leaves = vec![
-            LeafQueryData::<MockTypes>::genesis(
+            LeafQueryData::<MockTypes>::genesis::<TestVersions>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -868,6 +880,8 @@ pub mod node_tests {
     where
         for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
     {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let storage = D::create(0).await;
@@ -905,7 +919,7 @@ pub mod node_tests {
                     ),
             };
 
-            let mut leaf = LeafQueryData::<MockTypes>::genesis(
+            let mut leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
@@ -961,6 +975,8 @@ pub mod node_tests {
         for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
         for<'a> D::ReadOnly<'a>: NodeDataSource<MockTypes>,
     {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let storage = D::create(0).await;
@@ -971,7 +987,7 @@ pub mod node_tests {
         let disperse = vid.disperse([]).unwrap();
 
         // Insert test data with VID common and a share.
-        let leaf = LeafQueryData::<MockTypes>::genesis(
+        let leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )

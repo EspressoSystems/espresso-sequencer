@@ -28,6 +28,7 @@ use async_std::{
 use async_trait::async_trait;
 use chrono::Utc;
 use futures::{AsyncRead, AsyncWrite};
+use hotshot_example_types::node_types::TestVersions;
 use itertools::Itertools;
 use postgres_native_tls::TlsConnector;
 use std::{cmp::min, fmt::Debug, pin::Pin, str::FromStr};
@@ -1048,7 +1049,7 @@ mod test {
             .port(port);
 
         let mut storage = SqlStorage::connect(cfg).await.unwrap();
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(
+        let mut leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -1138,7 +1139,7 @@ mod test {
         let db = TmpDb::init().await;
 
         let mut storage = SqlStorage::connect(db.config()).await.unwrap();
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(
+        let mut leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
