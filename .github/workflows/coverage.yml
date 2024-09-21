@@ -55,7 +55,7 @@ jobs:
       # TODO investigate why `uint_bytes` fail in coverage runs
       - name: Run tests with coverage
         run: |
-          cargo llvm-cov report --doctests --lcov --output-path lcov.info
+          cargo llvm-cov report --lcov --output-path lcov.info
         env:
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
         timeout-minutes: 120
