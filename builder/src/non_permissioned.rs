@@ -23,13 +23,12 @@ use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
+    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
     service::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
+    utils::ParentBlockReferences,
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -153,7 +152,7 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,
                 leaf_commit: fake_commitment(),

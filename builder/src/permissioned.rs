@@ -55,14 +55,13 @@ use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
+    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
+    utils::ParentBlockReferences,
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -343,23 +342,19 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
         None => config.known_nodes_with_stake.clone(),
     };
 
-    let quorum_membership = GeneralStaticCommittee::create_election(
+    let quorum_membership = GeneralStaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake.clone(),
         Topic::Global,
-        0,
     );
-    let da_membership = GeneralStaticCommittee::create_election(
+    let da_membership = GeneralStaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
         Topic::Da,
-        0,
     );
     let memberships = Memberships {
         quorum_membership: quorum_membership.clone(),
         da_membership: da_membership.clone(),
-        vid_membership: quorum_membership.clone(),
-        view_sync_membership: quorum_membership,
     };
     let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
@@ -464,7 +459,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> BuilderC
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,
                 leaf_commit: fake_commitment(),

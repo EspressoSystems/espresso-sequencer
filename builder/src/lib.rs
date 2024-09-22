@@ -225,7 +225,6 @@ pub mod testing {
             let config: HotShotConfig<PubKey> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
-                num_nodes_without_stake,
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: known_nodes_without_stake_pub_keys,
@@ -235,7 +234,6 @@ pub mod testing {
                 start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes_with_stake,
-                da_non_staked_committee_size: num_nodes_without_stake,
                 my_own_validator_config: Default::default(),
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),

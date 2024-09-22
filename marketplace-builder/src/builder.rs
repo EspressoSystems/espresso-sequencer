@@ -39,13 +39,12 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use marketplace_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
+    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
     service::{
         run_builder_service, BroadcastSenders, BuilderHooks, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
+    utils::ParentBlockReferences,
 };
 use marketplace_solver::SolverError;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
@@ -197,7 +196,7 @@ impl BuilderConfig {
         let global_state = Arc::new(RwLock::new(global_state));
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,
                 leaf_commit: fake_commitment(),

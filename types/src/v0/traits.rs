@@ -14,7 +14,9 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
-        node_implementation::ConsensusTime, storage::Storage, ValidatedState as HotShotState,
+        node_implementation::{ConsensusTime, Versions},
+        storage::Storage,
+        ValidatedState as HotShotState,
     },
     utils::View,
 };
@@ -379,7 +381,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     ///
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
     /// if there is no saved state).
-    async fn load_consensus_state(
+    async fn load_consensus_state<V: Versions>(
         &self,
         state: NodeState,
     ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
@@ -419,7 +421,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
                     Leaf::genesis(&genesis_validated_state, &state).await,
-                    QuorumCertificate::genesis(&genesis_validated_state, &state).await,
+                    QuorumCertificate::genesis::<V>(&genesis_validated_state, &state).await,
                 )
             }
         };
@@ -489,7 +491,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 if let Err(err) = self.save_anchor_leaf(leaf, qc).await {
                     tracing::error!(
                         ?leaf,
-                        hash = %leaf.commit(),
+                        hash = %<Leaf as Committable>::commit(leaf),
                         "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}",
                     );
                 }

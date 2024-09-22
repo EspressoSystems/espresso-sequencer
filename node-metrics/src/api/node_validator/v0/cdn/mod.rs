@@ -17,20 +17,20 @@ use url::Url;
 
 /// ConnectedNetworkConsumer represents a trait that splits up a portion of
 /// the ConnectedNetwork trait, so that the consumer only needs to be aware of
-/// the `wait_for_ready` and `recv_msgs` functions.
+/// the `wait_for_ready` and `recv_message` functions.
 #[async_trait::async_trait]
 pub trait ConnectedNetworkConsumer<K> {
     /// [wait_for_ready] will not return until the network is ready to be
     /// utilized.
     async fn wait_for_ready(&self);
 
-    /// [recv_msgs] will return a list of messages that have been received from
+    /// [recv_message] will return a list of messages that have been received from
     /// the network.
     ///
     /// ## Errors
     ///
     /// All errors are expected to be network related.
-    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError>;
+    async fn recv_message(&self) -> Result<Vec<u8>, NetworkError>;
 }
 
 #[async_trait::async_trait]
@@ -43,9 +43,9 @@ where
         <N as ConnectedNetwork<K>>::wait_for_ready(self).await
     }
 
-    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError> {
+    async fn recv_message(&self) -> Result<Vec<u8>, NetworkError> {
         let cloned_self = self.clone();
-        <N as ConnectedNetwork<K>>::recv_msgs(&cloned_self).await
+        <N as ConnectedNetwork<K>>::recv_message(&cloned_self).await
     }
 }
 
@@ -89,8 +89,8 @@ impl CdnReceiveMessagesTask {
         let mut url_sender = url_sender;
 
         loop {
-            let messages_result = network.recv_msgs().await;
-            let messages = match messages_result {
+            let message_result = network.recv_message().await;
+            let message = match message_result {
                 Ok(message) => message,
                 Err(err) => {
                     tracing::error!("error receiving message: {:?}", err);
@@ -98,52 +98,49 @@ impl CdnReceiveMessagesTask {
                 }
             };
 
-            for message in messages {
-                // We want to try and decode this message.
-                let message_deserialize_result =
-                    bincode::deserialize::<Message<SeqTypes>>(&message);
+            // We want to try and decode this message.
+            let message_deserialize_result = bincode::deserialize::<Message<SeqTypes>>(&message);
 
-                let message = match message_deserialize_result {
-                    Ok(message) => message,
-                    Err(err) => {
-                        tracing::error!("error deserializing message: {:?}", err);
-                        continue;
+            let message = match message_deserialize_result {
+                Ok(message) => message,
+                Err(err) => {
+                    tracing::error!("error deserializing message: {:?}", err);
+                    continue;
+                }
+            };
+
+            let external_message_deserialize_result = match message.kind {
+                MessageKind::External(external_message) => {
+                    bincode::deserialize::<ExternalMessage>(&external_message)
+                }
+                _ => {
+                    tracing::error!("unexpected message kind: {:?}", message);
+                    continue;
+                }
+            };
+
+            let external_message = match external_message_deserialize_result {
+                Ok(external_message) => external_message,
+                Err(err) => {
+                    tracing::error!("error deserializing message: {:?}", err);
+                    continue;
+                }
+            };
+
+            match external_message {
+                ExternalMessage::RollCallResponse(roll_call_info) => {
+                    let public_api_url = roll_call_info.public_api_url;
+
+                    // We have a public api url, so we can process this url.
+
+                    if let Err(err) = url_sender.send(public_api_url).await {
+                        tracing::error!("error sending public api url: {:?}", err);
+                        return;
                     }
-                };
+                }
 
-                let external_message_deserialize_result = match message.kind {
-                    MessageKind::External(external_message) => {
-                        bincode::deserialize::<ExternalMessage>(&external_message)
-                    }
-                    _ => {
-                        tracing::error!("unexpected message kind: {:?}", message);
-                        continue;
-                    }
-                };
-
-                let external_message = match external_message_deserialize_result {
-                    Ok(external_message) => external_message,
-                    Err(err) => {
-                        tracing::error!("error deserializing message: {:?}", err);
-                        continue;
-                    }
-                };
-
-                match external_message {
-                    ExternalMessage::RollCallResponse(roll_call_info) => {
-                        let public_api_url = roll_call_info.public_api_url;
-
-                        // We have a public api url, so we can process this url.
-
-                        if let Err(err) = url_sender.send(public_api_url).await {
-                            tracing::error!("error sending public api url: {:?}", err);
-                            return;
-                        }
-                    }
-
-                    _ => {
-                        // We're not concerned about other message types
-                    }
+                _ => {
+                    // We're not concerned about other message types
                 }
             }
         }
@@ -309,14 +306,12 @@ mod test {
     /// [TestConnectedNetworkConsumer] is a test implementation of the
     /// [ConnectedNetworkConsumer] trait that allows for the simulation of
     /// network messages being received.
-    struct TestConnectedNetworkConsumer(Result<Vec<Vec<u8>>, NetworkError>);
+    struct TestConnectedNetworkConsumer(Result<Vec<u8>, NetworkError>);
 
     /// [clone_result] is a helper function that clones the result of a
     /// network message receive operation.  This is used to ensure that the
     /// original result is not consumed by the task.
-    fn clone_result(
-        result: &Result<Vec<Vec<u8>>, NetworkError>,
-    ) -> Result<Vec<Vec<u8>>, NetworkError> {
+    fn clone_result(result: &Result<Vec<u8>, NetworkError>) -> Result<Vec<u8>, NetworkError> {
         match result {
             Ok(messages) => Ok(messages.clone()),
             Err(err) => match err {
@@ -330,17 +325,17 @@ mod test {
     impl ConnectedNetworkConsumer<BLSPubKey> for TestConnectedNetworkConsumer {
         async fn wait_for_ready(&self) {}
 
-        async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError> {
+        async fn recv_message(&self) -> Result<Vec<u8>, NetworkError> {
             async_std::task::sleep(Duration::from_millis(5)).await;
             clone_result(&self.0)
         }
     }
 
-    /// [test_cdn_receive_messages_task] is a test that verifies that the
-    /// an expected External Message can be encoded, decoded, and sent to the
+    /// [test_cdn_receive_message_task] is a test that verifies that the
+    /// expected External Message can be encoded, decoded, and sent to the
     /// url_sender appropriately.
     #[async_std::test]
-    async fn test_cdn_receive_messages_task() {
+    async fn test_cdn_receive_message_task() {
         let test_hotshot_message_serialized = {
             let test_url = Url::parse("http://localhost:8080/").unwrap();
 
@@ -360,7 +355,7 @@ mod test {
 
         let (url_sender, url_receiver) = mpsc::channel(1);
         let task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(Ok(vec![test_hotshot_message_serialized])),
+            TestConnectedNetworkConsumer(Ok(test_hotshot_message_serialized)),
             url_sender,
         );
 
@@ -401,16 +396,14 @@ mod test {
         drop(task);
     }
 
-    /// [test_cdn_receive_messages_task_fails_decoding_hotshot_message] is a
+    /// [test_cdn_receive_message_task_fails_decoding_hotshot_message] is a
     /// test that verifies that the task does not close, nor send a url, when it
     /// encounters an error from the deserialization of the hotshot message.
     #[async_std::test]
-    async fn test_cdn_receive_messages_task_fails_decoding_hotshot_message() {
+    async fn test_cdn_receive_message_task_fails_decoding_hotshot_message() {
         let (url_sender, url_receiver) = mpsc::channel(1);
-        let task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(Ok(vec![vec![0]])),
-            url_sender,
-        );
+        let task =
+            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(vec![0])), url_sender);
 
         let mut url_receiver = url_receiver;
         // The task should not panic when it fails to receive a message.
@@ -425,13 +418,13 @@ mod test {
         drop(task);
     }
 
-    /// [test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant]
+    /// [test_cdn_receive_message_task_fails_unexpected_hotshot_message_variant]
     /// is a test that verifies that the task does not close, nor send a url, when
     /// it encounters a hotshot message that was not an External message.
     ///
     /// This really shouldn't happen in practice.
     #[async_std::test]
-    async fn test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant() {
+    async fn test_cdn_receive_message_task_fails_unexpected_hotshot_message_variant() {
         let (url_sender, url_receiver) = mpsc::channel(1);
         let bytes = bincode::serialize(&Message::<SeqTypes> {
             sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
@@ -439,8 +432,7 @@ mod test {
         })
         .unwrap();
 
-        let task =
-            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(vec![bytes])), url_sender);
+        let task = CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(bytes)), url_sender);
 
         let mut url_receiver = url_receiver;
         // The task should not panic when it fails to receive a message.
@@ -455,11 +447,11 @@ mod test {
         drop(task);
     }
 
-    /// [test_cdn_receive_messages_task_fails_decoding_external_message] is a
+    /// [test_cdn_receive_message_task_fails_decoding_external_message] is a
     /// test that verifies that the task does not close, nor send a url, when
     /// it encounters an error from the deserialization of the external message.
     #[async_std::test]
-    async fn test_cdn_receive_messages_task_fails_decoding_external_message() {
+    async fn test_cdn_receive_message_task_fails_decoding_external_message() {
         let (url_sender, url_receiver) = mpsc::channel(1);
         let bytes = bincode::serialize(&Message::<SeqTypes> {
             sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
@@ -467,8 +459,7 @@ mod test {
         })
         .unwrap();
 
-        let task =
-            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(vec![bytes])), url_sender);
+        let task = CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(bytes)), url_sender);
 
         let mut url_receiver = url_receiver;
         // The task should not panic when it fails to receive a message.
@@ -483,13 +474,13 @@ mod test {
         drop(task);
     }
 
-    /// [test_cdn_receive_messages_tasks_exits_when_url_receiver_closed] is a
+    /// [test_cdn_receive_message_tasks_exits_when_url_receiver_closed] is a
     /// test that verifies that the task exits when the url receiver is closed.
     ///
     /// Without being able to send urls to the url_sender, the task doesn't
     /// really have a point in existing.
     #[async_std::test]
-    async fn test_cdn_receive_messages_tasks_exits_when_url_receiver_closed() {
+    async fn test_cdn_receive_message_tasks_exits_when_url_receiver_closed() {
         let (url_sender, url_receiver) = mpsc::channel(1);
 
         let test_hotshot_message_serialized = {
@@ -511,7 +502,7 @@ mod test {
         drop(url_receiver);
 
         let mut task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(Ok(vec![test_hotshot_message_serialized])),
+            TestConnectedNetworkConsumer(Ok(test_hotshot_message_serialized)),
             url_sender.clone(),
         );
 
