@@ -55,11 +55,15 @@ use vbs::{
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::traits::network::Topic;
+    use hotshot_types::{traits::network::Topic, PeerConfig};
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
-    let membership = GeneralStaticCommittee::new(vec![], vec![], Topic::Global);
+    let membership = GeneralStaticCommittee::new(
+        vec![],                      /* no elligible leaders */
+        vec![PeerConfig::default()], /* one committee member, necessary to generate a VID share */
+        Topic::Global,
+    );
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },
