@@ -61,7 +61,7 @@ use hotshot_builder_core::{
         run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
-    utils::ParentBlockReferences,
+    ParentBlockReferences,
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -367,7 +367,7 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
         config,
         memberships,
         networks,
-        HotShotInitializer::from_genesis(instance_state)
+        HotShotInitializer::from_genesis::<V>(instance_state)
             .await
             .unwrap(),
         ConsensusMetricsValue::new(metrics),

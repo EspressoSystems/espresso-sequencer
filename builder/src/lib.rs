@@ -560,7 +560,7 @@ pub mod testing {
 
             let node_count = NonZeroUsize::new(num_nodes).unwrap();
 
-            let builder_config = BuilderConfig::init(
+            let builder_config = BuilderConfig::init::<V>(
                 key_pair,
                 bootstrapped_view,
                 tx_channel_capacity,

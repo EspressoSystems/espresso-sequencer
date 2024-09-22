@@ -28,7 +28,7 @@ use hotshot_builder_core::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
-    utils::ParentBlockReferences,
+    ParentBlockReferences,
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -79,7 +79,7 @@ pub fn build_instance_state<V: Versions>(
 
 impl BuilderConfig {
     #[allow(clippy::too_many_arguments)]
-    pub async fn init(
+    pub async fn init<V: Versions>(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -195,7 +195,7 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion>(
+            let res = run_non_permissioned_standalone_builder_service::<_, V>(
                 da_sender,
                 qc_sender,
                 decide_sender,

@@ -54,6 +54,7 @@ use vbs::{
 #[cfg(feature = "testing")]
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{Payload, SeqTypes, Transaction};
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::traits::network::Topic;
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
@@ -105,7 +106,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             data: QuorumProposal {
                 block_header,
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
