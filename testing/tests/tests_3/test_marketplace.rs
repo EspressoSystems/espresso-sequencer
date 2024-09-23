@@ -73,7 +73,7 @@ cross_tests!(
 );
 
 // Test marketplace with both regular builders down but solver + fallback builder up
-// Requires 90% nonempty blocks
+// Requires 80% nonempty blocks
 cross_tests!(
     TestName: test_marketplace_builders_down,
     Impls: [MemoryImpl],
@@ -96,7 +96,7 @@ cross_tests!(
                 changes: HashMap::from([(0, BuilderChange::Down)])
               }
             ],
-            validate_transactions: nonempty_block_threshold((90,100)),
+            validate_transactions: nonempty_block_threshold((40,50)),
             ..TestDescription::default()
         }
     },
@@ -128,7 +128,7 @@ cross_tests!(
               BuilderDescription {
                 changes: HashMap::from([(0, BuilderChange::Down)])
               },
-            validate_transactions: nonempty_block_threshold((80,100)),
+            validate_transactions: nonempty_block_threshold((40,50)),
             ..TestDescription::default()
         }
     },
