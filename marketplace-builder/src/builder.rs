@@ -268,7 +268,7 @@ impl BuilderConfig {
     }
 }
 
-#[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+#[cfg(test)]
 mod test {
     use std::{
         str::FromStr,
