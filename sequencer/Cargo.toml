@@ -46,6 +46,7 @@ cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
 
 clap = { workspace = true }
+client = { path = "../client" }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 csv = "1"
