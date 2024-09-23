@@ -12,7 +12,7 @@ pub mod client;
 pub mod config;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::OpenOptions,
     io::{self, ErrorKind},
     time::Duration,
@@ -90,7 +90,7 @@ struct OrchestratorState<KEY: SignatureKey> {
     /// Will be set to true once all nodes post they are ready to start
     start: bool,
     /// The total nodes that have posted they are ready to start
-    nodes_connected: u64,
+    nodes_connected: HashSet<PeerConfig<KEY>>,
     /// The results of the benchmarks
     bench_results: BenchResults,
     /// The number of nodes that have posted their results
@@ -131,7 +131,7 @@ impl<KEY: SignatureKey + 'static> OrchestratorState<KEY> {
             config: network_config,
             peer_pub_ready,
             pub_posted: HashMap::new(),
-            nodes_connected: 0,
+            nodes_connected: HashSet::new(),
             start: false,
             bench_results: BenchResults::default(),
             nodes_post_results: 0,
@@ -534,12 +534,16 @@ where
             });
         }
 
-        self.nodes_connected += 1;
-
-        tracing::error!("Nodes connected: {}", self.nodes_connected);
+        // `HashSet::insert()` returns whether the node was newly inserted (true) or not
+        if self.nodes_connected.insert(peer_config.clone()) {
+            tracing::error!(
+                "Node {peer_config} connected. Total nodes connected: {}",
+                self.nodes_connected.len()
+            );
+        }
 
         // i.e. nodes_connected >= num_nodes_with_stake * (start_threshold.0 / start_threshold.1)
-        if self.nodes_connected * self.config.config.start_threshold.1
+        if self.nodes_connected.len() as u64 * self.config.config.start_threshold.1
             >= (self.config.config.num_nodes_with_stake.get() as u64)
                 * self.config.config.start_threshold.0
         {
