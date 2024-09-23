@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["PostgresClient"]};
+window.SIDEBAR_ITEMS = {"mod":["mock"],"struct":["PostgresClient"]};

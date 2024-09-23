@@ -19,7 +19,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["hotshot_state_prover",["",[],["circuit.rs","lib.rs","mock_ledger.rs","service.rs","snark.rs"]]],\
 ["keygen",["",[],["keygen.rs"]]],\
 ["marketplace_builder",["",[],["builder.rs","hooks.rs","lib.rs"]]],\
-["marketplace_solver",["",[],["api.rs","database.rs","events.rs","lib.rs","options.rs","state.rs"]]],\
+["marketplace_solver",["",[],["api.rs","database.rs","events.rs","lib.rs","options.rs","state.rs","testing.rs"]]],\
 ["nasty_client",["",[],["nasty-client.rs"]]],\
 ["node_metrics",["",[["api",[["node_validator",[["v0",[["cdn",[],["mod.rs"]]],["create_node_validator_api.rs","mod.rs"]]],["mod.rs"]]],["mod.rs"]],["service",[["client_id",[],["mod.rs"]],["client_message",[],["mod.rs"]],["client_state",[],["mod.rs"]],["data_state",[],["location_details.rs","mod.rs","node_identity.rs"]],["node_type",[],["mod.rs"]],["server_message",[],["mod.rs"]]],["mod.rs"]]],["lib.rs"]]],\
 ["orchestrator",["",[],["orchestrator.rs"]]],\
