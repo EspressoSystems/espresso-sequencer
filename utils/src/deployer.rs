@@ -3,7 +3,7 @@ use async_std::sync::Arc;
 use clap::{builder::OsStr, Parser, ValueEnum};
 use contract_bindings::{
     erc1967_proxy::ERC1967Proxy,
-    fee_contract::FeeContract,
+    fee_contract::{FeeContract, FEECONTRACT_ABI, FEECONTRACT_BYTECODE},
     hot_shot::HotShot,
     light_client::{LightClient, LIGHTCLIENT_ABI},
     light_client_mock::LIGHTCLIENTMOCK_ABI,
@@ -391,6 +391,57 @@ pub async fn deploy_light_client_contract_as_proxy_for_test<M: Middleware + 'sta
         .await?;
 
     Ok(light_client_proxy_address)
+}
+
+/// Default deployment function `FeeContract.sol` for testing
+///
+pub async fn deploy_fee_contract<M: Middleware + 'static>(l1: Arc<M>) -> anyhow::Result<Address> {
+    // Deploy fee contract
+    let fee_contract_factory = ContractFactory::new(
+        FEECONTRACT_ABI.clone(),
+        FEECONTRACT_BYTECODE.clone(),
+        l1.clone(),
+    );
+    let contract = fee_contract_factory.deploy(())?.send().await?;
+
+    let fee_contract_address = contract.address();
+
+    Ok(fee_contract_address)
+}
+
+/// Default deployment function `FeeContract.sol` (as proxy) for testing
+///
+pub async fn deploy_fee_contract_as_proxy<M: Middleware + 'static>(
+    l1: Arc<M>,
+    contracts: &mut Contracts,
+) -> anyhow::Result<Address> {
+    // Deploy fee contract
+    let fee_contract_factory = ContractFactory::new(
+        FEECONTRACT_ABI.clone(),
+        FEECONTRACT_BYTECODE.clone(),
+        l1.clone(),
+    );
+    let contract = fee_contract_factory.deploy(())?.send().await?;
+
+    let fee_contract_address = contract.address();
+
+    let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
+
+    let deployer = *(l1.clone().get_accounts().await?.first()).expect("Address not found");
+
+    let data = fee_contract
+        .initialize(deployer)
+        .calldata()
+        .context("calldata for initialize transaction not available")?;
+
+    let fee_contract_proxy_address = contracts
+        .deploy_tx(
+            Contract::FeeContractProxy,
+            ERC1967Proxy::deploy(l1.clone(), (fee_contract_address, data))?,
+        )
+        .await?;
+
+    Ok(fee_contract_proxy_address)
 }
 
 #[allow(clippy::too_many_arguments)]
