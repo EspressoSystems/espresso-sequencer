@@ -130,7 +130,7 @@ gas-benchmarks:
 # the lcov output is pushed to coveralls.
 code-coverage:
   @echo "Running code coverage"
-  cargo llvm-cov nextest --all-features --profile coverage --lcov --output-path lcov.info --no-fail-fast
+  cargo llvm-cov nextest --all-features --profile coverage --no-fail-fast --open
 
 # Download Aztec's SRS for production
 download-srs:

@@ -44,7 +44,6 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - uses: taiki-e/install-action@nextest
 
-      # TODO investigate why `uint_bytes` fail in coverage runs
       - name: Collect coverage data
         run: |
           cargo llvm-cov --no-report nextest --all-features
@@ -55,6 +54,6 @@ jobs:
         timeout-minutes: 90
 
       - name: Coveralls upload
-        uses: coverallsapp/github-action@master
+        uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
