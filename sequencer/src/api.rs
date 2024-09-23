@@ -371,6 +371,7 @@ pub mod test_helpers {
     use async_std::task::sleep;
     use committable::Committable;
 
+    use async_std::task::JoinHandle;
     use espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
@@ -393,8 +394,9 @@ pub mod test_helpers {
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-    use vbs::version::StaticVersion;
-    use vbs::version::StaticVersionType;
+    use tide_disco::{Api, App, Error, StatusCode};
+    use url::Url;
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     use super::*;
     use crate::{
@@ -863,6 +865,61 @@ pub mod test_helpers {
             .unwrap()
             .unwrap();
     }
+
+    pub async fn spawn_dishonest_peer_catchup_api() -> anyhow::Result<(Url, JoinHandle<()>)> {
+        let toml = toml::from_str::<toml::Value>(include_str!("../api/catchup.toml")).unwrap();
+        let mut api =
+            Api::<(), hotshot_query_service::Error, SequencerApiVersion>::new(toml).unwrap();
+
+        api.get("account", |_req, _state: &()| {
+            async move {
+                Result::<AccountQueryData, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no account".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("blocks", |_req, _state| {
+            async move {
+                Result::<BlocksFrontier, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no account".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("chainconfig", |_req, _state| {
+            async move {
+                Result::<ChainConfig, _>::Ok(ChainConfig {
+                    max_block_size: 300.into(),
+                    base_fee: 1.into(),
+                    fee_recipient: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                        .parse()
+                        .unwrap(),
+                    ..Default::default()
+                })
+            }
+            .boxed()
+        })?;
+
+        let mut app = App::<_, hotshot_query_service::Error>::with_state(());
+        app.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
+
+        app.register_module::<_, _>("catchup", api).unwrap();
+
+        let port = pick_unused_port().expect("no free port");
+        let url: Url = Url::parse(&format!("http://localhost:{port}")).unwrap();
+
+        let handle = async_std::task::spawn({
+            let url = url.clone();
+            async move {
+                let _ = app.serve(url, SequencerApiVersion::instance()).await;
+            }
+        });
+
+        Ok((url, handle))
+    }
 }
 
 #[cfg(test)]
@@ -1069,16 +1126,15 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::BTreeMap, time::Duration};
-
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
+    use std::{collections::BTreeMap, time::Duration};
 
     use espresso_types::{
         mock::MockStateCatchup,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade,
-        Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, Delta, FeeAccount, FeeAmount, Header, MockSequencerVersions,
+        SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1093,6 +1149,7 @@ mod test {
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+        utils::{View, ViewInner},
         ValidatorConfig,
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
@@ -1100,8 +1157,8 @@ mod test {
     use sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
     use surf_disco::Client;
     use test_helpers::{
-        catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkConfigBuilder,
+        catchup_test_helper, spawn_dishonest_peer_catchup_api, state_signature_test_helper,
+        status_test_helper, submit_test_helper, TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use time::OffsetDateTime;
@@ -1117,6 +1174,124 @@ mod test {
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
     };
+
+    #[async_std::test]
+    async fn test_chain_config_catchup_dishonest_peer() {
+        // This test starts a test network of five nodes, each connected to a dishonest peer.
+        // Initially, all nodes have the full chain config.
+        // We update the decided state of one node (node 5) with a chain config commitment.
+        // Node 5 then sends a catchup request to its dishonest peer.
+        // The dishonest peer responds with an invalid chain config that does not match the requested chain config commitment.
+        // After waiting for some time, we verify that node 5 does not have the full chain configuration, i.e., the chain config resolves to None.
+        // This means that Node 5 has validated the chain config from the peer.
+        setup_test();
+
+        const NUM_NODES: usize = 5;
+
+        let (url, _handle) = spawn_dishonest_peer_catchup_api().await.unwrap();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let cf = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+
+        let state = ValidatedState {
+            chain_config: cf.into(),
+            ..Default::default()
+        };
+
+        // all the nodes have a full chain config in their validated state so no need to catchup initially.
+        let states = std::array::from_fn(|_| state.clone());
+
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: None,
+                })
+                .catchup(Default::default()),
+            )
+            .states(states)
+            .catchups(std::array::from_fn(|_| {
+                StatePeers::<StaticVersion<0, 1>>::from_urls(
+                    vec![url.clone()],
+                    BackoffParams::default(),
+                )
+            }))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        // Wait for a few blocks to pass
+        network
+            .server
+            .event_stream()
+            .await
+            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
+            .take(3)
+            .collect::<Vec<_>>()
+            .await;
+
+        let handle = network.peers[3].consensus();
+        let handle_write_lock = handle.write().await;
+
+        let consensus = handle_write_lock.consensus();
+        let mut consensus_write_lock = consensus.write().await;
+
+        // Get the last decided leaf and update the validated state with the chain config commitment
+        // so that it makes a catchup request.
+        let last_decided_leaf = consensus_write_lock.decided_leaf();
+
+        let view = View {
+            view_inner: ViewInner::Leaf {
+                leaf: last_decided_leaf.commit(),
+                state: ValidatedState {
+                    chain_config: cf.commit().into(),
+                    ..Default::default()
+                }
+                .into(),
+                delta: Some(
+                    Delta {
+                        fees_delta: Default::default(),
+                    }
+                    .into(),
+                ),
+            },
+        };
+
+        let peer_validated_state = network.peers[3].decided_state().await;
+        assert_eq!(peer_validated_state.chain_config.resolve(), None);
+
+        consensus_write_lock
+            .update_validated_state_map(last_decided_leaf.view_number(), view)
+            .unwrap();
+
+        drop(consensus_write_lock);
+        drop(handle_write_lock);
+
+        // Wait for several blocks to be decided
+        network
+            .server
+            .event_stream()
+            .await
+            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
+            .take(10)
+            .collect::<Vec<_>>()
+            .await;
+
+        // The node should have made a catchup request, but since the peer is dishonest,
+        // the state must not contain the malicious chain config.
+        let peer_validated_state = network.peers[3].decided_state().await;
+        assert_eq!(peer_validated_state.chain_config.resolve(), None);
+
+        network.server.shut_down().await;
+    }
 
     #[async_std::test]
     async fn test_healthcheck() {

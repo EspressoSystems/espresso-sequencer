@@ -197,7 +197,7 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
                     if cf.commit() == commitment {
                         return Ok(cf);
                     } else {
-                        tracing::warn!(
+                        tracing::error!(
                             "Received chain config with mismatched commitment from {}: expected {}, got {}",
                             client.url,
                             commitment,
