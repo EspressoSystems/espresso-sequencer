@@ -122,7 +122,7 @@ impl<TYPES: NodeType> std::fmt::Display for ParentBlockReferences<TYPES> {
     }
 }
 
-// TODO: Update commitment calculation with the new commit.
+// TODO: Update commitment calculation with the new `commit`.
 // <https://github.com/EspressoSystems/marketplace-builder-core/issues/143>
 trait LegacyCommit<T: NodeType> {
     fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>>;
