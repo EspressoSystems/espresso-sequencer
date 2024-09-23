@@ -213,7 +213,9 @@ impl<Types: NodeType> LeafQueryData<Types> {
         leaf: Leaf<Types>,
         qc: QuorumCertificate<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
-        // TODO: Replace with the new `commit`.
+        // TODO: Replace with the new `commit` function in HotShot. Add an `upgrade_lock` parameter
+        // and a `HsVer: Versions` bound, then call `leaf.commit(upgrade_lock).await`. This will
+        // require updates in callers and relevant types as well.
         let leaf_commit = <Leaf<Types> as Committable>::commit(&leaf);
         ensure!(
             qc.data.leaf_commit == leaf_commit,
@@ -248,7 +250,9 @@ impl<Types: NodeType> LeafQueryData<Types> {
     }
 
     pub fn hash(&self) -> LeafHash<Types> {
-        // TODO: Replace with the new `commit`.
+        // TODO: Replace with the new `commit` function in HotShot. Add an `upgrade_lock` parameter
+        // and a `HsVer: Versions` bound, then call `leaf.commit(upgrade_lock).await`. This will
+        // require updates in callers and relevant types as well.
         <Leaf<Types> as Committable>::commit(&self.leaf)
     }
 
