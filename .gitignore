@@ -27,6 +27,7 @@ cache
 
 
 yarn.lock
+package-lock.json
 
 # wake files
 .wake
