@@ -130,10 +130,7 @@ gas-benchmarks:
 # the lcov output is pushed to coveralls.
 code-coverage:
   @echo "Running code coverage"
-  nix develop .#coverage -c cargo test --all-features --no-fail-fast --release --workspace -- --skip service::test::test_
-  grcov . -s . --binary-path $CARGO_TARGET_DIR/debug/ -t html --branch --ignore-not-existing -o $CARGO_TARGET_DIR/coverage/ \
-      --ignore 'contract-bindings/*' --ignore 'contracts/*'
-  @echo "HTML report available at: $CARGO_TARGET_DIR/coverage/index.html"
+  cargo llvm-cov nextest --all-features --profile coverage --lcov --output-path lcov.info --no-fail-fast
 
 # Download Aztec's SRS for production
 download-srs:
@@ -144,6 +141,3 @@ download-srs:
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
-
-next-coverage:
-	cargo llvm-cov nextest --all-features --profile coverage
