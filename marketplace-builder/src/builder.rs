@@ -290,7 +290,7 @@ mod test {
         FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, SequencerVersions,
         Transaction,
     };
-    use ethers::utils::Anvil;
+    use ethers::{core::k256::elliptic_curve::rand_core::block, utils::Anvil};
     use hooks::connect_to_solver;
     use hotshot::rand;
     use hotshot::types::{BLSPrivKey, Event, EventType};
@@ -305,7 +305,7 @@ mod test {
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            block_contents::{BlockPayload, BuilderFee, GENESIS_VID_NUM_STORAGE_NODES},
             node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
@@ -533,10 +533,13 @@ mod test {
         // Use `_mock_solver` here to avoid it being dropped.
         let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
 
+        let keypair = FeeAccount::test_key_pair();
+        let address = keypair.address();
+        let base_fee = FeeAmount::from(10);
         // Start and connect to a reserve builder.
         let init = BuilderConfig::init(
             true,
-            FeeAccount::test_key_pair(),
+            keypair.clone(),
             ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
             NonZeroUsize::new(1024).unwrap(),
@@ -547,7 +550,7 @@ mod test {
             Duration::from_secs(2),
             5,
             Duration::from_secs(2),
-            FeeAmount::from(10),
+            base_fee,
             Some(BidConfig {
                 namespaces: vec![NamespaceId::from(REGISTERED_NAMESPACE)],
                 amount: FeeAmount::from(10),
@@ -574,10 +577,13 @@ mod test {
             }
 
             let event = subscribed_events.next().await.unwrap().unwrap();
+
             if let EventType::QuorumProposal { proposal, .. } = event.event {
                 let parent_view_number = *proposal.data.view_number;
-                let parent_commitment =
-                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+                let leaf = Leaf::from_quorum_proposal(&proposal.data);
+
+                let parent_commitment = leaf.payload_commitment();
+
                 let bundle = builder_client
                     .get::<Bundle<SeqTypes>>(
                         format!(
@@ -589,7 +595,39 @@ mod test {
                     .send()
                     .await
                     .unwrap();
-                assert_eq!(bundle.transactions, vec![registered_transaction]);
+                assert_eq!(bundle.transactions, vec![registered_transaction.clone()]);
+
+                let txn_commit = <[u8; 32]>::from(registered_transaction.commit()).to_vec();
+                let signature = bundle.signature;
+                assert!(signature.verify(txn_commit, address).is_ok());
+
+                let (payload, _) = Payload::from_transactions(
+                    vec![registered_transaction],
+                    &ValidatedState::default(),
+                    &NodeState::default(),
+                )
+                .await
+                .expect("unable to create payload");
+
+                let encoded_txns = payload.encode().to_vec();
+                let block_size = encoded_txns.len() as u64;
+
+                let fees = base_fee * block_size;
+
+                let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+                    &keypair,
+                    fees.as_u64().unwrap(),
+                )
+                .unwrap();
+
+                let sequencing_fee = BuilderFee {
+                    fee_amount: fees.as_u64().unwrap(),
+                    fee_account: FeeAccount::from(address),
+                    fee_signature,
+                };
+
+                assert_eq!(bundle.sequencing_fee, sequencing_fee);
+
                 break;
             }
         }
@@ -626,6 +664,10 @@ mod test {
         // Use `_mock_solver` here to avoid it being dropped.
         let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
 
+        let keypair = FeeAccount::test_key_pair();
+        let address = keypair.address();
+        let base_fee = FeeAmount::from(10);
+
         // Start and connect to a fallback builder.
         let init = BuilderConfig::init(
             false,
@@ -640,7 +682,7 @@ mod test {
             Duration::from_secs(2),
             5,
             Duration::from_secs(2),
-            FeeAmount::from(10),
+            base_fee,
             None,
             solver_base_url,
         );
@@ -679,7 +721,40 @@ mod test {
                     .send()
                     .await
                     .unwrap();
-                assert_eq!(bundle.transactions, vec![unregistered_transaction]);
+                assert_eq!(bundle.transactions, vec![unregistered_transaction.clone()]);
+
+                let txn_commit =
+                    <[u8; 32]>::from(unregistered_transaction.clone().commit()).to_vec();
+                let signature = bundle.signature;
+                assert!(signature.verify(txn_commit, address).is_ok());
+
+                let (payload, _) = Payload::from_transactions(
+                    vec![unregistered_transaction],
+                    &ValidatedState::default(),
+                    &NodeState::default(),
+                )
+                .await
+                .expect("unable to create payload");
+
+                let encoded_txns = payload.encode().to_vec();
+                let block_size = encoded_txns.len() as u64;
+
+                let fees = base_fee * block_size;
+
+                let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+                    &keypair,
+                    fees.as_u64().unwrap(),
+                )
+                .unwrap();
+
+                let sequencing_fee = BuilderFee {
+                    fee_amount: fees.as_u64().unwrap(),
+                    fee_account: FeeAccount::from(address),
+                    fee_signature,
+                };
+
+                assert_eq!(bundle.sequencing_fee, sequencing_fee);
+
                 break;
             }
         }
