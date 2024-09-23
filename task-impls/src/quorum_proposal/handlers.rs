@@ -362,7 +362,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
             )
             .await
         {
-            error!("Failed to publish proposal; error = {e}");
+            error!("Failed to publish proposal; error = {e:#}");
         }
     }
 }
