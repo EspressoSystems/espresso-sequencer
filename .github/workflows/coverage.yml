@@ -45,7 +45,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Collect coverage data
-        run: cargo llvm-cov nextest --all-features --lcov --output-path lcov.info
+        run: cargo llvm-cov nextest --all-features --no-fail-fast --lcov --output-path lcov.info
         env:
           RUSTFLAGS: ${{ env.COVERAGE_RUSTFLAGS }}
         timeout-minutes: 90
