@@ -1,6 +1,6 @@
 [profile.default]
 slow-timeout = "2m"
-default-filter = 'not test(slow_)'
+default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
 
 # The restart tests run an entire sequencing network, and so are quite resource intensive.
@@ -9,7 +9,16 @@ filter = 'test(slow_test_restart)'
 threads-required = 'num-cpus'
 
 [profile.slow]
+slow-timeout = "2m"
 default-filter = 'test(slow_)'
+retries = 2
 
 [profile.all]
+slow-timeout = "2m"
 default-filter = 'all()'
+retries = 2
+
+[profile.integration]
+slow-timeout = "2m"
+default-filter = 'package(tests)'
+retries = 2

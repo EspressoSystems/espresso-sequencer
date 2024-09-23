@@ -24,7 +24,6 @@ use futures::FutureExt;
 use genesis::L1Finalized;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
-use libp2p_networking::network::GossipConfig;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -40,7 +39,7 @@ use derivative::Derivative;
 use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 pub use genesis::Genesis;
 #[cfg(feature = "libp2p")]
-use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
+use hotshot::traits::implementations::{CombinedNetworks, GossipConfig, Libp2pNetwork};
 use hotshot::{
     traits::implementations::{
         derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
@@ -382,18 +381,15 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let l1_genesis = match genesis.l1_finalized {
-        Some(L1Finalized::Block(b)) => Some(b),
-        Some(L1Finalized::Number { number }) => {
-            Some(l1_client.wait_for_finalized_block(number).await)
-        }
-        None => None,
+        L1Finalized::Block(b) => b,
+        L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
     };
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
         l1_client,
         genesis_header: genesis.header,
         genesis_state,
-        l1_genesis,
+        l1_genesis: Some(l1_genesis),
         peers: catchup::local_and_remote(
             persistence_opt,
             StatePeers::<SequencerApiVersion>::from_urls(
@@ -471,8 +467,9 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig,
     };
     use marketplace_builder_core::{
-        builder_state::{BuilderState, BuiltFromProposedBlock},
+        builder_state::BuilderState,
         service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
+        utils::ParentBlockReferences,
     };
     use portpicker::pick_unused_port;
     use vbs::version::Version;
@@ -510,7 +507,7 @@ pub mod testing {
         instance_state: NodeState,
         validated_state: ValidatedState,
     ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let builder_key_pair = EthKeyPair::random();
+        let builder_key_pair = TestConfig::<0>::builder_key();
         let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
 
         // This should never fail.
@@ -551,10 +548,10 @@ pub mod testing {
         let leaf = Leaf::genesis(&validated_state, &instance_state).await;
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: ViewNumber::genesis(),
                 vid_commitment,
-                leaf_commit: leaf.commit(),
+                leaf_commit: <Leaf as Committable>::commit(&leaf),
                 builder_commitment,
             },
             &receivers,
@@ -582,7 +579,14 @@ pub mod testing {
         .into_app()
         .expect("Failed to create builder tide-disco app");
 
-        async_spawn(app.serve(url.clone(), MarketplaceVersion::instance()));
+        async_spawn(
+            app.serve(
+                format!("http://0.0.0.0:{port}")
+                    .parse::<Url>()
+                    .expect("Failed to parse builder listener"),
+                MarketplaceVersion::instance(),
+            ),
+        );
 
         (
             Box::new(MarketplaceBuilderImplementation { hooks, senders }),
@@ -696,7 +700,6 @@ pub mod testing {
                 fixed_leader_for_gpuvid: 0,
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
-                num_nodes_without_stake: 0,
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: vec![],
@@ -706,7 +709,6 @@ pub mod testing {
                 start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes,
-                da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),

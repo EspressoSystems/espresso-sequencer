@@ -311,9 +311,11 @@ pub async fn deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
+    multisig_address: Option<H160>,
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
+    permissioned_prover: Option<Address>,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;
@@ -323,17 +325,17 @@ pub async fn deploy(
         .index(account_index)?
         .build()?
         .with_chain_id(chain_id);
-    let owner = wallet.address();
+    let deployer = wallet.address();
     let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
 
     // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
     // gas.
-    let balance = l1.get_balance(owner, None).await?;
+    let balance = l1.get_balance(deployer, None).await?;
     ensure!(
         balance > 0.into(),
-        "deployer account {owner:#x} is not funded!"
+        "deployer account {deployer:#x} is not funded!"
     );
-    tracing::info!(%balance, "deploying from address {owner:#x}");
+    tracing::info!(%balance, "deploying from address {deployer:#x}");
 
     // `HotShot.sol`
     if should_deploy(ContractGroup::HotShot, &only) {
@@ -363,7 +365,7 @@ pub async fn deploy(
         let (genesis_lc, genesis_stake) = genesis.await?.clone();
 
         let data = light_client
-            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, owner)
+            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         let light_client_proxy_address = contracts
@@ -380,6 +382,25 @@ pub async fn deploy(
         {
             panic!("Light Client contract's address is not a proxy");
         }
+
+        // Instantiate a wrapper with the proxy address and light client ABI.
+        let proxy = LightClient::new(light_client_proxy_address, l1.clone());
+
+        // Perission the light client prover.
+        if let Some(prover) = permissioned_prover {
+            tracing::info!(%light_client_proxy_address, %prover, "setting permissioned prover");
+            proxy.set_permissioned_prover(prover).send().await?.await?;
+        }
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %light_client_proxy_address,
+                %owner,
+                "transferring light client proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?.await?;
+        }
     }
 
     // `FeeContract.sol`
@@ -389,7 +410,7 @@ pub async fn deploy(
             .await?;
         let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
         let data = fee_contract
-            .initialize(owner)
+            .initialize(deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         let fee_contract_proxy_address = contracts
@@ -405,6 +426,19 @@ pub async fn deploy(
             .expect("Failed to determine if fee contract is a proxy")
         {
             panic!("Fee contract's address is not a proxy");
+        }
+
+        // Instantiate a wrapper with the proxy address and fee contract ABI.
+        let proxy = FeeContract::new(fee_contract_proxy_address, l1.clone());
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %fee_contract_proxy_address,
+                %owner,
+                "transferring fee contract proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?.await?;
         }
     }
 
@@ -440,7 +474,7 @@ pub async fn is_proxy_contract(
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ContractGroup {
     #[clap(name = "hotshot")]
-    HotShot,
+    HotShot, // TODO: confirm whether we keep HotShot in the contract group
     FeeContract,
     LightClient,
 }

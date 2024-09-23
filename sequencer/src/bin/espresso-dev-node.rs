@@ -4,12 +4,12 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, MockSequencerVersions};
+use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions, V0_1};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
-    types::{Address, U256},
+    types::{Address, H160, U256},
 };
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_state_prover::service::{
@@ -62,6 +62,16 @@ struct Args {
     )]
     account_index: u32,
 
+    /// Address for the multisig wallet that will be the admin
+    ///
+    /// This the multisig wallet that will be upgrade contracts and execute admin only functions on contracts
+    #[clap(
+        long,
+        name = "MULTISIG_ADDRESS",
+        env = "ESPRESSO_SEQUENCER_ETH_MULTISIG_ADDRESS"
+    )]
+    multisig_address: Option<H160>,
+
     /// The frequency of updating the light client state, expressed in update interval
     #[clap( long, value_parser = parse_duration, default_value = "20s", env = "ESPRESSO_STATE_PROVER_UPDATE_INTERVAL")]
     update_interval: Duration,
@@ -86,6 +96,11 @@ struct Args {
     /// If there are fewer indices provided than chains, the base ACCOUNT_INDEX will be used.
     #[clap(long, env = "ESPRESSO_SEQUENCER_DEPLOYER_ALT_INDICES")]
     alt_account_indices: Vec<u32>,
+
+    /// Optional list of multisig addresses for the alternate chains.
+    /// If there are fewer multisig addresses provided than chains, the base MULTISIG_ADDRESS will be used.
+    #[arg(long, env = "ESPRESSO_DEPLOYER_ALT_MULTISIG_ADDRESSES", num_args = 1.., value_delimiter = ',')]
+    alt_multisig_addresses: Vec<H160>,
 
     /// The frequency of updating the light client state for alt chains.
     /// If there are fewer intervals provided than chains, the base update interval will be used.
@@ -134,9 +149,11 @@ async fn main() -> anyhow::Result<()> {
         rpc_url,
         mnemonic,
         account_index,
+        multisig_address,
         alt_chain_providers,
         alt_mnemonics,
         alt_account_indices,
+        alt_multisig_addresses,
         sequencer_api_port,
         sequencer_api_max_connections,
         builder_port,
@@ -177,7 +194,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let network_config = TestConfigBuilder::default()
-        .builder_port(builder_port)
+        .marketplace_builder_port(builder_port)
         .state_relay_url(relay_server_url.clone())
         .l1_url(l1_url.clone())
         .build();
@@ -188,7 +205,8 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+    let network =
+        TestNetwork::new(config, SequencerVersions::<MarketplaceVersion, V0_1>::new()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
@@ -203,10 +221,11 @@ async fn main() -> anyhow::Result<()> {
     let mut mock_contracts = BTreeMap::new();
     let mut handles = FuturesUnordered::new();
     // deploy contract for L1 and each alt chain
-    for (url, mnemonic, account_index, update_interval, retry_interval) in once((
+    for (url, mnemonic, account_index, multisig_address, update_interval, retry_interval) in once((
         l1_url.clone(),
         mnemonic.clone(),
         account_index,
+        multisig_address,
         update_interval,
         retry_interval,
     ))
@@ -220,6 +239,12 @@ async fn main() -> anyhow::Result<()> {
                     .chain(std::iter::repeat(account_index)),
             )
             .zip(
+                alt_multisig_addresses
+                    .into_iter()
+                    .map(Some)
+                    .chain(std::iter::repeat(multisig_address)),
+            )
+            .zip(
                 alt_prover_update_intervals
                     .into_iter()
                     .chain(std::iter::repeat(update_interval)),
@@ -229,7 +254,9 @@ async fn main() -> anyhow::Result<()> {
                     .into_iter()
                     .chain(std::iter::repeat(retry_interval)),
             )
-            .map(|((((url, mnc), idx), update), retry)| (url.clone(), mnc, idx, update, retry)),
+            .map(|(((((url, mnc), idx), mlts), update), retry)| {
+                (url.clone(), mnc, idx, mlts, update, retry)
+            }),
     ) {
         tracing::info!("deploying the contract for provider: {url:?}");
 
@@ -237,9 +264,11 @@ async fn main() -> anyhow::Result<()> {
             url.clone(),
             mnemonic.clone(),
             account_index,
+            multisig_address,
             true,
             None,
             async { Ok(lc_genesis.clone()) }.boxed(),
+            None,
             contracts.clone(),
         )
         .await?;
@@ -323,6 +352,7 @@ async fn main() -> anyhow::Result<()> {
 
     let dev_info = DevInfo {
         builder_url: network.cfg.hotshot_config().builder_urls[0].clone(),
+        sequencer_api_port,
         l1_prover_port,
         l1_url,
         l1_light_client_address: l1_lc,
@@ -473,6 +503,7 @@ async fn run_dev_node_server<ApiVer: StaticVersionType + 'static, S: Signer + Cl
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DevInfo {
     pub builder_url: Url,
+    pub sequencer_api_port: u16,
     pub l1_prover_port: u16,
     pub l1_url: Url,
     pub l1_light_client_address: Address,
@@ -604,18 +635,10 @@ mod tests {
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
 
-        let builder_address = builder_api_client
-            .get::<String>("block_info/builderaddress")
-            .send()
-            .await
-            .unwrap();
-
-        assert!(!builder_address.is_empty());
-
         let tx = Transaction::new(100_u32.into(), vec![1, 2, 3]);
 
-        let hash: Commitment<Transaction> = api_client
-            .post("submit/submit")
+        let hash: Commitment<Transaction> = builder_api_client
+            .post("txn_submit/submit")
             .body_json(&tx)
             .unwrap()
             .send()
@@ -633,6 +656,7 @@ mod tests {
             .await;
         while tx_result.is_err() {
             sleep(Duration::from_secs(1)).await;
+            tracing::warn!("waiting for tx");
 
             tx_result = api_client
                 .get::<TransactionQueryData<SeqTypes>>(&format!(

@@ -61,6 +61,7 @@ mod persistence_tests {
         traits::EventConsumer, Event, Leaf, NodeState, PubKey, SeqTypes, ValidatedState,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
         event::{EventType, HotShotAction, LeafInfo},
@@ -172,7 +173,7 @@ mod persistence_tests {
             data: QuorumProposal::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
@@ -354,7 +355,7 @@ mod persistence_tests {
         ];
         let mut final_qc = leaves[3].justify_qc();
         final_qc.view_number += 1;
-        final_qc.data.leaf_commit = leaf.commit();
+        final_qc.data.leaf_commit = Committable::commit(&leaf);
         let qcs = [
             leaves[1].justify_qc(),
             leaves[2].justify_qc(),
@@ -508,13 +509,19 @@ mod persistence_tests {
         let mut quorum_proposal = QuorumProposal::<SeqTypes> {
             block_header: leaf.block_header().clone(),
             view_number: ViewNumber::genesis(),
-            justify_qc: QuorumCertificate::genesis(&ValidatedState::default(), &NodeState::mock())
-                .await,
+            justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                &ValidatedState::default(),
+                &NodeState::mock(),
+            )
+            .await,
             upgrade_certificate: None,
             proposal_certificate: None,
         };
-        let mut qc =
-            QuorumCertificate::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let mut qc = QuorumCertificate::genesis::<TestVersions>(
+            &ValidatedState::default(),
+            &NodeState::mock(),
+        )
+        .await;
 
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
             .expect("Failed to sign block payload");
@@ -532,7 +539,7 @@ mod persistence_tests {
             quorum_proposal.view_number = ViewNumber::new(i);
             let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
-            qc.data.leaf_commit = leaf.commit();
+            qc.data.leaf_commit = Committable::commit(&leaf);
             vid.data.view_number = leaf.view_number();
             da_proposal.data.view_number = leaf.view_number();
             chain.push((leaf.clone(), qc.clone(), vid.clone(), da_proposal.clone()));

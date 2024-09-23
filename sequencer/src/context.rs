@@ -100,28 +100,24 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
 
         // Load saved consensus state from storage.
         let (initializer, anchor_view) = persistence
-            .load_consensus_state(instance_state.clone())
+            .load_consensus_state::<V>(instance_state.clone())
             .await?;
 
-        let committee_membership = GeneralStaticCommittee::create_election(
+        let committee_membership = GeneralStaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_nodes_with_stake.clone(),
             Topic::Global,
-            0,
         );
 
-        let da_membership = GeneralStaticCommittee::create_election(
+        let da_membership = GeneralStaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
             Topic::Da,
-            0,
         );
 
         let memberships = Memberships {
             quorum_membership: committee_membership.clone(),
             da_membership,
-            vid_membership: committee_membership.clone(),
-            view_sync_membership: committee_membership.clone(),
         };
 
         let stake_table_commit = static_stake_table_commitment(
@@ -134,7 +130,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
 
         let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(
             config.known_nodes_with_stake.clone(),
-            config.num_nodes_without_stake,
+            0,
         )));
 
         let persistence = Arc::new(persistence);

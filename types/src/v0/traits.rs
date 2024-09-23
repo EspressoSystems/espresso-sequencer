@@ -15,7 +15,9 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
-        node_implementation::ConsensusTime, storage::Storage, ValidatedState as HotShotState,
+        node_implementation::{ConsensusTime, Versions},
+        storage::Storage,
+        ValidatedState as HotShotState,
     },
     utils::View,
 };
@@ -366,7 +368,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// if there is no saved state). Also returns the anchor view number, which can be used as a
     /// reference point to process any events which were not processed before a previous shutdown,
     /// if applicable,.
-    async fn load_consensus_state(
+    async fn load_consensus_state<V: Versions>(
         &self,
         state: NodeState,
     ) -> anyhow::Result<(HotShotInitializer<SeqTypes>, Option<ViewNumber>)> {
@@ -408,7 +410,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
                     Leaf::genesis(&genesis_validated_state, &state).await,
-                    QuorumCertificate::genesis(&genesis_validated_state, &state).await,
+                    QuorumCertificate::genesis::<V>(&genesis_validated_state, &state).await,
                     None,
                 )
             }

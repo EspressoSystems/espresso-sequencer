@@ -43,8 +43,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, KeyPair,
-            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, GossipConfig,
+            KeyPair, Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -55,14 +55,13 @@ use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
+    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
+    ParentBlockReferences,
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -96,7 +95,6 @@ use hotshot_types::{
 };
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
-use libp2p_networking::network::GossipConfig;
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -259,11 +257,8 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let l1_genesis = match genesis.l1_finalized {
-        Some(L1Finalized::Block(b)) => Some(b),
-        Some(L1Finalized::Number { number }) => {
-            Some(l1_client.wait_for_finalized_block(number).await)
-        }
-        None => None,
+        L1Finalized::Block(b) => b,
+        L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
     };
 
     let instance_state = NodeState {
@@ -271,7 +266,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         l1_client,
         genesis_header: genesis.header,
         genesis_state: genesis_state.clone(),
-        l1_genesis,
+        l1_genesis: Some(l1_genesis),
         peers: Arc::new(StatePeers::<SequencerApiVersion>::from_urls(
             network_params.state_peers,
             network_params.catchup_backoff,
@@ -347,23 +342,19 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
         None => config.known_nodes_with_stake.clone(),
     };
 
-    let quorum_membership = GeneralStaticCommittee::create_election(
+    let quorum_membership = GeneralStaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake.clone(),
         Topic::Global,
-        0,
     );
-    let da_membership = GeneralStaticCommittee::create_election(
+    let da_membership = GeneralStaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
         Topic::Da,
-        0,
     );
     let memberships = Memberships {
         quorum_membership: quorum_membership.clone(),
         da_membership: da_membership.clone(),
-        vid_membership: quorum_membership.clone(),
-        view_sync_membership: quorum_membership,
     };
     let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
@@ -376,7 +367,7 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
         config,
         memberships,
         networks,
-        HotShotInitializer::from_genesis(instance_state)
+        HotShotInitializer::from_genesis::<V>(instance_state)
             .await
             .unwrap(),
         ConsensusMetricsValue::new(metrics),
@@ -468,7 +459,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> BuilderC
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,
                 leaf_commit: fake_commitment(),

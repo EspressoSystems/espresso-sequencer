@@ -29,7 +29,7 @@ use itertools::Itertools;
 use portpicker::pick_unused_port;
 use sequencer::{
     api::{self, data_source::testing::TestableSequencerDataSource, options::Http},
-    genesis::StakeTableConfig,
+    genesis::{L1Finalized, StakeTableConfig},
     network::cdn::{TestingDef, WrappedSignatureKey},
 };
 use sequencer_utils::test_utils::setup_test;
@@ -276,7 +276,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
                 chain_config: Default::default(),
                 stake_table: StakeTableConfig { capacity: 10 },
                 accounts: Default::default(),
-                l1_finalized: Default::default(),
+                l1_finalized: L1Finalized::Number { number: 0 },
                 header: Default::default(),
                 upgrades: Default::default(),
                 base_version: Version { major: 0, minor: 1 },
@@ -433,7 +433,7 @@ impl TestNetwork {
             chain_config: Default::default(),
             stake_table: StakeTableConfig { capacity: 10 },
             accounts: Default::default(),
-            l1_finalized: Default::default(),
+            l1_finalized: L1Finalized::Number { number: 0 },
             header: Default::default(),
             upgrades: Default::default(),
             base_version: Version { major: 0, minor: 1 },
@@ -658,7 +658,6 @@ fn start_orchestrator(port: u16, nodes: &[NodeParams]) -> JoinHandle<()> {
     config.config.known_nodes_without_stake = vec![];
     config.config.next_view_timeout = view_timeout.as_millis() as u64;
     config.config.builder_timeout = builder_timeout;
-    config.enable_registration_verification = false;
 
     let bind = format!("http://0.0.0.0:{port}").parse().unwrap();
     spawn(async move {
