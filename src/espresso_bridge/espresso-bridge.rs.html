@@ -287,90 +287,20 @@
 <a href="#287" id="287">287</a>
 <a href="#288" id="288">288</a>
 <a href="#289" id="289">289</a>
-<a href="#290" id="290">290</a>
-<a href="#291" id="291">291</a>
-<a href="#292" id="292">292</a>
-<a href="#293" id="293">293</a>
-<a href="#294" id="294">294</a>
-<a href="#295" id="295">295</a>
-<a href="#296" id="296">296</a>
-<a href="#297" id="297">297</a>
-<a href="#298" id="298">298</a>
-<a href="#299" id="299">299</a>
-<a href="#300" id="300">300</a>
-<a href="#301" id="301">301</a>
-<a href="#302" id="302">302</a>
-<a href="#303" id="303">303</a>
-<a href="#304" id="304">304</a>
-<a href="#305" id="305">305</a>
-<a href="#306" id="306">306</a>
-<a href="#307" id="307">307</a>
-<a href="#308" id="308">308</a>
-<a href="#309" id="309">309</a>
-<a href="#310" id="310">310</a>
-<a href="#311" id="311">311</a>
-<a href="#312" id="312">312</a>
-<a href="#313" id="313">313</a>
-<a href="#314" id="314">314</a>
-<a href="#315" id="315">315</a>
-<a href="#316" id="316">316</a>
-<a href="#317" id="317">317</a>
-<a href="#318" id="318">318</a>
-<a href="#319" id="319">319</a>
-<a href="#320" id="320">320</a>
-<a href="#321" id="321">321</a>
-<a href="#322" id="322">322</a>
-<a href="#323" id="323">323</a>
-<a href="#324" id="324">324</a>
-<a href="#325" id="325">325</a>
-<a href="#326" id="326">326</a>
-<a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a>
-<a href="#329" id="329">329</a>
-<a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
-<a href="#332" id="332">332</a>
-<a href="#333" id="333">333</a>
-<a href="#334" id="334">334</a>
-<a href="#335" id="335">335</a>
-<a href="#336" id="336">336</a>
-<a href="#337" id="337">337</a>
-<a href="#338" id="338">338</a>
-<a href="#339" id="339">339</a>
-<a href="#340" id="340">340</a>
-<a href="#341" id="341">341</a>
-<a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
-<a href="#344" id="344">344</a>
-<a href="#345" id="345">345</a>
-<a href="#346" id="346">346</a>
-<a href="#347" id="347">347</a>
-<a href="#348" id="348">348</a>
-<a href="#349" id="349">349</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
-
-<span class="kw">use </span>anyhow::{bail, ensure, Context};
-<span class="kw">use </span>async_std::{sync::Arc, task::sleep};
+</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, ensure, Context};
+<span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>clap::{Parser, Subcommand};
+<span class="kw">use </span>client::SequencerClient;
 <span class="kw">use </span>contract_bindings::fee_contract::FeeContract;
-<span class="kw">use </span>espresso_types::{eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header};
+<span class="kw">use </span>espresso_types::{eth_signature_key::EthKeyPair, Header};
 <span class="kw">use </span>ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
     types::{Address, BlockId, U256},
 };
 <span class="kw">use </span>futures::stream::StreamExt;
-<span class="kw">use </span>jf_merkle_tree::{
-    prelude::{MerkleProof, Sha3Node},
-    MerkleTreeScheme,
-};
-<span class="kw">use </span>sequencer::SequencerApiVersion;
 <span class="kw">use </span>sequencer_utils::logging;
-<span class="kw">use </span>surf_disco::{error::ClientError, Url};
-
-<span class="kw">type </span>EspressoClient = surf_disco::Client&lt;ClientError, SequencerApiVersion&gt;;
-
-<span class="kw">type </span>FeeMerkleProof = MerkleProof&lt;FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }&gt;;
+<span class="kw">use </span>surf_disco::Url;
 
 <span class="doccomment">/// Command-line utility for working with the Espresso bridge.
 </span><span class="attr">#[derive(Debug, Parser)]
@@ -499,7 +429,7 @@
     <span class="kw">let </span>contract = FeeContract::new(opt.contract_address, l1.clone());
 
     <span class="comment">// Connect to Espresso.
-    </span><span class="kw">let </span>espresso = EspressoClient::new(opt.espresso_provider);
+    </span><span class="kw">let </span>espresso = SequencerClient::new(opt.espresso_provider);
 
     <span class="comment">// Validate deposit.
     </span><span class="kw">let </span>amount = U256::from(opt.amount);
@@ -515,7 +445,10 @@
     );
 
     <span class="comment">// Record the initial balance on Espresso.
-    </span><span class="kw">let </span>initial_balance = get_espresso_balance(<span class="kw-2">&amp;</span>espresso, l1.address(), <span class="prelude-val">None</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+    </span><span class="kw">let </span>initial_balance = espresso
+        .get_espresso_balance(l1.address(), <span class="prelude-val">None</span>)
+        .<span class="kw">await
+        </span>.context(<span class="string">"getting Espresso block height"</span>)<span class="question-mark">?</span>;
     <span class="macro">tracing::debug!</span>(%initial_balance, <span class="string">"initial balance"</span>);
 
     <span class="comment">// Send the deposit transaction.
@@ -541,16 +474,10 @@
     <span class="macro">tracing::info!</span>(l1_block, <span class="string">"deposit mined on L1"</span>);
 
     <span class="comment">// Wait for Espresso to catch up to the L1.
-    </span><span class="kw">let </span>espresso_height = espresso
-        .get::&lt;u64&gt;(<span class="string">"node/block-height"</span>)
-        .send()
-        .<span class="kw">await
-        </span>.context(<span class="string">"getting Espresso block height"</span>)<span class="question-mark">?</span>;
+    </span><span class="kw">let </span>espresso_height = espresso.get_height().<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>headers = espresso
-        .socket(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/stream/headers/{espresso_height}"</span>))
-        .subscribe()
-        .<span class="kw">await
-        </span>.context(<span class="string">"subscribing to Espresso headers"</span>)<span class="question-mark">?</span>;
+        .subscribe_headers(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/stream/headers/{espresso_height}"</span>))
+        .<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">let </span>espresso_block = <span class="kw">loop </span>{
         <span class="kw">let </span>header: Header = <span class="kw">match </span>headers.next().<span class="kw">await</span>.context(<span class="string">"header stream ended"</span>)<span class="question-mark">? </span>{
             <span class="prelude-val">Ok</span>(header) =&gt; header,
@@ -576,7 +503,9 @@
     };
 
     <span class="comment">// Confirm that the Espresso balance has increased.
-    </span><span class="kw">let </span>final_balance = get_espresso_balance(<span class="kw-2">&amp;</span>espresso, l1.address(), <span class="prelude-val">Some</span>(espresso_block)).<span class="kw">await</span><span class="question-mark">?</span>;
+    </span><span class="kw">let </span>final_balance = espresso
+        .get_espresso_balance(l1.address(), <span class="prelude-val">Some</span>(espresso_block))
+        .<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">if </span>final_balance &gt;= initial_balance + amount.into() {
         <span class="macro">tracing::info!</span>(%final_balance, <span class="string">"deposit successful"</span>);
     } <span class="kw">else </span>{
@@ -600,8 +529,8 @@
         <span class="macro">bail!</span>(<span class="string">"address or mnemonic must be provided"</span>);
     };
 
-    <span class="kw">let </span>espresso = EspressoClient::new(opt.espresso_provider);
-    <span class="kw">let </span>balance = get_espresso_balance(<span class="kw-2">&amp;</span>espresso, address, opt.block).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">let </span>espresso = SequencerClient::new(opt.espresso_provider);
+    <span class="kw">let </span>balance = espresso.get_espresso_balance(address, opt.block).<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="comment">// Output the balance on regular standard out, rather than as a log message, to make scripting
     // easier.
@@ -634,55 +563,6 @@
     </span><span class="macro">println!</span>(<span class="string">"{balance}"</span>);
 
     <span class="prelude-val">Ok</span>(())
-}
-
-<span class="kw">async fn </span>get_espresso_balance(
-    espresso: <span class="kw-2">&amp;</span>EspressoClient,
-    address: Address,
-    block: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-) -&gt; anyhow::Result&lt;FeeAmount&gt; {
-    <span class="comment">// Get the block height to query at, defaulting to the latest block.
-    </span><span class="kw">let </span>block = <span class="kw">if let </span><span class="prelude-val">Some</span>(block) = block {
-        block
-    } <span class="kw">else </span>{
-        espresso
-            .get::&lt;u64&gt;(<span class="string">"node/block-height"</span>)
-            .send()
-            .<span class="kw">await
-            </span>.context(<span class="string">"getting block height"</span>)<span class="question-mark">?
-            </span>- <span class="number">1
-    </span>};
-
-    <span class="comment">// Download the Merkle path for this fee account at the specified block height. Transient errors
-    // are possible (for example, if we are fetching from the latest block, the block height might
-    // get incremented slightly before the state becomes available) so retry a few times.
-    </span><span class="kw">let </span><span class="kw-2">mut </span>retry = <span class="number">0</span>;
-    <span class="kw">let </span>max_retries = <span class="number">5</span>;
-    <span class="kw">let </span>proof = <span class="kw">loop </span>{
-        <span class="macro">tracing::debug!</span>(%address, block, retry, <span class="string">"fetching Espresso balance"</span>);
-        <span class="kw">match </span>espresso
-            .get::&lt;FeeMerkleProof&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"fee-state/{block}/{address:#x}"</span>))
-            .send()
-            .<span class="kw">await
-        </span>{
-            <span class="prelude-val">Ok</span>(proof) =&gt; <span class="kw">break </span>proof,
-            <span class="prelude-val">Err</span>(err) =&gt; {
-                <span class="macro">tracing::warn!</span>(<span class="string">"error getting account balance: {err:#}"</span>);
-                retry += <span class="number">1</span>;
-
-                <span class="kw">if </span>retry == max_retries {
-                    <span class="kw">return </span><span class="prelude-val">Err</span>(err).context(<span class="string">"getting account balance"</span>);
-                } <span class="kw">else </span>{
-                    sleep(Duration::from_secs(<span class="number">5</span>)).<span class="kw">await</span>;
-                }
-            }
-        }
-    };
-
-    <span class="comment">// If the element in the Merkle path is missing -- there is no account with this address -- the
-    // balance is defined to be 0.
-    </span><span class="kw">let </span>balance = proof.elem().copied().unwrap_or(<span class="number">0</span>.into());
-    <span class="prelude-val">Ok</span>(balance)
 }
 
 <span class="attr">#[async_std::main]
