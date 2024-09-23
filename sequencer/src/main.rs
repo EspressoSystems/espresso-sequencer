@@ -259,7 +259,7 @@ mod test {
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
-        genesis::StakeTableConfig,
+        genesis::{L1Finalized, StakeTableConfig},
         persistence::fs,
         SequencerApiVersion,
     };
@@ -285,7 +285,7 @@ mod test {
             chain_config: Default::default(),
             stake_table: StakeTableConfig { capacity: 10 },
             accounts: Default::default(),
-            l1_finalized: Default::default(),
+            l1_finalized: L1Finalized::Number { number: 0 },
             header: Default::default(),
             upgrades: Default::default(),
             base_version: Version { major: 0, minor: 1 },
