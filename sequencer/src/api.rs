@@ -1182,8 +1182,9 @@ mod test {
         // We update the decided state of one node (node 5) with a chain config commitment.
         // Node 5 then sends a catchup request to its dishonest peer.
         // The dishonest peer responds with an invalid chain config that does not match the requested chain config commitment.
-        // After waiting for some time, we verify that node 5 does not have the full chain configuration, i.e., the chain config resolves to None.
-        // This means that Node 5 has validated the chain config from the peer.
+        // After waiting for some time, we verify that node 5 does not have the full chain config
+        // i.e., the validated state chain config resolves to None.
+        // This means that peer chain config response is validated
         setup_test();
 
         const NUM_NODES: usize = 5;
