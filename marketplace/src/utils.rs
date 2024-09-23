@@ -235,7 +235,8 @@ impl<TYPES: NodeType, V: StaticVersionType + 'static> Stream for EventServiceStr
     }
 }
 
-// TODO use new commitment
+// TODO: Update commitment calculation with the new commit.
+// <https://github.com/EspressoSystems/marketplace-builder-core/issues/143>
 pub trait LegacyCommit<T: NodeType> {
     fn legacy_commit(&self) -> committable::Commitment<hotshot_types::data::Leaf<T>>;
 }
