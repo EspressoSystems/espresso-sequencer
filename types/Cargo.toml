@@ -29,10 +29,6 @@ futures = { workspace = true }
 cdn-proto = { workspace = true }
 reqwest = { workspace = true }
 
-generic-array = { workspace = true }
-
-# TODO generic-array should not be a direct dependency
-# https://github.com/EspressoSystems/HotShot/issues/1850
 lazy_static = { workspace = true }
 memoize = { workspace = true }
 rand = { workspace = true }

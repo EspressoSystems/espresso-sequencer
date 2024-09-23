@@ -12,7 +12,7 @@ use ark_std::{
     vec::Vec,
 };
 use bitvec::prelude::*;
-use generic_array::{ArrayLength, GenericArray};
+use digest::generic_array::{ArrayLength, GenericArray};
 use jf_signature::{AggregateableSignatureSchemes, SignatureError};
 use serde::{Deserialize, Serialize};
 

@@ -8,8 +8,8 @@
 
 use ark_serialize::SerializationError;
 use bitvec::{slice::BitSlice, vec::BitVec};
+use digest::generic_array::GenericArray;
 use ethereum_types::U256;
-use generic_array::GenericArray;
 use jf_signature::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair, SignKey, VerKey},
     SignatureError, SignatureScheme,
