@@ -13,3 +13,6 @@ fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 
 [header]
 timestamp = "1970-01-01T00:00:00Z"
+
+[l1_finalized]
+number = 0

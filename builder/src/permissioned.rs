@@ -43,8 +43,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, KeyPair,
-            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, GossipConfig,
+            KeyPair, Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -96,7 +96,6 @@ use hotshot_types::{
 };
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
-use libp2p_networking::network::GossipConfig;
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -259,11 +258,8 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let l1_genesis = match genesis.l1_finalized {
-        Some(L1Finalized::Block(b)) => Some(b),
-        Some(L1Finalized::Number { number }) => {
-            Some(l1_client.wait_for_finalized_block(number).await)
-        }
-        None => None,
+        L1Finalized::Block(b) => b,
+        L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
     };
 
     let instance_state = NodeState {
@@ -271,7 +267,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         l1_client,
         genesis_header: genesis.header,
         genesis_state: genesis_state.clone(),
-        l1_genesis,
+        l1_genesis: Some(l1_genesis),
         peers: Arc::new(StatePeers::<SequencerApiVersion>::from_urls(
             network_params.state_peers,
             network_params.catchup_backoff,

@@ -48,7 +48,7 @@ pub struct Genesis {
     pub stake_table: StakeTableConfig,
     #[serde(default)]
     pub accounts: HashMap<FeeAccount, FeeAmount>,
-    pub l1_finalized: Option<L1Finalized>,
+    pub l1_finalized: L1Finalized,
     pub header: GenesisHeader,
     #[serde(rename = "upgrade", with = "upgrade_ser")]
     #[serde(default)]
@@ -369,7 +369,7 @@ mod test {
         );
         assert_eq!(
             genesis.l1_finalized,
-            Some(L1Finalized::Block(L1BlockInfo {
+            L1Finalized::Block(L1BlockInfo {
                 number: 64,
                 timestamp: 0x123def.into(),
                 hash: H256([
@@ -377,7 +377,7 @@ mod test {
                     0xf3, 0x0a, 0x47, 0xde, 0x02, 0xcf, 0x28, 0xad, 0x68, 0xc8, 0x9e, 0x10, 0x4c,
                     0x00, 0xc4, 0xe5, 0x1b, 0xb7, 0xa5
                 ])
-            }))
+            })
         );
     }
 
@@ -398,6 +398,9 @@ mod test {
 
             [header]
             timestamp = 123456
+
+            [l1_finalized]
+            number = 0
         }
         .to_string();
 
@@ -421,7 +424,7 @@ mod test {
             }
         );
         assert_eq!(genesis.accounts, HashMap::default());
-        assert_eq!(genesis.l1_finalized, None);
+        assert_eq!(genesis.l1_finalized, L1Finalized::Number { number: 0 });
     }
 
     #[test]
@@ -448,10 +451,7 @@ mod test {
         .to_string();
 
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-        assert_eq!(
-            genesis.l1_finalized,
-            Some(L1Finalized::Number { number: 42 })
-        );
+        assert_eq!(genesis.l1_finalized, L1Finalized::Number { number: 42 });
     }
 
     #[async_std::test]
@@ -679,6 +679,9 @@ mod test {
 
             [header]
             timestamp = "2024-05-16T11:20:28-04:00"
+
+            [l1_finalized]
+            number = 0
         }
         .to_string();
 

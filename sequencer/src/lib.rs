@@ -24,7 +24,6 @@ use futures::FutureExt;
 use genesis::L1Finalized;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
-use libp2p_networking::network::GossipConfig;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -40,7 +39,7 @@ use derivative::Derivative;
 use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 pub use genesis::Genesis;
 #[cfg(feature = "libp2p")]
-use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
+use hotshot::traits::implementations::{CombinedNetworks, GossipConfig, Libp2pNetwork};
 use hotshot::{
     traits::implementations::{
         derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
@@ -376,18 +375,15 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let l1_genesis = match genesis.l1_finalized {
-        Some(L1Finalized::Block(b)) => Some(b),
-        Some(L1Finalized::Number { number }) => {
-            Some(l1_client.wait_for_finalized_block(number).await)
-        }
-        None => None,
+        L1Finalized::Block(b) => b,
+        L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
     };
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
         l1_client,
         genesis_header: genesis.header,
         genesis_state,
-        l1_genesis,
+        l1_genesis: Some(l1_genesis),
         peers: catchup::local_and_remote(
             persistence_opt,
             StatePeers::<SequencerApiVersion>::from_urls(

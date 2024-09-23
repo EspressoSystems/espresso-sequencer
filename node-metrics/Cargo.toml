@@ -29,7 +29,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { version = "^1.0.113", optional = true }
 surf-disco = { workspace = true }
-tide-disco = { version = "0.9.0" }
+tide-disco = { workspace = true }
 time = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }

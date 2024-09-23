@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, createSafeTransactionData, validateEthereumAddress } from "./utils";
+import { getEnvVar, createSafeTransactionData, validateEthereumAddress, getSigner } from "./utils";
 const SET_PROVER_CMD = "setProver" as const;
 const DISABLE_PROVER_CMD = "disableProver" as const;
 
@@ -21,8 +21,9 @@ async function main() {
      */
     // Initialize web3 provider using the RPC URL from environment variables
     const web3Provider = new ethers.JsonRpcProvider(getEnvVar("RPC_URL"));
-    // Create a signer using the orchestrator's private key and the web3 provider
-    const orchestratorSigner = new ethers.Wallet(getEnvVar("SAFE_ORCHESTRATOR_PRIVATE_KEY"), web3Provider);
+
+    // Get the signer, this signer must be one of the signers on the Safe Multisig Wallet
+    const orchestratorSigner = getSigner(web3Provider);
 
     // Set up Eth Adapter with ethers and the signer
     const ethAdapter = new EthersAdapter({
@@ -95,7 +96,7 @@ export async function proposeSetProverTransaction(
   // Prepare the transaction data to set the permissioned prover
   let data = createPermissionedProverTxData(proverAddress);
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
@@ -147,7 +148,7 @@ export async function proposeDisableProverTransaction(
   // Prepare the transaction data to disable permissioned prover mode
   let data = createDisablePermissionedProverTxData();
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
@@ -200,9 +201,12 @@ async function createSafeTransaction(
   // Prepare the safe transaction data with the contract address, data, and value
   let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
 
+  if (getEnvVar("USE_HARDWARE_WALLET")) {
+    console.log(`Please sign the message on your connected Ledger device`);
+  }
+
   // Create the safe transaction using the Safe SDK
   const safeTransaction = await safeSDK.createTransaction({ transactions: [safeTransactionData] });
-
   return safeTransaction;
 }
 

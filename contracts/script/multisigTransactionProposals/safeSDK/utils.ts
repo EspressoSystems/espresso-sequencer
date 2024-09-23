@@ -1,4 +1,6 @@
 import { ethers } from "ethers"; // Import ethers from the ethers library
+import { LedgerSigner } from "@ethers-ext/signer-ledger";
+import HIDTransport from "@ledgerhq/hw-transport-node-hid";
 
 /**
  * Function to check if a given string is a valid Ethereum address
@@ -49,4 +51,23 @@ export function createSafeTransactionData(to: string, data: string, value: strin
     value: value,
   };
   return safeTransactionData; // Return the safe transaction data object
+}
+
+/**
+ * Function to check if a given string is a valid Ethereum address
+ * @param {string} address - The Ethereum address to validate
+ * @throws {Error} - Throws an error if the address is invalid and doesn't follow Ethereum address standards
+ */
+export function getSigner(web3Provider: ethers.Provider): ethers.Signer {
+  let orchestratorSigner;
+  const use_hardware_wallet = getEnvVar("USE_HARDWARE_WALLET");
+  if (use_hardware_wallet == "true") {
+    // Create a signer using the ledger
+    orchestratorSigner = new LedgerSigner(HIDTransport, web3Provider);
+  } else {
+    // Create a signer using the orchestrator's private key and the web3 provider
+    orchestratorSigner = new ethers.Wallet(getEnvVar("SAFE_ORCHESTRATOR_PRIVATE_KEY"), web3Provider);
+  }
+
+  return orchestratorSigner;
 }
