@@ -460,8 +460,9 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig,
     };
     use marketplace_builder_core::{
-        builder_state::{BuilderState, BuiltFromProposedBlock},
+        builder_state::BuilderState,
         service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
+        utils::ParentBlockReferences,
     };
     use portpicker::pick_unused_port;
     use vbs::version::Version;
@@ -540,10 +541,10 @@ pub mod testing {
         let leaf = Leaf::genesis(&validated_state, &instance_state).await;
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: ViewNumber::genesis(),
                 vid_commitment,
-                leaf_commit: leaf.commit(),
+                leaf_commit: <Leaf as Committable>::commit(&leaf),
                 builder_commitment,
             },
             &receivers,
@@ -692,7 +693,6 @@ pub mod testing {
                 fixed_leader_for_gpuvid: 0,
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
-                num_nodes_without_stake: 0,
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: vec![],
@@ -702,7 +702,6 @@ pub mod testing {
                 start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes,
-                da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
