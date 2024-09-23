@@ -18,7 +18,7 @@ use hotshot_types::{
     traits::{
         self,
         block_contents::{BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::NodeType,
+        node_implementation::{NodeType, Versions},
         EncodeBytes,
     },
     vid::{vid_scheme, VidCommitment},
@@ -213,23 +213,27 @@ impl<Types: NodeType> LeafQueryData<Types> {
         leaf: Leaf<Types>,
         qc: QuorumCertificate<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
+        // TODO: Replace with the new `commit` function in HotShot. Add an `upgrade_lock` parameter
+        // and a `HsVer: Versions` bound, then call `leaf.commit(upgrade_lock).await`. This will
+        // require updates in callers and relevant types as well.
+        let leaf_commit = <Leaf<Types> as Committable>::commit(&leaf);
         ensure!(
-            qc.data.leaf_commit == leaf.commit(),
+            qc.data.leaf_commit == leaf_commit,
             InconsistentLeafSnafu {
-                leaf: leaf.commit(),
+                leaf: leaf_commit,
                 qc_leaf: qc.data.leaf_commit
             }
         );
         Ok(Self { leaf, qc })
     }
 
-    pub async fn genesis(
+    pub async fn genesis<HsVer: Versions>(
         validated_state: &Types::ValidatedState,
         instance_state: &Types::InstanceState,
     ) -> Self {
         Self {
             leaf: Leaf::genesis(validated_state, instance_state).await,
-            qc: QuorumCertificate::genesis(validated_state, instance_state).await,
+            qc: QuorumCertificate::genesis::<HsVer>(validated_state, instance_state).await,
         }
     }
 
@@ -246,7 +250,10 @@ impl<Types: NodeType> LeafQueryData<Types> {
     }
 
     pub fn hash(&self) -> LeafHash<Types> {
-        self.leaf.commit()
+        // TODO: Replace with the new `commit` function in HotShot. Add an `upgrade_lock` parameter
+        // and a `HsVer: Versions` bound, then call `leaf.commit(upgrade_lock).await`. This will
+        // require updates in callers and relevant types as well.
+        <Leaf<Types> as Committable>::commit(&self.leaf)
     }
 
     pub fn block_hash(&self) -> BlockHash<Types> {

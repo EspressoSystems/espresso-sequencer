@@ -389,6 +389,8 @@ mod test {
     // storing VID common and later the corresponding share.
     #[async_std::test]
     async fn test_vid_monotonicity() {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let storage = D::create(0).await;
@@ -398,7 +400,7 @@ mod test {
         let disperse = vid_scheme(2).disperse([]).unwrap();
 
         // Insert test data with VID common but no share.
-        let leaf = LeafQueryData::<MockTypes>::genesis(
+        let leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )

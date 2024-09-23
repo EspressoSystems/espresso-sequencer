@@ -851,6 +851,8 @@ mod test {
 
     #[async_std::test]
     async fn test_extensions() {
+        use hotshot_example_types::node_types::TestVersions;
+
         setup_test();
 
         let dir = TempDir::with_prefix("test_availability_extensions").unwrap();
@@ -863,7 +865,9 @@ mod test {
 
         // mock up some consensus data.
         let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::default()).await;
-        let qc = QuorumCertificate::genesis(&Default::default(), &Default::default()).await;
+        let qc =
+            QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
+                .await;
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
         let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());
 

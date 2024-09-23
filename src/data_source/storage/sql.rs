@@ -949,7 +949,10 @@ pub mod testing {
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
     use async_std::task::sleep;
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
+    use hotshot_example_types::{
+        node_types::TestVersions,
+        state_types::{TestInstanceState, TestValidatedState},
+    };
     use std::time::Duration;
 
     use super::{testing::TmpDb, *};
@@ -1048,7 +1051,7 @@ mod test {
             .port(port);
 
         let mut storage = SqlStorage::connect(cfg).await.unwrap();
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(
+        let mut leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )
@@ -1138,7 +1141,7 @@ mod test {
         let db = TmpDb::init().await;
 
         let mut storage = SqlStorage::connect(db.config()).await.unwrap();
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(
+        let mut leaf = LeafQueryData::<MockTypes>::genesis::<TestVersions>(
             &TestValidatedState::default(),
             &TestInstanceState::default(),
         )

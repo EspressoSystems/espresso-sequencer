@@ -729,6 +729,8 @@ mod test {
 
     #[async_std::test]
     async fn test_composition() {
+        use hotshot_example_types::node_types::TestVersions;
+
         let dir = TempDir::with_prefix("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
         let hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
@@ -737,7 +739,9 @@ mod test {
 
         // Mock up some data and add a block to the store.
         let leaf = Leaf::<MockTypes>::genesis(&Default::default(), &Default::default()).await;
-        let qc = QuorumCertificate::genesis(&Default::default(), &Default::default()).await;
+        let qc =
+            QuorumCertificate::genesis::<TestVersions>(&Default::default(), &Default::default())
+                .await;
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
         let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());
         let mut tx = hotshot_qs.write().await.unwrap();
