@@ -875,7 +875,7 @@ pub mod test_helpers {
             async move {
                 Result::<AccountQueryData, _>::Err(hotshot_query_service::Error::catch_all(
                     StatusCode::BAD_REQUEST,
-                    "no account".to_string(),
+                    "no account found".to_string(),
                 ))
             }
             .boxed()
@@ -884,7 +884,7 @@ pub mod test_helpers {
             async move {
                 Result::<BlocksFrontier, _>::Err(hotshot_query_service::Error::catch_all(
                     StatusCode::BAD_REQUEST,
-                    "no account".to_string(),
+                    "no block found".to_string(),
                 ))
             }
             .boxed()
