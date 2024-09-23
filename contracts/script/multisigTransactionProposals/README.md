@@ -47,7 +47,7 @@ To disable the permissioned prover on the light client contract, ensure that the
 in the `.env.contracts` file:
 
 - `RPC_URL`
-- `SAFE_ORCHESTRATOR_PRIVATE_KEY`
+- `SAFE_ORCHESTRATOR_PRIVATE_KEY` (if not using a hardware wallet)
 - `SAFE_MULTISIG_ADDRESS`
 - `LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS`
 - `USE_HARDWARE_WALLET` (if yes, put "true", otherwise "false")
@@ -64,6 +64,33 @@ Once successful, all signers will see a transaction request on the SAFE UI
 
 Once the transaction has been signed by all signers and executed by one, you should be able to go to the light client
 proxy and read the permissioned prover address. It will be equal to the 0 ETH address (address(0)).
+
+## Set the state history retention period
+
+To enable the state history retention period on the light client contract, ensure that the following environment
+variables are set in the `.env` file:
+
+- `RPC_URL`
+- `SAFE_ORCHESTRATOR_PRIVATE_KEY` (if not using a hardware wallet)
+- `SAFE_MULTISIG_ADDRESS`
+- `LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS`
+- `STATE_HISTORY_RETENTION_PERIOD`
+- `USE_HARDWARE_WALLET` (if yes, put "true", otherwise "false")
+
+Assuming you're in the root folder, run the following command:
+
+```bash
+source .env.contracts && \
+ts-node contracts/script/multisigTransactionProposals/safeSDK/modifyStateHistoryRetentionPeriod.ts
+```
+
+Open the the URL shown in the console to sign the transaction in the Safe UI.
+
+Once successful, all signers will see a transaction request on the SAFE UI e.g.
+`https://app.safe.global/transactions/queue?safe=$SAFE_MULTISIG_ADDRESS`
+
+Once the transaction has been signed by all signers and executed by one, you should be able to go to the light client
+proxy and read the state history retention period on etherscan.
 
 ## Demonstrating the setPermissionedProver workflow
 
