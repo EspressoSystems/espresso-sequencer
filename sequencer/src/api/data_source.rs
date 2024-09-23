@@ -1,4 +1,4 @@
-use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+use std::{collections::HashSet, num::NonZeroUsize, sync::Arc, time::Duration};
 
 use anyhow::{bail, Context};
 use async_trait::async_trait;
@@ -6,7 +6,7 @@ use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
     v0_3::ChainConfig,
-    PubKey, Transaction,
+    PubKey, Transaction, ValidatedState,
 };
 use ethers::prelude::Address;
 use futures::future::Future;
@@ -102,6 +102,7 @@ pub(crate) trait SubmitDataSource<N: ConnectedNetwork<PubKey>, P: SequencerPersi
 
 pub(crate) trait HotShotConfigDataSource {
     fn get_config(&self) -> impl Send + Future<Output = PublicNetworkConfig>;
+    fn decided_state(&self) -> impl Send + Future<Output = Arc<ValidatedState>>;
 }
 
 #[async_trait]

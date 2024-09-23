@@ -326,6 +326,12 @@ where
             async move { Ok(env_variables) }
         }
         .boxed()
+    })?
+    .get("chain_config", |_, state| {
+        async move { Ok(state.decided_state().await.chain_config) }.boxed()
+    })?
+    .get("api_version", move |_, _| {
+        { async move { Ok(ApiVer::version()) } }.boxed()
     })?;
 
     Ok(api)
