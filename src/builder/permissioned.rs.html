@@ -657,11 +657,6 @@
 <a href="#657" id="657">657</a>
 <a href="#658" id="658">658</a>
 <a href="#659" id="659">659</a>
-<a href="#660" id="660">660</a>
-<a href="#661" id="661">661</a>
-<a href="#662" id="662">662</a>
-<a href="#663" id="663">663</a>
-<a href="#664" id="664">664</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     alloc::System,
     any,
@@ -719,14 +714,13 @@
     BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
 <span class="kw">use </span>hotshot_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
+    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
+    ParentBlockReferences,
 };
 <span class="kw">use </span>hotshot_events_service::{
     events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
@@ -1007,23 +1001,19 @@
         <span class="prelude-val">None </span>=&gt; config.known_nodes_with_stake.clone(),
     };
 
-    <span class="kw">let </span>quorum_membership = GeneralStaticCommittee::create_election(
+    <span class="kw">let </span>quorum_membership = GeneralStaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake.clone(),
         Topic::Global,
-        <span class="number">0</span>,
     );
-    <span class="kw">let </span>da_membership = GeneralStaticCommittee::create_election(
+    <span class="kw">let </span>da_membership = GeneralStaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
         Topic::Da,
-        <span class="number">0</span>,
     );
     <span class="kw">let </span>memberships = Memberships {
         quorum_membership: quorum_membership.clone(),
         da_membership: da_membership.clone(),
-        vid_membership: quorum_membership.clone(),
-        view_sync_membership: quorum_membership,
     };
     <span class="kw">let </span>state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
@@ -1036,7 +1026,7 @@
         config,
         memberships,
         networks,
-        HotShotInitializer::from_genesis(instance_state)
+        HotShotInitializer::from_genesis::&lt;V&gt;(instance_state)
             .<span class="kw">await
             </span>.unwrap(),
         ConsensusMetricsValue::new(metrics),
@@ -1128,7 +1118,7 @@
         <span class="kw">let </span>global_state_clone = global_state.clone();
 
         <span class="kw">let </span>builder_state = BuilderState::&lt;SeqTypes&gt;::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,
                 leaf_commit: fake_commitment(),

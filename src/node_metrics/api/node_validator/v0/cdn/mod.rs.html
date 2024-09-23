@@ -576,15 +576,6 @@
 <a href="#576" id="576">576</a>
 <a href="#577" id="577">577</a>
 <a href="#578" id="578">578</a>
-<a href="#579" id="579">579</a>
-<a href="#580" id="580">580</a>
-<a href="#581" id="581">581</a>
-<a href="#582" id="582">582</a>
-<a href="#583" id="583">583</a>
-<a href="#584" id="584">584</a>
-<a href="#585" id="585">585</a>
-<a href="#586" id="586">586</a>
-<a href="#587" id="587">587</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::api::node_validator::v0::create_node_validator_api::ExternalMessage;
 <span class="kw">use </span>async_std::task::JoinHandle;
 <span class="kw">use </span>espresso_types::{PubKey, SeqTypes};
@@ -604,20 +595,20 @@
 
 <span class="doccomment">/// ConnectedNetworkConsumer represents a trait that splits up a portion of
 /// the ConnectedNetwork trait, so that the consumer only needs to be aware of
-/// the `wait_for_ready` and `recv_msgs` functions.
+/// the `wait_for_ready` and `recv_message` functions.
 </span><span class="attr">#[async_trait::async_trait]
 </span><span class="kw">pub trait </span>ConnectedNetworkConsumer&lt;K&gt; {
     <span class="doccomment">/// [wait_for_ready] will not return until the network is ready to be
     /// utilized.
     </span><span class="kw">async fn </span>wait_for_ready(<span class="kw-2">&amp;</span><span class="self">self</span>);
 
-    <span class="doccomment">/// [recv_msgs] will return a list of messages that have been received from
+    <span class="doccomment">/// [recv_message] will return a list of messages that have been received from
     /// the network.
     ///
     /// ## Errors
     ///
     /// All errors are expected to be network related.
-    </span><span class="kw">async fn </span>recv_msgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Vec&lt;u8&gt;&gt;, NetworkError&gt;;
+    </span><span class="kw">async fn </span>recv_message(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, NetworkError&gt;;
 }
 
 <span class="attr">#[async_trait::async_trait]
@@ -630,9 +621,9 @@
         &lt;N <span class="kw">as </span>ConnectedNetwork&lt;K&gt;&gt;::wait_for_ready(<span class="self">self</span>).<span class="kw">await
     </span>}
 
-    <span class="kw">async fn </span>recv_msgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Vec&lt;u8&gt;&gt;, NetworkError&gt; {
+    <span class="kw">async fn </span>recv_message(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, NetworkError&gt; {
         <span class="kw">let </span>cloned_self = <span class="self">self</span>.clone();
-        &lt;N <span class="kw">as </span>ConnectedNetwork&lt;K&gt;&gt;::recv_msgs(<span class="kw-2">&amp;</span>cloned_self).<span class="kw">await
+        &lt;N <span class="kw">as </span>ConnectedNetwork&lt;K&gt;&gt;::recv_message(<span class="kw-2">&amp;</span>cloned_self).<span class="kw">await
     </span>}
 }
 
@@ -676,8 +667,8 @@
         <span class="kw">let </span><span class="kw-2">mut </span>url_sender = url_sender;
 
         <span class="kw">loop </span>{
-            <span class="kw">let </span>messages_result = network.recv_msgs().<span class="kw">await</span>;
-            <span class="kw">let </span>messages = <span class="kw">match </span>messages_result {
+            <span class="kw">let </span>message_result = network.recv_message().<span class="kw">await</span>;
+            <span class="kw">let </span>message = <span class="kw">match </span>message_result {
                 <span class="prelude-val">Ok</span>(message) =&gt; message,
                 <span class="prelude-val">Err</span>(err) =&gt; {
                     <span class="macro">tracing::error!</span>(<span class="string">"error receiving message: {:?}"</span>, err);
@@ -685,53 +676,50 @@
                 }
             };
 
-            <span class="kw">for </span>message <span class="kw">in </span>messages {
-                <span class="comment">// We want to try and decode this message.
-                </span><span class="kw">let </span>message_deserialize_result =
-                    bincode::deserialize::&lt;Message&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>message);
+            <span class="comment">// We want to try and decode this message.
+            </span><span class="kw">let </span>message_deserialize_result = bincode::deserialize::&lt;Message&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>message);
 
-                <span class="kw">let </span>message = <span class="kw">match </span>message_deserialize_result {
-                    <span class="prelude-val">Ok</span>(message) =&gt; message,
-                    <span class="prelude-val">Err</span>(err) =&gt; {
-                        <span class="macro">tracing::error!</span>(<span class="string">"error deserializing message: {:?}"</span>, err);
-                        <span class="kw">continue</span>;
-                    }
-                };
-
-                <span class="kw">let </span>external_message_deserialize_result = <span class="kw">match </span>message.kind {
-                    MessageKind::External(external_message) =&gt; {
-                        bincode::deserialize::&lt;ExternalMessage&gt;(<span class="kw-2">&amp;</span>external_message)
-                    }
-                    <span class="kw">_ </span>=&gt; {
-                        <span class="macro">tracing::error!</span>(<span class="string">"unexpected message kind: {:?}"</span>, message);
-                        <span class="kw">continue</span>;
-                    }
-                };
-
-                <span class="kw">let </span>external_message = <span class="kw">match </span>external_message_deserialize_result {
-                    <span class="prelude-val">Ok</span>(external_message) =&gt; external_message,
-                    <span class="prelude-val">Err</span>(err) =&gt; {
-                        <span class="macro">tracing::error!</span>(<span class="string">"error deserializing message: {:?}"</span>, err);
-                        <span class="kw">continue</span>;
-                    }
-                };
-
-                <span class="kw">match </span>external_message {
-                    ExternalMessage::RollCallResponse(roll_call_info) =&gt; {
-                        <span class="kw">let </span>public_api_url = roll_call_info.public_api_url;
-
-                        <span class="comment">// We have a public api url, so we can process this url.
-
-                        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = url_sender.send(public_api_url).<span class="kw">await </span>{
-                            <span class="macro">tracing::error!</span>(<span class="string">"error sending public api url: {:?}"</span>, err);
-                            <span class="kw">return</span>;
-                        }
-                    }
-
-                    <span class="kw">_ </span>=&gt; {
-                        <span class="comment">// We're not concerned about other message types
-                    </span>}
+            <span class="kw">let </span>message = <span class="kw">match </span>message_deserialize_result {
+                <span class="prelude-val">Ok</span>(message) =&gt; message,
+                <span class="prelude-val">Err</span>(err) =&gt; {
+                    <span class="macro">tracing::error!</span>(<span class="string">"error deserializing message: {:?}"</span>, err);
+                    <span class="kw">continue</span>;
                 }
+            };
+
+            <span class="kw">let </span>external_message_deserialize_result = <span class="kw">match </span>message.kind {
+                MessageKind::External(external_message) =&gt; {
+                    bincode::deserialize::&lt;ExternalMessage&gt;(<span class="kw-2">&amp;</span>external_message)
+                }
+                <span class="kw">_ </span>=&gt; {
+                    <span class="macro">tracing::error!</span>(<span class="string">"unexpected message kind: {:?}"</span>, message);
+                    <span class="kw">continue</span>;
+                }
+            };
+
+            <span class="kw">let </span>external_message = <span class="kw">match </span>external_message_deserialize_result {
+                <span class="prelude-val">Ok</span>(external_message) =&gt; external_message,
+                <span class="prelude-val">Err</span>(err) =&gt; {
+                    <span class="macro">tracing::error!</span>(<span class="string">"error deserializing message: {:?}"</span>, err);
+                    <span class="kw">continue</span>;
+                }
+            };
+
+            <span class="kw">match </span>external_message {
+                ExternalMessage::RollCallResponse(roll_call_info) =&gt; {
+                    <span class="kw">let </span>public_api_url = roll_call_info.public_api_url;
+
+                    <span class="comment">// We have a public api url, so we can process this url.
+
+                    </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = url_sender.send(public_api_url).<span class="kw">await </span>{
+                        <span class="macro">tracing::error!</span>(<span class="string">"error sending public api url: {:?}"</span>, err);
+                        <span class="kw">return</span>;
+                    }
+                }
+
+                <span class="kw">_ </span>=&gt; {
+                    <span class="comment">// We're not concerned about other message types
+                </span>}
             }
         }
     }
@@ -896,14 +884,12 @@
     <span class="doccomment">/// [TestConnectedNetworkConsumer] is a test implementation of the
     /// [ConnectedNetworkConsumer] trait that allows for the simulation of
     /// network messages being received.
-    </span><span class="kw">struct </span>TestConnectedNetworkConsumer(<span class="prelude-ty">Result</span>&lt;Vec&lt;Vec&lt;u8&gt;&gt;, NetworkError&gt;);
+    </span><span class="kw">struct </span>TestConnectedNetworkConsumer(<span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, NetworkError&gt;);
 
     <span class="doccomment">/// [clone_result] is a helper function that clones the result of a
     /// network message receive operation.  This is used to ensure that the
     /// original result is not consumed by the task.
-    </span><span class="kw">fn </span>clone_result(
-        result: <span class="kw-2">&amp;</span><span class="prelude-ty">Result</span>&lt;Vec&lt;Vec&lt;u8&gt;&gt;, NetworkError&gt;,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Vec&lt;u8&gt;&gt;, NetworkError&gt; {
+    </span><span class="kw">fn </span>clone_result(result: <span class="kw-2">&amp;</span><span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, NetworkError&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, NetworkError&gt; {
         <span class="kw">match </span>result {
             <span class="prelude-val">Ok</span>(messages) =&gt; <span class="prelude-val">Ok</span>(messages.clone()),
             <span class="prelude-val">Err</span>(err) =&gt; <span class="kw">match </span>err {
@@ -917,17 +903,17 @@
     </span><span class="kw">impl </span>ConnectedNetworkConsumer&lt;BLSPubKey&gt; <span class="kw">for </span>TestConnectedNetworkConsumer {
         <span class="kw">async fn </span>wait_for_ready(<span class="kw-2">&amp;</span><span class="self">self</span>) {}
 
-        <span class="kw">async fn </span>recv_msgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Vec&lt;u8&gt;&gt;, NetworkError&gt; {
+        <span class="kw">async fn </span>recv_message(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, NetworkError&gt; {
             async_std::task::sleep(Duration::from_millis(<span class="number">5</span>)).<span class="kw">await</span>;
             clone_result(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
         }
     }
 
-    <span class="doccomment">/// [test_cdn_receive_messages_task] is a test that verifies that the
-    /// an expected External Message can be encoded, decoded, and sent to the
+    <span class="doccomment">/// [test_cdn_receive_message_task] is a test that verifies that the
+    /// expected External Message can be encoded, decoded, and sent to the
     /// url_sender appropriately.
     </span><span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_cdn_receive_messages_task() {
+    </span><span class="kw">async fn </span>test_cdn_receive_message_task() {
         <span class="kw">let </span>test_hotshot_message_serialized = {
             <span class="kw">let </span>test_url = Url::parse(<span class="string">"http://localhost:8080/"</span>).unwrap();
 
@@ -947,7 +933,7 @@
 
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
         <span class="kw">let </span>task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[test_hotshot_message_serialized])),
+            TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(test_hotshot_message_serialized)),
             url_sender,
         );
 
@@ -988,16 +974,14 @@
         drop(task);
     }
 
-    <span class="doccomment">/// [test_cdn_receive_messages_task_fails_decoding_hotshot_message] is a
+    <span class="doccomment">/// [test_cdn_receive_message_task_fails_decoding_hotshot_message] is a
     /// test that verifies that the task does not close, nor send a url, when it
     /// encounters an error from the deserialization of the hotshot message.
     </span><span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_cdn_receive_messages_task_fails_decoding_hotshot_message() {
+    </span><span class="kw">async fn </span>test_cdn_receive_message_task_fails_decoding_hotshot_message() {
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
-        <span class="kw">let </span>task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[<span class="macro">vec!</span>[<span class="number">0</span>]])),
-            url_sender,
-        );
+        <span class="kw">let </span>task =
+            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[<span class="number">0</span>])), url_sender);
 
         <span class="kw">let </span><span class="kw-2">mut </span>url_receiver = url_receiver;
         <span class="comment">// The task should not panic when it fails to receive a message.
@@ -1012,13 +996,13 @@
         drop(task);
     }
 
-    <span class="doccomment">/// [test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant]
+    <span class="doccomment">/// [test_cdn_receive_message_task_fails_unexpected_hotshot_message_variant]
     /// is a test that verifies that the task does not close, nor send a url, when
     /// it encounters a hotshot message that was not an External message.
     ///
     /// This really shouldn't happen in practice.
     </span><span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant() {
+    </span><span class="kw">async fn </span>test_cdn_receive_message_task_fails_unexpected_hotshot_message_variant() {
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
         <span class="kw">let </span>bytes = bincode::serialize(<span class="kw-2">&amp;</span>Message::&lt;SeqTypes&gt; {
             sender: BLSPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">0</span>).<span class="number">0</span>,
@@ -1026,8 +1010,7 @@
         })
         .unwrap();
 
-        <span class="kw">let </span>task =
-            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[bytes])), url_sender);
+        <span class="kw">let </span>task = CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(bytes)), url_sender);
 
         <span class="kw">let </span><span class="kw-2">mut </span>url_receiver = url_receiver;
         <span class="comment">// The task should not panic when it fails to receive a message.
@@ -1042,11 +1025,11 @@
         drop(task);
     }
 
-    <span class="doccomment">/// [test_cdn_receive_messages_task_fails_decoding_external_message] is a
+    <span class="doccomment">/// [test_cdn_receive_message_task_fails_decoding_external_message] is a
     /// test that verifies that the task does not close, nor send a url, when
     /// it encounters an error from the deserialization of the external message.
     </span><span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_cdn_receive_messages_task_fails_decoding_external_message() {
+    </span><span class="kw">async fn </span>test_cdn_receive_message_task_fails_decoding_external_message() {
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
         <span class="kw">let </span>bytes = bincode::serialize(<span class="kw-2">&amp;</span>Message::&lt;SeqTypes&gt; {
             sender: BLSPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">0</span>).<span class="number">0</span>,
@@ -1054,8 +1037,7 @@
         })
         .unwrap();
 
-        <span class="kw">let </span>task =
-            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[bytes])), url_sender);
+        <span class="kw">let </span>task = CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(bytes)), url_sender);
 
         <span class="kw">let </span><span class="kw-2">mut </span>url_receiver = url_receiver;
         <span class="comment">// The task should not panic when it fails to receive a message.
@@ -1070,13 +1052,13 @@
         drop(task);
     }
 
-    <span class="doccomment">/// [test_cdn_receive_messages_tasks_exits_when_url_receiver_closed] is a
+    <span class="doccomment">/// [test_cdn_receive_message_tasks_exits_when_url_receiver_closed] is a
     /// test that verifies that the task exits when the url receiver is closed.
     ///
     /// Without being able to send urls to the url_sender, the task doesn't
     /// really have a point in existing.
     </span><span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_cdn_receive_messages_tasks_exits_when_url_receiver_closed() {
+    </span><span class="kw">async fn </span>test_cdn_receive_message_tasks_exits_when_url_receiver_closed() {
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
 
         <span class="kw">let </span>test_hotshot_message_serialized = {
@@ -1098,7 +1080,7 @@
         drop(url_receiver);
 
         <span class="kw">let </span><span class="kw-2">mut </span>task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[test_hotshot_message_serialized])),
+            TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(test_hotshot_message_serialized)),
             url_sender.clone(),
         );
 

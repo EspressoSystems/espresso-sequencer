@@ -151,9 +151,6 @@
 <a href="#151" id="151">151</a>
 <a href="#152" id="152">152</a>
 <a href="#153" id="153">153</a>
-<a href="#154" id="154">154</a>
-<a href="#155" id="155">155</a>
-<a href="#156" id="156">156</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>clap::Parser;
@@ -279,7 +276,6 @@
         start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,
         indexed_da: <span class="bool-val">false</span>,
-        enable_registration_verification: <span class="bool-val">false</span>,
         ..Default::default()
     };
 
@@ -289,7 +285,6 @@
     };
 
     config.config.num_nodes_with_stake = args.num_nodes;
-    config.config.num_nodes_without_stake = <span class="number">0</span>;
     config.config.known_nodes_with_stake = <span class="macro">vec!</span>[Default::default(); args.num_nodes.get()];
     config.config.known_da_nodes = Vec::new();
     config.config.known_nodes_without_stake = <span class="macro">vec!</span>[];
@@ -300,7 +295,6 @@
     config.config.round_start_delay = args.round_start_delay.as_millis() <span class="kw">as </span>u64;
     config.config.start_delay = args.start_delay.as_millis() <span class="kw">as </span>u64;
     config.config.da_staked_committee_size = args.num_nodes.get();
-    config.config.da_non_staked_committee_size = <span class="number">0</span>;
     config.config.builder_urls = Vec1::try_from_vec(args.builder_urls).unwrap();
     config.config.builder_timeout = args.builder_timeout;
     run_orchestrator(

@@ -877,8 +877,6 @@
 <a href="#877" id="877">877</a>
 <a href="#878" id="878">878</a>
 <a href="#879" id="879">879</a>
-<a href="#880" id="880">880</a>
-<a href="#881" id="881">881</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -1106,7 +1104,6 @@
             <span class="kw">let </span>config: HotShotConfig&lt;PubKey&gt; = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
-                num_nodes_without_stake,
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: known_nodes_without_stake_pub_keys,
@@ -1116,7 +1113,6 @@
                 start_delay: Duration::from_millis(<span class="number">1</span>).as_millis() <span class="kw">as </span>u64,
                 num_bootstrap: <span class="number">1usize</span>,
                 da_staked_committee_size: num_nodes_with_stake,
-                da_non_staked_committee_size: num_nodes_without_stake,
                 my_own_validator_config: Default::default(),
                 data_request_delay: Duration::from_millis(<span class="number">200</span>),
                 view_sync_timeout: Duration::from_secs(<span class="number">5</span>),
@@ -1443,7 +1439,7 @@
 
             <span class="kw">let </span>node_count = NonZeroUsize::new(num_nodes).unwrap();
 
-            <span class="kw">let </span>builder_config = BuilderConfig::init(
+            <span class="kw">let </span>builder_config = BuilderConfig::init::&lt;V&gt;(
                 key_pair,
                 bootstrapped_view,
                 tx_channel_capacity,

@@ -600,6 +600,8 @@
 <a href="#600" id="600">600</a>
 <a href="#601" id="601">601</a>
 <a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
@@ -616,7 +618,9 @@
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::{
-        node_implementation::ConsensusTime, storage::Storage, ValidatedState <span class="kw">as </span>HotShotState,
+        node_implementation::{ConsensusTime, Versions},
+        storage::Storage,
+        ValidatedState <span class="kw">as </span>HotShotState,
     },
     utils::View,
 };
@@ -981,7 +985,7 @@
     ///
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
     /// if there is no saved state).
-    </span><span class="kw">async fn </span>load_consensus_state(
+    </span><span class="kw">async fn </span>load_consensus_state&lt;V: Versions&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         state: NodeState,
     ) -&gt; anyhow::Result&lt;HotShotInitializer&lt;SeqTypes&gt;&gt; {
@@ -1021,7 +1025,7 @@
                 <span class="macro">tracing::info!</span>(<span class="string">"no saved leaf, starting from genesis leaf"</span>);
                 (
                     Leaf::genesis(<span class="kw-2">&amp;</span>genesis_validated_state, <span class="kw-2">&amp;</span>state).<span class="kw">await</span>,
-                    QuorumCertificate::genesis(<span class="kw-2">&amp;</span>genesis_validated_state, <span class="kw-2">&amp;</span>state).<span class="kw">await</span>,
+                    QuorumCertificate::genesis::&lt;V&gt;(<span class="kw-2">&amp;</span>genesis_validated_state, <span class="kw-2">&amp;</span>state).<span class="kw">await</span>,
                 )
             }
         };
@@ -1091,7 +1095,7 @@
                 <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = <span class="self">self</span>.save_anchor_leaf(leaf, qc).<span class="kw">await </span>{
                     <span class="macro">tracing::error!</span>(
                         <span class="question-mark">?</span>leaf,
-                        hash = %leaf.commit(),
+                        hash = %&lt;Leaf <span class="kw">as </span>Committable&gt;::commit(leaf),
                         <span class="string">"Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}"</span>,
                     );
                 }

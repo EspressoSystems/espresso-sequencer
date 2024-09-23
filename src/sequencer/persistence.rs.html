@@ -381,6 +381,11 @@
 <a href="#381" id="381">381</a>
 <a href="#382" id="382">382</a>
 <a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -440,6 +445,7 @@
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
     <span class="kw">use </span>hotshot::types::{BLSPubKey, SignatureKey};
+    <span class="kw">use </span>hotshot_example_types::node_types::TestVersions;
     <span class="kw">use </span>hotshot_types::{
         data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
         event::HotShotAction,
@@ -468,7 +474,11 @@
 
         <span class="comment">// Store a leaf.
         </span><span class="kw">let </span>leaf1 = Leaf::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>NodeState::mock()).<span class="kw">await</span>;
-        <span class="kw">let </span>qc1 = QuorumCertificate::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>NodeState::mock()).<span class="kw">await</span>;
+        <span class="kw">let </span>qc1 = QuorumCertificate::genesis::&lt;TestVersions&gt;(
+            <span class="kw-2">&amp;</span>ValidatedState::default(),
+            <span class="kw-2">&amp;</span>NodeState::mock(),
+        )
+        .<span class="kw">await</span>;
         storage.save_anchor_leaf(<span class="kw-2">&amp;</span>leaf1, <span class="kw-2">&amp;</span>qc1).<span class="kw">await</span>.unwrap();
         <span class="macro">assert_eq!</span>(
             storage.load_anchor_leaf().<span class="kw">await</span>.unwrap().unwrap(),
@@ -481,7 +491,7 @@
         <span class="kw">let </span>qc2 = QuorumCertificate::new(
             qc1.data.clone(),
             QuorumData {
-                leaf_commit: leaf2.commit(),
+                leaf_commit: &lt;Leaf <span class="kw">as </span>Committable&gt;::commit(<span class="kw-2">&amp;</span>leaf2),
             }
             .commit(),
             qc1.view_number,
@@ -577,7 +587,7 @@
             data: QuorumProposal::&lt;SeqTypes&gt; {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate::genesis::&lt;TestVersions&gt;(
                     <span class="kw-2">&amp;</span>ValidatedState::default(),
                     <span class="kw-2">&amp;</span>NodeState::mock(),
                 )

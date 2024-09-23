@@ -324,7 +324,7 @@
 
     <span class="kw">let </span>buffer_view_num_count = opt.buffer_view_num_count;
 
-    <span class="kw">let </span>_builder_config = BuilderConfig::init(
+    <span class="kw">let </span>_builder_config = BuilderConfig::init::&lt;V&gt;(
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,

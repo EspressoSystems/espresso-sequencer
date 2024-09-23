@@ -343,7 +343,6 @@
 <a href="#343" id="343">343</a>
 <a href="#344" id="344">344</a>
 <a href="#345" id="345">345</a>
-<a href="#346" id="346">346</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -369,13 +368,12 @@
     BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
 <span class="kw">use </span>hotshot_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
+    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
     service::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
+    ParentBlockReferences,
 };
 <span class="kw">use </span>hotshot_events_service::{
     events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
@@ -426,7 +424,7 @@
 
 <span class="kw">impl </span>BuilderConfig {
     <span class="attr">#[allow(clippy::too_many_arguments)]
-    </span><span class="kw">pub async fn </span>init(
+    </span><span class="kw">pub async fn </span>init&lt;V: Versions&gt;(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -499,7 +497,7 @@
         <span class="kw">let </span>global_state_clone = global_state.clone();
 
         <span class="kw">let </span>builder_state = BuilderState::&lt;SeqTypes&gt;::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,
                 leaf_commit: fake_commitment(),
@@ -542,7 +540,7 @@
         <span class="kw">let </span>global_state_clone = global_state.clone();
         <span class="macro">tracing::info!</span>(<span class="string">"Running permissionless builder against hotshot events API at {events_url}"</span>,);
         async_spawn(<span class="kw">async move </span>{
-            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerApiVersion&gt;(
+            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, V&gt;(
                 da_sender,
                 qc_sender,
                 decide_sender,

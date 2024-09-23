@@ -534,6 +534,9 @@
 <a href="#534" id="534">534</a>
 <a href="#535" id="535">535</a>
 <a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{error::Error, time::Duration};
 
 <span class="kw">use </span>anyhow::anyhow;
@@ -817,6 +820,7 @@
     <span class="kw">use </span>espresso_types::{L1Client, Leaf, NodeState, ValidatedState};
     <span class="kw">use </span>ethers::{abi::AbiDecode, providers::Middleware};
     <span class="kw">use </span>futures::FutureExt;
+    <span class="kw">use </span>hotshot_example_types::node_types::TestVersions;
     <span class="kw">use </span>hotshot_types::simple_certificate::QuorumCertificate;
     <span class="kw">use </span>sequencer_utils::{
         test_utils::{setup_test, TestL1System},
@@ -868,9 +872,11 @@
 
     <span class="kw">async fn </span>mock_leaf(height: u64, node_state: <span class="kw-2">&amp;</span>NodeState) -&gt; LeafQueryData&lt;SeqTypes&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>leaf = Leaf::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), node_state).<span class="kw">await</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>qc = QuorumCertificate::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), node_state).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>qc =
+            QuorumCertificate::genesis::&lt;TestVersions&gt;(<span class="kw-2">&amp;</span>ValidatedState::default(), node_state)
+                .<span class="kw">await</span>;
         <span class="kw-2">*</span>leaf.block_header_mut().height_mut() = height;
-        qc.data.leaf_commit = leaf.commit();
+        qc.data.leaf_commit = &lt;Leaf <span class="kw">as </span>Committable&gt;::commit(<span class="kw-2">&amp;</span>leaf);
         LeafQueryData::new(leaf, qc).unwrap()
     }
 
