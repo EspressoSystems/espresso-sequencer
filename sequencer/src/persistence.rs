@@ -57,6 +57,7 @@ mod persistence_tests {
     use committable::Committable;
     use espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
     use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
         event::HotShotAction,
@@ -85,7 +86,11 @@ mod persistence_tests {
 
         // Store a leaf.
         let leaf1 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
-        let qc1 = QuorumCertificate::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let qc1 = QuorumCertificate::genesis::<TestVersions>(
+            &ValidatedState::default(),
+            &NodeState::mock(),
+        )
+        .await;
         storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
         assert_eq!(
             storage.load_anchor_leaf().await.unwrap().unwrap(),
@@ -98,7 +103,7 @@ mod persistence_tests {
         let qc2 = QuorumCertificate::new(
             qc1.data.clone(),
             QuorumData {
-                leaf_commit: leaf2.commit(),
+                leaf_commit: <Leaf as Committable>::commit(&leaf2),
             }
             .commit(),
             qc1.view_number,
@@ -194,7 +199,7 @@ mod persistence_tests {
             data: QuorumProposal::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )

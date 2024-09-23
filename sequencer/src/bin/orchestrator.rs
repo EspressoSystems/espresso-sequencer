@@ -123,7 +123,6 @@ async fn main() {
         start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,
         indexed_da: false,
-        enable_registration_verification: false,
         ..Default::default()
     };
 
@@ -133,7 +132,6 @@ async fn main() {
     };
 
     config.config.num_nodes_with_stake = args.num_nodes;
-    config.config.num_nodes_without_stake = 0;
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
     config.config.known_da_nodes = Vec::new();
     config.config.known_nodes_without_stake = vec![];
@@ -144,7 +142,6 @@ async fn main() {
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
     config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.da_staked_committee_size = args.num_nodes.get();
-    config.config.da_non_staked_committee_size = 0;
     config.config.builder_urls = Vec1::try_from_vec(args.builder_urls).unwrap();
     config.config.builder_timeout = args.builder_timeout;
     run_orchestrator(

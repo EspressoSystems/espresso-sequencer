@@ -281,6 +281,7 @@ mod test {
     use espresso_types::{L1Client, Leaf, NodeState, ValidatedState};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::simple_certificate::QuorumCertificate;
     use sequencer_utils::{
         test_utils::{setup_test, TestL1System},
@@ -332,9 +333,11 @@ mod test {
 
     async fn mock_leaf(height: u64, node_state: &NodeState) -> LeafQueryData<SeqTypes> {
         let mut leaf = Leaf::genesis(&ValidatedState::default(), node_state).await;
-        let mut qc = QuorumCertificate::genesis(&ValidatedState::default(), node_state).await;
+        let mut qc =
+            QuorumCertificate::genesis::<TestVersions>(&ValidatedState::default(), node_state)
+                .await;
         *leaf.block_header_mut().height_mut() = height;
-        qc.data.leaf_commit = leaf.commit();
+        qc.data.leaf_commit = <Leaf as Committable>::commit(&leaf);
         LeafQueryData::new(leaf, qc).unwrap()
     }
 
