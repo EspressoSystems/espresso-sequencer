@@ -146,4 +146,4 @@ dev-download-srs:
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
 
 next-coverage:
-	cargo +nightly llvm-cov nextest --all-features --profile coverage
+	cargo llvm-cov nextest --all-features --profile coverage
