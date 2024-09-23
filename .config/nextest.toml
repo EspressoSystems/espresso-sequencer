@@ -1,6 +1,6 @@
 [profile.default]
 slow-timeout = "2m"
-default-filter = 'not test(slow_) and not package(tests)'
+default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
 
 [profile.slow]
