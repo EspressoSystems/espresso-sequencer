@@ -1001,14 +1001,14 @@ mod test {
 
     /// check whether the quorum_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing quorum proposal messages
     /// used for testing only
-    fn check_equal_quorum_proposal_hashmap(
+    fn check_equal_quorum_proposal_hashmap<TYPES: NodeType>(
         quorum_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TestTypes as NodeType>::Time),
-            Arc<Proposal<TestTypes, QuorumProposal<TestTypes>>>,
+            (BuilderCommitment, TYPES::Time),
+            Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
         >,
         correct_quorum_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TestTypes as NodeType>::Time),
-            Arc<Proposal<TestTypes, QuorumProposal<TestTypes>>>,
+            (BuilderCommitment, TYPES::Time),
+            Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
         >,
     ) {
         let deserialized_map: HashMap<_, _> = quorum_proposal_payload_commit_to_da_proposal.clone();
@@ -1260,10 +1260,7 @@ mod test {
         // sub-test one
         // call process_quorum_proposal without matching da proposal message
         // quorum_proposal_payload_commit_to_quorum_proposal should insert the message
-        let mut correct_quorum_proposal_payload_commit_to_quorum_proposal: HashMap<
-            (BuilderCommitment, <TestTypes as NodeType>::Time),
-            Arc<Proposal<TestTypes, QuorumProposal<TestTypes>>>,
-        > = HashMap::new();
+        let mut correct_quorum_proposal_payload_commit_to_quorum_proposal = HashMap::new();
         if let MessageType::QuorumProposalMessage(practice_qc_msg) = quorum_proposal_msg.clone() {
             builder_state
                 .process_quorum_proposal(practice_qc_msg.clone())
