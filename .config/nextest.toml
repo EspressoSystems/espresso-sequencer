@@ -24,4 +24,4 @@ default-filter = 'package(tests)'
 retries = 2
 
 [profile.coverage]
-default-filter = 'not (test(slow_) | test(service::test::test_) | test(uint_bytes) | test(diff-test-hotshot) | package(contract-bindings) | package(gen-vk-contract) | package(hotshot-contract-adapter) | package(hotshot-state-prover) | package(tests))'
+default-filter = 'not (test(slow_) | test(service::test::test_) | test(uint_bytes) | test(diff-test-hotshot) | test(test_catchup) | package(contract-bindings) | package(gen-vk-contract) | package(hotshot-contract-adapter) | package(hotshot-state-prover) | package(tests))'
