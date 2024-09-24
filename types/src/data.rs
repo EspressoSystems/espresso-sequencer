@@ -32,7 +32,6 @@ use snafu::Snafu;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 use tracing::error;
-use vbs::version::StaticVersionType;
 use vec1::Vec1;
 
 use crate::{
@@ -446,25 +445,14 @@ pub struct Leaf<TYPES: NodeType> {
 }
 
 impl<TYPES: NodeType> Leaf<TYPES> {
+    #[allow(clippy::unused_async)]
     /// Calculate the leaf commitment,
     /// which is gated on the version to include the block header.
     pub async fn commit<V: Versions>(
         &self,
-        upgrade_lock: &UpgradeLock<TYPES, V>,
+        _upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Commitment<Self> {
-        let version = upgrade_lock.version_infallible(self.view_number).await;
-
-        if version < V::Marketplace::VERSION {
-            <Self as Committable>::commit(self)
-        } else {
-            RawCommitmentBuilder::new("leaf commitment")
-                .u64_field("view number", *self.view_number)
-                .field("parent leaf commitment", self.parent_commitment)
-                .field("block header", self.block_header.commit())
-                .field("justify qc", self.justify_qc.commit())
-                .optional("upgrade certificate", &self.upgrade_certificate)
-                .finalize()
-        }
+        <Self as Committable>::commit(self)
     }
 }
 
@@ -791,15 +779,10 @@ pub fn serialize_signature2<TYPES: NodeType>(
 
 impl<TYPES: NodeType> Committable for Leaf<TYPES> {
     fn commit(&self) -> committable::Commitment<Self> {
-        // Skip the transaction commitments, so that the repliacs can reconstruct the leaf.
         RawCommitmentBuilder::new("leaf commitment")
             .u64_field("view number", *self.view_number)
-            .u64_field("block number", self.height())
-            .field("parent Leaf commitment", self.parent_commitment)
-            .var_size_field(
-                "block payload commitment",
-                self.payload_commitment().as_ref(),
-            )
+            .field("parent leaf commitment", self.parent_commitment)
+            .field("block header", self.block_header.commit())
             .field("justify qc", self.justify_qc.commit())
             .optional("upgrade certificate", &self.upgrade_certificate)
             .finalize()
