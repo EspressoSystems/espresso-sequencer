@@ -12,6 +12,7 @@ use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
     data_source::{Transaction, VersionedDataSource},
     merklized_state::{MerklizedStateHeightPersistence, UpdateStateData},
+    status::StatusDataSource,
     types::HeightIndexed,
 };
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -220,7 +221,8 @@ where
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
         let last_height = storage.get_last_state_height().await?;
-        tracing::info!(last_height, "updating state storage");
+        let current_height = storage.block_height().await?;
+        tracing::info!(last_height, current_height, "updating state storage");
 
         let parent_leaf = storage.get_leaf(last_height).await;
         let leaves = storage.subscribe_leaves(last_height + 1).await;
@@ -270,6 +272,7 @@ pub(crate) trait SequencerStateDataSource:
     'static
     + Debug
     + AvailabilityDataSource<SeqTypes>
+    + StatusDataSource
     + VersionedDataSource
     + CatchupDataSource
     + MerklizedStateHeightPersistence
@@ -280,6 +283,7 @@ impl<T> SequencerStateDataSource for T where
     T: 'static
         + Debug
         + AvailabilityDataSource<SeqTypes>
+        + StatusDataSource
         + VersionedDataSource
         + CatchupDataSource
         + MerklizedStateHeightPersistence

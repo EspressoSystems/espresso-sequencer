@@ -102,7 +102,7 @@ impl TestConfig {
             .map_err(|e| anyhow!(e))
             .and_then(|var| var.parse::<bool>().map_err(|e| anyhow!(e)))
             .ok()
-            .is_some_and(|val| val == true)
+            .is_some_and(|val| val)
         {
             load_generator_url = url_from_port(dotenvy::var(
                 "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT",
