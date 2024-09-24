@@ -1041,7 +1041,8 @@ mod test {
         const NUM_STORAGE_NODES: usize = 4;
 
         // start builder_state without entering event loop
-        let (_senders, global_state, mut builder_state) = start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+        let (_senders, global_state, mut builder_state) =
+            start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
