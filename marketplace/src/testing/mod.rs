@@ -60,13 +60,13 @@ impl NodeType for TestTypes {
     type AuctionResult = TestAuctionResult;
 }
 
-/// set up the broadcast channels and instatiate the global state with fixed channel capacity and num nodes
-pub async fn start_builder_state(
+pub async fn start_builder_state_without_event_loop(
     channel_capacity: usize,
     num_storage_nodes: usize,
 ) -> (
     BroadcastSenders<TestTypes>,
     Arc<RwLock<GlobalState<TestTypes>>>,
+    BuilderState<TestTypes>,
 ) {
     // set up the broadcast channels
     let (bootstrap_sender, bootstrap_receiver) =
@@ -103,6 +103,20 @@ pub async fn start_builder_state(
         Duration::from_secs(3600), // duration for txn garbage collection
         Arc::new(TestValidatedState::default()),
     );
+
+    (senders, global_state, builder_state)
+}
+
+/// set up the broadcast channels and instatiate the global state with fixed channel capacity and num nodes
+pub async fn start_builder_state(
+    channel_capacity: usize,
+    num_storage_nodes: usize,
+) -> (
+    BroadcastSenders<TestTypes>,
+    Arc<RwLock<GlobalState<TestTypes>>>,
+) {
+    let (senders, global_state, builder_state) =
+        start_builder_state_without_event_loop(channel_capacity, num_storage_nodes).await;
 
     // start the event loop
     builder_state.event_loop();

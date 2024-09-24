@@ -971,7 +971,7 @@ mod test {
     use super::DaProposalMessage;
     use super::MessageType;
     use super::ParentBlockReferences;
-    use crate::testing::{calc_proposal_msg, TestTypes};
+    use crate::testing::{calc_proposal_msg, start_builder_state_without_event_loop, TestTypes};
 
     /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
     /// used for testing only
@@ -1040,44 +1040,8 @@ mod test {
         // Number of nodes on DA committee
         const NUM_STORAGE_NODES: usize = 4;
 
-        // start builder state, very similar to `start_builder_state` in `mod.rs` without starting the event loop
-        let channel_capacity = CHANNEL_CAPACITY;
-        let num_storage_nodes = NUM_STORAGE_NODES;
-        // set up the broadcast channels
-        let (bootstrap_sender, bootstrap_receiver) =
-            broadcast::<MessageType<TestTypes>>(channel_capacity);
-        let (senders, receivers) = broadcast_channels(channel_capacity);
-
-        let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
-        let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
-        let parent_block_references = ParentBlockReferences {
-            view_number: ViewNumber::genesis(),
-            vid_commitment: genesis_vid_commitment,
-            leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
-            builder_commitment: genesis_builder_commitment,
-        };
-
-        // instantiate the global state
-        let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
-            bootstrap_sender,
-            senders.transactions.clone(),
-            genesis_vid_commitment,
-            ViewNumber::genesis(),
-        )));
-
-        // instantiate the bootstrap builder state
-        let mut builder_state = BuilderState::<TestTypes>::new(
-            parent_block_references,
-            &receivers,
-            bootstrap_receiver,
-            Vec::new(),
-            Arc::clone(&global_state),
-            Duration::from_millis(10), // max time to wait for non-zero txn block
-            0,                         // base fee
-            Arc::new(TestInstanceState::default()),
-            Duration::from_secs(3600), // duration for txn garbage collection
-            Arc::new(TestValidatedState::default()),
-        );
+        // start builder_state without entering event loop
+        let (_senders, global_state, mut builder_state) = start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
