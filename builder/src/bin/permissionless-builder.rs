@@ -150,7 +150,7 @@ async fn run<V: Versions>(
 
     let buffer_view_num_count = opt.buffer_view_num_count;
 
-    let _builder_config = BuilderConfig::init(
+    let _builder_config = BuilderConfig::init::<V>(
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,

@@ -7,7 +7,8 @@ use async_std::{
 };
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+    v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
+    NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
@@ -40,6 +41,7 @@ use crate::{
     state_signature::StateSigner,
     static_stake_table_commitment, Node, SeqTypes, SequencerApiVersion,
 };
+
 /// The consensus handle
 pub type Consensus<N, P, V> = SystemContextHandle<SeqTypes, Node<N, P>, V>;
 
@@ -83,12 +85,13 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
         public_api_url: Option<Url>,
+        event_consumer: impl PersistenceEventConsumer + 'static,
         _: V,
         marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
-        tracing::info!(%pub_key, "initializing consensus");
+        tracing::info!(%pub_key, is_da = config.my_own_validator_config.is_da, "initializing consensus");
 
         // Stick our node ID in `metrics` so it is easily accessible via the status API.
         metrics
@@ -96,29 +99,25 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             .set(instance_state.node_id as usize);
 
         // Load saved consensus state from storage.
-        let initializer = persistence
-            .load_consensus_state(instance_state.clone())
+        let (initializer, anchor_view) = persistence
+            .load_consensus_state::<V>(instance_state.clone())
             .await?;
 
-        let committee_membership = GeneralStaticCommittee::create_election(
+        let committee_membership = GeneralStaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_nodes_with_stake.clone(),
             Topic::Global,
-            0,
         );
 
-        let da_membership = GeneralStaticCommittee::create_election(
+        let da_membership = GeneralStaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
             Topic::Da,
-            0,
         );
 
         let memberships = Memberships {
             quorum_membership: committee_membership.clone(),
             da_membership,
-            vid_membership: committee_membership.clone(),
-            view_sync_membership: committee_membership.clone(),
         };
 
         let stake_table_commit = static_stake_table_commitment(
@@ -131,7 +130,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
 
         let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(
             config.known_nodes_with_stake.clone(),
-            config.num_nodes_without_stake,
+            0,
         )));
 
         let persistence = Arc::new(persistence);
@@ -160,9 +159,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         let roll_call_info = external_event_handler::RollCallInfo { public_api_url };
 
         // Create the external event handler
-        let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
-            .await
-            .with_context(|| "Failed to create external event handler")?;
+        let mut tasks = TaskList::default();
+        let external_event_handler =
+            ExternalEventHandler::new(&mut tasks, network, roll_call_info, pub_key)
+                .await
+                .with_context(|| "Failed to create external event handler")?;
 
         Ok(Self::new(
             handle,
@@ -172,10 +173,14 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             event_streamer,
             instance_state,
             network_config,
-        ))
+            event_consumer,
+            anchor_view,
+        )
+        .with_task_list(tasks))
     }
 
     /// Constructor
+    #[allow(clippy::too_many_arguments)]
     fn new(
         handle: Consensus<N, P, V>,
         persistence: Arc<P>,
@@ -184,9 +189,12 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
         config: NetworkConfig<PubKey>,
+        event_consumer: impl PersistenceEventConsumer + 'static,
+        anchor_view: Option<ViewNumber>,
     ) -> Self {
         let events = handle.event_stream();
 
+        let node_id = node_state.node_id;
         let mut ctx = Self {
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
@@ -200,11 +208,14 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         ctx.spawn(
             "main event handler",
             handle_events(
+                node_id,
                 events,
                 persistence,
                 ctx.state_signer.clone(),
                 external_event_handler,
                 Some(event_streamer.clone()),
+                event_consumer,
+                anchor_view,
             ),
         );
 
@@ -264,6 +275,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.handle.read().await.decided_state().await
     }
 
+    pub fn node_id(&self) -> u64 {
+        self.node_state.node_id
+    }
+
     pub fn node_state(&self) -> NodeState {
         self.node_state.clone()
     }
@@ -298,6 +313,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         tracing::info!("shutting down SequencerContext");
         self.handle.write().await.shut_down().await;
         self.tasks.shut_down().await;
+
+        // Since we've already shut down, we can set `detached` so the drop
+        // handler doesn't call `shut_down` again.
+        self.detached = true;
     }
 
     /// Wait for consensus to complete.
@@ -329,18 +348,35 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_events<V: Versions>(
+    node_id: u64,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<impl SequencerPersistence>,
     state_signer: Arc<StateSigner<SequencerApiVersion>>,
     external_event_handler: ExternalEventHandler<V>,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+    event_consumer: impl PersistenceEventConsumer + 'static,
+    anchor_view: Option<ViewNumber>,
 ) {
+    if let Some(view) = anchor_view {
+        // Process and clean up any leaves that we may have persisted last time we were running but
+        // failed to handle due to a shutdown.
+        if let Err(err) = persistence
+            .append_decided_leaves(view, vec![], &event_consumer)
+            .await
+        {
+            tracing::warn!(
+                "failed to process decided leaves, chain may not be up to date: {err:#}"
+            );
+        }
+    }
+
     while let Some(event) = events.next().await {
-        tracing::debug!(?event, "consensus event");
+        tracing::debug!(node_id, ?event, "consensus event");
 
         // Store latest consensus state.
-        persistence.handle_event(&event).await;
+        persistence.handle_event(&event, &event_consumer).await;
 
         // Generate state signature.
         state_signer.handle_event(&event).await;

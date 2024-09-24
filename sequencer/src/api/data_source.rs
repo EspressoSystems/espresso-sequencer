@@ -1,4 +1,4 @@
-use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, time::Duration};
 
 use anyhow::{bail, Context};
 use async_trait::async_trait;
@@ -207,13 +207,11 @@ pub struct PublicHotShotConfig {
     execution_type: ExecutionType,
     start_threshold: (u64, u64),
     num_nodes_with_stake: NonZeroUsize,
-    num_nodes_without_stake: usize,
     known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
     known_da_nodes: Vec<PeerConfig<PubKey>>,
     known_nodes_without_stake: Vec<PubKey>,
     my_own_validator_config: PublicValidatorConfig,
     da_staked_committee_size: usize,
-    da_non_staked_committee_size: usize,
     fixed_leader_for_gpuvid: usize,
     next_view_timeout: u64,
     view_sync_timeout: Duration,
@@ -243,13 +241,11 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             execution_type,
             start_threshold,
             num_nodes_with_stake,
-            num_nodes_without_stake,
             known_nodes_with_stake,
             known_da_nodes,
             known_nodes_without_stake,
             my_own_validator_config,
             da_staked_committee_size,
-            da_non_staked_committee_size,
             fixed_leader_for_gpuvid,
             next_view_timeout,
             view_sync_timeout,
@@ -274,13 +270,11 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             execution_type,
             start_threshold,
             num_nodes_with_stake,
-            num_nodes_without_stake,
             known_nodes_with_stake,
             known_da_nodes,
             known_nodes_without_stake,
             my_own_validator_config: my_own_validator_config.into(),
             da_staked_committee_size,
-            da_non_staked_committee_size,
             fixed_leader_for_gpuvid,
             next_view_timeout,
             view_sync_timeout,
@@ -312,13 +306,11 @@ impl PublicHotShotConfig {
             execution_type: self.execution_type,
             start_threshold: self.start_threshold,
             num_nodes_with_stake: self.num_nodes_with_stake,
-            num_nodes_without_stake: self.num_nodes_without_stake,
             known_nodes_with_stake: self.known_nodes_with_stake,
             known_da_nodes: self.known_da_nodes,
             known_nodes_without_stake: self.known_nodes_without_stake,
             my_own_validator_config,
             da_staked_committee_size: self.da_staked_committee_size,
-            da_non_staked_committee_size: self.da_non_staked_committee_size,
             fixed_leader_for_gpuvid: self.fixed_leader_for_gpuvid,
             next_view_timeout: self.next_view_timeout,
             view_sync_timeout: self.view_sync_timeout,
@@ -431,18 +423,17 @@ impl PublicNetworkConfig {
             commit_sha: self.commit_sha,
             builder: self.builder,
             random_builder: self.random_builder,
-            public_keys: HashSet::new(),
-            enable_registration_verification: false,
+            public_keys: Vec::new(),
         })
     }
 }
 
-#[cfg(test)]
-pub(crate) mod testing {
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
     use super::{super::Options, *};
 
     #[async_trait]
-    pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
+    pub trait TestableSequencerDataSource: SequencerDataSource {
         type Storage: Sync;
 
         async fn create_storage() -> Self::Storage;

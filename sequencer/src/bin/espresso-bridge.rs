@@ -1,27 +1,17 @@
-use std::time::Duration;
-
 use anyhow::{bail, ensure, Context};
-use async_std::{sync::Arc, task::sleep};
+use async_std::sync::Arc;
 use clap::{Parser, Subcommand};
+use client::SequencerClient;
 use contract_bindings::fee_contract::FeeContract;
-use espresso_types::{eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header};
+use espresso_types::{eth_signature_key::EthKeyPair, Header};
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
     types::{Address, BlockId, U256},
 };
 use futures::stream::StreamExt;
-use jf_merkle_tree::{
-    prelude::{MerkleProof, Sha3Node},
-    MerkleTreeScheme,
-};
-use sequencer::SequencerApiVersion;
 use sequencer_utils::logging;
-use surf_disco::{error::ClientError, Url};
-
-type EspressoClient = surf_disco::Client<ClientError, SequencerApiVersion>;
-
-type FeeMerkleProof = MerkleProof<FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }>;
+use surf_disco::Url;
 
 /// Command-line utility for working with the Espresso bridge.
 #[derive(Debug, Parser)]
@@ -150,7 +140,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     let contract = FeeContract::new(opt.contract_address, l1.clone());
 
     // Connect to Espresso.
-    let espresso = EspressoClient::new(opt.espresso_provider);
+    let espresso = SequencerClient::new(opt.espresso_provider);
 
     // Validate deposit.
     let amount = U256::from(opt.amount);
@@ -166,7 +156,10 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     );
 
     // Record the initial balance on Espresso.
-    let initial_balance = get_espresso_balance(&espresso, l1.address(), None).await?;
+    let initial_balance = espresso
+        .get_espresso_balance(l1.address(), None)
+        .await
+        .context("getting Espresso block height")?;
     tracing::debug!(%initial_balance, "initial balance");
 
     // Send the deposit transaction.
@@ -192,16 +185,10 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     tracing::info!(l1_block, "deposit mined on L1");
 
     // Wait for Espresso to catch up to the L1.
-    let espresso_height = espresso
-        .get::<u64>("node/block-height")
-        .send()
-        .await
-        .context("getting Espresso block height")?;
+    let espresso_height = espresso.get_height().await?;
     let mut headers = espresso
-        .socket(&format!("availability/stream/headers/{espresso_height}"))
-        .subscribe()
-        .await
-        .context("subscribing to Espresso headers")?;
+        .subscribe_headers(&format!("availability/stream/headers/{espresso_height}"))
+        .await?;
     let espresso_block = loop {
         let header: Header = match headers.next().await.context("header stream ended")? {
             Ok(header) => header,
@@ -227,7 +214,9 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     };
 
     // Confirm that the Espresso balance has increased.
-    let final_balance = get_espresso_balance(&espresso, l1.address(), Some(espresso_block)).await?;
+    let final_balance = espresso
+        .get_espresso_balance(l1.address(), Some(espresso_block))
+        .await?;
     if final_balance >= initial_balance + amount.into() {
         tracing::info!(%final_balance, "deposit successful");
     } else {
@@ -251,8 +240,8 @@ async fn balance(opt: Balance) -> anyhow::Result<()> {
         bail!("address or mnemonic must be provided");
     };
 
-    let espresso = EspressoClient::new(opt.espresso_provider);
-    let balance = get_espresso_balance(&espresso, address, opt.block).await?;
+    let espresso = SequencerClient::new(opt.espresso_provider);
+    let balance = espresso.get_espresso_balance(address, opt.block).await?;
 
     // Output the balance on regular standard out, rather than as a log message, to make scripting
     // easier.
@@ -285,55 +274,6 @@ async fn l1_balance(opt: L1Balance) -> anyhow::Result<()> {
     println!("{balance}");
 
     Ok(())
-}
-
-async fn get_espresso_balance(
-    espresso: &EspressoClient,
-    address: Address,
-    block: Option<u64>,
-) -> anyhow::Result<FeeAmount> {
-    // Get the block height to query at, defaulting to the latest block.
-    let block = if let Some(block) = block {
-        block
-    } else {
-        espresso
-            .get::<u64>("node/block-height")
-            .send()
-            .await
-            .context("getting block height")?
-            - 1
-    };
-
-    // Download the Merkle path for this fee account at the specified block height. Transient errors
-    // are possible (for example, if we are fetching from the latest block, the block height might
-    // get incremented slightly before the state becomes available) so retry a few times.
-    let mut retry = 0;
-    let max_retries = 5;
-    let proof = loop {
-        tracing::debug!(%address, block, retry, "fetching Espresso balance");
-        match espresso
-            .get::<FeeMerkleProof>(&format!("fee-state/{block}/{address:#x}"))
-            .send()
-            .await
-        {
-            Ok(proof) => break proof,
-            Err(err) => {
-                tracing::warn!("error getting account balance: {err:#}");
-                retry += 1;
-
-                if retry == max_retries {
-                    return Err(err).context("getting account balance");
-                } else {
-                    sleep(Duration::from_secs(5)).await;
-                }
-            }
-        }
-    };
-
-    // If the element in the Merkle path is missing -- there is no account with this address -- the
-    // balance is defined to be 0.
-    let balance = proof.elem().copied().unwrap_or(0.into());
-    Ok(balance)
 }
 
 #[async_std::main]

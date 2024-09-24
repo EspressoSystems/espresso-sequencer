@@ -49,7 +49,7 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo build --locked --bin diff-test --release
+          cargo build --locked --release
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
@@ -62,3 +62,22 @@ jobs:
           export PATH="$PWD/target/release:$PATH"
           cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
         timeout-minutes: 5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@V27
+
+      - name: Install process-compose
+        run: |
+          nix profile install nixpkgs#process-compose
+
+      - name: Test Integration
+        env:
+          CARGO_TERM_COLOR: always
+          NEXTEST_PROFILE: integration
+        run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          export PATH="$PWD/target/release:$PATH"
+          docker compose pull || docker-compose pull
+          bash -x scripts/demo-native -D
+          cargo nextest run --locked --release --all-features --verbose --nocapture
+        timeout-minutes: 40

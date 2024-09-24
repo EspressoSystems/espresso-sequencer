@@ -9,7 +9,7 @@ demo *args:
 
 demo-native:
     cargo build --release
-    scripts/demo-native
+    scripts/demo-native -D
 
 demo-native-mp:
     cargo build --release
@@ -47,6 +47,10 @@ test-slow:
 
 test-all:
 	cargo nextest run --locked --release --workspace --all-features --verbose --profile all
+
+test-integration:
+	@echo 'NOTE that demo-native must be running for this test to succeed.'
+	cargo nextest run --all-features --nocapture --profile integration
 
 clippy:
     cargo clippy --workspace --all-features --all-targets -- -D warnings
