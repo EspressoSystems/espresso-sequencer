@@ -43,8 +43,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, KeyPair,
-            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, GossipConfig,
+            KeyPair, Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -96,7 +96,6 @@ use hotshot_types::{
 };
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
-use libp2p_networking::network::GossipConfig;
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},

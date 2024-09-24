@@ -24,7 +24,6 @@ use futures::FutureExt;
 use genesis::L1Finalized;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
-use libp2p_networking::network::GossipConfig;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
 use state_signature::static_stake_table_commitment;
@@ -40,7 +39,7 @@ use derivative::Derivative;
 use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 pub use genesis::Genesis;
 #[cfg(feature = "libp2p")]
-use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
+use hotshot::traits::implementations::{CombinedNetworks, GossipConfig, Libp2pNetwork};
 use hotshot::{
     traits::implementations::{
         derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
