@@ -1117,78 +1117,6 @@ mod test {
     };
 
     #[async_std::test]
-    async fn test_chain_config_catchup_dishonest_peer() {
-        // This test sets up a network of three nodes, each with the full chain config.
-        // One of the nodes is connected to a dishonest peer.
-        // When this node makes a chain config catchup request, it will result in an error due to the peer's malicious response.
-        // The test also makes a catchup request for another node with an honest peer, which succeeds.
-        // The requested chain config is based on the commitment from the validated state's chain config.
-        // The dishonest peer responds with an invalid (malicious) chain config
-        setup_test();
-
-        const NUM_NODES: usize = 3;
-
-        let (url, _handle) = spawn_dishonest_peer_catchup_api().await.unwrap();
-
-        let port = pick_unused_port().expect("No ports free");
-        let anvil = Anvil::new().spawn();
-        let l1 = anvil.endpoint().parse().unwrap();
-
-        let cf = ChainConfig {
-            max_block_size: 300.into(),
-            base_fee: 1.into(),
-            ..Default::default()
-        };
-
-        let state = ValidatedState {
-            chain_config: cf.into(),
-            ..Default::default()
-        };
-
-        let mut peers = std::array::from_fn(|_| {
-            StatePeers::<SequencerApiVersion>::from_urls(
-                vec![format!("http://localhost:{port}").parse().unwrap()],
-                BackoffParams::default(),
-            )
-        });
-
-        // one of the node has dishonest peer
-        peers[1] = StatePeers::<SequencerApiVersion>::from_urls(
-            vec![url.clone()],
-            BackoffParams::default(),
-        );
-
-        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
-            .api_config(
-                Options::from(options::Http {
-                    port,
-                    max_connections: None,
-                })
-                .catchup(Default::default()),
-            )
-            .states(std::array::from_fn(|_| state.clone()))
-            .catchups(peers)
-            .network_config(TestConfigBuilder::default().l1_url(l1).build())
-            .build();
-
-        let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
-
-        // Test a catchup request for node #0, which is connected to an honest peer.
-        // The catchup should successfully retrieve the correct chain config.
-        let node = &network.peers[0];
-        let peers = node.node_state().peers;
-        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
-
-        // Test a catchup request for node #1, which is connected to a dishonest peer.
-        // This request will result in an error due to the malicious chain config provided by the peer.
-        let node = &network.peers[1];
-        let peers = node.node_state().peers;
-        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
-
-        network.server.shut_down().await;
-    }
-
-    #[async_std::test]
     async fn test_healthcheck() {
         setup_test();
 
@@ -1530,6 +1458,79 @@ mod test {
 
         network.server.shut_down().await;
         drop(network);
+    }
+
+    #[async_std::test]
+    async fn test_chain_config_catchup_dishonest_peer() {
+        // This test sets up a network of three nodes, each with the full chain config.
+        // One of the nodes is connected to a dishonest peer.
+        // When this node makes a chain config catchup request, it will result in an error due to the peer's malicious response.
+        // The test also makes a catchup request for another node with an honest peer, which succeeds.
+        // The requested chain config is based on the commitment from the validated state's chain config.
+        // The dishonest peer responds with an invalid (malicious) chain config
+        setup_test();
+
+        const NUM_NODES: usize = 3;
+
+        let (url, handle) = spawn_dishonest_peer_catchup_api().await.unwrap();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let cf = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+
+        let state = ValidatedState {
+            chain_config: cf.into(),
+            ..Default::default()
+        };
+
+        let mut peers = std::array::from_fn(|_| {
+            StatePeers::<SequencerApiVersion>::from_urls(
+                vec![format!("http://localhost:{port}").parse().unwrap()],
+                BackoffParams::default(),
+            )
+        });
+
+        // one of the node has dishonest peer
+        peers[1] = StatePeers::<SequencerApiVersion>::from_urls(
+            vec![url.clone()],
+            BackoffParams::default(),
+        );
+
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: None,
+                })
+                .catchup(Default::default()),
+            )
+            .states(std::array::from_fn(|_| state.clone()))
+            .catchups(peers)
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        // Test a catchup request for node #0, which is connected to an honest peer.
+        // The catchup should successfully retrieve the correct chain config.
+        let node = &network.peers[0];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
+
+        // Test a catchup request for node #1, which is connected to a dishonest peer.
+        // This request will result in an error due to the malicious chain config provided by the peer.
+        let node = &network.peers[1];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
+
+        network.server.shut_down().await;
+        handle.cancel().await;
     }
 
     #[async_std::test]
