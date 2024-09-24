@@ -975,14 +975,14 @@ mod test {
 
     /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
     /// used for testing only
-    fn check_equal_da_proposal_hashmap(
+    fn check_equal_da_proposal_hashmap<TYPES: NodeType>(
         da_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TestTypes as NodeType>::Time),
-            Arc<DaProposalMessage<TestTypes>>,
+            (BuilderCommitment, <TYPES>::Time),
+            Arc<DaProposalMessage<TYPES>>,
         >,
         correct_da_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TestTypes as NodeType>::Time),
-            Arc<DaProposalMessage<TestTypes>>,
+            (BuilderCommitment, <TYPES>::Time),
+            Arc<DaProposalMessage<TYPES>>,
         >,
     ) {
         let deserialized_map: HashMap<_, _> = da_proposal_payload_commit_to_da_proposal.clone();
@@ -1001,15 +1001,13 @@ mod test {
 
     /// check whether the quorum_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing quorum proposal messages
     /// used for testing only
+    type QuorumProposalMap<TYPES> = HashMap<
+        (BuilderCommitment, <TYPES as NodeType>::Time),
+        Arc<Proposal<TYPES, QuorumProposal<TYPES>>>
+    >;
     fn check_equal_quorum_proposal_hashmap<TYPES: NodeType>(
-        quorum_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, TYPES::Time),
-            Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
-        >,
-        correct_quorum_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, TYPES::Time),
-            Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
-        >,
+        quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
+        correct_quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
     ) {
         let deserialized_map: HashMap<_, _> = quorum_proposal_payload_commit_to_da_proposal.clone();
         for (key, value) in deserialized_map.iter() {
