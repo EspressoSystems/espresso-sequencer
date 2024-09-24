@@ -273,11 +273,22 @@
 <a href="#273" id="273">273</a>
 <a href="#274" id="274">274</a>
 <a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
+<span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
     v0_3::ChainConfig,
@@ -468,7 +479,16 @@
                 .<span class="kw">await
             </span>{
                 <span class="prelude-val">Ok</span>(cf) =&gt; {
-                    <span class="kw">return </span><span class="prelude-val">Ok</span>(cf);
+                    <span class="kw">if </span>cf.commit() == commitment {
+                        <span class="kw">return </span><span class="prelude-val">Ok</span>(cf);
+                    } <span class="kw">else </span>{
+                        <span class="macro">tracing::error!</span>(
+                            <span class="string">"Received chain config with mismatched commitment from {}: expected {}, got {}"</span>,
+                            client.url,
+                            commitment,
+                            cf.commit(),
+                        );
+                    }
                 }
                 <span class="prelude-val">Err</span>(err) =&gt; {
                     <span class="macro">tracing::warn!</span>(<span class="string">"Error fetching chain config from peer: {}"</span>, err);
