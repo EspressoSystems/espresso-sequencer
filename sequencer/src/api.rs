@@ -1074,8 +1074,8 @@ mod test {
         mock::MockStateCatchup,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        BackoffParams, Delta, FeeAccount, FeeAmount, Header, MockSequencerVersions,
-        SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
+        TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1090,7 +1090,6 @@ mod test {
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
-        utils::{View, ViewInner},
         ValidatorConfig,
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
@@ -1119,17 +1118,15 @@ mod test {
 
     #[async_std::test]
     async fn test_chain_config_catchup_dishonest_peer() {
-        // This test starts a test network of five nodes, each connected to a dishonest peer.
-        // Initially, all nodes have the full chain config.
-        // We update the decided state of one node (node 5) with a chain config commitment.
-        // Node 5 then sends a catchup request to its dishonest peer.
-        // The dishonest peer responds with an invalid chain config that does not match the requested chain config commitment.
-        // After waiting for some time, we verify that node 5 does not have the full chain config
-        // i.e., the validated state chain config resolves to None.
-        // This means that peer chain config response is validated
+        // This test sets up a network of three nodes, each with the full chain config.
+        // One of the nodes is connected to a dishonest peer.
+        // When this node makes a chain config catchup request, it will result in an error due to the peer's malicious response.
+        // The test also makes a catchup request for another node with an honest peer, which succeeds.
+        // The requested chain config is based on the commitment from the validated state's chain config.
+        // The dishonest peer responds with an invalid (malicious) chain config
         setup_test();
 
-        const NUM_NODES: usize = 5;
+        const NUM_NODES: usize = 3;
 
         let (url, _handle) = spawn_dishonest_peer_catchup_api().await.unwrap();
 
@@ -1148,8 +1145,18 @@ mod test {
             ..Default::default()
         };
 
-        // all the nodes have a full chain config in their validated state so no need to catchup initially.
-        let states = std::array::from_fn(|_| state.clone());
+        let mut peers = std::array::from_fn(|_| {
+            StatePeers::<SequencerApiVersion>::from_urls(
+                vec![format!("http://localhost:{port}").parse().unwrap()],
+                BackoffParams::default(),
+            )
+        });
+
+        // one of the node has dishonest peer
+        peers[1] = StatePeers::<SequencerApiVersion>::from_urls(
+            vec![url.clone()],
+            BackoffParams::default(),
+        );
 
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
             .api_config(
@@ -1159,79 +1166,24 @@ mod test {
                 })
                 .catchup(Default::default()),
             )
-            .states(states)
-            .catchups(std::array::from_fn(|_| {
-                StatePeers::<StaticVersion<0, 1>>::from_urls(
-                    vec![url.clone()],
-                    BackoffParams::default(),
-                )
-            }))
+            .states(std::array::from_fn(|_| state.clone()))
+            .catchups(peers)
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
         let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
-        // Wait for a few blocks to pass
-        network
-            .server
-            .event_stream()
-            .await
-            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
-            .take(3)
-            .collect::<Vec<_>>()
-            .await;
+        // Test a catchup request for node #0, which is connected to an honest peer.
+        // The catchup should successfully retrieve the correct chain config.
+        let node = &network.peers[0];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
 
-        let handle = network.peers[3].consensus();
-        let handle_write_lock = handle.write().await;
-
-        let consensus = handle_write_lock.consensus();
-        let mut consensus_write_lock = consensus.write().await;
-
-        // Get the last decided leaf and update the validated state with the chain config commitment
-        // so that it makes a catchup request.
-        let last_decided_leaf = consensus_write_lock.decided_leaf();
-
-        let view = View {
-            view_inner: ViewInner::Leaf {
-                leaf: last_decided_leaf.commit(),
-                state: ValidatedState {
-                    chain_config: cf.commit().into(),
-                    ..Default::default()
-                }
-                .into(),
-                delta: Some(
-                    Delta {
-                        fees_delta: Default::default(),
-                    }
-                    .into(),
-                ),
-            },
-        };
-
-        let peer_validated_state = network.peers[3].decided_state().await;
-        assert_eq!(peer_validated_state.chain_config.resolve(), None);
-
-        consensus_write_lock
-            .update_validated_state_map(last_decided_leaf.view_number(), view)
-            .unwrap();
-
-        drop(consensus_write_lock);
-        drop(handle_write_lock);
-
-        // Wait for several blocks to be decided
-        network
-            .server
-            .event_stream()
-            .await
-            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
-            .take(10)
-            .collect::<Vec<_>>()
-            .await;
-
-        // The node should have made a catchup request, but since the peer is dishonest,
-        // the state must not contain the malicious chain config.
-        let peer_validated_state = network.peers[3].decided_state().await;
-        assert_eq!(peer_validated_state.chain_config.resolve(), None);
+        // Test a catchup request for node #1, which is connected to a dishonest peer.
+        // This request will result in an error due to the malicious chain config provided by the peer.
+        let node = &network.peers[1];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
 
         network.server.shut_down().await;
     }
