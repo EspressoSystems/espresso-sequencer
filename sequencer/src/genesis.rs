@@ -7,6 +7,8 @@ use anyhow::Context;
 use espresso_types::{
     v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
 };
+use ethers::providers::{Http, Provider};
+use sequencer_utils::deployer::is_proxy_contract;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
@@ -46,7 +48,7 @@ pub struct Genesis {
     pub stake_table: StakeTableConfig,
     #[serde(default)]
     pub accounts: HashMap<FeeAccount, FeeAmount>,
-    pub l1_finalized: Option<L1Finalized>,
+    pub l1_finalized: L1Finalized,
     pub header: GenesisHeader,
     #[serde(rename = "upgrade", with = "upgrade_ser")]
     #[serde(default)]
@@ -71,6 +73,33 @@ impl Genesis {
         }
 
         base_fee
+    }
+}
+
+impl Genesis {
+    pub async fn validate_fee_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
+        let provider = Provider::<Http>::try_from(l1_rpc_url)?;
+
+        if let Some(fee_contract_address) = self.chain_config.fee_contract {
+            if !is_proxy_contract(provider.clone(), fee_contract_address).await? {
+                anyhow::bail!("Fee contract's address is not a proxy");
+            }
+        }
+
+        // now iterate over each upgrade type and validate the fee contract if it exists
+        for upgrade in self.upgrades.values() {
+            match &upgrade.upgrade_type {
+                UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
+                    if let Some(fee_contract_address) = chain_config.fee_contract {
+                        if !is_proxy_contract(provider.clone(), fee_contract_address).await? {
+                            anyhow::bail!("Fee contract's address is not a proxy");
+                        }
+                    }
+                }
+            }
+        }
+        // TODO: it's optional for the fee contract to be included in a proxy in v1 so no need to panic but revisit this after v1 https://github.com/EspressoSystems/espresso-sequencer/pull/2000#discussion_r1765174702
+        Ok(())
     }
 }
 
@@ -340,7 +369,7 @@ mod test {
         );
         assert_eq!(
             genesis.l1_finalized,
-            Some(L1Finalized::Block(L1BlockInfo {
+            L1Finalized::Block(L1BlockInfo {
                 number: 64,
                 timestamp: 0x123def.into(),
                 hash: H256([
@@ -348,7 +377,7 @@ mod test {
                     0xf3, 0x0a, 0x47, 0xde, 0x02, 0xcf, 0x28, 0xad, 0x68, 0xc8, 0x9e, 0x10, 0x4c,
                     0x00, 0xc4, 0xe5, 0x1b, 0xb7, 0xa5
                 ])
-            }))
+            })
         );
     }
 
@@ -369,6 +398,9 @@ mod test {
 
             [header]
             timestamp = 123456
+
+            [l1_finalized]
+            number = 0
         }
         .to_string();
 
@@ -392,7 +424,7 @@ mod test {
             }
         );
         assert_eq!(genesis.accounts, HashMap::default());
-        assert_eq!(genesis.l1_finalized, None);
+        assert_eq!(genesis.l1_finalized, L1Finalized::Number { number: 0 });
     }
 
     #[test]
@@ -419,10 +451,215 @@ mod test {
         .to_string();
 
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-        assert_eq!(
-            genesis.l1_finalized,
-            Some(L1Finalized::Number { number: 42 })
+        assert_eq!(genesis.l1_finalized, L1Finalized::Number { number: 42 });
+    }
+
+    #[async_std::test]
+    async fn test_genesis_fee_contract_is_not_a_proxy() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // validate the the fee_contract address
+        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+
+        // check if the result from the validation is an error
+        if let Err(e) = result {
+            // assert that the error message contains "Fee contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Fee contract's address is not a proxy"));
+        } else {
+            panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
+        }
+    }
+
+    #[async_std::test]
+    async fn test_genesis_fee_contract_is_a_proxy() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x00AeE426f8558929102df1eBA983B5C439E37D18"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+
+        assert!(
+            result.is_ok(),
+            "Expected Fee Contract to be a proxy, but it was not"
         );
+    }
+
+    #[async_std::test]
+    async fn test_genesis_fee_contract_is_a_proxy_with_upgrades() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x00AeE426f8558929102df1eBA983B5C439E37D18" // a proxy
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 999999999
+            max_block_size = 3000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x00AeE426f8558929102df1eBA983B5C439E37D18" // a proxy
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+
+        assert!(
+            result.is_ok(),
+            "Expected Fee Contract to be a proxy, but it was not"
+        );
+    }
+
+    #[async_std::test]
+    async fn test_genesis_fee_contract_is_not_a_proxy_with_upgrades() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468" //not a proxy
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.marketplace]
+            [upgrade.marketplace.chain_config]
+            chain_id = 999999999
+            max_block_size = 3000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            bid_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468" //not a proxy
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // validate the fee_contract address
+        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+
+        // check if the result from the validation is an error
+        if let Err(e) = result {
+            // assert that the error message contains "Fee contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Fee contract's address is not a proxy"));
+        } else {
+            panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
+        }
     }
 
     #[test]
@@ -442,6 +679,9 @@ mod test {
 
             [header]
             timestamp = "2024-05-16T11:20:28-04:00"
+
+            [l1_finalized]
+            number = 0
         }
         .to_string();
 
@@ -506,6 +746,7 @@ mod test {
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         let (version, genesis_upgrade) = genesis.upgrades.last_key_value().unwrap();
+        println!("{:?}", genesis_upgrade);
 
         assert_eq!(*version, Version { major: 0, minor: 2 });
 

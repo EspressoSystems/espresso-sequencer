@@ -2,14 +2,16 @@ use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
 use espresso_types::{
-    FeeVersion, MarketplaceVersion, SequencerVersions, SolverAuctionResultsProvider, V0_0, V0_1,
+    traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
+    SolverAuctionResultsProvider, V0_0, V0_1,
 };
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
-    init_node,
+    context::SequencerContext,
+    init_node, network,
     options::{Modules, Options},
     persistence, Genesis, L1Params, NetworkParams,
 };
@@ -24,6 +26,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::warn!(?modules, "sequencer starting up");
 
     let genesis = Genesis::from_file(&opt.genesis_file)?;
+
+    // validate that the fee contract is a proxy and panic otherwise
+    genesis
+        .validate_fee_contract(opt.l1_provider_url.to_string())
+        .await
+        .unwrap();
+
     tracing::info!(?genesis, "genesis");
 
     let base = genesis.base_version;
@@ -91,12 +100,12 @@ where
     V: Versions,
 {
     if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(genesis, modules, opt, storage, versions).await
+        run_with_storage(genesis, modules, opt, storage, versions).await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(genesis, modules, opt, storage, versions).await
+        run_with_storage(genesis, modules, opt, storage, versions).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
-        init_with_storage(
+        run_with_storage(
             genesis,
             modules,
             opt,
@@ -107,13 +116,33 @@ where
     }
 }
 
-async fn init_with_storage<S, V>(
+async fn run_with_storage<S, V>(
     genesis: Genesis,
     modules: Modules,
     opt: Options,
     storage_opt: S,
     versions: V,
 ) -> anyhow::Result<()>
+where
+    S: DataSourceOptions,
+    V: Versions,
+{
+    let ctx = init_with_storage(genesis, modules, opt, storage_opt, versions).await?;
+
+    // Start doing consensus.
+    ctx.start_consensus().await;
+    ctx.join().await;
+
+    Ok(())
+}
+
+async fn init_with_storage<S, V>(
+    genesis: Genesis,
+    modules: Modules,
+    opt: Options,
+    storage_opt: S,
+    versions: V,
+) -> anyhow::Result<SequencerContext<network::Production, S::Persistence, V>>
 where
     S: DataSourceOptions,
     V: Versions,
@@ -198,7 +227,7 @@ where
             }
 
             http_opt
-                .serve(move |metrics| {
+                .serve(move |metrics, consumer| {
                     async move {
                         init_node(
                             genesis,
@@ -207,12 +236,12 @@ where
                             storage_opt,
                             l1_params,
                             versions,
+                            consumer,
                             opt.is_da,
                             opt.identity,
                             marketplace_config,
                         )
                         .await
-                        .unwrap()
                     }
                     .boxed()
                 })
@@ -226,6 +255,7 @@ where
                 storage_opt,
                 l1_params,
                 versions,
+                NullEventConsumer,
                 opt.is_da,
                 opt.identity,
                 marketplace_config,
@@ -234,12 +264,10 @@ where
         }
     };
 
-    // Start doing consensus.
-    ctx.start_consensus().await;
-    ctx.join().await;
-
-    Ok(())
+    Ok(ctx)
 }
+
+mod restart_tests;
 
 #[cfg(test)]
 mod test {
@@ -252,7 +280,7 @@ mod test {
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
-        genesis::StakeTableConfig,
+        genesis::{L1Finalized, StakeTableConfig},
         persistence::fs,
         SequencerApiVersion,
     };
@@ -278,7 +306,7 @@ mod test {
             chain_config: Default::default(),
             stake_table: StakeTableConfig { capacity: 10 },
             accounts: Default::default(),
-            l1_finalized: Default::default(),
+            l1_finalized: L1Finalized::Number { number: 0 },
             header: Default::default(),
             upgrades: Default::default(),
             base_version: Version { major: 0, minor: 1 },

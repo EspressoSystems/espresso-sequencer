@@ -9,6 +9,7 @@ resolver = "2"
 
 members = [
   "builder",
+  "client",
   "contract-bindings",
   "contracts/rust/adapter",
   "contracts/rust/diff-test",
@@ -18,6 +19,7 @@ members = [
   "marketplace-solver",
   "node-metrics",
   "sequencer",
+  "tests",
   "types",
   "utils",
 ]
@@ -51,26 +53,27 @@ cld = "0.5"
 derive_more = "0.99.17"
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
 dotenvy = "0.15"
+dyn-clone = "1.0"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74", features = ["dependency-tasks"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75", features = ["dependency-tasks"] }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.74" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.47" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.47" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.46" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.57" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.75" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.49" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.49" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.47" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.60" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74", features = ["dependency-tasks"] }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
-libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75", features = ["dependency-tasks"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75" }
+libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.74" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.75" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
@@ -114,7 +117,7 @@ strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
 sqlx = { version = "^0.8", features = ["postgres", "macros"] }
 tagged-base64 = "0.4"
-tide-disco = "0.9"
+tide-disco = "0.9.1"
 thiserror = "1.0.61"
 tracing = "0.1"
 bytesize = "1.3"
@@ -124,6 +127,7 @@ rand_distr = "0.4"
 reqwest = "0.12"
 serde = { version = "1.0.195", features = ["derive"] }
 serde_json = "^1.0.113"
+tempfile = "3.10"
 toml = "0.8"
 url = "2.3"
 vbs = "0.1"

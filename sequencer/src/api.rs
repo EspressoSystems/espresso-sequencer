@@ -14,9 +14,8 @@ use espresso_types::{
 use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
-    stream::{BoxStream, Stream},
+    stream::BoxStream,
 };
-use hotshot::types::Event;
 use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
@@ -25,6 +24,7 @@ use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
+    event::Event,
     light_client::StateSignatureRequestBody,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
 };
@@ -91,13 +91,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
         Self {
             consensus: Arc::pin(Lazy::from_future(init.boxed())),
         }
-    }
-
-    fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
-        let state = self.clone();
-        async move { state.consensus().await.read().await.event_stream() }
-            .boxed()
-            .flatten_stream()
     }
 
     async fn state_signer(&self) -> &StateSigner<SequencerApiVersion> {
@@ -374,7 +367,7 @@ pub mod test_helpers {
     use async_std::task::JoinHandle;
     use espresso_types::{
         mock::MockStateCatchup,
-        v0::traits::{PersistenceOptions, StateCatchup},
+        v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
@@ -531,14 +524,13 @@ pub mod test_helpers {
         ) -> Self {
             let mut cfg = cfg;
             let mut builder_tasks = Vec::new();
-            let mut legacy_builder_url = "http://example.com".parse().unwrap();
             let mut marketplace_builder_url = "http://example.com".parse().unwrap();
 
             if <V as Versions>::Base::VERSION < MarketplaceVersion::VERSION {
                 let (task, url) =
                     run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
                 builder_tasks.push(task);
-                legacy_builder_url = url;
+                cfg.network_config.set_builder_urls(vec1::vec1![url]);
             };
 
             if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION
@@ -546,16 +538,15 @@ pub mod test_helpers {
             {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.marketplace_builder_port(),
-                    NodeState::default(),
+                    NodeState::default().with_current_version(V::Base::VERSION),
                     cfg.state[0].clone(),
                 )
                 .await;
                 builder_tasks.push(task);
+                cfg.network_config
+                    .set_builder_urls(vec1::vec1![url.clone()]);
                 marketplace_builder_url = url;
             }
-
-            cfg.network_config
-                .set_builder_urls(vec1::vec1![legacy_builder_url]);
 
             let mut nodes = join_all(
                 izip!(cfg.state, cfg.persistence, cfg.catchup)
@@ -567,21 +558,23 @@ pub mod test_helpers {
                         let marketplace_builder_url = marketplace_builder_url.clone();
                         async move {
                             if i == 0 {
-                                opt.serve(|metrics| {
+                                opt.serve(|metrics, consumer| {
                                     let cfg = cfg.clone();
                                     async move {
-                                        cfg.init_node(
-                                            0,
-                                            state,
-                                            persistence,
-                                            catchup,
-                                            &*metrics,
-                                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                                            bind_version,
-                                            upgrades_map,
-                                            marketplace_builder_url,
-                                        )
-                                        .await
+                                        Ok(cfg
+                                            .init_node(
+                                                0,
+                                                state,
+                                                persistence,
+                                                catchup,
+                                                &*metrics,
+                                                STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                consumer,
+                                                bind_version,
+                                                upgrades_map,
+                                                marketplace_builder_url,
+                                            )
+                                            .await)
                                     }
                                     .boxed()
                                 })
@@ -595,6 +588,7 @@ pub mod test_helpers {
                                     catchup,
                                     &NoMetrics,
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    NullEventConsumer,
                                     bind_version,
                                     upgrades_map,
                                     marketplace_builder_url,
@@ -932,7 +926,8 @@ mod api_tests {
     use espresso_types::{Header, NamespaceId};
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
-    use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
+    use hotshot_query_service::availability::{BlockQueryData, VidCommonQueryData};
+
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
@@ -943,7 +938,6 @@ mod api_tests {
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
 
-    use self::options::HotshotEvents;
     use super::*;
     use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
@@ -991,17 +985,6 @@ mod api_tests {
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
-        // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        client
-            .socket("availability/stream/leaves/0")
-            .subscribe::<LeafQueryData<SeqTypes>>()
-            .await
-            .unwrap()
-            .next()
-            .await
-            .unwrap()
-            .unwrap();
-
         let hash = client
             .post("submit/submit")
             .body_json(&txn)
@@ -1014,6 +997,18 @@ mod api_tests {
         // Wait for a Decide event containing transaction matching the one we sent
         let block_height = wait_for_decide_on_handle(&mut events, &txn).await as usize;
         tracing::info!(block_height, "transaction sequenced");
+
+        // Wait for the query service to update to this block height.
+        client
+            .socket(&format!("availability/stream/blocks/{block_height}"))
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
         let mut found_txn = false;
         let mut found_empty_block = false;
         for block_num in 0..=block_height {
@@ -1067,61 +1062,6 @@ mod api_tests {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
     }
-
-    #[async_std::test]
-    pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
-        use HotshotEvents;
-
-        setup_test();
-
-        let hotshot_event_streaming_port =
-            pick_unused_port().expect("No ports free for hotshot event streaming");
-        let query_service_port = pick_unused_port().expect("No ports free for query service");
-
-        let url = format!("http://localhost:{hotshot_event_streaming_port}")
-            .parse()
-            .unwrap();
-
-        let hotshot_events = HotshotEvents {
-            events_service_port: hotshot_event_streaming_port,
-        };
-
-        let client: Client<ServerError, StaticVersion<0, 1>> = Client::new(url);
-
-        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
-
-        let anvil = Anvil::new().spawn();
-        let l1 = anvil.endpoint().parse().unwrap();
-        let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::default()
-            .api_config(options)
-            .network_config(network_config)
-            .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
-
-        let mut subscribed_events = client
-            .socket("hotshot-events/events")
-            .subscribe::<Event<SeqTypes>>()
-            .await
-            .unwrap();
-
-        let total_count = 5;
-        // wait for these events to receive on client 1
-        let mut receive_count = 0;
-        loop {
-            let event = subscribed_events.next().await.unwrap();
-            tracing::info!(
-                "Received event in hotshot event streaming Client 1: {:?}",
-                event
-            );
-            receive_count += 1;
-            if receive_count > total_count {
-                tracing::info!("Client Received atleast desired events, exiting loop");
-                break;
-            }
-        }
-        assert_eq!(receive_count, total_count + 1);
-    }
 }
 
 #[cfg(test)]
@@ -1132,6 +1072,7 @@ mod test {
 
     use espresso_types::{
         mock::MockStateCatchup,
+        traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, Delta, FeeAccount, FeeAmount, Header, MockSequencerVersions,
         SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
@@ -1166,6 +1107,7 @@ mod test {
 
     use self::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
+        options::HotshotEvents,
         sql::DataSource as SqlDataSource,
     };
     use super::*;
@@ -1472,6 +1414,7 @@ mod test {
                 ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
                 MockSequencerVersions::new(),
                 Default::default(),
                 "http://localhost".parse().unwrap(),
@@ -2055,5 +1998,58 @@ mod test {
             ))
             .unwrap()
         );
+    }
+
+    #[async_std::test]
+    async fn test_hotshot_event_streaming() {
+        setup_test();
+
+        let hotshot_event_streaming_port =
+            pick_unused_port().expect("No ports free for hotshot event streaming");
+        let query_service_port = pick_unused_port().expect("No ports free for query service");
+
+        let url = format!("http://localhost:{hotshot_event_streaming_port}")
+            .parse()
+            .unwrap();
+
+        let hotshot_events = HotshotEvents {
+            events_service_port: hotshot_event_streaming_port,
+        };
+
+        let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
+
+        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
+
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        let mut subscribed_events = client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let total_count = 5;
+        // wait for these events to receive on client 1
+        let mut receive_count = 0;
+        loop {
+            let event = subscribed_events.next().await.unwrap();
+            tracing::info!(
+                "Received event in hotshot event streaming Client 1: {:?}",
+                event
+            );
+            receive_count += 1;
+            if receive_count > total_count {
+                tracing::info!("Client Received atleast desired events, exiting loop");
+                break;
+            }
+        }
+        assert_eq!(receive_count, total_count + 1);
     }
 }

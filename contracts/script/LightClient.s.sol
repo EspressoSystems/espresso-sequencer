@@ -1,27 +1,21 @@
 pragma solidity ^0.8.20;
 
 import { Script } from "forge-std/Script.sol";
-
-import {
-    Defender,
-    ApprovalProcessResponse,
-    ProposeUpgradeResponse
-} from "openzeppelin-foundry-upgrades/Defender.sol";
 import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
-import { UtilsScript } from "./Utils.s.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 /// @notice Deploy the upgradeable light client contract using the OpenZeppelin Upgrades plugin.
 contract DeployLightClientScript is Script {
-    string public contractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
+    string public contractName = vm.envString("LIGHT_CLIENT_CONTRACT_ORIGINAL_NAME");
 
     /// @dev Deploys both the proxy and the implementation contract.
     /// The proxy admin is set as the owner of the contract upon deployment.
     /// The `owner` parameter should be the address of the multisig wallet to ensure proper
     /// ownership management.
     /// @param numInitValidators number of the validators initially
+    /// @param stateHistoryRetentionPeriod state history retention period in seconds
     /// @param owner The address that will be set as the owner of the proxy (typically a multisig
     /// wallet).
     function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
@@ -32,6 +26,19 @@ contract DeployLightClientScript is Script {
             LC.LightClientState memory lightClientState
         )
     {
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
+
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "mock-genesis";
@@ -41,15 +48,33 @@ contract DeployLightClientScript is Script {
         (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
             abi.decode(result, (LC.LightClientState, LC.StakeTableState));
 
-        // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
-
         proxyAddress = Upgrades.deployUUPSProxy(
             contractName,
-            abi.encodeCall(LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, owner))
+            abi.encodeCall(
+                LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, deployer)
+            )
+        );
+
+        LC lightClientProxy = LC(proxyAddress);
+
+        // Currently, the light client is in prover mode so set the permissioned prover
+        address permissionedProver = vm.envAddress("PERMISSIONED_PROVER_ADDRESS");
+        lightClientProxy.setPermissionedProver(permissionedProver);
+
+        // transfer ownership to the multisig
+        lightClientProxy.transferOwnership(owner);
+
+        // verify post deployment details
+        require(
+            lightClientProxy.permissionedProver() == owner,
+            "Post Deployment Verification: Set permissioned prover failed"
+        );
+        require(
+            lightClientProxy.owner() == owner, "Post Deployment Verification: Owner transfer failed"
+        );
+        require(
+            lightClientProxy.stateHistoryRetentionPeriod() == stateHistoryRetentionPeriod,
+            "Post Deployment Verification: stateHistoryRetentionPeriod is not as expected"
         );
 
         // Get the implementation address
@@ -64,7 +89,7 @@ contract DeployLightClientScript is Script {
 /// @notice Upgrades the light client contract first by deploying the new implementation
 /// and then executing the upgrade via the Safe Multisig wallet using the SAFE SDK.
 contract LightClientContractUpgradeScript is Script {
-    string internal originalContractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
+    string internal originalContractName = vm.envString("LIGHT_CLIENT_CONTRACT_ORIGINAL_NAME");
     string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
 
     /// @dev First the new implementation contract is deployed via the deployer wallet.
@@ -77,11 +102,19 @@ contract LightClientContractUpgradeScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        // get the deployer to depley the new implementation contract
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         // deploy the new implementation contract
         LCV2 implementationContract = new LCV2();
@@ -118,7 +151,7 @@ contract LightClientContractUpgradeScript is Script {
 /// @dev this is used when upgrading to the same base contract file which is being actively modified
 /// before mainnet
 contract UpgradeLightClientContractWithSameContractScript is Script {
-    string internal originalContractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
+    string internal originalContractName = vm.envString("LIGHT_CLIENT_CONTRACT_ORIGINAL_NAME");
     string internal upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
 
     function run() public returns (address implementationAddress, bytes memory result) {
@@ -128,11 +161,19 @@ contract UpgradeLightClientContractWithSameContractScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        // get the deployer to depley the new implementation contract
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         // deploy the new implementation contract
         LC implementationContract = new LC();
@@ -161,144 +202,6 @@ contract UpgradeLightClientContractWithSameContractScript is Script {
         result = vm.ffi(cmds);
 
         return (address(implementationContract), result);
-    }
-}
-
-/// @notice Deploys an upgradeable LightClient Contract using OpenZeppelin Defender.
-/// the deployment environment details are set in OpenZeppelin Defender which is
-/// identified via the Defender Key and Secret in the environment file
-contract DeployLightClientDefenderScript is Script {
-    string public contractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
-    UtilsScript public utils = new UtilsScript();
-    uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
-
-    /// @dev When this function is run, a transaction to deploy the implementation is submitted to
-    /// Defender
-    /// This transaction must be signed via OpenZeppelin Defender's UI and once it completes
-    /// another transaction is available to sign for the deployment of the proxy
-    function run(uint32 stateHistoryRetentionPeriod)
-        public
-        returns (address proxy, address multisig, LC.LightClientState memory lightClientState)
-    {
-        // TODO for a production deployment provide the right genesis state and value
-        uint32 numInitValidators = 1;
-
-        string[] memory cmds = new string[](3);
-        cmds[0] = "diff-test";
-        cmds[1] = "mock-genesis";
-        cmds[3] = vm.toString(uint256(numInitValidators));
-
-        bytes memory result = vm.ffi(cmds);
-        (LC.LightClientState memory state, LC.StakeTableState memory stakeState) =
-            abi.decode(result, (LC.LightClientState, LC.StakeTableState));
-
-        ApprovalProcessResponse memory upgradeApprovalProcess = Defender.getUpgradeApprovalProcess();
-        multisig = upgradeApprovalProcess.via;
-
-        if (upgradeApprovalProcess.via == address(0)) {
-            revert(
-                string.concat(
-                    "Upgrade approval process with id ",
-                    upgradeApprovalProcess.approvalProcessId,
-                    " has no assigned address"
-                )
-            );
-        }
-
-        Options memory opts;
-        opts.defender.useDefenderDeploy = true;
-        opts.defender.salt = bytes32(abi.encodePacked(contractSalt));
-
-        proxy = Upgrades.deployUUPSProxy(
-            contractName,
-            abi.encodeCall(
-                LC.initialize, (state, stakeState, stateHistoryRetentionPeriod, multisig)
-            ),
-            opts
-        );
-
-        //generate the file path, file output and write to the file
-        (string memory filePath, string memory fileData) = utils.generateProxyDeploymentOutput(
-            contractName,
-            contractSalt,
-            proxy,
-            multisig,
-            upgradeApprovalProcess.approvalProcessId,
-            upgradeApprovalProcess.viaType
-        );
-        utils.writeJson(filePath, fileData);
-
-        //generate the salt history file path,  output and write to the file
-        (string memory saltFilePath, string memory saltFileData) =
-            utils.generateSaltOutput(contractName, contractSalt);
-        utils.writeJson(saltFilePath, saltFileData);
-
-        return (proxy, multisig, state);
-    }
-}
-
-/// @notice Upgrades the LightClient Contract using OpenZeppelin Defender.
-/// the deployment environment details are set in OpenZeppelin Defender which is
-/// identified via the Defender Key and Secret in the environment file
-
-contract UpgradeLightClientWithDefenderScript is Script {
-    string public originalContractName = vm.envString("LIGHT_CLIENT_ORIGINAL_CONTRACT_NAME");
-    string public upgradeContractName = vm.envString("LIGHT_CLIENT_CONTRACT_UPGRADE_NAME");
-    uint256 public contractSalt = uint256(vm.envInt("LIGHT_CLIENT_SALT"));
-    UtilsScript public utils = new UtilsScript();
-
-    /// @dev it depends on the `LIGHT_CLIENT_CONTRACT_UPGRADE_NAME` in the environment file to
-    /// determine
-    /// which implementation it's being upgraded to
-    /// When this function is run, a transaction to deploy the new implementation is submitted to
-    /// Defender
-    /// This transaction must be signed via OpenZeppelin Defender's UI and once it completes
-    /// another transaction is available to sign to call the upgrade method on the proxy
-    function run() public returns (string memory proposalId, string memory proposalUrl) {
-        //get the previous salt from the salt history - this assumes there was first a deployment
-        (string memory saltFilePath,) = utils.generateSaltFilePath(originalContractName);
-        (, string memory saltData) = utils.readFile(saltFilePath);
-        uint256 prevContractSalt = vm.parseJsonUint(saltData, ".previousSalt");
-
-        (string memory filePath,) =
-            utils.generateDeploymentFilePath(originalContractName, prevContractSalt);
-
-        //read the deployment file from the previous deployment to get the proxyAddress & multisig
-        // used for deployment
-        (, string memory result) = utils.readFile(filePath);
-        address proxyAddress = vm.parseJsonAddress(result, ".proxyAddress");
-        address multisig = vm.parseJsonAddress(result, ".multisig");
-
-        //set openzeppelin defender options for the deployment
-        Options memory opts;
-        opts.defender.useDefenderDeploy = true;
-        opts.defender.salt = bytes32(contractSalt);
-        opts.referenceContract = originalContractName;
-
-        // propose the upgrade via openzeppelin defender
-        ProposeUpgradeResponse memory response =
-            Defender.proposeUpgrade(proxyAddress, upgradeContractName, opts);
-        string memory responseProposalId = response.proposalId;
-        string memory responseProposalUrl = response.url;
-
-        //generate the file path, file output (deployment info) and write to the file
-        (string memory upgradeFilePath, string memory fileData) = utils.generateUpgradeOutput(
-            originalContractName,
-            contractSalt,
-            upgradeContractName,
-            proxyAddress,
-            multisig,
-            responseProposalId,
-            responseProposalUrl
-        );
-        utils.writeJson(upgradeFilePath, fileData);
-
-        //generate the salt history file path,  output and write to the file
-        string memory saltFileData;
-        (saltFilePath, saltFileData) = utils.generateSaltOutput(originalContractName, contractSalt);
-        utils.writeJson(saltFilePath, saltFileData);
-
-        return (responseProposalId, responseProposalUrl);
     }
 }
 
@@ -384,10 +287,18 @@ contract UpgradeLightClientWithoutMultisigAdminScript is Script {
     /// TODO get the most recent deployment from the devops tooling
     function run(address mostRecentlyDeployedProxy) external returns (address) {
         // get the deployer info from the environment and start broadcast as the deployer
-        string memory seedPhrase = vm.envString("MNEMONIC");
-        uint32 seedPhraseOffset = uint32(vm.envUint("MNEMONIC_OFFSET"));
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
-        vm.startBroadcast(admin);
+        address deployer;
+        string memory ledgerCommand = vm.envString("USE_HARDWARE_WALLET");
+        if (keccak256(bytes(ledgerCommand)) == keccak256(bytes("true"))) {
+            deployer = vm.envAddress("DEPLOYER_HARDWARE_WALLET_ADDRESS");
+        } else {
+            // get the deployer info from the environment
+            string memory seedPhrase = vm.envString("MNEMONIC");
+            uint32 seedPhraseOffset = uint32(vm.envUint("MNEMONIC_OFFSET"));
+            (deployer,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        }
+
+        vm.startBroadcast(deployer);
 
         address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()));
         return proxy;

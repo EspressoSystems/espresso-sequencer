@@ -12,7 +12,9 @@ use contract_bindings::{
     plonk_verifier_2::PlonkVerifier2,
 };
 use derive_more::Display;
-use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
+use ethers::{
+    prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject, utils::hex,
+};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
@@ -300,6 +302,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
         .deploy(constructor_args)?
         .send()
         .await?;
+
     Ok(contract.address())
 }
 
@@ -308,9 +311,11 @@ pub async fn deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
+    multisig_address: Option<H160>,
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
+    permissioned_prover: Option<Address>,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;
@@ -320,17 +325,17 @@ pub async fn deploy(
         .index(account_index)?
         .build()?
         .with_chain_id(chain_id);
-    let owner = wallet.address();
-    let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
+    let deployer = wallet.address();
+    let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
 
     // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
     // gas.
-    let balance = l1.get_balance(owner, None).await?;
+    let balance = l1.get_balance(deployer, None).await?;
     ensure!(
         balance > 0.into(),
-        "deployer account {owner:#x} is not funded!"
+        "deployer account {deployer:#x} is not funded!"
     );
-    tracing::info!(%balance, "deploying from address {owner:#x}");
+    tracing::info!(%balance, "deploying from address {deployer:#x}");
 
     // `HotShot.sol`
     if should_deploy(ContractGroup::HotShot, &only) {
@@ -360,15 +365,42 @@ pub async fn deploy(
         let (genesis_lc, genesis_stake) = genesis.await?.clone();
 
         let data = light_client
-            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, owner)
+            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
-        contracts
+        let light_client_proxy_address = contracts
             .deploy_tx(
                 Contract::LightClientProxy,
                 ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
             )
             .await?;
+
+        // confirm that the implementation address is the address of the light client contract deployed above
+        if !is_proxy_contract(provider.clone(), light_client_proxy_address)
+            .await
+            .expect("Failed to determine if light contract is a proxy")
+        {
+            panic!("Light Client contract's address is not a proxy");
+        }
+
+        // Instantiate a wrapper with the proxy address and light client ABI.
+        let proxy = LightClient::new(light_client_proxy_address, l1.clone());
+
+        // Perission the light client prover.
+        if let Some(prover) = permissioned_prover {
+            tracing::info!(%light_client_proxy_address, %prover, "setting permissioned prover");
+            proxy.set_permissioned_prover(prover).send().await?.await?;
+        }
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %light_client_proxy_address,
+                %owner,
+                "transferring light client proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?.await?;
+        }
     }
 
     // `FeeContract.sol`
@@ -378,15 +410,36 @@ pub async fn deploy(
             .await?;
         let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
         let data = fee_contract
-            .initialize(owner)
+            .initialize(deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
-        contracts
+        let fee_contract_proxy_address = contracts
             .deploy_tx(
                 Contract::FeeContractProxy,
                 ERC1967Proxy::deploy(l1.clone(), (fee_contract_address, data))?,
             )
             .await?;
+
+        // confirm that the implementation address is the address of the fee contract deployed above
+        if !is_proxy_contract(provider.clone(), fee_contract_proxy_address)
+            .await
+            .expect("Failed to determine if fee contract is a proxy")
+        {
+            panic!("Fee contract's address is not a proxy");
+        }
+
+        // Instantiate a wrapper with the proxy address and fee contract ABI.
+        let proxy = FeeContract::new(fee_contract_proxy_address, l1.clone());
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %fee_contract_proxy_address,
+                %owner,
+                "transferring fee contract proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?.await?;
+        }
     }
 
     Ok(contracts)
@@ -399,10 +452,29 @@ fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> boo
     }
 }
 
+pub async fn is_proxy_contract(
+    provider: Provider<Http>,
+    proxy_address: H160,
+) -> anyhow::Result<bool> {
+    // confirm that the proxy_address is a proxy
+    // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
+    let hex_bytes = hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+        .expect("Failed to decode hex string");
+    let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
+    let storage = provider
+        .get_storage_at(proxy_address, implementation_slot, None)
+        .await?;
+
+    let implementation_address = H160::from_slice(&storage[12..]);
+
+    // when the implementation address is not equal to zero, it's a proxy
+    Ok(implementation_address != H160::zero())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ContractGroup {
     #[clap(name = "hotshot")]
-    HotShot,
+    HotShot, // TODO: confirm whether we keep HotShot in the contract group
     FeeContract,
     LightClient,
 }
