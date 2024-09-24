@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
+use committable::Committable;
 use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
     v0_3::ChainConfig,
@@ -193,7 +194,16 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
                 .await
             {
                 Ok(cf) => {
-                    return Ok(cf);
+                    if cf.commit() == commitment {
+                        return Ok(cf);
+                    } else {
+                        tracing::error!(
+                            "Received chain config with mismatched commitment from {}: expected {}, got {}",
+                            client.url,
+                            commitment,
+                            cf.commit(),
+                        );
+                    }
                 }
                 Err(err) => {
                     tracing::warn!("Error fetching chain config from peer: {}", err);
