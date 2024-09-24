@@ -431,8 +431,7 @@ impl PublicNetworkConfig {
             commit_sha: self.commit_sha,
             builder: self.builder,
             random_builder: self.random_builder,
-            public_keys: HashSet::new(),
-            enable_registration_verification: false,
+            public_keys: Vec::new(),
         })
     }
 }
