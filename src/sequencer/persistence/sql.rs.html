@@ -609,35 +609,195 @@
 <a href="#609" id="609">609</a>
 <a href="#610" id="610">610</a>
 <a href="#611" id="611">611</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
-
-<span class="kw">use </span>anyhow::Context;
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
+<a href="#625" id="625">625</a>
+<a href="#626" id="626">626</a>
+<a href="#627" id="627">627</a>
+<a href="#628" id="628">628</a>
+<a href="#629" id="629">629</a>
+<a href="#630" id="630">630</a>
+<a href="#631" id="631">631</a>
+<a href="#632" id="632">632</a>
+<a href="#633" id="633">633</a>
+<a href="#634" id="634">634</a>
+<a href="#635" id="635">635</a>
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a>
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a>
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+<a href="#691" id="691">691</a>
+<a href="#692" id="692">692</a>
+<a href="#693" id="693">693</a>
+<a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
+<a href="#716" id="716">716</a>
+<a href="#717" id="717">717</a>
+<a href="#718" id="718">718</a>
+<a href="#719" id="719">719</a>
+<a href="#720" id="720">720</a>
+<a href="#721" id="721">721</a>
+<a href="#722" id="722">722</a>
+<a href="#723" id="723">723</a>
+<a href="#724" id="724">724</a>
+<a href="#725" id="725">725</a>
+<a href="#726" id="726">726</a>
+<a href="#727" id="727">727</a>
+<a href="#728" id="728">728</a>
+<a href="#729" id="729">729</a>
+<a href="#730" id="730">730</a>
+<a href="#731" id="731">731</a>
+<a href="#732" id="732">732</a>
+<a href="#733" id="733">733</a>
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
+<a href="#761" id="761">761</a>
+<a href="#762" id="762">762</a>
+<a href="#763" id="763">763</a>
+<a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
+<a href="#766" id="766">766</a>
+<a href="#767" id="767">767</a>
+<a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::{stream::StreamExt, sync::Arc};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
     parse_duration,
-    v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, NetworkConfig,
+    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
+    BackoffParams, Leaf, NetworkConfig, Payload,
 };
 <span class="kw">use </span>hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, postgres::types::ToSql, Config, SqlStorage},
+        sql::{include_migrations, postgres::types::ToSql, Config, SqlStorage, Transaction},
     },
-    Transaction, VersionedDataSource,
+    Transaction <span class="kw">as _</span>, VersionedDataSource,
 };
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
-    event::HotShotAction,
+    event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
-    traits::node_implementation::ConsensusTime,
+    traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
     vote::HasViewNumber,
 };
+<span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
 
 <span class="kw">use crate</span>::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
@@ -899,63 +1059,46 @@
         tx.commit().<span class="kw">await
     </span>}
 
-    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
-
-        <span class="kw">let </span>stmt1 = <span class="string">"DELETE FROM vid_share where view &lt;= $1"</span>;
-        tx.execute(stmt1, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
-
-        <span class="kw">let </span>stmt2 = <span class="string">"DELETE FROM da_proposal where view &lt;= $1"</span>;
-        tx.execute(stmt2, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
-
-        <span class="kw">let </span>stmt3 = <span class="string">"DELETE FROM quorum_proposals where view &lt;= $1"</span>;
-        tx.execute(stmt3, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
-
-        tx.commit().<span class="kw">await
-    </span>}
-
-    <span class="kw">async fn </span>save_anchor_leaf(
+    <span class="kw">async fn </span>append_decided_leaves(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        leaf: <span class="kw-2">&amp;</span>Leaf,
-        qc: <span class="kw-2">&amp;</span>QuorumCertificate&lt;SeqTypes&gt;,
+        view: ViewNumber,
+        leaf_chain: <span class="kw">impl </span>IntoIterator&lt;Item = (<span class="kw-2">&amp;</span>LeafInfo&lt;SeqTypes&gt;, QuorumCertificate&lt;SeqTypes&gt;)&gt; + Send,
+        consumer: <span class="kw-2">&amp;</span>(<span class="kw">impl </span>EventConsumer + <span class="lifetime">'static</span>),
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="kw">let </span>stmt = <span class="string">"
-            INSERT INTO anchor_leaf (id, height, view, leaf, qc) VALUES (0, $1, $2, $3, $4)
-            ON CONFLICT (id) DO UPDATE SET (height, view, leaf, qc) = ROW (
-                GREATEST(anchor_leaf.height, excluded.height),
-                CASE
-                    WHEN excluded.height &gt; anchor_leaf.height THEN excluded.view
-                    ELSE anchor_leaf.view
-                END,
-                CASE
-                    WHEN excluded.height &gt; anchor_leaf.height THEN excluded.leaf
-                    ELSE anchor_leaf.leaf
-                END,
-                CASE
-                    WHEN excluded.height &gt; anchor_leaf.height THEN excluded.qc
-                    ELSE anchor_leaf.qc
-                END
-            )
-        "</span>;
+        <span class="kw">let </span>values = leaf_chain
+            .into_iter()
+            .map(|(info, qc)| {
+                <span class="kw">let </span>view = qc.view_number.u64() <span class="kw">as </span>i64;
+                <span class="kw">let </span>leaf_bytes = bincode::serialize(<span class="kw-2">&amp;</span>info.leaf)<span class="question-mark">?</span>;
+                <span class="kw">let </span>qc_bytes = bincode::serialize(<span class="kw-2">&amp;</span>qc)<span class="question-mark">?</span>;
+                <span class="prelude-val">Ok</span>((view, leaf_bytes, qc_bytes))
+            })
+            .collect::&lt;anyhow::Result&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>height = leaf.height() <span class="kw">as </span>i64;
-        <span class="kw">let </span>view = qc.view_number.u64() <span class="kw">as </span>i64;
-        <span class="kw">let </span>leaf_bytes = bincode::serialize(leaf)<span class="question-mark">?</span>;
-        <span class="kw">let </span>qc_bytes = bincode::serialize(qc)<span class="question-mark">?</span>;
+        <span class="comment">// First, append the new leaves. We do this in its own transaction because even if GC or the
+        // event consumer later fails, there is no need to abort the storage of the leaves.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>rows = values
+            .iter()
+            .map(|(view, leaf, qc)| [sql_param(view), sql_param(leaf), sql_param(qc)]);
 
-        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
-        tx.execute_one_with_retries(
-            stmt,
-            [
-                sql_param(<span class="kw-2">&amp;</span>height),
-                sql_param(<span class="kw-2">&amp;</span>view),
-                sql_param(<span class="kw-2">&amp;</span>leaf_bytes),
-                sql_param(<span class="kw-2">&amp;</span>qc_bytes),
-            ],
-        )
-        .<span class="kw">await</span><span class="question-mark">?</span>;
-        tx.commit().<span class="kw">await
-    </span>}
+        tx.upsert(<span class="string">"anchor_leaf"</span>, [<span class="string">"view"</span>, <span class="string">"leaf"</span>, <span class="string">"qc"</span>], [<span class="string">"view"</span>], rows)
+            .<span class="kw">await</span><span class="question-mark">?</span>;
+        tx.commit().<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="comment">// Generate an event for the new leaves and, only if it succeeds, clean up data we no longer
+        // need.
+        </span><span class="kw">let </span>consumer = dyn_clone::clone(consumer);
+        <span class="kw">let </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = collect_garbage(tx, view, consumer).<span class="kw">await </span>{
+            <span class="comment">// GC/event processing failure is not an error, since by this point we have at least
+            // managed to persist the decided leaves successfully, and GC will just run again at the
+            // next decide. Log an error but do not return it.
+            </span><span class="macro">tracing::warn!</span>(<span class="question-mark">?</span>view, <span class="string">"GC/event processing failed: {err:#}"</span>);
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
 
     <span class="kw">async fn </span>load_latest_acted_view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;ViewNumber&gt;&gt; {
         <span class="prelude-val">Ok</span>(<span class="self">self
@@ -977,7 +1120,7 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt_static(<span class="string">"SELECT leaf, qc FROM anchor_leaf WHERE id = 0"</span>)
+            </span>.query_opt_static(<span class="string">"SELECT leaf, qc FROM anchor_leaf ORDER BY view DESC LIMIT 1"</span>)
             .<span class="kw">await</span><span class="question-mark">?
         </span><span class="kw">else </span>{
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
@@ -1060,8 +1203,7 @@
 
     <span class="kw">async fn </span>load_quorum_proposals(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-    ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt;&gt;
-    {
+    ) -&gt; anyhow::Result&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt; {
         <span class="kw">let </span>rows = <span class="self">self
             </span>.db
             .read()
@@ -1069,7 +1211,7 @@
             </span>.query_static(<span class="string">"SELECT * FROM quorum_proposals"</span>)
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
-        <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(BTreeMap::from_iter(
+        <span class="prelude-val">Ok</span>(BTreeMap::from_iter(
             rows.map(|row| {
                 <span class="kw">let </span>row = row<span class="question-mark">?</span>;
                 <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
@@ -1081,7 +1223,7 @@
             })
             .collect::&lt;anyhow::Result&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()
             .<span class="kw">await</span><span class="question-mark">?</span>,
-        )))
+        ))
     }
 
     <span class="kw">async fn </span>append_vid(
@@ -1177,6 +1319,186 @@
         tx.commit().<span class="kw">await
     </span>}
 }
+
+<span class="kw">async fn </span>collect_garbage(
+    <span class="kw-2">mut </span>tx: Transaction&lt;<span class="lifetime">'_</span>&gt;,
+    view: ViewNumber,
+    consumer: <span class="kw">impl </span>EventConsumer,
+) -&gt; anyhow::Result&lt;()&gt; {
+    <span class="comment">// Clean up and collect VID shares.
+    </span><span class="kw">let </span><span class="kw-2">mut </span>vid_shares = tx
+        .query(
+            <span class="string">"DELETE FROM vid_share where view &lt;= $1 RETURNING view, data"</span>,
+            [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+        )
+        .<span class="kw">await</span><span class="question-mark">?
+        </span>.map(|row| {
+            <span class="kw">let </span>row = row<span class="question-mark">?</span>;
+            <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
+            <span class="kw">let </span>data: Vec&lt;u8&gt; = row.get(<span class="string">"data"</span>);
+            <span class="kw">let </span>vid_proposal =
+                bincode::deserialize::&lt;Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;&gt;(<span class="kw-2">&amp;</span>data)<span class="question-mark">?</span>;
+            <span class="prelude-val">Ok</span>((view <span class="kw">as </span>u64, vid_proposal.data))
+        })
+        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+
+    <span class="comment">// Clean up and collect DA proposals.
+    </span><span class="kw">let </span><span class="kw-2">mut </span>da_proposals = tx
+        .query(
+            <span class="string">"DELETE FROM da_proposal where view &lt;= $1 RETURNING view, data"</span>,
+            [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+        )
+        .<span class="kw">await</span><span class="question-mark">?
+        </span>.map(|row| {
+            <span class="kw">let </span>row = row<span class="question-mark">?</span>;
+            <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
+            <span class="kw">let </span>data: Vec&lt;u8&gt; = row.get(<span class="string">"data"</span>);
+            <span class="kw">let </span>da_proposal =
+                bincode::deserialize::&lt;Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;&gt;(<span class="kw-2">&amp;</span>data)<span class="question-mark">?</span>;
+            <span class="prelude-val">Ok</span>((view <span class="kw">as </span>u64, da_proposal.data))
+        })
+        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+
+    <span class="comment">// Clean up and collect leaves, except do not delete the most recent leaf: we need to remember
+    // this so that in case we restart, we can pick up from the last decided leaf. We still do
+    // include this leaf in the query results (the `UNION` clause) so we can include it in the
+    // decide event we send to the consumer.
+    </span><span class="kw">let </span><span class="kw-2">mut </span>leaves = tx
+        .query(
+            <span class="string">"SELECT view, leaf, qc FROM anchor_leaf WHERE view &lt;= $1"</span>,
+            [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+        )
+        .<span class="kw">await</span><span class="question-mark">?
+        </span>.map(|row| {
+            <span class="kw">let </span>row = row<span class="question-mark">?</span>;
+            <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
+            <span class="kw">let </span>leaf_data: Vec&lt;u8&gt; = row.get(<span class="string">"leaf"</span>);
+            <span class="kw">let </span>leaf = bincode::deserialize::&lt;Leaf&gt;(<span class="kw-2">&amp;</span>leaf_data)<span class="question-mark">?</span>;
+            <span class="kw">let </span>qc_data: Vec&lt;u8&gt; = row.get(<span class="string">"qc"</span>);
+            <span class="kw">let </span>qc = bincode::deserialize::&lt;QuorumCertificate&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>qc_data)<span class="question-mark">?</span>;
+            <span class="prelude-val">Ok</span>((view <span class="kw">as </span>u64, (leaf, qc)))
+        })
+        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+    tx.execute(
+        <span class="string">"DELETE FROM anchor_leaf WHERE view &lt; $1"</span>,
+        [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+    )
+    .<span class="kw">await</span><span class="question-mark">?</span>;
+
+    <span class="comment">// Clean up old proposals. These are not part of the decide event we generate for the consumer,
+    // so we don't need to return them.
+    </span>tx.execute(
+        <span class="string">"DELETE FROM quorum_proposals where view &lt;= $1"</span>,
+        [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+    )
+    .<span class="kw">await</span><span class="question-mark">?</span>;
+
+    <span class="comment">// Exclude from the decide event any leaves which have definitely already been processed. We may
+    // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in
+    // the previous decide event -- remained in the database to serve as the anchor leaf, so our
+    // query would have returned it. In fact, this will almost always be the case, but there are two
+    // cases where it might not be, and we must process this leaf after all:
+    //
+    // 1. The oldest leaf is the genesis leaf, and there _is_ no previous decide event
+    // 2. We previously stored some leaves in the database and then failed while processing the
+    //    decide event, or shut down before generating the decide event, and so we are only now
+    //    generating the decide event for those previous leaves.
+    //
+    // Since these cases (particularly case 2) are hard to account for explicitly, we just use a
+    // persistent value in the database to remember how far we have successfully processed the event
+    // stream.
+    </span><span class="kw">let </span>last_processed_view: <span class="prelude-ty">Option</span>&lt;i64&gt; = tx
+        .query_opt_static(<span class="string">"SELECT last_processed_view FROM event_stream WHERE id = 1 LIMIT 1"</span>)
+        .<span class="kw">await</span><span class="question-mark">?
+        </span>.map(|row| row.get(<span class="string">"last_processed_view"</span>));
+    <span class="kw">let </span>leaves = <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = last_processed_view {
+        <span class="kw">let </span>new_leaves = leaves.split_off(<span class="kw-2">&amp;</span>((v <span class="kw">as </span>u64) + <span class="number">1</span>));
+        <span class="kw">if </span>!leaves.is_empty() {
+            <span class="macro">tracing::debug!</span>(
+                v,
+                remaining_leaves = new_leaves.len(),
+                <span class="question-mark">?</span>leaves,
+                <span class="string">"excluding already-processed leaves from decide event"
+            </span>);
+        }
+        new_leaves
+    } <span class="kw">else </span>{
+        leaves
+    };
+
+    <span class="comment">// Collate all the information by view number and construct a chain of leaves and a chain of
+    // corresponding QCs.
+    </span><span class="kw">let </span>(leaf_chain, qcs): (Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;) = leaves
+        .into_iter()
+        <span class="comment">// Go in reverse chronological order, as expected by Decide events.
+        </span>.rev()
+        .map(|(view, (<span class="kw-2">mut </span>leaf, qc))| {
+            <span class="comment">// Include the VID share if available.
+            </span><span class="kw">let </span>vid_share = vid_shares.remove(<span class="kw-2">&amp;</span>view);
+            <span class="kw">if </span>vid_share.is_none() {
+                <span class="macro">tracing::debug!</span>(view, <span class="string">"VID share not available at decide"</span>);
+            }
+
+            <span class="comment">// Fill in the full block payload using the DA proposals we had persisted.
+            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(proposal) = da_proposals.remove(<span class="kw-2">&amp;</span>view) {
+                <span class="kw">let </span>payload =
+                    Payload::from_bytes(<span class="kw-2">&amp;</span>proposal.encoded_transactions, <span class="kw-2">&amp;</span>proposal.metadata);
+                leaf.fill_block_payload_unchecked(payload);
+            } <span class="kw">else </span>{
+                <span class="macro">tracing::debug!</span>(view, <span class="string">"DA proposal not available at decide"</span>);
+            }
+
+            (
+                LeafInfo {
+                    leaf,
+                    vid_share,
+
+                    <span class="comment">// Note: the following fields are not used in Decide event processing, and
+                    // should be removed. For now, we just default them.
+                    </span>state: Default::default(),
+                    delta: Default::default(),
+                },
+                qc,
+            )
+        })
+        .unzip();
+
+    <span class="comment">// Generate decide event for the consumer.
+    </span><span class="kw">let </span><span class="prelude-val">Some</span>(final_qc) = qcs.into_iter().next() <span class="kw">else </span>{
+        <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>view, <span class="string">"no new leaves at decide"</span>);
+        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+    };
+    <span class="macro">tracing::debug!</span>(<span class="question-mark">?</span>view, <span class="question-mark">?</span>final_qc, <span class="question-mark">?</span>leaf_chain, <span class="string">"generating decide event"</span>);
+
+    consumer
+        .handle_event(<span class="kw-2">&amp;</span>Event {
+            view_number: view,
+            event: EventType::Decide {
+                leaf_chain: Arc::new(leaf_chain),
+                qc: Arc::new(final_qc),
+                block_size: <span class="prelude-val">None</span>,
+            },
+        })
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+
+    <span class="comment">// Now that we have definitely processed leaves up to `view`, we can update
+    // `last_processed_view` so we don't process these leaves again. We may still fail at this
+    // point, or shut down, and fail to complete this update. At worst this will lead to us sending
+    // a duplicate decide event the next time we are called; this is fine as the event consumer is
+    // required to be idempotent.
+    </span>tx.upsert(
+        <span class="string">"event_stream"</span>,
+        [<span class="string">"id"</span>, <span class="string">"last_processed_view"</span>],
+        [<span class="string">"id"</span>],
+        [[sql_param(<span class="kw-2">&amp;</span><span class="number">1i32</span>), sql_param(<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64))]],
+    )
+    .<span class="kw">await</span><span class="question-mark">?</span>;
+
+    tx.commit().<span class="kw">await
+</span>}
 
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>sql_param&lt;T: ToSql + Sync&gt;(param: <span class="kw-2">&amp;</span>T) -&gt; <span class="kw-2">&amp;</span>(<span class="kw">dyn </span>ToSql + Sync) {
     param

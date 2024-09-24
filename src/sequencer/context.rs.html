@@ -401,6 +401,46 @@
 <a href="#401" id="401">401</a>
 <a href="#402" id="402">402</a>
 <a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
+<a href="#410" id="410">410</a>
+<a href="#411" id="411">411</a>
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Display;
 
 <span class="kw">use </span>anyhow::Context;
@@ -410,7 +450,8 @@
 };
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+    v0::traits::{EventConsumer <span class="kw">as </span>PersistenceEventConsumer, SequencerPersistence},
+    NodeState, PubKey, Transaction, ValidatedState,
 };
 <span class="kw">use </span>futures::{
     future::{join_all, Future},
@@ -443,6 +484,7 @@
     state_signature::StateSigner,
     static_stake_table_commitment, Node, SeqTypes, SequencerApiVersion,
 };
+
 <span class="doccomment">/// The consensus handle
 </span><span class="kw">pub type </span>Consensus&lt;N, P, V&gt; = SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;, V&gt;;
 
@@ -486,12 +528,13 @@
         metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
         stake_table_capacity: u64,
         public_api_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
+        event_consumer: <span class="kw">impl </span>PersistenceEventConsumer + <span class="lifetime">'static</span>,
         <span class="kw">_</span>: V,
         marketplace_config: MarketplaceConfig&lt;SeqTypes, Node&lt;N, P&gt;&gt;,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>config = <span class="kw-2">&amp;</span>network_config.config;
         <span class="kw">let </span>pub_key = config.my_own_validator_config.public_key;
-        <span class="macro">tracing::info!</span>(%pub_key, <span class="string">"initializing consensus"</span>);
+        <span class="macro">tracing::info!</span>(%pub_key, is_da = config.my_own_validator_config.is_da, <span class="string">"initializing consensus"</span>);
 
         <span class="comment">// Stick our node ID in `metrics` so it is easily accessible via the status API.
         </span>metrics
@@ -499,7 +542,7 @@
             .set(instance_state.node_id <span class="kw">as </span>usize);
 
         <span class="comment">// Load saved consensus state from storage.
-        </span><span class="kw">let </span>initializer = persistence
+        </span><span class="kw">let </span>(initializer, anchor_view) = persistence
             .load_consensus_state::&lt;V&gt;(instance_state.clone())
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
@@ -559,9 +602,11 @@
         </span><span class="kw">let </span>roll_call_info = external_event_handler::RollCallInfo { public_api_url };
 
         <span class="comment">// Create the external event handler
-        </span><span class="kw">let </span>external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
-            .<span class="kw">await
-            </span>.with_context(|| <span class="string">"Failed to create external event handler"</span>)<span class="question-mark">?</span>;
+        </span><span class="kw">let </span><span class="kw-2">mut </span>tasks = TaskList::default();
+        <span class="kw">let </span>external_event_handler =
+            ExternalEventHandler::new(<span class="kw-2">&amp;mut </span>tasks, network, roll_call_info, pub_key)
+                .<span class="kw">await
+                </span>.with_context(|| <span class="string">"Failed to create external event handler"</span>)<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(<span class="self">Self</span>::new(
             handle,
@@ -571,10 +616,14 @@
             event_streamer,
             instance_state,
             network_config,
-        ))
+            event_consumer,
+            anchor_view,
+        )
+        .with_task_list(tasks))
     }
 
     <span class="doccomment">/// Constructor
+    </span><span class="attr">#[allow(clippy::too_many_arguments)]
     </span><span class="kw">fn </span>new(
         handle: Consensus&lt;N, P, V&gt;,
         persistence: Arc&lt;P&gt;,
@@ -583,9 +632,12 @@
         event_streamer: Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;,
         node_state: NodeState,
         config: NetworkConfig&lt;PubKey&gt;,
+        event_consumer: <span class="kw">impl </span>PersistenceEventConsumer + <span class="lifetime">'static</span>,
+        anchor_view: <span class="prelude-ty">Option</span>&lt;ViewNumber&gt;,
     ) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span>events = handle.event_stream();
 
+        <span class="kw">let </span>node_id = node_state.node_id;
         <span class="kw">let </span><span class="kw-2">mut </span>ctx = <span class="self">Self </span>{
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
@@ -599,11 +651,14 @@
         ctx.spawn(
             <span class="string">"main event handler"</span>,
             handle_events(
+                node_id,
                 events,
                 persistence,
                 ctx.state_signer.clone(),
                 external_event_handler,
                 <span class="prelude-val">Some</span>(event_streamer.clone()),
+                event_consumer,
+                anchor_view,
             ),
         );
 
@@ -663,6 +718,10 @@
         <span class="self">self</span>.handle.read().<span class="kw">await</span>.decided_state().<span class="kw">await
     </span>}
 
+    <span class="kw">pub fn </span>node_id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+        <span class="self">self</span>.node_state.node_id
+    }
+
     <span class="kw">pub fn </span>node_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; NodeState {
         <span class="self">self</span>.node_state.clone()
     }
@@ -697,6 +756,10 @@
         <span class="macro">tracing::info!</span>(<span class="string">"shutting down SequencerContext"</span>);
         <span class="self">self</span>.handle.write().<span class="kw">await</span>.shut_down().<span class="kw">await</span>;
         <span class="self">self</span>.tasks.shut_down().<span class="kw">await</span>;
+
+        <span class="comment">// Since we've already shut down, we can set `detached` so the drop
+        // handler doesn't call `shut_down` again.
+        </span><span class="self">self</span>.detached = <span class="bool-val">true</span>;
     }
 
     <span class="doccomment">/// Wait for consensus to complete.
@@ -728,18 +791,35 @@
     }
 }
 
-<span class="kw">async fn </span>handle_events&lt;V: Versions&gt;(
+<span class="attr">#[allow(clippy::too_many_arguments)]
+</span><span class="kw">async fn </span>handle_events&lt;V: Versions&gt;(
+    node_id: u64,
     <span class="kw-2">mut </span>events: <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; + Unpin,
     persistence: Arc&lt;<span class="kw">impl </span>SequencerPersistence&gt;,
     state_signer: Arc&lt;StateSigner&lt;SequencerApiVersion&gt;&gt;,
     external_event_handler: ExternalEventHandler&lt;V&gt;,
     events_streamer: <span class="prelude-ty">Option</span>&lt;Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;&gt;,
+    event_consumer: <span class="kw">impl </span>PersistenceEventConsumer + <span class="lifetime">'static</span>,
+    anchor_view: <span class="prelude-ty">Option</span>&lt;ViewNumber&gt;,
 ) {
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(view) = anchor_view {
+        <span class="comment">// Process and clean up any leaves that we may have persisted last time we were running but
+        // failed to handle due to a shutdown.
+        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = persistence
+            .append_decided_leaves(view, <span class="macro">vec!</span>[], <span class="kw-2">&amp;</span>event_consumer)
+            .<span class="kw">await
+        </span>{
+            <span class="macro">tracing::warn!</span>(
+                <span class="string">"failed to process decided leaves, chain may not be up to date: {err:#}"
+            </span>);
+        }
+    }
+
     <span class="kw">while let </span><span class="prelude-val">Some</span>(event) = events.next().<span class="kw">await </span>{
-        <span class="macro">tracing::debug!</span>(<span class="question-mark">?</span>event, <span class="string">"consensus event"</span>);
+        <span class="macro">tracing::debug!</span>(node_id, <span class="question-mark">?</span>event, <span class="string">"consensus event"</span>);
 
         <span class="comment">// Store latest consensus state.
-        </span>persistence.handle_event(<span class="kw-2">&amp;</span>event).<span class="kw">await</span>;
+        </span>persistence.handle_event(<span class="kw-2">&amp;</span>event, <span class="kw-2">&amp;</span>event_consumer).<span class="kw">await</span>;
 
         <span class="comment">// Generate state signature.
         </span>state_signer.handle_event(<span class="kw-2">&amp;</span>event).<span class="kw">await</span>;

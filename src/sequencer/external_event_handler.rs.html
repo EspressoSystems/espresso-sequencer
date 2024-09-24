@@ -181,11 +181,6 @@
 <a href="#181" id="181">181</a>
 <a href="#182" id="182">182</a>
 <a href="#183" id="183">183</a>
-<a href="#184" id="184">184</a>
-<a href="#185" id="185">185</a>
-<a href="#186" id="186">186</a>
-<a href="#187" id="187">187</a>
-<a href="#188" id="188">188</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Should probably rename this to "external" or something
 
 </span><span class="kw">use </span><span class="kw">crate</span>::context::TaskList;
@@ -231,9 +226,6 @@
     <span class="comment">// The public key of the node
     </span><span class="kw">pub </span>public_key: BLSPubKey,
 
-    <span class="comment">// The tasks that are running
-    </span><span class="kw">pub </span>_tasks: TaskList,
-
     <span class="comment">// The outbound message queue
     </span><span class="kw">pub </span>outbound_message_sender: Sender&lt;OutboundMessage&gt;,
 
@@ -250,6 +242,7 @@
 <span class="kw">impl</span>&lt;V: Versions&gt; ExternalEventHandler&lt;V&gt; {
     <span class="doccomment">/// Creates a new `ExternalEventHandler` with the given network and roll call info
     </span><span class="kw">pub async fn </span>new&lt;N: ConnectedNetwork&lt;PubKey&gt;&gt;(
+        tasks: <span class="kw-2">&amp;mut </span>TaskList,
         network: Arc&lt;N&gt;,
         roll_call_info: RollCallInfo,
         public_key: BLSPubKey,
@@ -257,8 +250,6 @@
         <span class="comment">// Create the outbound message queue
         </span><span class="kw">let </span>(outbound_message_sender, outbound_message_receiver) =
             async_compatibility_layer::channel::bounded(<span class="number">10</span>);
-
-        <span class="kw">let </span><span class="kw-2">mut </span>tasks: TaskList = Default::default();
 
         <span class="comment">// Spawn the outbound message handling loop
         </span>tasks.spawn(
@@ -281,7 +272,6 @@
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             roll_call_info,
             public_key,
-            _tasks: tasks,
             outbound_message_sender,
             _pd: Default::default(),
         })

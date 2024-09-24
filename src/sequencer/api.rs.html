@@ -1877,8 +1877,6 @@
 <a href="#1877" id="1877">1877</a>
 <a href="#1878" id="1878">1878</a>
 <a href="#1879" id="1879">1879</a>
-<a href="#1880" id="1880">1880</a>
-<a href="#1881" id="1881">1881</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -1895,9 +1893,8 @@
 <span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::{
     future::{BoxFuture, Future, FutureExt},
-    stream::{BoxStream, Stream},
+    stream::BoxStream,
 };
-<span class="kw">use </span>hotshot::types::Event;
 <span class="kw">use </span>hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
@@ -1906,6 +1903,7 @@
 <span class="kw">use </span>hotshot_state_prover::service::light_client_genesis_from_stake_table;
 <span class="kw">use </span>hotshot_types::{
     data::ViewNumber,
+    event::Event,
     light_client::StateSignatureRequestBody,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
 };
@@ -1972,13 +1970,6 @@
         <span class="self">Self </span>{
             consensus: Arc::pin(Lazy::from_future(init.boxed())),
         }
-    }
-
-    <span class="kw">fn </span>event_stream(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; + Unpin {
-        <span class="kw">let </span>state = <span class="self">self</span>.clone();
-        <span class="kw">async move </span>{ state.consensus().<span class="kw">await</span>.read().<span class="kw">await</span>.event_stream() }
-            .boxed()
-            .flatten_stream()
     }
 
     <span class="kw">async fn </span>state_signer(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>StateSigner&lt;SequencerApiVersion&gt; {
@@ -2254,7 +2245,7 @@
 
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup,
-        v0::traits::{PersistenceOptions, StateCatchup},
+        v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
     };
     <span class="kw">use </span>ethers::{prelude::Address, utils::Anvil};
@@ -2444,22 +2435,24 @@
                         <span class="kw">let </span>marketplace_builder_url = marketplace_builder_url.clone();
                         <span class="kw">async move </span>{
                             <span class="kw">if </span>i == <span class="number">0 </span>{
-                                opt.serve(|metrics| {
+                                opt.serve(|metrics, consumer| {
                                     <span class="kw">let </span>cfg = cfg.clone();
                                     <span class="kw">async move </span>{
-                                        cfg.init_node(
-                                            <span class="number">0</span>,
-                                            state,
-                                            persistence,
-                                            catchup,
-                                            <span class="kw-2">&amp;*</span>metrics,
-                                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                                            bind_version,
-                                            upgrades_map,
-                                            marketplace_builder_url,
-                                        )
-                                        .<span class="kw">await
-                                    </span>}
+                                        <span class="prelude-val">Ok</span>(cfg
+                                            .init_node(
+                                                <span class="number">0</span>,
+                                                state,
+                                                persistence,
+                                                catchup,
+                                                <span class="kw-2">&amp;*</span>metrics,
+                                                STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                consumer,
+                                                bind_version,
+                                                upgrades_map,
+                                                marketplace_builder_url,
+                                            )
+                                            .<span class="kw">await</span>)
+                                    }
                                     .boxed()
                                 })
                                 .<span class="kw">await
@@ -2472,6 +2465,7 @@
                                     catchup,
                                     <span class="kw-2">&amp;</span>NoMetrics,
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    NullEventConsumer,
                                     bind_version,
                                     upgrades_map,
                                     marketplace_builder_url,
@@ -2754,7 +2748,8 @@
     <span class="kw">use </span>espresso_types::{Header, NamespaceId};
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::stream::StreamExt;
-    <span class="kw">use </span>hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
+    <span class="kw">use </span>hotshot_query_service::availability::{BlockQueryData, VidCommonQueryData};
+
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
@@ -2765,7 +2760,6 @@
     <span class="kw">use </span>tide_disco::error::ServerError;
     <span class="kw">use </span>vbs::version::StaticVersion;
 
-    <span class="kw">use </span><span class="self">self</span>::options::HotshotEvents;
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
@@ -2813,17 +2807,6 @@
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
-        <span class="comment">// Wait for at least one empty block to be sequenced (after consensus starts VID).
-        </span>client
-            .socket(<span class="string">"availability/stream/leaves/0"</span>)
-            .subscribe::&lt;LeafQueryData&lt;SeqTypes&gt;&gt;()
-            .<span class="kw">await
-            </span>.unwrap()
-            .next()
-            .<span class="kw">await
-            </span>.unwrap()
-            .unwrap();
-
         <span class="kw">let </span>hash = client
             .post(<span class="string">"submit/submit"</span>)
             .body_json(<span class="kw-2">&amp;</span>txn)
@@ -2836,6 +2819,18 @@
         <span class="comment">// Wait for a Decide event containing transaction matching the one we sent
         </span><span class="kw">let </span>block_height = wait_for_decide_on_handle(<span class="kw-2">&amp;mut </span>events, <span class="kw-2">&amp;</span>txn).<span class="kw">await as </span>usize;
         <span class="macro">tracing::info!</span>(block_height, <span class="string">"transaction sequenced"</span>);
+
+        <span class="comment">// Wait for the query service to update to this block height.
+        </span>client
+            .socket(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/stream/blocks/{block_height}"</span>))
+            .subscribe::&lt;BlockQueryData&lt;SeqTypes&gt;&gt;()
+            .<span class="kw">await
+            </span>.unwrap()
+            .next()
+            .<span class="kw">await
+            </span>.unwrap()
+            .unwrap();
+
         <span class="kw">let </span><span class="kw-2">mut </span>found_txn = <span class="bool-val">false</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>found_empty_block = <span class="bool-val">false</span>;
         <span class="kw">for </span>block_num <span class="kw">in </span><span class="number">0</span>..=block_height {
@@ -2889,61 +2884,6 @@
         <span class="kw">let </span>storage = D::create_storage().<span class="kw">await</span>;
         catchup_test_helper(|opt| D::options(<span class="kw-2">&amp;</span>storage, opt)).<span class="kw">await
     </span>}
-
-    <span class="attr">#[async_std::test]
-    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>test_hotshot_event_streaming&lt;D: TestableSequencerDataSource&gt;() {
-        <span class="kw">use </span>HotshotEvents;
-
-        setup_test();
-
-        <span class="kw">let </span>hotshot_event_streaming_port =
-            pick_unused_port().expect(<span class="string">"No ports free for hotshot event streaming"</span>);
-        <span class="kw">let </span>query_service_port = pick_unused_port().expect(<span class="string">"No ports free for query service"</span>);
-
-        <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{hotshot_event_streaming_port}"</span>)
-            .parse()
-            .unwrap();
-
-        <span class="kw">let </span>hotshot_events = HotshotEvents {
-            events_service_port: hotshot_event_streaming_port,
-        };
-
-        <span class="kw">let </span>client: Client&lt;ServerError, StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;&gt; = Client::new(url);
-
-        <span class="kw">let </span>options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
-
-        <span class="kw">let </span>anvil = Anvil::new().spawn();
-        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
-        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
-            .api_config(options)
-            .network_config(network_config)
-            .build();
-        <span class="kw">let </span>_network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
-
-        <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = client
-            .socket(<span class="string">"hotshot-events/events"</span>)
-            .subscribe::&lt;Event&lt;SeqTypes&gt;&gt;()
-            .<span class="kw">await
-            </span>.unwrap();
-
-        <span class="kw">let </span>total_count = <span class="number">5</span>;
-        <span class="comment">// wait for these events to receive on client 1
-        </span><span class="kw">let </span><span class="kw-2">mut </span>receive_count = <span class="number">0</span>;
-        <span class="kw">loop </span>{
-            <span class="kw">let </span>event = subscribed_events.next().<span class="kw">await</span>.unwrap();
-            <span class="macro">tracing::info!</span>(
-                <span class="string">"Received event in hotshot event streaming Client 1: {:?}"</span>,
-                event
-            );
-            receive_count += <span class="number">1</span>;
-            <span class="kw">if </span>receive_count &gt; total_count {
-                <span class="macro">tracing::info!</span>(<span class="string">"Client Received atleast desired events, exiting loop"</span>);
-                <span class="kw">break</span>;
-            }
-        }
-        <span class="macro">assert_eq!</span>(receive_count, total_count + <span class="number">1</span>);
-    }
 }
 
 <span class="attr">#[cfg(test)]
@@ -2955,6 +2895,7 @@
 
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup,
+        traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade,
         Timestamp, Upgrade, UpgradeType, ValidatedState,
@@ -2988,6 +2929,7 @@
 
     <span class="kw">use </span><span class="self">self</span>::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
+        options::HotshotEvents,
         sql::DataSource <span class="kw">as </span>SqlDataSource,
     };
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
@@ -3175,6 +3117,7 @@
                 ),
                 <span class="kw-2">&amp;</span>NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
                 MockSequencerVersions::new(),
                 Default::default(),
                 <span class="string">"http://localhost"</span>.parse().unwrap(),
@@ -3758,6 +3701,59 @@
             ))
             .unwrap()
         );
+    }
+
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_hotshot_event_streaming() {
+        setup_test();
+
+        <span class="kw">let </span>hotshot_event_streaming_port =
+            pick_unused_port().expect(<span class="string">"No ports free for hotshot event streaming"</span>);
+        <span class="kw">let </span>query_service_port = pick_unused_port().expect(<span class="string">"No ports free for query service"</span>);
+
+        <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{hotshot_event_streaming_port}"</span>)
+            .parse()
+            .unwrap();
+
+        <span class="kw">let </span>hotshot_events = HotshotEvents {
+            events_service_port: hotshot_event_streaming_port,
+        };
+
+        <span class="kw">let </span>client: Client&lt;ServerError, SequencerApiVersion&gt; = Client::new(url);
+
+        <span class="kw">let </span>options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
+
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>_network = TestNetwork::new(config, MockSequencerVersions::new()).<span class="kw">await</span>;
+
+        <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = client
+            .socket(<span class="string">"hotshot-events/events"</span>)
+            .subscribe::&lt;Event&lt;SeqTypes&gt;&gt;()
+            .<span class="kw">await
+            </span>.unwrap();
+
+        <span class="kw">let </span>total_count = <span class="number">5</span>;
+        <span class="comment">// wait for these events to receive on client 1
+        </span><span class="kw">let </span><span class="kw-2">mut </span>receive_count = <span class="number">0</span>;
+        <span class="kw">loop </span>{
+            <span class="kw">let </span>event = subscribed_events.next().<span class="kw">await</span>.unwrap();
+            <span class="macro">tracing::info!</span>(
+                <span class="string">"Received event in hotshot event streaming Client 1: {:?}"</span>,
+                event
+            );
+            receive_count += <span class="number">1</span>;
+            <span class="kw">if </span>receive_count &gt; total_count {
+                <span class="macro">tracing::info!</span>(<span class="string">"Client Received atleast desired events, exiting loop"</span>);
+                <span class="kw">break</span>;
+            }
+        }
+        <span class="macro">assert_eq!</span>(receive_count, total_count + <span class="number">1</span>);
     }
 }
 </code></pre></div></section></main></body></html>

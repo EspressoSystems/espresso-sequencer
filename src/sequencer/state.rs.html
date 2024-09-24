@@ -526,6 +526,10 @@
 <a href="#526" id="526">526</a>
 <a href="#527" id="527">527</a>
 <a href="#528" id="528">528</a>
+<a href="#529" id="529">529</a>
+<a href="#530" id="530">530</a>
+<a href="#531" id="531">531</a>
+<a href="#532" id="532">532</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt::Debug;
 <span class="kw">use </span>std::{sync::Arc, time::Duration};
 
@@ -540,6 +544,7 @@
     availability::{AvailabilityDataSource, LeafQueryData},
     data_source::{Transaction, VersionedDataSource},
     merklized_state::{MerklizedStateHeightPersistence, UpdateStateData},
+    status::StatusDataSource,
     types::HeightIndexed,
 };
 <span class="kw">use </span>jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
@@ -748,7 +753,8 @@
     <span class="comment">// get last saved merklized state
     </span><span class="kw">let </span>(last_height, parent_leaf, <span class="kw-2">mut </span>leaves) = {
         <span class="kw">let </span>last_height = storage.get_last_state_height().<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="macro">tracing::info!</span>(last_height, <span class="string">"updating state storage"</span>);
+        <span class="kw">let </span>current_height = storage.block_height().<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="macro">tracing::info!</span>(last_height, current_height, <span class="string">"updating state storage"</span>);
 
         <span class="kw">let </span>parent_leaf = storage.get_leaf(last_height).<span class="kw">await</span>;
         <span class="kw">let </span>leaves = storage.subscribe_leaves(last_height + <span class="number">1</span>).<span class="kw">await</span>;
@@ -798,6 +804,7 @@
     <span class="lifetime">'static
     </span>+ Debug
     + AvailabilityDataSource&lt;SeqTypes&gt;
+    + StatusDataSource
     + VersionedDataSource
     + CatchupDataSource
     + MerklizedStateHeightPersistence
@@ -808,6 +815,7 @@
     </span>T: <span class="lifetime">'static
         </span>+ Debug
         + AvailabilityDataSource&lt;SeqTypes&gt;
+        + StatusDataSource
         + VersionedDataSource
         + CatchupDataSource
         + MerklizedStateHeightPersistence

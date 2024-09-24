@@ -871,12 +871,12 @@
     }
 }
 
-<span class="attr">#[cfg(test)]
-</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">mod </span>testing {
+<span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
+</span><span class="kw">pub mod </span>testing {
     <span class="kw">use super</span>::{<span class="kw">super</span>::Options, <span class="kw-2">*</span>};
 
     <span class="attr">#[async_trait]
-    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>TestableSequencerDataSource: SequencerDataSource {
+    </span><span class="kw">pub trait </span>TestableSequencerDataSource: SequencerDataSource {
         <span class="kw">type </span>Storage: Sync;
 
         <span class="kw">async fn </span>create_storage() -&gt; <span class="self">Self</span>::Storage;

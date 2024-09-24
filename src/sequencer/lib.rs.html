@@ -1083,6 +1083,16 @@
 <a href="#1083" id="1083">1083</a>
 <a href="#1084" id="1084">1084</a>
 <a href="#1085" id="1085">1085</a>
+<a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
+<a href="#1089" id="1089">1089</a>
+<a href="#1090" id="1090">1090</a>
+<a href="#1091" id="1091">1091</a>
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1100,8 +1110,8 @@
 <span class="kw">use </span>catchup::StatePeers;
 <span class="kw">use </span>context::SequencerContext;
 <span class="kw">use </span>espresso_types::{
-    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
-    ValidatedState,
+    traits::EventConsumer, BackoffParams, L1Client, NodeState, PubKey, SeqTypes,
+    SolverAuctionResultsProvider, ValidatedState,
 };
 <span class="kw">use </span>ethers::types::U256;
 <span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
@@ -1221,6 +1231,7 @@
     persistence_opt: P,
     l1_params: L1Params,
     seq_versions: V,
+    event_consumer: <span class="kw">impl </span>EventConsumer + <span class="lifetime">'static</span>,
     is_da: bool,
     identity: Identity,
     marketplace_config: MarketplaceConfig&lt;SeqTypes, Node&lt;network::Production, P::Persistence&gt;&gt;,
@@ -1404,7 +1415,7 @@
         },
         CdnMetricsValue::new(metrics),
     )
-    .with_context(|| <span class="string">"Failed to create CDN network"</span>)<span class="question-mark">?</span>;
+    .with_context(|| <span class="macro">format!</span>(<span class="string">"Failed to create CDN network {node_index}"</span>))<span class="question-mark">?</span>;
 
     <span class="comment">// Initialize the Libp2p network (if enabled)
     </span><span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
@@ -1420,7 +1431,12 @@
             hotshot::traits::implementations::Libp2pMetricsValue::new(metrics),
         )
         .<span class="kw">await
-        </span>.with_context(|| <span class="string">"Failed to create libp2p network"</span>)<span class="question-mark">?</span>;
+        </span>.with_context(|| {
+            <span class="macro">format!</span>(
+                <span class="string">"Failed to create libp2p network on node {node_index}; binding to {:?}"</span>,
+                network_params.libp2p_bind_address
+            )
+        })<span class="question-mark">?</span>;
 
         <span class="macro">tracing::warn!</span>(<span class="string">"Waiting for at least one connection to be initialized"</span>);
         <span class="macro">futures::select!</span> {
@@ -1491,6 +1507,7 @@
         metrics,
         genesis.stake_table.capacity,
         network_params.public_api_url,
+        event_consumer,
         seq_versions,
         marketplace_config,
     )
@@ -1514,7 +1531,7 @@
     <span class="kw">use </span>espresso_types::{
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
-        v0::traits::{PersistenceOptions, StateCatchup},
+        v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
         Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
         Upgrade,
     };
@@ -1878,6 +1895,7 @@
                     MockStateCatchup::default(),
                     <span class="kw-2">&amp;</span>NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                    NullEventConsumer,
                     bind_version,
                     Default::default(),
                     Url::parse(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
@@ -1920,6 +1938,7 @@
             catchup: <span class="kw">impl </span>StateCatchup + <span class="lifetime">'static</span>,
             metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
             stake_table_capacity: u64,
+            event_consumer: <span class="kw">impl </span>EventConsumer + <span class="lifetime">'static</span>,
             bind_version: V,
             upgrades: BTreeMap&lt;Version, Upgrade&gt;,
             marketplace_builder_url: Url,
@@ -1983,7 +2002,8 @@
                 metrics,
                 stake_table_capacity,
                 <span class="prelude-val">None</span>, <span class="comment">// The public API URL
-                </span>bind_version,
+                </span>event_consumer,
+                bind_version,
                 MarketplaceConfig::&lt;SeqTypes, Node&lt;network::Memory, P::Persistence&gt;&gt; {
                     auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
                     fallback_builder_url: marketplace_builder_url,

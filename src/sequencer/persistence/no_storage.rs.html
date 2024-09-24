@@ -126,24 +126,41 @@
 <a href="#126" id="126">126</a>
 <a href="#127" id="127">127</a>
 <a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Mock implementation of persistence, for testing.
 </span><span class="attr">#![cfg(any(test, feature = <span class="string">"testing"</span>))]
 
-</span><span class="kw">use </span>std::collections::BTreeMap;
-
+</span><span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>espresso_types::{
-    v0::traits::{PersistenceOptions, SequencerPersistence},
+    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, NetworkConfig,
 };
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
-    event::HotShotAction,
+    event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     utils::View,
 };
+<span class="kw">use </span>std::collections::BTreeMap;
 
 <span class="kw">use crate</span>::{SeqTypes, ViewNumber};
 
@@ -176,17 +193,35 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;</span><span class="self">self</span>, _view: ViewNumber) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="prelude-val">Ok</span>(())
-    }
-
-    <span class="kw">async fn </span>save_anchor_leaf(
+    <span class="kw">async fn </span>append_decided_leaves(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        <span class="kw">_</span>: <span class="kw-2">&amp;</span>Leaf,
-        <span class="kw">_</span>: <span class="kw-2">&amp;</span>QuorumCertificate&lt;SeqTypes&gt;,
+        view_number: ViewNumber,
+        leaves: <span class="kw">impl </span>IntoIterator&lt;Item = (<span class="kw-2">&amp;</span>LeafInfo&lt;SeqTypes&gt;, QuorumCertificate&lt;SeqTypes&gt;)&gt; + Send,
+        consumer: <span class="kw-2">&amp;</span><span class="kw">impl </span>EventConsumer,
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="prelude-val">Ok</span>(())
-    }
+        <span class="kw">let </span>(<span class="kw-2">mut </span>leaf_chain, <span class="kw-2">mut </span>qcs): (Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;) = leaves
+            .into_iter()
+            .map(|(info, qc)| (info.clone(), qc))
+            .unzip();
+
+        <span class="comment">// Put in reverse chronological order, as expected from Decide events.
+        </span>leaf_chain.reverse();
+        qcs.reverse();
+
+        <span class="comment">// Generate decide event for the consumer.
+        </span><span class="kw">let </span>final_qc = qcs.pop().unwrap();
+
+        consumer
+            .handle_event(<span class="kw-2">&amp;</span>Event {
+                view_number,
+                event: EventType::Decide {
+                    leaf_chain: Arc::new(leaf_chain),
+                    qc: Arc::new(final_qc),
+                    block_size: <span class="prelude-val">None</span>,
+                },
+            })
+            .<span class="kw">await
+    </span>}
 
     <span class="kw">async fn </span>load_latest_acted_view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;ViewNumber&gt;&gt; {
         <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
@@ -220,9 +255,8 @@
 
     <span class="kw">async fn </span>load_quorum_proposals(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-    ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt;&gt;
-    {
-        <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+    ) -&gt; anyhow::Result&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt; {
+        <span class="prelude-val">Ok</span>(Default::default())
     }
 
     <span class="kw">async fn </span>append_vid(

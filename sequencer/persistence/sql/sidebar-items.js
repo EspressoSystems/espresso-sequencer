@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["sql_param"],"struct":["Options","Persistence","PruningOptions"]};
+window.SIDEBAR_ITEMS = {"fn":["collect_garbage","sql_param"],"struct":["Options","Persistence","PruningOptions"]};

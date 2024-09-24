@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["update_loop","update_state"]};
+window.SIDEBAR_ITEMS = {"fn":["update_state"],"struct":["ApiEventConsumer"]};

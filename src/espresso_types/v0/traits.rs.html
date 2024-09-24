@@ -602,13 +602,70 @@
 <a href="#602" id="602">602</a>
 <a href="#603" id="603">603</a>
 <a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
+<a href="#625" id="625">625</a>
+<a href="#626" id="626">626</a>
+<a href="#627" id="627">627</a>
+<a href="#628" id="628">628</a>
+<a href="#629" id="629">629</a>
+<a href="#630" id="630">630</a>
+<a href="#631" id="631">631</a>
+<a href="#632" id="632">632</a>
+<a href="#633" id="633">633</a>
+<a href="#634" id="634">634</a>
+<a href="#635" id="635">635</a>
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a>
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
-</span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
+</span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>async_trait::async_trait;
-<span class="kw">use </span>committable::{Commitment, Committable};
+<span class="kw">use </span>committable::Commitment;
+<span class="kw">use </span>dyn_clone::DynClone;
 <span class="kw">use </span>futures::{FutureExt, TryFutureExt};
 <span class="kw">use </span>hotshot::{types::EventType, HotShotInitializer};
 <span class="kw">use </span>hotshot_types::{
@@ -943,24 +1000,8 @@
     <span class="doccomment">/// Save the orchestrator config to storage.
     </span><span class="kw">async fn </span>save_config(<span class="kw-2">&amp;</span><span class="self">self</span>, cfg: <span class="kw-2">&amp;</span>NetworkConfig) -&gt; anyhow::Result&lt;()&gt;;
 
-    <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt;;
-
-    <span class="doccomment">/// Saves the latest decided leaf.
-    ///
-    /// If the height of the new leaf is not greater than the height of the previous decided leaf,
-    /// storage is not updated.
-    </span><span class="kw">async fn </span>save_anchor_leaf(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        leaf: <span class="kw-2">&amp;</span>Leaf,
-        qc: <span class="kw-2">&amp;</span>QuorumCertificate&lt;SeqTypes&gt;,
-    ) -&gt; anyhow::Result&lt;()&gt;;
-
     <span class="doccomment">/// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
     </span><span class="kw">async fn </span>load_latest_acted_view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;ViewNumber&gt;&gt;;
-
-    <span class="doccomment">/// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
-    </span><span class="kw">async fn </span>load_anchor_leaf(<span class="kw-2">&amp;</span><span class="self">self</span>)
-        -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;(Leaf, QuorumCertificate&lt;SeqTypes&gt;)&gt;&gt;;
 
     <span class="doccomment">/// Load undecided state saved by consensus before we shut down.
     </span><span class="kw">async fn </span>load_undecided_state(
@@ -970,7 +1011,7 @@
     <span class="doccomment">/// Load the proposals saved by consensus
     </span><span class="kw">async fn </span>load_quorum_proposals(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-    ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt;&gt;;
+    ) -&gt; anyhow::Result&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt;;
 
     <span class="kw">async fn </span>load_vid_share(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
@@ -984,11 +1025,13 @@
     <span class="doccomment">/// Load the latest known consensus state.
     ///
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
-    /// if there is no saved state).
+    /// if there is no saved state). Also returns the anchor view number, which can be used as a
+    /// reference point to process any events which were not processed before a previous shutdown,
+    /// if applicable,.
     </span><span class="kw">async fn </span>load_consensus_state&lt;V: Versions&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         state: NodeState,
-    ) -&gt; anyhow::Result&lt;HotShotInitializer&lt;SeqTypes&gt;&gt; {
+    ) -&gt; anyhow::Result&lt;(HotShotInitializer&lt;SeqTypes&gt;, <span class="prelude-ty">Option</span>&lt;ViewNumber&gt;)&gt; {
         <span class="kw">let </span>genesis_validated_state = ValidatedState::genesis(<span class="kw-2">&amp;</span>state).<span class="number">0</span>;
         <span class="kw">let </span>highest_voted_view = <span class="kw">match </span><span class="self">self
             </span>.load_latest_acted_view()
@@ -1004,7 +1047,7 @@
                 ViewNumber::genesis()
             }
         };
-        <span class="kw">let </span>(leaf, high_qc) = <span class="kw">match </span><span class="self">self
+        <span class="kw">let </span>(leaf, high_qc, anchor_view) = <span class="kw">match </span><span class="self">self
             </span>.load_anchor_leaf()
             .<span class="kw">await
             </span>.context(<span class="string">"loading anchor leaf"</span>)<span class="question-mark">?
@@ -1019,13 +1062,16 @@
                         high_qc.view_number
                     )
                 );
-                (leaf, high_qc)
+
+                <span class="kw">let </span>anchor_view = leaf.view_number();
+                (leaf, high_qc, <span class="prelude-val">Some</span>(anchor_view))
             }
             <span class="prelude-val">None </span>=&gt; {
                 <span class="macro">tracing::info!</span>(<span class="string">"no saved leaf, starting from genesis leaf"</span>);
                 (
                     Leaf::genesis(<span class="kw-2">&amp;</span>genesis_validated_state, <span class="kw-2">&amp;</span>state).<span class="kw">await</span>,
                     QuorumCertificate::genesis::&lt;V&gt;(<span class="kw-2">&amp;</span>genesis_validated_state, <span class="kw-2">&amp;</span>state).<span class="kw">await</span>,
+                    <span class="prelude-val">None</span>,
                 )
             }
         };
@@ -1053,9 +1099,7 @@
         <span class="kw">let </span>saved_proposals = <span class="self">self
             </span>.load_quorum_proposals()
             .<span class="kw">await
-            </span>.context(<span class="string">"loading saved proposals"</span>)
-            .unwrap_or_default()
-            .unwrap_or_default();
+            </span>.context(<span class="string">"loading saved proposals"</span>)<span class="question-mark">?</span>;
 
         <span class="macro">tracing::info!</span>(
             <span class="question-mark">?</span>leaf,
@@ -1067,46 +1111,86 @@
             <span class="question-mark">?</span>saved_proposals,
             <span class="string">"loaded consensus state"
         </span>);
-        <span class="prelude-val">Ok</span>(HotShotInitializer::from_reload(
-            leaf,
-            state,
-            validated_state,
-            view,
-            highest_voted_view,
-            saved_proposals,
-            high_qc,
-            undecided_leaves.into_values().collect(),
-            undecided_state,
+
+        <span class="prelude-val">Ok</span>((
+            HotShotInitializer::from_reload(
+                leaf,
+                state,
+                validated_state,
+                view,
+                highest_voted_view,
+                saved_proposals,
+                high_qc,
+                undecided_leaves.into_values().collect(),
+                undecided_state,
+            ),
+            anchor_view,
         ))
     }
 
     <span class="doccomment">/// Update storage based on an event from consensus.
-    </span><span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event) {
+    </span><span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event, consumer: <span class="kw-2">&amp;</span>(<span class="kw">impl </span>EventConsumer + <span class="lifetime">'static</span>)) {
         <span class="kw">if let </span>EventType::Decide { leaf_chain, qc, .. } = <span class="kw-2">&amp;</span>event.event {
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(LeafInfo { leaf, .. }) = leaf_chain.first() {
-                <span class="kw">if </span>qc.view_number != leaf.view_number() {
-                    <span class="macro">tracing::error!</span>(
-                        leaf_view = <span class="question-mark">?</span>leaf.view_number(),
-                        qc_view = <span class="question-mark">?</span>qc.view_number,
-                        <span class="string">"latest leaf and QC are from different views!"</span>,
-                    );
-                    <span class="kw">return</span>;
-                }
-                <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = <span class="self">self</span>.save_anchor_leaf(leaf, qc).<span class="kw">await </span>{
-                    <span class="macro">tracing::error!</span>(
-                        <span class="question-mark">?</span>leaf,
-                        hash = %&lt;Leaf <span class="kw">as </span>Committable&gt;::commit(leaf),
-                        <span class="string">"Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}"</span>,
-                    );
-                }
+            <span class="kw">let </span><span class="prelude-val">Some</span>(LeafInfo { leaf, .. }) = leaf_chain.first() <span class="kw">else </span>{
+                <span class="comment">// No new leaves.
+                </span><span class="kw">return</span>;
+            };
 
-                <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = <span class="self">self</span>.collect_garbage(leaf.view_number()).<span class="kw">await </span>{
-                    <span class="macro">tracing::error!</span>(<span class="string">"Failed to garbage collect. {err:#}"</span>,);
-                }
+            <span class="comment">// Associate each decided leaf with a QC.
+            </span><span class="kw">let </span>chain = leaf_chain.iter().zip(
+                <span class="comment">// The first (most recent) leaf corresponds to the QC triggering the decide event.
+                </span>std::iter::once((<span class="kw-2">**</span>qc).clone())
+                    <span class="comment">// Moving backwards in the chain, each leaf corresponds with the subsequent
+                    // leaf's justify QC.
+                    </span>.chain(leaf_chain.iter().map(|leaf| leaf.leaf.justify_qc())),
+            );
+
+            <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = <span class="self">self
+                </span>.append_decided_leaves(leaf.view_number(), chain, consumer)
+                .<span class="kw">await
+            </span>{
+                <span class="macro">tracing::error!</span>(
+                    <span class="string">"failed to save decided leaves, chain may not be up to date: {err:#}"
+                </span>);
+                <span class="kw">return</span>;
             }
         }
     }
 
+    <span class="doccomment">/// Append decided leaves to persistent storage and emit a corresponding event.
+    ///
+    /// `consumer` will be sent a `Decide` event containing all decided leaves in persistent storage
+    /// up to and including `view`. If available in persistent storage, full block payloads and VID
+    /// info will also be included for each leaf.
+    ///
+    /// Once the new decided leaves have been processed, old data up to `view` will be garbage
+    /// collected The consumer's handling of this event is a prerequisite for the completion of
+    /// garbage collection: if the consumer fails to process the event, no data is deleted. This
+    /// ensures that, if called repeatedly, all decided leaves ever recorded in consensus storage
+    /// will eventually be passed to the consumer.
+    ///
+    /// Note that the converse is not true: if garbage collection fails, it is not guaranteed that
+    /// the consumer hasn't processed the decide event. Thus, in rare cases, some events may be
+    /// processed twice, or the consumer may get two events which share a subset of their data.
+    /// Thus, it is the consumer's responsibility to make sure its handling of each leaf is
+    /// idempotent.
+    ///
+    /// If the consumer fails to handle the new decide event, it may be retried, or simply postponed
+    /// until the next decide, at which point all persisted leaves from the failed GC run will be
+    /// included in the event along with subsequently decided leaves.
+    ///
+    /// This functionality is useful for keeping a separate view of the blockchain in sync with the
+    /// consensus storage. For example, the `consumer` could be used for moving data from consensus
+    /// storage to long-term archival storage.
+    </span><span class="kw">async fn </span>append_decided_leaves(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        decided_view: ViewNumber,
+        leaf_chain: <span class="kw">impl </span>IntoIterator&lt;Item = (<span class="kw-2">&amp;</span>LeafInfo&lt;SeqTypes&gt;, QuorumCertificate&lt;SeqTypes&gt;)&gt; + Send,
+        consumer: <span class="kw-2">&amp;</span>(<span class="kw">impl </span>EventConsumer + <span class="lifetime">'static</span>),
+    ) -&gt; anyhow::Result&lt;()&gt;;
+
+    <span class="kw">async fn </span>load_anchor_leaf(<span class="kw-2">&amp;</span><span class="self">self</span>)
+        -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;(Leaf, QuorumCertificate&lt;SeqTypes&gt;)&gt;&gt;;
     <span class="kw">async fn </span>append_vid(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;,
@@ -1125,6 +1209,34 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt;;
+}
+
+<span class="attr">#[async_trait]
+</span><span class="kw">pub trait </span>EventConsumer: Debug + DynClone + Send + Sync {
+    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event) -&gt; anyhow::Result&lt;()&gt;;
+}
+
+<span class="macro">dyn_clone::clone_trait_object!</span>(EventConsumer);
+
+<span class="attr">#[async_trait]
+</span><span class="kw">impl</span>&lt;T&gt; EventConsumer <span class="kw">for </span>Box&lt;T&gt;
+<span class="kw">where
+    </span><span class="self">Self</span>: Clone,
+    T: EventConsumer + <span class="question-mark">?</span>Sized,
+{
+    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, event: <span class="kw-2">&amp;</span>Event) -&gt; anyhow::Result&lt;()&gt; {
+        (<span class="kw-2">**</span><span class="self">self</span>).handle_event(event).<span class="kw">await
+    </span>}
+}
+
+<span class="attr">#[derive(Clone, Copy, Debug)]
+</span><span class="kw">pub struct </span>NullEventConsumer;
+
+<span class="attr">#[async_trait]
+</span><span class="kw">impl </span>EventConsumer <span class="kw">for </span>NullEventConsumer {
+    <span class="kw">async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, _event: <span class="kw-2">&amp;</span>Event) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="prelude-val">Ok</span>(())
+    }
 }
 
 <span class="attr">#[async_trait]
