@@ -1412,6 +1412,7 @@ mod test {
             })
             .collect::<Vec<_>>();
         let mut prev_quorum_proposal: Option<QuorumProposal<TestTypes>> = None;
+        #[allow(clippy::needless_range_loop)]
         for round in 0..NUM_ROUNDS {
             let transactions = all_transactions[round].clone();
             let (quorum_proposal, _quorum_proposal_msg, _da_proposal_msg, builder_state_id) =
@@ -1434,7 +1435,7 @@ mod test {
                 ParentBlockReferences {
                     view_number: quorum_proposal.view_number,
                     vid_commitment: quorum_proposal.block_header.payload_commitment,
-                    leaf_commit: leaf_commit,
+                    leaf_commit,
                     builder_commitment: quorum_proposal.block_header.builder_commitment,
                 },
                 req_sender,
