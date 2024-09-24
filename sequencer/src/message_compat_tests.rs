@@ -38,7 +38,8 @@ use hotshot_types::{
         ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
     },
     traits::{
-        node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
+        election::Membership, node_implementation::ConsensusTime, signature_key::SignatureKey,
+        BlockPayload, EncodeBytes,
     },
     vid::vid_scheme,
 };
@@ -53,15 +54,14 @@ use vbs::{
 #[cfg(feature = "testing")]
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{Payload, SeqTypes, Transaction};
-    use hotshot_types::traits::network::Topic;
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::{traits::network::Topic, PeerConfig};
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
     let membership = GeneralStaticCommittee::new(
-        &[],
-        vec![sender.stake_table_entry(1)],
-        vec![],
-        0,
+        vec![],                      /* no elligible leaders */
+        vec![PeerConfig::default()], /* one committee member, necessary to generate a VID share */
         Topic::Global,
     );
     let upgrade_data = UpgradeProposalData {
@@ -110,7 +110,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             data: QuorumProposal {
                 block_header,
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
@@ -136,7 +136,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
         GeneralConsensusMessage::Vote(QuorumVote {
             signature: (sender, signature.clone()),
             data: QuorumData {
-                leaf_commit: leaf.commit(),
+                leaf_commit: <Leaf as Committable>::commit(&leaf),
             },
             view_number: ViewNumber::genesis(),
         }),

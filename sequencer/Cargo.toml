@@ -18,12 +18,13 @@ required-features = ["testing"]
 [dev-dependencies]
 escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
+hotshot-example-types = { workspace = true }
 hotshot-query-service = { workspace = true, features = ["testing"] }
 hotshot-testing = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
-tempfile = "3.9.0"
+tempfile = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -45,12 +46,14 @@ cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
 
 clap = { workspace = true }
+client = { path = "../client" }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 csv = "1"
 derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
+dyn-clone = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
@@ -75,6 +78,7 @@ itertools = { workspace = true }
 jf-crhf = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-rescue = { workspace = true }
+tempfile = { workspace = true, optional = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }

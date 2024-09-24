@@ -1,0 +1,21 @@
+[package]
+name = "tests"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+publish = false
+
+[[test]]
+name = "test_demo_native"
+path = "demo_native.rs"
+
+[dev-dependencies]
+anyhow = { workspace = true }
+async-std = { workspace = true }
+client = { path = "../client" }
+dotenvy = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
+ethers = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true, features = ["json", "blocking"] }
+surf-disco = { workspace = true }
