@@ -411,6 +411,18 @@ impl<K: SignatureKey> Default for NetworkConfig<K> {
 #[serde_inline_default]
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(bound(deserialize = ""))]
+pub struct PublicKeysFile<KEY: SignatureKey> {
+    /// The list of public keys that are allowed to connect to the orchestrator
+    ///
+    /// If nonempty, this list becomes the stake table and is used to determine DA membership (ignoring the node's request).
+    #[serde(default)]
+    pub public_keys: Vec<PeerConfigKeys<KEY>>,
+}
+
+/// a network config stored in a file
+#[serde_inline_default]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(bound(deserialize = ""))]
 pub struct NetworkConfigFile<KEY: SignatureKey> {
     /// number of views to run
     #[serde_inline_default(ORCHESTRATOR_DEFAULT_NUM_ROUNDS)]

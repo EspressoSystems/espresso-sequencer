@@ -13,6 +13,7 @@ pub mod config;
 
 use std::{
     collections::{HashMap, HashSet},
+    fs,
     fs::OpenOptions,
     io::{self, ErrorKind},
     time::Duration,
@@ -46,7 +47,7 @@ use vbs::{
     BinarySerializer,
 };
 
-use crate::config::NetworkConfig;
+use crate::config::{NetworkConfig, PublicKeysFile};
 
 /// Orchestrator is not, strictly speaking, bound to the network; it can have its own versioning.
 /// Orchestrator Version (major)
@@ -855,6 +856,24 @@ where
     if env_password.is_ok() {
         tracing::warn!("Took orchestrator manual start password from the environment variable: ORCHESTRATOR_MANUAL_START_PASSWORD={:?}", env_password);
         network_config.manual_start_password = env_password.ok();
+    }
+
+    // Try to overwrite the network_config public keys
+    // from the file the env var points to, or panic.
+    {
+        let env_public_keys = std::env::var("ORCHESTRATOR_PUBLIC_KEYS");
+
+        if let Ok(filepath) = env_public_keys {
+            #[allow(clippy::panic)]
+            let config_file_as_string: String = fs::read_to_string(filepath.clone())
+                .unwrap_or_else(|_| panic!("Could not read config file located at {filepath}"));
+
+            let file: PublicKeysFile<KEY> =
+                toml::from_str::<PublicKeysFile<KEY>>(&config_file_as_string)
+                    .expect("Unable to convert config file to TOML");
+
+            network_config.public_keys = file.public_keys;
+        }
     }
 
     network_config.config.known_nodes_with_stake = network_config
