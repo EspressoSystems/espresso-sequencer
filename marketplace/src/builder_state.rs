@@ -1003,7 +1003,7 @@ mod test {
     /// used for testing only
     type QuorumProposalMap<TYPES> = HashMap<
         (BuilderCommitment, <TYPES as NodeType>::Time),
-        Arc<Proposal<TYPES, QuorumProposal<TYPES>>>
+        Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
     >;
     fn check_equal_quorum_proposal_hashmap<TYPES: NodeType>(
         quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
