@@ -1496,8 +1496,8 @@ mod test {
             )
         });
 
-        // one of the node has dishonest peer
-        peers[1] = StatePeers::<SequencerApiVersion>::from_urls(
+        // one of the node has dishonest peer. This list of peers is for node#1
+        peers[2] = StatePeers::<SequencerApiVersion>::from_urls(
             vec![url.clone()],
             BackoffParams::default(),
         );
