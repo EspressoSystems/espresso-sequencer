@@ -951,23 +951,16 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 mod test {
     use std::collections::HashMap;
     use std::sync::Arc;
-    use std::time::Duration;
 
     use async_broadcast::broadcast;
-    use async_lock::RwLock;
-    use committable::{Commitment, CommitmentBoundsArkless, RawCommitmentBuilder};
+    use committable::RawCommitmentBuilder;
     use hotshot_example_types::block_types::TestTransaction;
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
     use hotshot_types::data::ViewNumber;
     use hotshot_types::data::{Leaf, QuorumProposal};
     use hotshot_types::message::Proposal;
-    use hotshot_types::traits::block_contents::vid_commitment;
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
 
-    use crate::service::{broadcast_channels, GlobalState};
-
-    use super::BuilderState;
     use super::DaProposalMessage;
     use super::MessageType;
     use super::ParentBlockReferences;
@@ -1176,44 +1169,9 @@ mod test {
         // Number of nodes on DA committee
         const NUM_STORAGE_NODES: usize = 4;
 
-        // start builder state, very similar to `start_builder_state` in `mod.rs` without starting the event loop
-        let channel_capacity = CHANNEL_CAPACITY;
-        let num_storage_nodes = NUM_STORAGE_NODES;
-        // set up the broadcast channels
-        let (bootstrap_sender, bootstrap_receiver) =
-            broadcast::<MessageType<TestTypes>>(channel_capacity);
-        let (senders, receivers) = broadcast_channels(channel_capacity);
-
-        let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
-        let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
-        let parent_block_references = ParentBlockReferences {
-            view_number: ViewNumber::genesis(),
-            vid_commitment: genesis_vid_commitment,
-            leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
-            builder_commitment: genesis_builder_commitment,
-        };
-
-        // instantiate the global state
-        let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
-            bootstrap_sender,
-            senders.transactions.clone(),
-            genesis_vid_commitment,
-            ViewNumber::genesis(),
-        )));
-
-        // instantiate the bootstrap builder state
-        let mut builder_state = BuilderState::<TestTypes>::new(
-            parent_block_references,
-            &receivers,
-            bootstrap_receiver,
-            Vec::new(),
-            Arc::clone(&global_state),
-            Duration::from_millis(10), // max time to wait for non-zero txn block
-            0,                         // base fee
-            Arc::new(TestInstanceState::default()),
-            Duration::from_secs(3600), // duration for txn garbage collection
-            Arc::new(TestValidatedState::default()),
-        );
+        // start builder_state without entering event loop
+        let (_senders, global_state, mut builder_state) =
+            start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
@@ -1322,44 +1280,9 @@ mod test {
         // Number of nodes on DA committee
         const NUM_STORAGE_NODES: usize = 4;
 
-        // start builder state, very similar to `start_builder_state` in `mod.rs` without starting the event loop
-        let channel_capacity = CHANNEL_CAPACITY;
-        let num_storage_nodes = NUM_STORAGE_NODES;
-        // set up the broadcast channels
-        let (bootstrap_sender, bootstrap_receiver) =
-            broadcast::<MessageType<TestTypes>>(channel_capacity);
-        let (senders, receivers) = broadcast_channels(channel_capacity);
-
-        let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
-        let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
-        let parent_block_references = ParentBlockReferences {
-            view_number: ViewNumber::genesis(),
-            vid_commitment: genesis_vid_commitment,
-            leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
-            builder_commitment: genesis_builder_commitment,
-        };
-
-        // instantiate the global state
-        let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
-            bootstrap_sender,
-            senders.transactions.clone(),
-            genesis_vid_commitment,
-            ViewNumber::genesis(),
-        )));
-
-        // instantiate the bootstrap builder state
-        let mut builder_state = BuilderState::<TestTypes>::new(
-            parent_block_references,
-            &receivers,
-            bootstrap_receiver,
-            Vec::new(),
-            Arc::clone(&global_state),
-            Duration::from_millis(10), // max time to wait for non-zero txn block
-            0,                         // base fee
-            Arc::new(TestInstanceState::default()),
-            Duration::from_secs(3600), // duration for txn garbage collection
-            Arc::new(TestValidatedState::default()),
-        );
+        // start builder_state without entering event loop
+        let (_senders, global_state, mut builder_state) =
+            start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // insert some builder states
 
