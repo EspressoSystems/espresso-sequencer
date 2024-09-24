@@ -51,6 +51,10 @@ pub struct NetworkNodeConfig<K: SignatureKey + 'static> {
     /// If not supplied we will not send an authentication message during the handshake
     #[builder(default)]
     pub auth_message: Option<Vec<u8>>,
+
+    #[builder(default)]
+    /// The timeout for DHT lookups.
+    pub dht_timeout: Option<Duration>,
 }
 
 /// Configuration for Libp2p's Gossipsub

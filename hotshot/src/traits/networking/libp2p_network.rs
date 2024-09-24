@@ -553,7 +553,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                 is_ready: Arc::new(AtomicBool::new(false)),
                 // This is optimal for 10-30 nodes. TODO: parameterize this for both tests and examples
                 // https://github.com/EspressoSystems/HotShot/issues/2088
-                dht_timeout: Duration::from_secs(120),
+                dht_timeout: config.dht_timeout.unwrap_or(Duration::from_secs(120)),
                 is_bootstrapped: Arc::new(AtomicBool::new(false)),
                 metrics,
                 subscribed_topics,
