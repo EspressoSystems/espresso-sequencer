@@ -61,7 +61,7 @@ impl NodeType for TestTypes {
 }
 
 /// set up the broadcast channels and instatiate the global state with fixed channel capacity and num nodes
-async fn start_builder_state(
+pub async fn start_builder_state(
     channel_capacity: usize,
     num_storage_nodes: usize,
 ) -> (
