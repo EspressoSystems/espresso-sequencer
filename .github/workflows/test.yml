@@ -68,8 +68,7 @@ jobs:
         uses: cachix/install-nix-action@V27
 
       - name: Install process-compose
-        run: |
-          nix profile install nixpkgs#process-compose
+        run: nix profile install nixpkgs#process-compose
 
       - name: Pull Docker Images
         run: docker compose pull || docker-compose pull
