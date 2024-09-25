@@ -29,6 +29,22 @@ source .env.contracts && \
 ts-node contracts/script/multisigTransactionProposals/safeSDK/createMultisigWallet.ts
 ```
 
+## List Pending Transaction Proposals
+
+Anyone can view transaction proposals for a multisig wallet. Ensure that the following environment variables are set in
+the `.env.contracts` file:
+
+- `RPC_URL`
+- `SAFE_MULTISIG_ADDRESS`
+- `SAFE_MULTISIG_ADDRESS`
+
+Assuming you're in the root folder, run the following command:
+
+```bash
+source .env.contracts && \
+ts-node contracts/script/multisigTransactionProposals/safeSDK/viewPendingTxnProposals.ts
+```
+
 ## Set Permissioned Prover
 
 To enable the permissioned prover on the light client contract, ensure that the following environment variables are set
