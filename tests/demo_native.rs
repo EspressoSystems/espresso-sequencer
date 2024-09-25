@@ -217,7 +217,7 @@ async fn test_smoke() -> Result<()> {
     println!("Initial State:{}", initial);
 
     loop {
-        sleep(Duration::from_nanos(1500)).await;
+        sleep(Duration::from_secs(1)).await;
 
         let new = testing.test_state().await;
 
