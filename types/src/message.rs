@@ -397,6 +397,15 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
         }
     }
 
+    #[allow(clippy::new_without_default)]
+    /// Create a new `UpgradeLock` from an optional upgrade certificate
+    pub fn from_certificate(certificate: &Option<UpgradeCertificate<TYPES>>) -> Self {
+        Self {
+            decided_upgrade_certificate: Arc::new(RwLock::new(certificate.clone())),
+            _pd: PhantomData::<V>,
+        }
+    }
+
     /// Calculate the version applied in a view, based on the provided upgrade lock.
     ///
     /// # Errors
@@ -457,8 +466,8 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
             // Associated constants cannot be used in pattern matches, so we do this trick instead.
             v if v == V::Base::VERSION => Serializer::<V::Base>::serialize(&message),
             v if v == V::Upgrade::VERSION => Serializer::<V::Upgrade>::serialize(&message),
-            _ => {
-                bail!("Attempted to serialize with an incompatible version. This should be impossible.");
+            v => {
+                bail!("Attempted to serialize with version {}, which is incompatible. This should be impossible.", v);
             }
         };
 
@@ -481,8 +490,8 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
         let deserialized_message: M = match actual_version {
             v if v == V::Base::VERSION => Serializer::<V::Base>::deserialize(message),
             v if v == V::Upgrade::VERSION => Serializer::<V::Upgrade>::deserialize(message),
-            _ => {
-                bail!("Cannot deserialize message!");
+            v => {
+                bail!("Cannot deserialize message with stated version {}", v);
             }
         }
         .context("Failed to deserialize message!")?;

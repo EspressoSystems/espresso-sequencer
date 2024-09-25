@@ -13,7 +13,10 @@ use hotshot_types::{
     consensus::OuterConsensus,
     data::QuorumProposal,
     event::{Event, EventType},
-    traits::node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+    traits::{
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        storage::Storage,
+    },
     vote::HasViewNumber,
 };
 use tracing::{debug, instrument};
@@ -60,6 +63,13 @@ pub(crate) async fn handle_quorum_proposal_validated<
             .await;
         *decided_certificate_lock = Some(cert.clone());
         drop(decided_certificate_lock);
+
+        let _ = task_state
+            .storage
+            .write()
+            .await
+            .update_decided_upgrade_certificate(Some(cert.clone()))
+            .await;
     }
 
     let mut consensus_writer = task_state.consensus.write().await;

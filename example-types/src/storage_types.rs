@@ -17,7 +17,7 @@ use hotshot_types::{
     data::{DaProposal, Leaf, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{
         node_implementation::{ConsensusTime, NodeType},
         storage::Storage,
@@ -60,6 +60,7 @@ pub struct TestStorage<TYPES: NodeType> {
     /// `should_return_err` is a testing utility to validate negative cases.
     pub should_return_err: bool,
     pub delay_config: DelayConfig,
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 }
 
 impl<TYPES: NodeType> Default for TestStorage<TYPES> {
@@ -68,6 +69,7 @@ impl<TYPES: NodeType> Default for TestStorage<TYPES> {
             inner: Arc::new(RwLock::new(TestStorageState::default())),
             should_return_err: false,
             delay_config: DelayConfig::default(),
+            decided_upgrade_certificate: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -90,6 +92,9 @@ impl<TYPES: NodeType> TestStorage<TYPES> {
     }
     pub async fn high_qc_cloned(&self) -> Option<QuorumCertificate<TYPES>> {
         self.inner.read().await.high_qc.clone()
+    }
+    pub async fn decided_upgrade_certificate(&self) -> Option<UpgradeCertificate<TYPES>> {
+        self.decided_upgrade_certificate.read().await.clone()
     }
     pub async fn last_actioned_view(&self) -> TYPES::Time {
         self.inner.read().await.action
@@ -181,6 +186,14 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
             bail!("Failed to update high qc to storage");
         }
         Self::run_delay_settings_from_config(&self.delay_config).await;
+        Ok(())
+    }
+    async fn update_decided_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+    ) -> Result<()> {
+        *self.decided_upgrade_certificate.write().await = decided_upgrade_certificate;
+
         Ok(())
     }
 }

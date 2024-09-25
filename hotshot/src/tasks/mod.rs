@@ -195,6 +195,23 @@ pub async fn add_consensus_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, 
     handle.add_task(DaTaskState::<TYPES, I, V>::create_from(handle).await);
     handle.add_task(TransactionTaskState::<TYPES, I, V>::create_from(handle).await);
 
+    {
+        let mut upgrade_certificate_lock = handle
+            .hotshot
+            .upgrade_lock
+            .decided_upgrade_certificate
+            .write()
+            .await;
+
+        // clear the loaded certificate if it's now outdated
+        if upgrade_certificate_lock
+            .as_ref()
+            .is_some_and(|cert| V::Base::VERSION >= cert.data.new_version)
+        {
+            *upgrade_certificate_lock = None;
+        }
+    }
+
     // only spawn the upgrade task if we are actually configured to perform an upgrade.
     if V::Base::VERSION < V::Upgrade::VERSION {
         handle.add_task(UpgradeTaskState::<TYPES, I, V>::create_from(handle).await);

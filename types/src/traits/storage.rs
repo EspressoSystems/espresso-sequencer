@@ -20,7 +20,7 @@ use crate::{
     data::{DaProposal, Leaf, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
 };
 
 /// Abstraction for storing a variety of consensus payload datum.
@@ -45,5 +45,10 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
         &self,
         leafs: CommitmentMap<Leaf<TYPES>>,
         state: BTreeMap<TYPES::Time, View<TYPES>>,
+    ) -> Result<()>;
+    /// Upgrade the current decided upgrade certificate in storage.
+    async fn update_decided_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     ) -> Result<()>;
 }

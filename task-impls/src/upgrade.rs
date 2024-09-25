@@ -269,9 +269,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                         old_version: V::Base::VERSION,
                         new_version: V::Upgrade::VERSION,
                         new_version_hash: V::UPGRADE_HASH.to_vec(),
-                        // We schedule the upgrade to begin 15 views in the future
                         old_version_last_view: TYPES::Time::new(view + UPGRADE_BEGIN_OFFSET),
-                        // and end 20 views in the future
                         new_version_first_view: TYPES::Time::new(view + UPGRADE_FINISH_OFFSET),
                         decide_by: TYPES::Time::new(view + UPGRADE_DECIDE_BY_OFFSET),
                     };

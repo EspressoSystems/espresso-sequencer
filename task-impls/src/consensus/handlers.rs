@@ -540,6 +540,13 @@ pub async fn handle_quorum_proposal_validated<
             .await;
         *decided_certificate_lock = Some(cert.clone());
         drop(decided_certificate_lock);
+
+        let _ = task_state
+            .storage
+            .write()
+            .await
+            .update_decided_upgrade_certificate(Some(cert.clone()))
+            .await;
     }
 
     let mut consensus = task_state.consensus.write().await;

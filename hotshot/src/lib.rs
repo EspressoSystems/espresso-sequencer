@@ -49,7 +49,7 @@ use hotshot_types::{
     data::{Leaf, QuorumProposal},
     event::{EventType, LeafInfo},
     message::{DataMessage, Message, MessageKind, Proposal},
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -255,7 +255,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         let (internal_tx, internal_rx) = internal_channel;
         let (mut external_tx, mut external_rx) = external_channel;
 
-        let upgrade_lock = UpgradeLock::<TYPES, V>::new();
+        let upgrade_lock =
+            UpgradeLock::<TYPES, V>::from_certificate(&initializer.decided_upgrade_certificate);
 
         // Allow overflow on the channel, otherwise sending to it may block.
         external_rx.set_overflow(true);
@@ -959,6 +960,8 @@ pub struct HotShotInitializer<TYPES: NodeType> {
     /// than `inner`s view number for the non genesis case because we must have seen higher QCs
     /// to decide on the leaf.
     high_qc: QuorumCertificate<TYPES>,
+    /// Previously decided upgrade certificate; this is necessary if an upgrade has happened and we are not restarting with the new version
+    decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     /// Undecided leafs that were seen, but not yet decided on.  These allow a restarting node
     /// to vote and propose right away if they didn't miss anything while down.
     undecided_leafs: Vec<Leaf<TYPES>>,
@@ -986,6 +989,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             actioned_view: TYPES::Time::new(0),
             saved_proposals: BTreeMap::new(),
             high_qc,
+            decided_upgrade_certificate: None,
             undecided_leafs: Vec::new(),
             undecided_state: BTreeMap::new(),
             instance_state,
@@ -1008,6 +1012,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         actioned_view: TYPES::Time,
         saved_proposals: BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
         high_qc: QuorumCertificate<TYPES>,
+        decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
         undecided_leafs: Vec<Leaf<TYPES>>,
         undecided_state: BTreeMap<TYPES::Time, View<TYPES>>,
     ) -> Self {
@@ -1020,6 +1025,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             actioned_view,
             saved_proposals,
             high_qc,
+            decided_upgrade_certificate,
             undecided_leafs,
             undecided_state,
         }
