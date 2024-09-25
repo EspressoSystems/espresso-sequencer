@@ -11,6 +11,24 @@ wallet.
 - You have node installed
 - Run `npm install` to install dependencies
 
+## Create a Multisig Wallet
+
+Assuming you don't have a Safe Multisig already. Ensure that the following environment variables are set in the
+`.env.contracts` file:
+
+- `RPC_URL`
+- `USE_HARDWARE_WALLET` (if yes, put "true", otherwise "false")
+- - if false, then also set the `SAFE_ORCHESTRATOR_PRIVATE_KEY`
+- `SAFE_SIGNERS_LIST`
+- `SAFE_SIGNER_THRESHOLD`
+
+Assuming you're in the root folder, run the following command:
+
+```bash
+source .env.contracts && \
+ts-node contracts/script/multisigTransactionProposals/safeSDK/createMultisigWallet.ts
+```
+
 ## Set Permissioned Prover
 
 To enable the permissioned prover on the light client contract, ensure that the following environment variables are set

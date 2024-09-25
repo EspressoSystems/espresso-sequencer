@@ -1,7 +1,7 @@
 import { ethers } from "ethers"; // Import ethers from the ethers library
 import { LedgerSigner } from "@ethers-ext/signer-ledger";
 import HIDTransport from "@ledgerhq/hw-transport-node-hid";
-import Safe from "@safe-global/protocol-kit";
+import Safe, { EthersAdapter } from "@safe-global/protocol-kit";
 // declaring types locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
 type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
 type SafeSignature = Awaited<ReturnType<Safe["signHash"]>>;
@@ -149,4 +149,20 @@ export async function createAndSignSafeTransaction(
   const senderSignature = await safeSDK.signHash(safeTxHash);
 
   return { safeTransaction, safeTxHash, senderSignature };
+}
+
+export async function initializeClient(): Promise<[ethers.Signer, EthersAdapter]> {
+  // Initialize web3 provider using the RPC URL from environment variables
+  const web3Provider = new ethers.JsonRpcProvider(getEnvVar("RPC_URL"));
+
+  // Get the signer, this signer must be one of the signers on the Safe Multisig Wallet
+  const orchestratorSigner = getSigner(web3Provider);
+
+  // Set up Eth Adapter with ethers and the signer
+  const ethAdapter = new EthersAdapter({
+    ethers,
+    signerOrProvider: orchestratorSigner,
+  });
+
+  return [orchestratorSigner, ethAdapter];
 }

@@ -1,25 +1,14 @@
 import dotenv from "dotenv";
 import { ethers } from "ethers";
-import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, validateEthereumAddress, createAndSignSafeTransaction, getSigner } from "./utils";
+import { getEnvVar, validateEthereumAddress, createAndSignSafeTransaction, initializeClient } from "./utils";
 
 async function main() {
   dotenv.config();
 
   try {
-    // Initialize web3 provider using the RPC URL from environment variables
-    const web3Provider = new ethers.JsonRpcProvider(getEnvVar("RPC_URL"));
-
-    // Get the signer, this signer must be one of the signers on the Safe Multisig Wallet
-    const orchestratorSigner = getSigner(web3Provider);
-
-    // Set up Eth Adapter with ethers and the signer
-    const ethAdapter = new EthersAdapter({
-      ethers,
-      signerOrProvider: orchestratorSigner,
-    });
+    const [orchestratorSigner, ethAdapter] = await initializeClient();
 
     const chainId = await ethAdapter.getChainId();
     const safeService = new SafeApiKit({ chainId });
