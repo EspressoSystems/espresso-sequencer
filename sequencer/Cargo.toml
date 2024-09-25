@@ -53,6 +53,7 @@ csv = "1"
 derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
+dyn-clone = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
@@ -77,6 +78,7 @@ itertools = { workspace = true }
 jf-crhf = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-rescue = { workspace = true }
+tempfile = { workspace = true, optional = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }

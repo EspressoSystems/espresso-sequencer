@@ -14,9 +14,8 @@ use espresso_types::{
 use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
-    stream::{BoxStream, Stream},
+    stream::BoxStream,
 };
-use hotshot::types::Event;
 use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
@@ -25,6 +24,7 @@ use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
+    event::Event,
     light_client::StateSignatureRequestBody,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
 };
@@ -91,13 +91,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
         Self {
             consensus: Arc::pin(Lazy::from_future(init.boxed())),
         }
-    }
-
-    fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
-        let state = self.clone();
-        async move { state.consensus().await.read().await.event_stream() }
-            .boxed()
-            .flatten_stream()
     }
 
     async fn state_signer(&self) -> &StateSigner<SequencerApiVersion> {
@@ -371,9 +364,10 @@ pub mod test_helpers {
     use async_std::task::sleep;
     use committable::Committable;
 
+    use async_std::task::JoinHandle;
     use espresso_types::{
         mock::MockStateCatchup,
-        v0::traits::{PersistenceOptions, StateCatchup},
+        v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
@@ -393,8 +387,9 @@ pub mod test_helpers {
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-    use vbs::version::StaticVersion;
-    use vbs::version::StaticVersionType;
+    use tide_disco::{Api, App, Error, StatusCode};
+    use url::Url;
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     use super::*;
     use crate::{
@@ -563,21 +558,23 @@ pub mod test_helpers {
                         let marketplace_builder_url = marketplace_builder_url.clone();
                         async move {
                             if i == 0 {
-                                opt.serve(|metrics| {
+                                opt.serve(|metrics, consumer| {
                                     let cfg = cfg.clone();
                                     async move {
-                                        cfg.init_node(
-                                            0,
-                                            state,
-                                            persistence,
-                                            catchup,
-                                            &*metrics,
-                                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                                            bind_version,
-                                            upgrades_map,
-                                            marketplace_builder_url,
-                                        )
-                                        .await
+                                        Ok(cfg
+                                            .init_node(
+                                                0,
+                                                state,
+                                                persistence,
+                                                catchup,
+                                                &*metrics,
+                                                STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                consumer,
+                                                bind_version,
+                                                upgrades_map,
+                                                marketplace_builder_url,
+                                            )
+                                            .await)
                                     }
                                     .boxed()
                                 })
@@ -591,6 +588,7 @@ pub mod test_helpers {
                                     catchup,
                                     &NoMetrics,
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    NullEventConsumer,
                                     bind_version,
                                     upgrades_map,
                                     marketplace_builder_url,
@@ -861,6 +859,61 @@ pub mod test_helpers {
             .unwrap()
             .unwrap();
     }
+
+    pub async fn spawn_dishonest_peer_catchup_api() -> anyhow::Result<(Url, JoinHandle<()>)> {
+        let toml = toml::from_str::<toml::Value>(include_str!("../api/catchup.toml")).unwrap();
+        let mut api =
+            Api::<(), hotshot_query_service::Error, SequencerApiVersion>::new(toml).unwrap();
+
+        api.get("account", |_req, _state: &()| {
+            async move {
+                Result::<AccountQueryData, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no account found".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("blocks", |_req, _state| {
+            async move {
+                Result::<BlocksFrontier, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no block found".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("chainconfig", |_req, _state| {
+            async move {
+                Result::<ChainConfig, _>::Ok(ChainConfig {
+                    max_block_size: 300.into(),
+                    base_fee: 1.into(),
+                    fee_recipient: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                        .parse()
+                        .unwrap(),
+                    ..Default::default()
+                })
+            }
+            .boxed()
+        })?;
+
+        let mut app = App::<_, hotshot_query_service::Error>::with_state(());
+        app.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
+
+        app.register_module::<_, _>("catchup", api).unwrap();
+
+        let port = pick_unused_port().expect("no free port");
+        let url: Url = Url::parse(&format!("http://localhost:{port}")).unwrap();
+
+        let handle = async_std::task::spawn({
+            let url = url.clone();
+            async move {
+                let _ = app.serve(url, SequencerApiVersion::instance()).await;
+            }
+        });
+
+        Ok((url, handle))
+    }
 }
 
 #[cfg(test)]
@@ -873,7 +926,8 @@ mod api_tests {
     use espresso_types::{Header, NamespaceId};
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
-    use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
+    use hotshot_query_service::availability::{BlockQueryData, VidCommonQueryData};
+
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
@@ -884,7 +938,6 @@ mod api_tests {
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
 
-    use self::options::HotshotEvents;
     use super::*;
     use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
@@ -932,17 +985,6 @@ mod api_tests {
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
-        // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        client
-            .socket("availability/stream/leaves/0")
-            .subscribe::<LeafQueryData<SeqTypes>>()
-            .await
-            .unwrap()
-            .next()
-            .await
-            .unwrap()
-            .unwrap();
-
         let hash = client
             .post("submit/submit")
             .body_json(&txn)
@@ -955,6 +997,18 @@ mod api_tests {
         // Wait for a Decide event containing transaction matching the one we sent
         let block_height = wait_for_decide_on_handle(&mut events, &txn).await as usize;
         tracing::info!(block_height, "transaction sequenced");
+
+        // Wait for the query service to update to this block height.
+        client
+            .socket(&format!("availability/stream/blocks/{block_height}"))
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
         let mut found_txn = false;
         let mut found_empty_block = false;
         for block_num in 0..=block_height {
@@ -1008,75 +1062,20 @@ mod api_tests {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
     }
-
-    #[async_std::test]
-    pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
-        use HotshotEvents;
-
-        setup_test();
-
-        let hotshot_event_streaming_port =
-            pick_unused_port().expect("No ports free for hotshot event streaming");
-        let query_service_port = pick_unused_port().expect("No ports free for query service");
-
-        let url = format!("http://localhost:{hotshot_event_streaming_port}")
-            .parse()
-            .unwrap();
-
-        let hotshot_events = HotshotEvents {
-            events_service_port: hotshot_event_streaming_port,
-        };
-
-        let client: Client<ServerError, StaticVersion<0, 1>> = Client::new(url);
-
-        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
-
-        let anvil = Anvil::new().spawn();
-        let l1 = anvil.endpoint().parse().unwrap();
-        let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::default()
-            .api_config(options)
-            .network_config(network_config)
-            .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
-
-        let mut subscribed_events = client
-            .socket("hotshot-events/events")
-            .subscribe::<Event<SeqTypes>>()
-            .await
-            .unwrap();
-
-        let total_count = 5;
-        // wait for these events to receive on client 1
-        let mut receive_count = 0;
-        loop {
-            let event = subscribed_events.next().await.unwrap();
-            tracing::info!(
-                "Received event in hotshot event streaming Client 1: {:?}",
-                event
-            );
-            receive_count += 1;
-            if receive_count > total_count {
-                tracing::info!("Client Received atleast desired events, exiting loop");
-                break;
-            }
-        }
-        assert_eq!(receive_count, total_count + 1);
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use std::{collections::BTreeMap, time::Duration};
-
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
+    use std::{collections::BTreeMap, time::Duration};
 
     use espresso_types::{
         mock::MockStateCatchup,
+        traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade,
-        Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
+        TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1098,8 +1097,8 @@ mod test {
     use sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
     use surf_disco::Client;
     use test_helpers::{
-        catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkConfigBuilder,
+        catchup_test_helper, spawn_dishonest_peer_catchup_api, state_signature_test_helper,
+        status_test_helper, submit_test_helper, TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use time::OffsetDateTime;
@@ -1107,6 +1106,7 @@ mod test {
 
     use self::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
+        options::HotshotEvents,
         sql::DataSource as SqlDataSource,
     };
     use super::*;
@@ -1294,6 +1294,7 @@ mod test {
                 ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
                 MockSequencerVersions::new(),
                 Default::default(),
                 "http://localhost".parse().unwrap(),
@@ -1457,6 +1458,79 @@ mod test {
 
         network.server.shut_down().await;
         drop(network);
+    }
+
+    #[async_std::test]
+    async fn test_chain_config_catchup_dishonest_peer() {
+        // This test sets up a network of three nodes, each with the full chain config.
+        // One of the nodes is connected to a dishonest peer.
+        // When this node makes a chain config catchup request, it will result in an error due to the peer's malicious response.
+        // The test also makes a catchup request for another node with an honest peer, which succeeds.
+        // The requested chain config is based on the commitment from the validated state's chain config.
+        // The dishonest peer responds with an invalid (malicious) chain config
+        setup_test();
+
+        const NUM_NODES: usize = 3;
+
+        let (url, handle) = spawn_dishonest_peer_catchup_api().await.unwrap();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let cf = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+
+        let state = ValidatedState {
+            chain_config: cf.into(),
+            ..Default::default()
+        };
+
+        let mut peers = std::array::from_fn(|_| {
+            StatePeers::<SequencerApiVersion>::from_urls(
+                vec![format!("http://localhost:{port}").parse().unwrap()],
+                BackoffParams::default(),
+            )
+        });
+
+        // one of the node has dishonest peer. This list of peers is for node#1
+        peers[2] = StatePeers::<SequencerApiVersion>::from_urls(
+            vec![url.clone()],
+            BackoffParams::default(),
+        );
+
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: None,
+                })
+                .catchup(Default::default()),
+            )
+            .states(std::array::from_fn(|_| state.clone()))
+            .catchups(peers)
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        // Test a catchup request for node #0, which is connected to an honest peer.
+        // The catchup should successfully retrieve the correct chain config.
+        let node = &network.peers[0];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
+
+        // Test a catchup request for node #1, which is connected to a dishonest peer.
+        // This request will result in an error due to the malicious chain config provided by the peer.
+        let node = &network.peers[1];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
+
+        network.server.shut_down().await;
+        handle.cancel().await;
     }
 
     #[async_std::test]
@@ -1877,5 +1951,58 @@ mod test {
             ))
             .unwrap()
         );
+    }
+
+    #[async_std::test]
+    async fn test_hotshot_event_streaming() {
+        setup_test();
+
+        let hotshot_event_streaming_port =
+            pick_unused_port().expect("No ports free for hotshot event streaming");
+        let query_service_port = pick_unused_port().expect("No ports free for query service");
+
+        let url = format!("http://localhost:{hotshot_event_streaming_port}")
+            .parse()
+            .unwrap();
+
+        let hotshot_events = HotshotEvents {
+            events_service_port: hotshot_event_streaming_port,
+        };
+
+        let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
+
+        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
+
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        let mut subscribed_events = client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let total_count = 5;
+        // wait for these events to receive on client 1
+        let mut receive_count = 0;
+        loop {
+            let event = subscribed_events.next().await.unwrap();
+            tracing::info!(
+                "Received event in hotshot event streaming Client 1: {:?}",
+                event
+            );
+            receive_count += 1;
+            if receive_count > total_count {
+                tracing::info!("Client Received atleast desired events, exiting loop");
+                break;
+            }
+        }
+        assert_eq!(receive_count, total_count + 1);
     }
 }
