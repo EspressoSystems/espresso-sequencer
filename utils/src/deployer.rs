@@ -386,7 +386,7 @@ pub async fn deploy(
         // Instantiate a wrapper with the proxy address and light client ABI.
         let proxy = LightClient::new(light_client_proxy_address, l1.clone());
 
-        // Perission the light client prover.
+        // Permission the light client prover.
         if let Some(prover) = permissioned_prover {
             tracing::info!(%light_client_proxy_address, %prover, "setting permissioned prover");
             proxy.set_permissioned_prover(prover).send().await?.await?;
@@ -400,6 +400,14 @@ pub async fn deploy(
                 "transferring light client proxy ownership to multisig",
             );
             proxy.transfer_ownership(owner).send().await?.await?;
+
+            // Confirm that the multisig address has been set as the owner
+            if !is_valid_proxy_admin(provider.clone(), light_client_proxy_address, owner)
+                .await
+                .expect("Failed to find the expected admin on the proxy")
+            {
+                panic!("Light Client Contract's proxy admin not set to the multisig");
+            }
         }
     }
 
@@ -420,7 +428,7 @@ pub async fn deploy(
             )
             .await?;
 
-        // confirm that the implementation address is the address of the fee contract deployed above
+        // Confirm that the implementation address is the address of the fee contract deployed above
         if !is_proxy_contract(provider.clone(), fee_contract_proxy_address)
             .await
             .expect("Failed to determine if fee contract is a proxy")
@@ -439,6 +447,14 @@ pub async fn deploy(
                 "transferring fee contract proxy ownership to multisig",
             );
             proxy.transfer_ownership(owner).send().await?.await?;
+
+            // Confirm that the multisig address has been set as the owner
+            if !is_valid_proxy_admin(provider.clone(), fee_contract_proxy_address, owner)
+                .await
+                .expect("Failed to find the expected admin on the proxy")
+            {
+                panic!("Fee Contract's proxy admin not set to the multisig");
+            }
         }
     }
 
@@ -469,6 +485,26 @@ pub async fn is_proxy_contract(
 
     // when the implementation address is not equal to zero, it's a proxy
     Ok(implementation_address != H160::zero())
+}
+
+pub async fn is_valid_proxy_admin(
+    provider: Provider<Http>,
+    proxy_address: H160,
+    admin: H160,
+) -> anyhow::Result<bool> {
+    // confirm that the admin parameter is the admin of the proxy
+    // using the admin slot, 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103, which is the keccak-256 hash of "eip1967.proxy.admin" subtracted by 1
+    let hex_bytes = hex::decode("b53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103")
+        .expect("Failed to decode hex string");
+    let admin_slot = ethers::types::H256::from_slice(&hex_bytes);
+    let storage = provider
+        .get_storage_at(proxy_address, admin_slot, None)
+        .await?;
+
+    let admin_address = H160::from_slice(&storage[12..]);
+
+    // we expect the admin_address to be equal to the one passed in
+    Ok(admin_address == admin)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
