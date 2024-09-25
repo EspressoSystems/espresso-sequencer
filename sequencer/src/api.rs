@@ -364,6 +364,7 @@ pub mod test_helpers {
     use async_std::task::sleep;
     use committable::Committable;
 
+    use async_std::task::JoinHandle;
     use espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
@@ -386,8 +387,9 @@ pub mod test_helpers {
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-    use vbs::version::StaticVersion;
-    use vbs::version::StaticVersionType;
+    use tide_disco::{Api, App, Error, StatusCode};
+    use url::Url;
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     use super::*;
     use crate::{
@@ -857,6 +859,61 @@ pub mod test_helpers {
             .unwrap()
             .unwrap();
     }
+
+    pub async fn spawn_dishonest_peer_catchup_api() -> anyhow::Result<(Url, JoinHandle<()>)> {
+        let toml = toml::from_str::<toml::Value>(include_str!("../api/catchup.toml")).unwrap();
+        let mut api =
+            Api::<(), hotshot_query_service::Error, SequencerApiVersion>::new(toml).unwrap();
+
+        api.get("account", |_req, _state: &()| {
+            async move {
+                Result::<AccountQueryData, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no account found".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("blocks", |_req, _state| {
+            async move {
+                Result::<BlocksFrontier, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no block found".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("chainconfig", |_req, _state| {
+            async move {
+                Result::<ChainConfig, _>::Ok(ChainConfig {
+                    max_block_size: 300.into(),
+                    base_fee: 1.into(),
+                    fee_recipient: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                        .parse()
+                        .unwrap(),
+                    ..Default::default()
+                })
+            }
+            .boxed()
+        })?;
+
+        let mut app = App::<_, hotshot_query_service::Error>::with_state(());
+        app.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
+
+        app.register_module::<_, _>("catchup", api).unwrap();
+
+        let port = pick_unused_port().expect("no free port");
+        let url: Url = Url::parse(&format!("http://localhost:{port}")).unwrap();
+
+        let handle = async_std::task::spawn({
+            let url = url.clone();
+            async move {
+                let _ = app.serve(url, SequencerApiVersion::instance()).await;
+            }
+        });
+
+        Ok((url, handle))
+    }
 }
 
 #[cfg(test)]
@@ -1009,17 +1066,16 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use std::{collections::BTreeMap, time::Duration};
-
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
+    use std::{collections::BTreeMap, time::Duration};
 
     use espresso_types::{
         mock::MockStateCatchup,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade,
-        Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
+        TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1041,8 +1097,8 @@ mod test {
     use sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
     use surf_disco::Client;
     use test_helpers::{
-        catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkConfigBuilder,
+        catchup_test_helper, spawn_dishonest_peer_catchup_api, state_signature_test_helper,
+        status_test_helper, submit_test_helper, TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use time::OffsetDateTime;
@@ -1405,6 +1461,79 @@ mod test {
     }
 
     #[async_std::test]
+    async fn test_chain_config_catchup_dishonest_peer() {
+        // This test sets up a network of three nodes, each with the full chain config.
+        // One of the nodes is connected to a dishonest peer.
+        // When this node makes a chain config catchup request, it will result in an error due to the peer's malicious response.
+        // The test also makes a catchup request for another node with an honest peer, which succeeds.
+        // The requested chain config is based on the commitment from the validated state's chain config.
+        // The dishonest peer responds with an invalid (malicious) chain config
+        setup_test();
+
+        const NUM_NODES: usize = 3;
+
+        let (url, handle) = spawn_dishonest_peer_catchup_api().await.unwrap();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let cf = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+
+        let state = ValidatedState {
+            chain_config: cf.into(),
+            ..Default::default()
+        };
+
+        let mut peers = std::array::from_fn(|_| {
+            StatePeers::<SequencerApiVersion>::from_urls(
+                vec![format!("http://localhost:{port}").parse().unwrap()],
+                BackoffParams::default(),
+            )
+        });
+
+        // one of the node has dishonest peer. This list of peers is for node#1
+        peers[2] = StatePeers::<SequencerApiVersion>::from_urls(
+            vec![url.clone()],
+            BackoffParams::default(),
+        );
+
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: None,
+                })
+                .catchup(Default::default()),
+            )
+            .states(std::array::from_fn(|_| state.clone()))
+            .catchups(peers)
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        // Test a catchup request for node #0, which is connected to an honest peer.
+        // The catchup should successfully retrieve the correct chain config.
+        let node = &network.peers[0];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
+
+        // Test a catchup request for node #1, which is connected to a dishonest peer.
+        // This request will result in an error due to the malicious chain config provided by the peer.
+        let node = &network.peers[1];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
+
+        network.server.shut_down().await;
+        handle.cancel().await;
+    }
+
+    #[async_std::test]
     async fn test_fee_upgrade_view_based() {
         setup_test();
 
@@ -1577,7 +1706,6 @@ mod test {
                 EventType::UpgradeProposal { proposal, .. } => {
                     let upgrade = proposal.data.upgrade_proposal;
                     let new_version = upgrade.new_version;
-                    dbg!(&new_version);
                     assert_eq!(new_version, <MockSeqVersions as Versions>::Upgrade::VERSION);
                     break upgrade.new_version_first_view;
                 }
@@ -1617,7 +1745,6 @@ mod test {
 
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
-                dbg!(height, new_version_first_view);
                 if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);

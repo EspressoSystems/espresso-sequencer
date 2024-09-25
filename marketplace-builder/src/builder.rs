@@ -289,7 +289,7 @@ mod test {
         FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, SequencerVersions,
         Transaction,
     };
-    use ethers::utils::Anvil;
+    use ethers::{core::k256::elliptic_curve::rand_core::block, utils::Anvil};
     use hooks::connect_to_solver;
     use hotshot::types::{
         BLSPrivKey, Event,
@@ -308,7 +308,7 @@ mod test {
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
-            block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            block_contents::{BlockPayload, BuilderFee, GENESIS_VID_NUM_STORAGE_NODES},
             node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
@@ -505,15 +505,15 @@ mod test {
             .unwrap()
     }
 
-    /// Get the transactions in the bundle associated with the received quorum proposal.
+    /// Get the bundle associated with the received quorum proposal.
     ///
     /// # Returns
     /// * `Some` if the bundle is fetched.
     /// * `None` if the quorum proposal isn't received or the bundle fetching fails.
-    async fn get_transactions(
+    async fn get_bundle(
         event: Event<SeqTypes>,
         builder_client: Client<ServerError, MarketplaceVersion>,
-    ) -> Option<Vec<Transaction>> {
+    ) -> Option<Bundle<SeqTypes>> {
         if let EventType::QuorumProposal { proposal, .. } = event.event {
             let parent_view_number = *proposal.data.view_number;
             let parent_commitment = Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
@@ -528,7 +528,7 @@ mod test {
                 .send()
                 .await
             {
-                return Some(bundle.transactions);
+                return Some(bundle);
             } else {
                 return None;
             }
@@ -566,10 +566,13 @@ mod test {
         // Use `_mock_solver` here to avoid it being dropped.
         let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
 
+        let keypair = FeeAccount::test_key_pair();
+        let address = keypair.address();
+        let base_fee = FeeAmount::from(10);
         // Start and connect to a reserve builder.
         let init = BuilderConfig::init(
             true,
-            FeeAccount::test_key_pair(),
+            keypair.clone(),
             ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
             NonZeroUsize::new(1024).unwrap(),
@@ -580,7 +583,7 @@ mod test {
             Duration::from_secs(2),
             5,
             Duration::from_secs(2),
-            FeeAmount::from(10),
+            base_fee,
             Some(BidConfig {
                 namespaces: vec![NamespaceId::from(REGISTERED_NAMESPACE)],
                 amount: FeeAmount::from(10),
@@ -596,7 +599,7 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
         let transactions = vec![registered_transaction.clone(), unregistered_transaction];
-        if public_mempool {
+        let bundle = if public_mempool {
             let server = &network.server;
             for transaction in transactions {
                 server.submit_transaction(transaction).await.unwrap();
@@ -610,9 +613,8 @@ mod test {
                 }
                 let event = events.next().await.unwrap();
 
-                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
-                    assert_eq!(txns, vec![registered_transaction]);
-                    break;
+                if let Some(bundle) = get_bundle(event, builder_client.clone()).await {
+                    break bundle;
                 }
             }
         } else {
@@ -624,12 +626,44 @@ mod test {
                     panic!("Didn't get a quorum proposal in 10 seconds");
                 }
                 let event = events.next().await.unwrap().unwrap();
-                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
-                    assert_eq!(txns, vec![registered_transaction]);
-                    break;
+                if let Some(bundle) = get_bundle(event, builder_client.clone()).await {
+                    break bundle;
                 }
             }
-        }
+        };
+
+        assert_eq!(bundle.transactions, vec![registered_transaction.clone()]);
+
+        let txn_commit = <[u8; 32]>::from(registered_transaction.commit()).to_vec();
+        let signature = bundle.signature;
+        assert!(signature.verify(txn_commit, address).is_ok());
+
+        let (payload, _) = Payload::from_transactions(
+            vec![registered_transaction],
+            &ValidatedState::default(),
+            &NodeState::default(),
+        )
+        .await
+        .expect("unable to create payload");
+
+        let encoded_txns = payload.encode().to_vec();
+        let block_size = encoded_txns.len() as u64;
+
+        let fees = base_fee * block_size;
+
+        let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+            &keypair,
+            fees.as_u64().unwrap(),
+        )
+        .unwrap();
+
+        let sequencing_fee = BuilderFee {
+            fee_amount: fees.as_u64().unwrap(),
+            fee_account: FeeAccount::from(address),
+            fee_signature,
+        };
+
+        assert_eq!(bundle.sequencing_fee, sequencing_fee);
     }
 
     async fn test_marketplace_fallback_builder(public_mempool: bool) {
@@ -662,6 +696,10 @@ mod test {
         // Use `_mock_solver` here to avoid it being dropped.
         let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
 
+        let keypair = FeeAccount::test_key_pair();
+        let address = keypair.address();
+        let base_fee = FeeAmount::from(10);
+
         // Start and connect to a fallback builder.
         let init = BuilderConfig::init(
             false,
@@ -676,7 +714,7 @@ mod test {
             Duration::from_secs(2),
             5,
             Duration::from_secs(2),
-            FeeAmount::from(10),
+            base_fee,
             None,
             solver_base_url,
         );
@@ -689,7 +727,7 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
         let transactions = vec![registered_transaction, unregistered_transaction.clone()];
-        if public_mempool {
+        let bundle = if public_mempool {
             let server = &network.server;
             for transaction in transactions {
                 server.submit_transaction(transaction).await.unwrap();
@@ -703,9 +741,8 @@ mod test {
                 }
                 let event = events.next().await.unwrap();
 
-                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
-                    assert_eq!(txns, vec![unregistered_transaction]);
-                    break;
+                if let Some(bundle) = get_bundle(event, builder_client.clone()).await {
+                    break bundle;
                 }
             }
         } else {
@@ -717,12 +754,44 @@ mod test {
                     panic!("Didn't get a quorum proposal in 10 seconds");
                 }
                 let event = events.next().await.unwrap().unwrap();
-                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
-                    assert_eq!(txns, vec![unregistered_transaction]);
-                    break;
+                if let Some(bundle) = get_bundle(event, builder_client.clone()).await {
+                    break bundle;
                 }
             }
-        }
+        };
+
+        assert_eq!(bundle.transactions, vec![unregistered_transaction.clone()]);
+
+        let txn_commit = <[u8; 32]>::from(unregistered_transaction.clone().commit()).to_vec();
+        let signature = bundle.signature;
+        assert!(signature.verify(txn_commit, address).is_ok());
+
+        let (payload, _) = Payload::from_transactions(
+            vec![unregistered_transaction],
+            &ValidatedState::default(),
+            &NodeState::default(),
+        )
+        .await
+        .expect("unable to create payload");
+
+        let encoded_txns = payload.encode().to_vec();
+        let block_size = encoded_txns.len() as u64;
+
+        let fees = base_fee * block_size;
+
+        let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+                    &keypair,
+                    fees.as_u64().unwrap(),
+                )
+                .unwrap();
+
+        let sequencing_fee = BuilderFee {
+            fee_amount: fees.as_u64().unwrap(),
+            fee_account: FeeAccount::from(address),
+            fee_signature,
+        };
+
+        assert_eq!(bundle.sequencing_fee, sequencing_fee);
     }
 
     #[async_std::test]
