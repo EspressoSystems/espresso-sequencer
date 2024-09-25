@@ -207,18 +207,18 @@ pub async fn calc_proposal_msg(
         proposal_certificate: None,
     };
 
-    let qc_signature =
+    let quorum_signature =
         <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
             &private_key,
             block_vid_commitment.as_ref(),
         )
-        .expect("Failed to sign payload commitment while preparing QC proposal");
+        .expect("Failed to sign payload commitment while preparing Quorum proposal");
 
     let quorum_proposal_msg =
         MessageType::QuorumProposalMessage(QuorumProposalMessage::<TestTypes> {
             proposal: Arc::new(Proposal {
                 data: quorum_proposal.clone(),
-                signature: qc_signature,
+                signature: quorum_signature,
                 _pd: PhantomData,
             }),
             sender: pub_key,

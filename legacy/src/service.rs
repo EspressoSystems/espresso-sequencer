@@ -26,7 +26,7 @@ use lru::LruCache;
 
 use crate::{
     builder_state::{
-        BuildBlockInfo, DaProposalMessage, DecideMessage, QCMessage, TransactionSource,
+        BuildBlockInfo, DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
         TriggerStatus,
     },
     BlockId, LegacyCommit as _,
@@ -1192,8 +1192,8 @@ pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, V:
     // sending a DA proposal from the hotshot to the builder states
     da_sender: BroadcastSender<MessageType<Types>>,
 
-    // sending a QC proposal from the hotshot to the builder states
-    qc_sender: BroadcastSender<MessageType<Types>>,
+    // sending a Quorum proposal from the hotshot to the builder states
+    quorum_sender: BroadcastSender<MessageType<Types>>,
 
     // sending a Decide event from the hotshot to the builder states
     decide_sender: BroadcastSender<MessageType<Types>>,
@@ -1276,11 +1276,12 @@ pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, V:
                         )
                         .await;
                     }
-                    // QC proposal event
+                    // Quorum proposal event
                     EventType::QuorumProposal { proposal, sender } => {
                         // get the leader for current view
                         let leader = membership.leader(proposal.data.view_number);
-                        handle_qc_event(&qc_sender, Arc::new(proposal), sender, leader).await;
+                        handle_quorum_event(&quorum_sender, Arc::new(proposal), sender, leader)
+                            .await;
                     }
                     _ => {
                         tracing::debug!("Unhandled event from Builder");
@@ -1318,8 +1319,8 @@ pub async fn run_permissioned_standalone_builder_service<
     // sending a DA proposal from the hotshot to the builder states
     da_sender: BroadcastSender<MessageType<Types>>,
 
-    // sending a QC proposal from the hotshot to the builder states
-    qc_sender: BroadcastSender<MessageType<Types>>,
+    // sending a Quorum proposal from the hotshot to the builder states
+    quorum_sender: BroadcastSender<MessageType<Types>>,
 
     // sending a Decide event from the hotshot to the builder states
     decide_sender: BroadcastSender<MessageType<Types>>,
@@ -1389,11 +1390,12 @@ pub async fn run_permissioned_standalone_builder_service<
                         )
                         .await;
                     }
-                    // QC proposal event
+                    // Quorum proposal event
                     EventType::QuorumProposal { proposal, sender } => {
                         // get the leader for current view
                         let leader = hotshot_handle.leader(proposal.data.view_number).await;
-                        handle_qc_event(&qc_sender, Arc::new(proposal), sender, leader).await;
+                        handle_quorum_event(&quorum_sender, Arc::new(proposal), sender, leader)
+                            .await;
                     }
                     _ => {
                         tracing::error!("Unhandled event from Builder: {:?}", event.event);
@@ -1503,90 +1505,92 @@ async fn handle_da_event_implementation<Types: NodeType>(
     Ok(())
 }
 
-/// [HandleQcEventError] represents the internal class of errors that can
-/// occur when attempting to process an incoming qc proposal event.  More
+/// [HandleQuorumEventError] represents the internal class of errors that can
+/// occur when attempting to process an incoming quorum proposal event.  More
 /// specifically these are the class of error that can be returned from
-/// [handle_qc_event_implementation].
+/// [handle_quorum_event_implementation].
 #[derive(Debug)]
-enum HandleQcEventError<Types: NodeType> {
+enum HandleQuorumEventError<Types: NodeType> {
     SenderIsNotLeader,
     SignatureValidationFailed,
     BroadcastFailed(async_broadcast::SendError<MessageType<Types>>),
 }
 
-/// [handle_qc_event] is a utility function that will attempt to broadcast the
-/// given `qc_proposal` to the given `qc_channel_sender` if the given details
-/// pass validation checks, and the [BroadcastSender] `qc_channel_sender` is
+/// [handle_quorum_event] is a utility function that will attempt to broadcast the
+/// given `quorum_proposal` to the given `quorum_channel_sender` if the given details
+/// pass validation checks, and the [BroadcastSender] `quorum_channel_sender` is
 /// still open.
-async fn handle_qc_event<Types: NodeType>(
-    qc_channel_sender: &BroadcastSender<MessageType<Types>>,
-    qc_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+async fn handle_quorum_event<Types: NodeType>(
+    quorum_channel_sender: &BroadcastSender<MessageType<Types>>,
+    quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
     leader: <Types as NodeType>::SignatureKey,
 ) {
     // We're explicitly not inspecting this error, as this function is not
     // expected to return an error or any indication of an error.
-    let _ = handle_qc_event_implementation(qc_channel_sender, qc_proposal, sender, leader).await;
+    let _ =
+        handle_quorum_event_implementation(quorum_channel_sender, quorum_proposal, sender, leader)
+            .await;
 }
 
-/// [handle_qc_event_implementation] is a utility function that will attempt
-/// to broadcast the given qc_proposal to the given [qc_channel_sender] if the
+/// [handle_quorum_event_implementation] is a utility function that will attempt
+/// to broadcast the given quorum_proposal to the given [quorum_channel_sender] if the
 /// given details pass all relevant checks.
 ///
 /// There are only three conditions under which this will fail to send the
-/// message via the given `qc_channel_sender`, and they are all represented
-/// via [HandleQcEventError]. They are as follows:
-/// - [HandleQcEventError::SenderIsNotLeader]: The sender is not the leader
-/// - [HandleQcEventError::SignatureValidationFailed]: The signature validation
+/// message via the given `quorum_channel_sender`, and they are all represented
+/// via [HandleQuorumEventError]. They are as follows:
+/// - [HandleQuorumEventError::SenderIsNotLeader]: The sender is not the leader
+/// - [HandleQuorumEventError::SignatureValidationFailed]: The signature validation
 ///   failed
-/// - [HandleQcEventError::BroadcastFailed]: The broadcast failed as no receiver
+/// - [HandleQuorumEventError::BroadcastFailed]: The broadcast failed as no receiver
 ///   is in place to receive the message
 ///
-/// This function is the implementation for [handle_qc_event].
-async fn handle_qc_event_implementation<Types: NodeType>(
-    qc_channel_sender: &BroadcastSender<MessageType<Types>>,
-    qc_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+/// This function is the implementation for [handle_quorum_event].
+async fn handle_quorum_event_implementation<Types: NodeType>(
+    quorum_channel_sender: &BroadcastSender<MessageType<Types>>,
+    quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
     leader: <Types as NodeType>::SignatureKey,
-) -> Result<(), HandleQcEventError<Types>> {
+) -> Result<(), HandleQuorumEventError<Types>> {
     tracing::debug!(
-        "QCProposal: Leader: {:?} for the view: {:?}",
+        "QuorumProposal: Leader: {:?} for the view: {:?}",
         leader,
-        qc_proposal.data.view_number
+        quorum_proposal.data.view_number
     );
 
-    let leaf = Leaf::from_quorum_proposal(&qc_proposal.data);
+    let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
 
-    // check if the sender is the leader and the signature is valid; if yes, broadcast the QC proposal
+    // check if the sender is the leader and the signature is valid; if yes, broadcast the Quorum proposal
     if sender != leader {
-        tracing::error!("Sender is not Leader on QCProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", qc_proposal.data.view_number, leader, sender);
-        return Err(HandleQcEventError::SenderIsNotLeader);
+        tracing::error!("Sender is not Leader on QuorumProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", quorum_proposal.data.view_number, leader, sender);
+        return Err(HandleQuorumEventError::SenderIsNotLeader);
     }
 
-    if !sender.validate(&qc_proposal.signature, leaf.legacy_commit().as_ref()) {
-        tracing::error!("Validation Failure on QCProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", qc_proposal.data.view_number, leader, sender);
-        return Err(HandleQcEventError::SignatureValidationFailed);
+    if !sender.validate(&quorum_proposal.signature, leaf.legacy_commit().as_ref()) {
+        tracing::error!("Validation Failure on QuorumProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", quorum_proposal.data.view_number, leader, sender);
+        return Err(HandleQuorumEventError::SignatureValidationFailed);
     }
 
-    let qc_msg = QCMessage::<Types> {
-        proposal: qc_proposal,
+    let quorum_msg = QuorumProposalMessage::<Types> {
+        proposal: quorum_proposal,
         sender: leader,
     };
-    let view_number = qc_msg.proposal.data.view_number;
+    let view_number = quorum_msg.proposal.data.view_number;
     tracing::debug!(
-        "Sending QC proposal to the builder states for view {:?}",
+        "Sending Quorum proposal to the builder states for view {:?}",
         view_number
     );
 
-    if let Err(e) = qc_channel_sender
-        .broadcast(MessageType::QCMessage(qc_msg))
+    if let Err(e) = quorum_channel_sender
+        .broadcast(MessageType::QuorumProposalMessage(quorum_msg))
         .await
     {
         tracing::warn!(
-            "Error {e}, failed to send QC proposal to builder states for view {:?}",
+            "Error {e}, failed to send Quorum proposal to builder states for view {:?}",
             view_number
         );
-        return Err(HandleQcEventError::BroadcastFailed(e));
+        return Err(HandleQuorumEventError::BroadcastFailed(e));
     }
 
     Ok(())
@@ -1827,9 +1831,9 @@ mod test {
     };
 
     use super::{
-        handle_da_event_implementation, handle_qc_event_implementation, AvailableBlocksError,
+        handle_da_event_implementation, handle_quorum_event_implementation, AvailableBlocksError,
         BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
-        HandleQcEventError, HandleReceivedTxns, HotShotEventsService, ProxyGlobalState,
+        HandleQuorumEventError, HandleReceivedTxns, HotShotEventsService, ProxyGlobalState,
     };
 
     // GlobalState Tests
@@ -4383,24 +4387,24 @@ mod test {
         }
     }
 
-    // handle_qc_event Tests
+    // handle_quorum_event Tests
 
-    /// This test checks that the error [HandleQcEventError::SenderIsNotLeader]
+    /// This test checks that the error [HandleQuorumEventError::SenderIsNotLeader]
     /// is returned under the right conditions of invoking
-    /// [handle_qc_event_implementation].
+    /// [handle_quorum_event_implementation].
     ///
     /// To trigger this error, we simply need to ensure that the public keys
     /// provided for the leader and the sender do not match.
     #[async_std::test]
-    async fn test_handle_qc_event_error_sender_is_not_leader() {
+    async fn test_handle_quorum_event_error_sender_is_not_leader() {
         let (sender_public_key, sender_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let (leader_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
-        let (qc_channel_sender, _) = async_broadcast::broadcast(10);
+        let (quorum_channel_sender, _) = async_broadcast::broadcast(10);
         let view_number = ViewNumber::new(10);
 
-        let qc_proposal = {
+        let quorum_proposal = {
             let leaf = Leaf::<TestTypes>::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
@@ -4420,28 +4424,28 @@ mod test {
             }
         };
 
-        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
 
         let signature =
             <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.legacy_commit().as_ref())
                 .unwrap();
 
-        let signed_qc_proposal = Arc::new(Proposal {
-            data: qc_proposal,
+        let signed_quorum_proposal = Arc::new(Proposal {
+            data: quorum_proposal,
             signature,
             _pd: Default::default(),
         });
 
-        let result = handle_qc_event_implementation(
-            &qc_channel_sender,
-            signed_qc_proposal.clone(),
+        let result = handle_quorum_event_implementation(
+            &quorum_channel_sender,
+            signed_quorum_proposal.clone(),
             sender_public_key,
             leader_public_key,
         )
         .await;
 
         match result {
-            Err(HandleQcEventError::SenderIsNotLeader) => {
+            Err(HandleQuorumEventError::SenderIsNotLeader) => {
                 // This is expected.
             }
             Ok(_) => {
@@ -4453,9 +4457,9 @@ mod test {
         }
     }
 
-    /// This test checks that the error [HandleQcEventError::SignatureValidationFailed]
+    /// This test checks that the error [HandleQuorumEventError::SignatureValidationFailed]
     /// is returned under the right conditions of invoking
-    /// [handle_qc_event_implementation].
+    /// [handle_quorum_event_implementation].
     ///
     /// To trigger this error, we simply need to ensure that the signature
     /// provided to the [Proposal] does not match the public key of the sender.
@@ -4463,15 +4467,15 @@ mod test {
     /// Additionally, the public keys passed for both the leader and the sender
     /// need to match each other.
     #[async_std::test]
-    async fn test_handle_qc_event_error_signature_validation_failed() {
+    async fn test_handle_quorum_event_error_signature_validation_failed() {
         let (sender_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let (_, leader_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
-        let (qc_channel_sender, _) = async_broadcast::broadcast(10);
+        let (quorum_channel_sender, _) = async_broadcast::broadcast(10);
         let view_number = ViewNumber::new(10);
 
-        let qc_proposal = {
+        let quorum_proposal = {
             let leaf = Leaf::<TestTypes>::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
@@ -4491,28 +4495,28 @@ mod test {
             }
         };
 
-        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
 
         let signature =
             <BLSPubKey as SignatureKey>::sign(&leader_private_key, leaf.legacy_commit().as_ref())
                 .unwrap();
 
-        let signed_qc_proposal = Arc::new(Proposal {
-            data: qc_proposal,
+        let signed_quorum_proposal = Arc::new(Proposal {
+            data: quorum_proposal,
             signature,
             _pd: Default::default(),
         });
 
-        let result = handle_qc_event_implementation(
-            &qc_channel_sender,
-            signed_qc_proposal.clone(),
+        let result = handle_quorum_event_implementation(
+            &quorum_channel_sender,
+            signed_quorum_proposal.clone(),
             sender_public_key,
             sender_public_key,
         )
         .await;
 
         match result {
-            Err(HandleQcEventError::SignatureValidationFailed) => {
+            Err(HandleQuorumEventError::SignatureValidationFailed) => {
                 // This is expected.
             }
             Ok(_) => {
@@ -4524,27 +4528,27 @@ mod test {
         }
     }
 
-    /// This test checks that the error [HandleQcEventError::BroadcastFailed]
+    /// This test checks that the error [HandleQuorumEventError::BroadcastFailed]
     /// is returned under the right conditions of invoking
-    /// [handle_qc_event_implementation].
+    /// [handle_quorum_event_implementation].
     ///
     /// To trigger this error, we simply need to ensure that the broadcast
     /// channel receiver has been closed / dropped before the attempt to
     /// send on the broadcast sender is performed.
     #[async_std::test]
-    async fn test_handle_qc_event_error_broadcast_failed() {
+    async fn test_handle_quorum_event_error_broadcast_failed() {
         let (sender_public_key, sender_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let (leader_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let qc_channel_sender = {
-            let (qc_channel_sender, _) = async_broadcast::broadcast(10);
-            qc_channel_sender
+        let quorum_channel_sender = {
+            let (quorum_channel_sender, _) = async_broadcast::broadcast(10);
+            quorum_channel_sender
         };
 
         let view_number = ViewNumber::new(10);
 
-        let qc_proposal = {
+        let quorum_proposal = {
             let leaf = Leaf::<TestTypes>::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
@@ -4564,28 +4568,28 @@ mod test {
             }
         };
 
-        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
 
         let signature =
             <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.legacy_commit().as_ref())
                 .unwrap();
 
-        let signed_qc_proposal = Arc::new(Proposal {
-            data: qc_proposal,
+        let signed_quorum_proposal = Arc::new(Proposal {
+            data: quorum_proposal,
             signature,
             _pd: Default::default(),
         });
 
-        let result = handle_qc_event_implementation(
-            &qc_channel_sender,
-            signed_qc_proposal.clone(),
+        let result = handle_quorum_event_implementation(
+            &quorum_channel_sender,
+            signed_quorum_proposal.clone(),
             sender_public_key,
             leader_public_key,
         )
         .await;
 
         match result {
-            Err(HandleQcEventError::BroadcastFailed(_)) => {
+            Err(HandleQuorumEventError::BroadcastFailed(_)) => {
                 // This is expected.
             }
             Ok(_) => {
@@ -4597,18 +4601,18 @@ mod test {
         }
     }
 
-    /// This test checks to ensure that [handle_qc_event_implementation]
+    /// This test checks to ensure that [handle_quorum_event_implementation]
     /// completes successfully as expected when the correct conditions are met.
     #[async_std::test]
-    async fn test_handle_qc_event_success() {
+    async fn test_handle_quorum_event_success() {
         let (sender_public_key, sender_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let (leader_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (qc_channel_sender, qc_channel_receiver) = async_broadcast::broadcast(10);
+        let (quorum_channel_sender, quorum_channel_receiver) = async_broadcast::broadcast(10);
         let view_number = ViewNumber::new(10);
 
-        let qc_proposal = {
+        let quorum_proposal = {
             let leaf = Leaf::<TestTypes>::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
@@ -4628,21 +4632,21 @@ mod test {
             }
         };
 
-        let leaf = Leaf::from_quorum_proposal(&qc_proposal);
+        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
 
         let signature =
             <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.legacy_commit().as_ref())
                 .unwrap();
 
-        let signed_qc_proposal = Arc::new(Proposal {
-            data: qc_proposal,
+        let signed_quorum_proposal = Arc::new(Proposal {
+            data: quorum_proposal,
             signature,
             _pd: Default::default(),
         });
 
-        let result = handle_qc_event_implementation(
-            &qc_channel_sender,
-            signed_qc_proposal.clone(),
+        let result = handle_quorum_event_implementation(
+            &quorum_channel_sender,
+            signed_quorum_proposal.clone(),
             sender_public_key,
             leader_public_key,
         )
@@ -4657,13 +4661,13 @@ mod test {
             }
         }
 
-        let mut qc_channel_receiver = qc_channel_receiver;
-        match qc_channel_receiver.next().await {
-            Some(MessageType::QCMessage(da_proposal_message)) => {
-                assert_eq!(da_proposal_message.proposal, signed_qc_proposal);
+        let mut quorum_channel_receiver = quorum_channel_receiver;
+        match quorum_channel_receiver.next().await {
+            Some(MessageType::QuorumProposalMessage(da_proposal_message)) => {
+                assert_eq!(da_proposal_message.proposal, signed_quorum_proposal);
             }
             _ => {
-                panic!("Expected a QCMessage, but got something else");
+                panic!("Expected a QuorumProposalMessage, but got something else");
             }
         }
     }

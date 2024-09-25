@@ -39,7 +39,9 @@ mod tests {
         state_types::{TestInstanceState, TestValidatedState},
     };
 
-    use crate::builder_state::{DaProposalMessage, DecideMessage, QCMessage, TransactionSource};
+    use crate::builder_state::{
+        DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
+    };
     use crate::service::{
         handle_received_txns, GlobalState, ProxyGlobalState, ReceivedTransaction,
     };
@@ -89,12 +91,12 @@ mod tests {
         let multiplication_factor = 5;
         const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
 
-        // settingup the broadcast channels i.e [From hostshot: (tx, decide, da, qc, )], [From api:(req - broadcast, res - mpsc channel) ]
+        // settingup the broadcast channels i.e [From hostshot: (tx, decide, da, quorum, )], [From api:(req - broadcast, res - mpsc channel) ]
         let (decide_sender, decide_receiver) =
             broadcast::<MessageType<TestTypes>>(num_test_messages * multiplication_factor);
         let (da_sender, da_receiver) =
             broadcast::<MessageType<TestTypes>>(num_test_messages * multiplication_factor);
-        let (qc_sender, qc_receiver) =
+        let (quorum_sender, quorum_proposal_receiver) =
             broadcast::<MessageType<TestTypes>>(num_test_messages * multiplication_factor);
         let (bootstrap_sender, bootstrap_receiver) =
             broadcast::<MessageType<TestTypes>>(num_test_messages * multiplication_factor);
@@ -126,7 +128,7 @@ mod tests {
             },
             decide_receiver.clone(),
             da_receiver.clone(),
-            qc_receiver.clone(),
+            quorum_proposal_receiver.clone(),
             bootstrap_receiver,
             tx_receiver,
             tx_queue,
@@ -152,7 +154,7 @@ mod tests {
         // storing response messages
         let mut previous_commitment = vid_commitment(&[], 8);
         let mut previous_view = ViewNumber::new(0);
-        let mut previous_qc_proposal = {
+        let mut previous_quorum_proposal = {
             let previous_jc = QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
@@ -299,7 +301,7 @@ mod tests {
                     }
                 };
 
-                // Prepare the QC proposal message
+                // Prepare the Quorum proposal message
                 // calculate the vid commitment over the encoded_transactions
                 let quorum_certificate_message = {
                     let block_payload = claimed_block.block_payload.clone();
@@ -335,19 +337,20 @@ mod tests {
                     };
 
                     let justify_qc = {
-                        let previous_justify_qc = previous_qc_proposal.justify_qc.clone();
+                        let previous_justify_qc = previous_quorum_proposal.justify_qc.clone();
                         // metadata
                         let _metadata = <TestBlockHeader as BlockHeader<TestTypes>>::metadata(
-                            &previous_qc_proposal.block_header,
+                            &previous_quorum_proposal.block_header,
                         );
-                        let leaf = Leaf::from_quorum_proposal(&previous_qc_proposal);
+                        let leaf = Leaf::from_quorum_proposal(&previous_quorum_proposal);
 
                         let q_data = QuorumData::<TestTypes> {
                             leaf_commit: leaf.legacy_commit(),
                         };
 
-                        let previous_qc_view_number = previous_qc_proposal.view_number.u64();
-                        let view_number = if previous_qc_view_number == 0
+                        let previous_quorum_view_number =
+                            previous_quorum_proposal.view_number.u64();
+                        let view_number = if previous_quorum_view_number == 0
                             && previous_justify_qc.view_number.u64() == 0
                         {
                             ViewNumber::new(0)
@@ -366,7 +369,7 @@ mod tests {
 
                     tracing::debug!("Iteration: {} justify_qc: {:?}", round, justify_qc);
 
-                    let qc_proposal = QuorumProposal::<TestTypes> {
+                    let quorum_proposal = QuorumProposal::<TestTypes> {
                         block_header,
                         view_number: ViewNumber::new(round as u64),
                         justify_qc: justify_qc.clone(),
@@ -376,19 +379,19 @@ mod tests {
 
                     let payload_vid_commitment =
                         <TestBlockHeader as BlockHeader<TestTypes>>::payload_commitment(
-                            &qc_proposal.block_header,
+                            &quorum_proposal.block_header,
                         );
 
-                    let qc_signature = <BLSPubKey as SignatureKey>::sign(
+                    let quorum_signature = <BLSPubKey as SignatureKey>::sign(
                         &leader_priv,
                         payload_vid_commitment.as_ref(),
                     )
-                    .expect("Failed to sign payload commitment while preparing QC proposal");
+                    .expect("Failed to sign payload commitment while preparing Quorum proposal");
 
-                    QCMessage::<TestTypes> {
+                    QuorumProposalMessage::<TestTypes> {
                         proposal: Arc::new(Proposal {
-                            data: qc_proposal.clone(),
-                            signature: qc_signature,
+                            data: quorum_proposal.clone(),
+                            signature: quorum_signature,
                             _pd: PhantomData,
                         }),
                         sender: leader_pub,
@@ -439,7 +442,8 @@ mod tests {
                     .block_header
                     .payload_commitment;
                 previous_view = quorum_certificate_message.proposal.data.view_number;
-                previous_qc_proposal = quorum_certificate_message.proposal.as_ref().data.clone();
+                previous_quorum_proposal =
+                    quorum_certificate_message.proposal.as_ref().data.clone();
 
                 // Broadcast the DA proposal
                 da_sender
@@ -448,8 +452,10 @@ mod tests {
                     .unwrap();
 
                 // Broadcast the Quorum Certificate
-                qc_sender
-                    .broadcast(MessageType::QCMessage(quorum_certificate_message))
+                quorum_sender
+                    .broadcast(MessageType::QuorumProposalMessage(
+                        quorum_certificate_message,
+                    ))
                     .await
                     .unwrap();
 
@@ -468,11 +474,11 @@ mod tests {
 
         // There should be num_test_messages messages in the receivers
         let mut da_receiver = da_receiver;
-        let mut qc_receiver = qc_receiver;
+        let mut quorum_proposal_receiver = quorum_proposal_receiver;
         let mut decide_receiver = decide_receiver;
         for _ in 0..num_test_messages {
             da_receiver.recv().await.unwrap();
-            qc_receiver.recv().await.unwrap();
+            quorum_proposal_receiver.recv().await.unwrap();
             decide_receiver.recv().await.unwrap();
         }
 
@@ -481,7 +487,10 @@ mod tests {
         else {
             panic!("There should not be any more messages in the da_receiver");
         };
-        let Err(TimeoutError { .. }) = qc_receiver.recv().timeout(Duration::from_millis(100)).await
+        let Err(TimeoutError { .. }) = quorum_proposal_receiver
+            .recv()
+            .timeout(Duration::from_millis(100))
+            .await
         else {
             panic!("There should not be any more messages in the da_receiver");
         };

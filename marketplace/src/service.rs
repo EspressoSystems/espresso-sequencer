@@ -561,20 +561,20 @@ pub fn broadcast_channels<TYPES: NodeType>(
 
     pair!(tx_sender, tx_receiver);
     pair!(da_sender, da_receiver);
-    pair!(qc_sender, qc_receiver);
+    pair!(quorum_sender, quorum_proposal_receiver);
     pair!(decide_sender, decide_receiver);
 
     (
         BroadcastSenders {
             transactions: tx_sender,
             da_proposal: da_sender,
-            quorum_proposal: qc_sender,
+            quorum_proposal: quorum_sender,
             decide: decide_sender,
         },
         BroadcastReceivers {
             transactions: tx_receiver,
             da_proposal: da_receiver,
-            quorum_proposal: qc_receiver,
+            quorum_proposal: quorum_proposal_receiver,
             decide: decide_receiver,
         },
     )
@@ -670,9 +670,9 @@ pub async fn run_builder_service<TYPES: NodeType<Time = ViewNumber>>(
             EventType::DaProposal { proposal, sender } => {
                 handle_da_event(&senders.da_proposal, proposal, sender).await;
             }
-            // QC proposal event
+            // Quorum proposal event
             EventType::QuorumProposal { proposal, sender } => {
-                handle_qc_event(&senders.quorum_proposal, Arc::new(proposal), sender).await;
+                handle_quorum_event(&senders.quorum_proposal, Arc::new(proposal), sender).await;
             }
             _ => {
                 tracing::trace!("Unhandled event from Builder: {:?}", event.event);
@@ -735,34 +735,34 @@ async fn handle_da_event<TYPES: NodeType>(
 }
 
 #[instrument(skip_all, fields(sender, quorum_proposal.data.view_number))]
-async fn handle_qc_event<TYPES: NodeType>(
-    qc_channel_sender: &BroadcastSender<MessageType<TYPES>>,
+async fn handle_quorum_event<TYPES: NodeType>(
+    quorum_channel_sender: &BroadcastSender<MessageType<TYPES>>,
     quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
     sender: <TYPES as NodeType>::SignatureKey,
 ) {
     let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
 
-    // check if the sender is the leader and the signature is valid; if yes, broadcast the QC proposal
+    // check if the sender is the leader and the signature is valid; if yes, broadcast the Quorum proposal
     if !sender.validate(&quorum_proposal.signature, leaf.legacy_commit().as_ref()) {
-        error!("Validation Failure on QCProposal");
+        error!("Validation Failure on QuorumProposal");
         return;
     };
 
-    let qc_msg = QuorumProposalMessage::<TYPES> {
+    let quorum_msg = QuorumProposalMessage::<TYPES> {
         proposal: quorum_proposal,
         sender,
     };
-    let view_number = qc_msg.proposal.data.view_number;
+    let view_number = quorum_msg.proposal.data.view_number;
     tracing::debug!(
-        "Sending QC proposal to the builder states for view {:?}",
+        "Sending Quorum proposal to the builder states for view {:?}",
         view_number
     );
-    if let Err(e) = qc_channel_sender
-        .broadcast(MessageType::QuorumProposalMessage(qc_msg))
+    if let Err(e) = quorum_channel_sender
+        .broadcast(MessageType::QuorumProposalMessage(quorum_msg))
         .await
     {
         tracing::warn!(
-            "Error {e}, failed to send QC proposal to builder states for view {:?}",
+            "Error {e}, failed to send Quorum proposal to builder states for view {:?}",
             view_number
         );
     }
