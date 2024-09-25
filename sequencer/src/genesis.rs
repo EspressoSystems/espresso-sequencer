@@ -7,7 +7,10 @@ use anyhow::Context;
 use espresso_types::{
     v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
 };
-use ethers::providers::{Http, Provider};
+use ethers::{
+    providers::{Http, Provider},
+    types::H160,
+};
 use sequencer_utils::deployer::is_proxy_contract;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
@@ -91,10 +94,12 @@ impl Genesis {
             match &upgrade.upgrade_type {
                 UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
                     if let Some(fee_contract_address) = chain_config.fee_contract {
-                        if !is_proxy_contract(provider.clone(), fee_contract_address).await? {
+                        if fee_contract_address == H160::zero() {
+                            anyhow::bail!("Fee contract cannot use the zero address");
+                        } else if !is_proxy_contract(provider.clone(), fee_contract_address).await?
+                        {
                             anyhow::bail!("Fee contract's address is not a proxy");
                         }
-                        // TODO: is it ok for the fee contract to have address(0) for upgrades?
                     } else {
                         // The Fee Contract address has to be provided for an upgrade so return an error
                         anyhow::bail!("Fee contract's address for the upgrade is missing");
@@ -730,6 +735,59 @@ mod test {
                 .contains("Fee contract's address for the upgrade is missing"));
         } else {
             panic!("Expected the fee contract to be missing, but the validation succeeded");
+        }
+    }
+
+    #[async_std::test]
+    async fn test_genesis_upgrade_fee_contract_address_is_zero() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            number = 42
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 5
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+
+        // validate the fee_contract address
+        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+
+        // check if the result from the validation is an error
+        if let Err(e) = result {
+            // assert that the error message contains "Fee contract's address is not a proxy"
+            assert!(e
+                .to_string()
+                .contains("Fee contract cannot use the zero address"));
+        } else {
+            panic!("Expected the fee contract to complain about the zero address but the validation succeeded");
         }
     }
 
