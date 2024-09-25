@@ -20,6 +20,7 @@ concurrency:
 env:
   RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
+  CARGO_TERM_COLOR: always
 
 jobs:
   test:
@@ -70,14 +71,26 @@ jobs:
         run: |
           nix profile install nixpkgs#process-compose
 
+      - name: Pull Docker Images
+        run: docker compose pull || docker-compose pull
+
       - name: Test Integration
         env:
-          CARGO_TERM_COLOR: always
           NEXTEST_PROFILE: integration
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          docker compose pull || docker-compose pull
           bash -x scripts/demo-native -D
+          cargo nextest run --locked --release --all-features --verbose --nocapture
+        timeout-minutes: 40
+
+      - name: Test Marketplace Integration
+        env:
+          NEXTEST_PROFILE: integration
+          MARKETPLACE_SMOKE_TEST: true
+        run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          export PATH="$PWD/target/release:$PATH"
+          bash -x scripts/demo-native  -f process-compose.yaml -f process-compose-mp.yml -D
           cargo nextest run --locked --release --all-features --verbose --nocapture
         timeout-minutes: 40
