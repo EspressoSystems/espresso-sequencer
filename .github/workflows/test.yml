@@ -71,21 +71,27 @@ jobs:
       - name: Pull Docker Images
         run: docker compose pull || docker-compose pull
 
-      - name: Run Demo-Native
+      - name: Test Integration
+        env:
+          NEXTEST_PROFILE: integration
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           bash -x scripts/demo-native -D
-
-      - name: Test Integration
-        env:
-          NEXTEST_PROFILE: integration
-        run: cargo nextest run --locked --release --all-features --verbose --nocapture
+          sleep 1
+          cargo nextest run --locked --release --all-features --verbose --nocapture
+          process-compose down
         timeout-minutes: 40
 
       - name: Test Marketplace Integration
         env:
           NEXTEST_PROFILE: integration
           MARKETPLACE_SMOKE_TEST: true
-        run: cargo nextest run --locked --release --all-features --verbose --nocapture
+        run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          export PATH="$PWD/target/release:$PATH"
+          bash -x scripts/demo-native  -f process-compose.yaml -f process-compose-mp.yml -D
+          sleep 1
+          cargo nextest run --locked --release --all-features --verbose --nocapture
+          process-compose down
         timeout-minutes: 40
