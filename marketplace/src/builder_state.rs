@@ -1,8 +1,8 @@
 use hotshot_types::{
     data::{Leaf, QuorumProposal},
     message::Proposal,
-    traits::block_contents::{BlockHeader, BlockPayload},
     traits::{
+        block_contents::{BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType},
         EncodeBytes,
     },
@@ -99,10 +99,22 @@ pub enum Status {
 /// Builder State to hold the state of the builder
 #[derive(Debug)]
 pub struct BuilderState<TYPES: NodeType> {
+    /// txns that have been included in recent blocks that have
+    /// been built.  This is used to try and guarantee that a transaction
+    /// isn't duplicated.
+    /// Keeps a history of the last 3 proposals.
     pub included_txns: RotatingSet<Commitment<TYPES::Transaction>>,
 
-    /// txns currently in the tx_queue
-    pub txns_in_queue: HashSet<Commitment<TYPES::Transaction>>,
+    /// txn commits currently in the tx_queue.  This is used as a quick
+    /// check for whether a transaction is already in the tx_queue or
+    /// not.
+    ///
+    /// This should be kept up-to-date with the tx_queue as it acts as an
+    /// accessory to the tx_queue.
+    pub txn_commits_in_queue: HashSet<Commitment<TYPES::Transaction>>,
+
+    /// filtered queue of available transactions, taken from tx_receiver
+    pub tx_queue: Vec<Arc<ReceivedTransaction<TYPES>>>,
 
     /// da_proposal_payload_commit to (da_proposal, node_count)
     #[allow(clippy::type_complexity)]
@@ -132,9 +144,6 @@ pub struct BuilderState<TYPES: NodeType> {
 
     /// incoming stream of transactions
     pub tx_receiver: BroadcastReceiver<Arc<ReceivedTransaction<TYPES>>>,
-
-    /// filtered queue of available transactions, taken from tx_receiver
-    pub tx_queue: Vec<Arc<ReceivedTransaction<TYPES>>>,
 
     /// global state handle, defined in the service.rs
     pub global_state: Arc<RwLock<GlobalState<TYPES>>>,
@@ -354,10 +363,27 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         })
     }
 
-    /// processing the DA proposal
-    /// pending whether it's processed already, if so, skip, or else, process it
-    /// deciding whether we have matching quorum proposal, if so, we remove them from the storage and
-    /// spawn a clone
+    /// [process_da_proposal] is a method that is used to handle incoming DA
+    /// proposal messages from an incoming HotShot [Event]. A DA Proposals is
+    /// a proposals that is meant to be voted on by consensus nodes in order to
+    /// determine which transactions should be included for this view.
+    ///
+    /// A DA Proposal in conjunction with a Quorum Proposal is an indicator
+    /// that a new Block / Leaf is being proposed for the HotShot network. So
+    /// we need to be able to propose new Bundles on top of these proposals.
+    ///
+    /// In order to do so we must first wait until we have both a DA Proposal
+    /// and a Quorum Proposal.  If we do not, then we can just record the
+    /// proposal we have and wait for the other to arrive.
+    ///
+    /// If we do have a matching Quorum Proposal, then we can proceed to make
+    /// a decision about extending the current [BuilderState] via
+    /// [BuilderState::spawn_clone_that_extends_self].
+    ///
+    /// > Note: In the case of `process_da_proposal` if we don't have a corresponding
+    /// > Quorum Proposal, then we will have to wait for `process_quorum_proposal`
+    /// > to be called with the matching Quorum Proposal.  Until that point we
+    /// > exit knowing we have fulfilled the DA proposal portion.
     #[tracing::instrument(skip_all, name = "process da proposal",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     async fn process_da_proposal(&mut self, da_msg: Arc<DaProposalMessage<TYPES>>) {
@@ -374,47 +400,59 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             da_msg.builder_commitment
         );
 
-        // If we've never processed this da proposal before, process it
-        if let std::collections::hash_map::Entry::Vacant(e) = self
+        let Entry::Vacant(e) = self
             .da_proposal_payload_commit_to_da_proposal
             .entry((da_msg.builder_commitment.clone(), da_msg.view_number))
-        {
-            // if we have matching da and quorum proposals, we can skip storing the one, and remove
-            // the other from storage, and call build_block with both, to save a little space.
-            if let Entry::Occupied(quorum_proposal) = self
-                .quorum_proposal_payload_commit_to_quorum_proposal
-                .entry((da_msg.builder_commitment.clone(), da_msg.view_number))
-            {
-                let quorum_proposal = quorum_proposal.remove();
-
-                // if we have a matching quorum proposal
-                // which means they have matching BuilderCommitment and view number
-                //  if (this is the correct parent or
-                //      (the correct parent is missing and this is the highest view))
-                //    spawn a clone
-                if quorum_proposal.data.view_number == da_msg.view_number {
-                    tracing::info!(
-                        "Spawning a clone from process DA proposal for view number: {:?}",
-                        da_msg.view_number
-                    );
-                    // remove this entry from quorum_proposal_payload_commit_to_quorum_proposal
-                    self.quorum_proposal_payload_commit_to_quorum_proposal
-                        .remove(&(da_msg.builder_commitment.clone(), da_msg.view_number));
-
-                    self.spawn_clone_that_extends_self(da_msg, quorum_proposal)
-                        .await;
-                } else {
-                    tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
-                }
-            } else {
-                e.insert(da_msg);
-            }
-        } else {
+        else {
             tracing::debug!("Payload commitment already exists in the da_proposal_payload_commit_to_da_proposal hashmap, so ignoring it");
+            return;
+        };
+
+        // if we have matching da and quorum proposals, we can skip storing the one, and remove
+        // the other from storage, and call build_block with both, to save a little space.
+        let Entry::Occupied(quorum_proposal) = self
+            .quorum_proposal_payload_commit_to_quorum_proposal
+            .entry((da_msg.builder_commitment.clone(), da_msg.view_number))
+        else {
+            e.insert(da_msg);
+            return;
+        };
+
+        let quorum_proposal = quorum_proposal.remove();
+
+        if quorum_proposal.data.view_number != da_msg.view_number {
+            tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
+            return;
         }
+
+        self.spawn_clone_that_extends_self(da_msg, quorum_proposal.clone())
+            .await;
     }
 
-    /// processing the quorum proposal
+    /// [process_quorum_proposal] is a method that is used to handle incoming
+    /// Quorum Proposal messages from an incoming HotShot [Event]. A Quorum
+    /// Proposal is a proposal that indicates the next potential Block of the
+    /// chain is being proposed for the HotShot network.  This proposal is
+    /// voted on by the consensus nodes in order to determine if whether this
+    /// will be the next Block of the chain or not.
+    ///
+    /// A Quorum Proposal in conjunction with a DA Proposal is an indicator
+    /// that a new Block / Leaf is being proposed for the HotShot network. So
+    /// we need to be able to propose new Bundles on top of these proposals.
+    ///
+    /// In order to do so we must first wait until we have both a DA Proposal
+    /// and a Quorum Proposal.  If we do not, then we can just record the
+    /// proposal we have and wait for the other to arrive.
+    ///
+    /// If we do have a matching DA Proposal, then we can proceed to make
+    /// a decision about extending the current [BuilderState] via
+    /// [BuilderState::spawn_clone_that_extends_self].
+    ///
+    /// > Note: In the case of `process_quorum_proposal` if we don't have a
+    /// > corresponding DA Proposal, then we will have to wait for
+    /// > `process_da_proposal` to be called with the matching DA Proposal.
+    /// > Until that point we exit knowing we have fulfilled the Quorum proposal
+    /// > portion.
     //#[tracing::instrument(skip_all, name = "Process Quorum Proposal")]
     #[tracing::instrument(skip_all, name = "process quorum proposal",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
@@ -427,9 +465,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // Two cases to handle:
         // Case 1: Bootstrapping phase
         // Case 2: No intended builder state exist
-        // To handle both cases, we can have the highest view number builder state running
-        // and only doing the insertion if and only if intended builder state for a particular view is not present
-        // check the presence of quorum_proposal.data.view_number-1 in the spawned_builder_states list
         let quorum_proposal = &qc_msg.proposal;
         let view_number = quorum_proposal.data.view_number;
         let payload_builder_commitment = quorum_proposal.data.block_header.builder_commitment();
@@ -439,39 +474,42 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             payload_builder_commitment
         );
 
-        // first check whether vid_commitment exists in the qc_payload_commit_to_qc hashmap, if yer, ignore it, otherwise validate it and later insert in
-        if let std::collections::hash_map::Entry::Vacant(e) = self
+        // first check whether vid_commitment exists in the
+        // qc_payload_commit_to_qc hashmap, if yes, ignore it, otherwise
+        // validate it and later insert in
+
+        let Entry::Vacant(e) = self
             .quorum_proposal_payload_commit_to_quorum_proposal
             .entry((payload_builder_commitment.clone(), view_number))
-        {
-            // if we have matching da and quorum proposals, we can skip storing the one, and remove the other from storage, and call build_block with both, to save a little space.
-            if let Entry::Occupied(da_proposal) = self
-                .da_proposal_payload_commit_to_da_proposal
-                .entry((payload_builder_commitment.clone(), view_number))
-            {
-                let da_proposal_info = da_proposal.remove();
-                // remove the entry from the da_proposal_payload_commit_to_da_proposal hashmap
-                self.da_proposal_payload_commit_to_da_proposal
-                    .remove(&(payload_builder_commitment.clone(), view_number));
-
-                // also make sure we clone for the same view number( check incase payload commitments are same)
-                if da_proposal_info.view_number == view_number {
-                    tracing::info!(
-                        "Spawning a clone from process QC proposal for view number: {:?}",
-                        view_number
-                    );
-
-                    self.spawn_clone_that_extends_self(da_proposal_info, quorum_proposal.clone())
-                        .await;
-                } else {
-                    tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
-                }
-            } else {
-                e.insert(quorum_proposal.clone());
-            }
-        } else {
+        else {
             tracing::debug!("Payload commitment already exists in the quorum_proposal_payload_commit_to_quorum_proposal hashmap, so ignoring it");
+            return;
+        };
+
+        // if we have matching da and quorum proposals, we can skip storing
+        // the one, and remove the other from storage, and call build_block
+        // with both, to save a little space.
+        let Entry::Occupied(da_proposal) = self
+            .da_proposal_payload_commit_to_da_proposal
+            .entry((payload_builder_commitment.clone(), view_number))
+        else {
+            e.insert(quorum_proposal.clone());
+            return;
+        };
+
+        let da_proposal_info = da_proposal.remove();
+        // remove the entry from the da_proposal_payload_commit_to_da_proposal hashmap
+        self.da_proposal_payload_commit_to_da_proposal
+            .remove(&(payload_builder_commitment.clone(), view_number));
+
+        // also make sure we clone for the same view number
+        // (check incase payload commitments are same)
+        if da_proposal_info.view_number != view_number {
+            tracing::debug!("Not spawning a clone despite matching DA and QC payload commitments, as they corresponds to different view numbers");
         }
+
+        self.spawn_clone_that_extends_self(da_proposal_info, quorum_proposal.clone())
+            .await;
     }
 
     /// [spawn_a_clone_that_extends_self] is a helper function that is used by
@@ -537,6 +575,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             );
             return Some(Status::ShouldExit);
         }
+
         tracing::info!(
             "Decide@{:?}; Task@{:?} not exiting; views >= {:?} being retained",
             decide_view_number.u64(),
@@ -591,13 +630,19 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         }
 
         for tx in da_proposal_info.txn_commitments.iter() {
-            self.txns_in_queue.remove(tx);
+            self.txn_commits_in_queue.remove(tx);
         }
+
+        // We add the included transactions to the included_txns set, so we can
+        // also filter them should they be included in a future transaction
+        // submission.
         self.included_txns
             .extend(da_proposal_info.txn_commitments.iter().cloned());
 
+        // We wish to keep only the transactions in the tx_queue to those that
+        // also exist in the txns_in_queue set.
         self.tx_queue
-            .retain(|tx| self.txns_in_queue.contains(&tx.commit));
+            .retain(|tx| self.txn_commits_in_queue.contains(&tx.commit));
 
         // register the spawned builder state to spawned_builder_states in the
         // global state We register this new child within the global_state, so
@@ -611,11 +656,19 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.event_loop();
     }
 
-    /// build a block from the BuilderStateId
-    /// This function collects available transactions not already in `included_txns` from near future
-    /// then form them into a block and calculate the block's `builder_hash` `block_payload` and `metadata`
-    /// insert `builder_hash` to `builder_commitments`
-    /// and finally return a struct in `BuildBlockInfo`
+    /// [build_block] is a method that will return a [BuildBlockInfo] if it is
+    /// able to build a block.  If it encounters an error building a block, then
+    /// it will return None.
+    ///
+    /// This first starts by collecting transactions to include in the block. It
+    /// will wait until it has at least one transaction to include in the block,
+    /// or up to the configured `maximize_txn_capture_timeout` duration elapses.
+    /// At which point it will attempt to build a block with the transactions it
+    /// has collected.
+    ///
+    /// Upon successfully building a block, a commitment for the [BuilderStateId]
+    /// and Block payload pair are stored, and a [BuildBlockInfo] is created
+    /// and returned.
     #[tracing::instrument(skip_all, name = "build block",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     async fn build_block(
@@ -637,120 +690,287 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
             async_sleep(sleep_interval).await
         }
-        if let Ok((payload, metadata)) =
+
+        let Ok((payload, metadata)) =
             <TYPES::BlockPayload as BlockPayload<TYPES>>::from_transactions(
                 self.tx_queue.iter().map(|tx| tx.tx.clone()),
                 &self.validated_state,
                 &self.instance_state,
             )
             .await
-        {
-            let builder_hash = payload.builder_commitment(&metadata);
-            // count the number of txns
-            let txn_count = payload.num_transactions(&metadata);
+        else {
+            tracing::warn!("Failed to build block payload");
+            return None;
+        };
 
-            // insert the recently built block into the builder commitments
-            self.builder_commitments
-                .insert((state_id, builder_hash.clone()));
+        let builder_hash = payload.builder_commitment(&metadata);
+        // count the number of txns
+        let txn_count = payload.num_transactions(&metadata);
 
-            let encoded_txns: Vec<u8> = payload.encode().to_vec();
-            let block_size: u64 = encoded_txns.len() as u64;
-            let offered_fee: u64 = self.base_fee * block_size;
+        // insert the recently built block into the builder commitments
+        self.builder_commitments
+            .insert((state_id, builder_hash.clone()));
 
-            tracing::info!(
-                "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
-                self.parent_block_references.view_number,
-                txn_count,
-                builder_hash
-            );
+        let encoded_txns: Vec<u8> = payload.encode().to_vec();
+        let block_size: u64 = encoded_txns.len() as u64;
+        let offered_fee: u64 = self.base_fee * block_size;
 
-            Some(BuildBlockInfo {
-                id: BlockId {
-                    view: self.parent_block_references.view_number,
-                    hash: builder_hash,
-                },
-                block_size,
-                offered_fee,
-                block_payload: payload,
-                metadata,
-            })
-        } else {
-            tracing::warn!("build block, returning None");
-            None
-        }
+        tracing::info!(
+            "Builder view num {:?}, building block with {:?} txns, with builder hash {:?}",
+            self.parent_block_references.view_number,
+            txn_count,
+            builder_hash
+        );
+
+        Some(BuildBlockInfo {
+            id: BlockId {
+                view: self.parent_block_references.view_number,
+                hash: builder_hash,
+            },
+            block_size,
+            offered_fee,
+            block_payload: payload,
+            metadata,
+        })
     }
 
+    /// [process_block_request] is a method that is used to handle incoming
+    /// [RequestMessage]s.  These [RequestMessage]s are looking for a bundle
+    /// of transactions to be included in the next block. Instead of returning
+    /// a value, this method's response will be provided to the [Sender] that
+    /// is included in the [RequestMessage].
+    ///
+    /// At this point this particular [BuilderState] has already been deemed
+    /// as the [BuilderState] that should handle this request, and it is up
+    /// to this [BuilderState] to provide the response, if it is able to do
+    /// so.
+    ///
+    /// The response will be a [ResponseMessage] that contains the transactions
+    /// the `Builder` wants to include in the next block in addition to the
+    /// expected block size, offered fee, and the
+    /// Builder's commit block of the data being returned.
     async fn process_block_request(&mut self, req: RequestMessage<TYPES>) {
         let requested_view_number = req.requested_view_number;
         // If a spawned clone is active then it will handle the request, otherwise the highest view num builder will handle
-        if requested_view_number == self.parent_block_references.view_number {
-            tracing::info!(
-                "Request handled by builder with view {}@{:?} for (view_num: {:?})",
-                self.parent_block_references.vid_commitment,
-                self.parent_block_references.view_number,
-                requested_view_number
-            );
-            let response = self
-                .build_block(BuilderStateId {
-                    parent_commitment: self.parent_block_references.vid_commitment,
-                    parent_view: requested_view_number,
-                })
-                .await;
-
-            match response {
-                Some(response) => {
-                    // form the response message
-                    let response_msg = ResponseMessage {
-                        builder_hash: response.id.hash.clone(),
-                        block_size: response.block_size,
-                        offered_fee: response.offered_fee,
-                        transactions: response
-                            .block_payload
-                            .transactions(&response.metadata)
-                            .collect(),
-                    };
-
-                    let builder_hash = response.id.hash.clone();
-                    self.global_state.write_arc().await.update_global_state(
-                        BuilderStateId {
-                            parent_commitment: self.parent_block_references.vid_commitment,
-                            parent_view: requested_view_number,
-                        },
-                        response,
-                        response_msg.clone(),
-                    );
-
-                    // ... and finally, send the response
-                    match req.response_channel.send(response_msg).await {
-                        Ok(_sent) => {
-                            tracing::info!(
-                                "Builder {:?} Sent response to the request{:?} with builder hash {:?}",
-                                self.parent_block_references.view_number,
-                                req,
-                                builder_hash
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Builder {:?} failed to send response to {:?} with builder hash {:?}, Err: {:?}",
-                                self.parent_block_references.view_number,
-                                req,
-                                builder_hash,
-                                e
-                            );
-                        }
-                    }
-                }
-                None => {
-                    tracing::debug!("No response to send");
-                }
-            }
-        } else {
+        if requested_view_number != self.parent_block_references.view_number {
             tracing::debug!(
-                "Builder {:?} Requested Builder commitment does not match the built_from_view, so ignoring it",
-                 self.parent_block_references.view_number);
+                "Builder {:?} Requested view number does not match the built_from_view, so ignoring it",
+                self.parent_block_references.view_number
+            );
+            return;
+        }
+
+        tracing::info!(
+            "Request handled by builder with view {}@{:?} for (view_num: {:?})",
+            self.parent_block_references.vid_commitment,
+            self.parent_block_references.view_number,
+            requested_view_number
+        );
+
+        let response = self
+            .build_block(BuilderStateId {
+                parent_commitment: self.parent_block_references.vid_commitment,
+                parent_view: requested_view_number,
+            })
+            .await;
+
+        let Some(response) = response else {
+            tracing::debug!("No response to send");
+            return;
+        };
+
+        // form the response message
+        let response_msg = ResponseMessage {
+            builder_hash: response.id.hash.clone(),
+            block_size: response.block_size,
+            offered_fee: response.offered_fee,
+            transactions: response
+                .block_payload
+                .transactions(&response.metadata)
+                .collect(),
+        };
+
+        let builder_hash = response.id.hash.clone();
+        self.global_state.write_arc().await.update_global_state(
+            BuilderStateId {
+                parent_commitment: self.parent_block_references.vid_commitment,
+                parent_view: requested_view_number,
+            },
+            response,
+            response_msg.clone(),
+        );
+
+        // ... and finally, send the response
+        if let Err(e) = req.response_channel.send(response_msg).await {
+            tracing::warn!(
+                "Builder {:?} failed to send response to {:?} with builder hash {:?}, Err: {:?}",
+                self.parent_block_references.view_number,
+                req,
+                builder_hash,
+                e
+            );
+            return;
+        }
+
+        tracing::info!(
+            "Builder {:?} Sent response to the request{:?} with builder hash {:?}",
+            self.parent_block_references.view_number,
+            req,
+            builder_hash
+        );
+    }
+
+    // MARK: event loop processing for [BuilderState]
+
+    /// [event_loop_helper_handle_request] is a helper function that is used
+    /// to handle incoming [MessageType]s, specifically [RequestMessage]s, that
+    /// are received by the [BuilderState::req_receiver] channel.
+    ///
+    /// This method is used to process block requests.
+    async fn event_loop_helper_handle_request(&mut self, req: Option<MessageType<TYPES>>) {
+        tracing::debug!(
+            "Received request msg in builder {:?}: {:?}",
+            self.parent_block_references.view_number,
+            req
+        );
+
+        let Some(req) = req else {
+            tracing::warn!("No more request messages to consume");
+            return;
+        };
+
+        let MessageType::RequestMessage(req) = req else {
+            tracing::warn!("Unexpected message on requests channel: {:?}", req);
+            return;
+        };
+
+        tracing::debug!(
+            "Received request msg in builder {:?}: {:?}",
+            self.parent_block_references.view_number,
+            req
+        );
+
+        self.process_block_request(req).await;
+    }
+
+    /// [event_loop_helper_handle_da_proposal] is a helper function that is used
+    /// to handle incoming [MessageType]s, specifically [DaProposalMessage]s,
+    /// that are received by the [BuilderState::da_proposal_receiver] channel.
+    async fn event_loop_helper_handle_da_proposal(&mut self, da: Option<MessageType<TYPES>>) {
+        let Some(da) = da else {
+            tracing::warn!("No more da proposal messages to consume");
+            return;
+        };
+
+        let MessageType::DaProposalMessage(rda_msg) = da else {
+            tracing::warn!("Unexpected message on da proposals channel: {:?}", da);
+            return;
+        };
+
+        tracing::debug!(
+            "Received da proposal msg in builder {:?}:\n {:?}",
+            self.parent_block_references,
+            rda_msg.view_number
+        );
+
+        self.process_da_proposal(rda_msg).await;
+    }
+
+    /// [event_loop_helper_handle_qc_proposal] is a helper function that is used
+    /// to handle incoming [MessageType]s, specifically [QuorumProposalMessage]s,
+    /// that are received by the [BuilderState::qc_receiver] channel.
+    async fn event_loop_helper_handle_qc_proposal(&mut self, qc: Option<MessageType<TYPES>>) {
+        let Some(qc) = qc else {
+            tracing::warn!("No more quorum proposal messages to consume");
+            return;
+        };
+
+        let MessageType::QuorumProposalMessage(rqc_msg) = qc else {
+            tracing::warn!("Unexpected message on quorum proposals channel: {:?}", qc);
+            return;
+        };
+
+        tracing::debug!(
+            "Received quorum proposal msg in builder {:?}:\n {:?} for view ",
+            self.parent_block_references,
+            rqc_msg.proposal.data.view_number
+        );
+
+        self.process_quorum_proposal(rqc_msg).await;
+    }
+
+    /// [event_loop_helper_handle_decide] is a helper function that is used to
+    /// handle incoming [MessageType]s, specifically [DecideMessage]s, that are
+    /// received by the [BuilderState::decide_receiver] channel.
+    ///
+    /// This method can trigger the exit of the [BuilderState::event_loop] async
+    /// task via the returned [std::ops::ControlFlow] type.  If the returned
+    /// value is a [std::ops::ControlFlow::Break], then the
+    /// [BuilderState::event_loop]
+    /// async task should exit.
+    async fn event_loop_helper_handle_decide(
+        &mut self,
+        decide: Option<MessageType<TYPES>>,
+    ) -> std::ops::ControlFlow<()> {
+        let Some(decide) = decide else {
+            tracing::warn!("No more decide messages to consume");
+            return std::ops::ControlFlow::Continue(());
+        };
+
+        let MessageType::DecideMessage(rdecide_msg) = decide else {
+            tracing::warn!("Unexpected message on decide channel: {:?}", decide);
+            return std::ops::ControlFlow::Continue(());
+        };
+
+        let latest_decide_view_num = rdecide_msg.latest_decide_view_number;
+        tracing::debug!(
+            "Received decide msg view {:?} in builder {:?}",
+            &latest_decide_view_num,
+            self.parent_block_references
+        );
+        let decide_status = self.process_decide_event(rdecide_msg).await;
+
+        let Some(decide_status) = decide_status else {
+            tracing::warn!(
+                "decide_status was None; Continuing builder {:?}",
+                self.parent_block_references
+            );
+            return std::ops::ControlFlow::Continue(());
+        };
+
+        match decide_status {
+            Status::ShouldContinue => {
+                tracing::debug!("Continuing builder {:?}", self.parent_block_references);
+                std::ops::ControlFlow::Continue(())
+            }
+            _ => {
+                tracing::info!(
+                    "Exiting builder {:?} with decide view {:?}",
+                    self.parent_block_references,
+                    &latest_decide_view_num
+                );
+                std::ops::ControlFlow::Break(())
+            }
         }
     }
+
+    /// [event_loop] is a method that spawns an async task that attempts to
+    /// handle messages being received across the [BuilderState]s various
+    /// channels.
+    ///
+    /// This async task will continue to run until it receives a message that
+    /// indicates that it should exit.  This exit message is sent via the
+    /// [DecideMessage] channel.
+    ///
+    /// The main body of the loop listens to four channels at once, and when
+    /// a message is received it will process the message with the appropriate
+    /// handler accordingly.
+    ///
+    /// > Note: There is potential for improvement in typing here, as each of
+    /// > these receivers returns the exact same type despite being separate
+    /// > Channels.  These channels may want to convey separate types so that
+    /// > the contained message can pertain to its specific channel
+    /// > accordingly.
     #[tracing::instrument(skip_all, name = "event loop",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     pub fn event_loop(mut self) {
@@ -760,93 +980,12 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                     "Builder {:?} event loop",
                     self.parent_block_references.view_number
                 );
+
                 futures::select! {
-                    req = self.req_receiver.next() => {
-                        tracing::debug!("Received request msg in builder {:?}: {:?}", self.parent_block_references.view_number, req);
-                        match req {
-                            Some(req) => {
-                                if let MessageType::RequestMessage(req) = req {
-                                    tracing::debug!(
-                                        "Received request msg in builder {:?}: {:?}",
-                                        self.parent_block_references.view_number,
-                                        req
-                                    );
-                                    self.process_block_request(req).await;
-                                } else {
-                                    tracing::warn!("Unexpected message on requests channel: {:?}", req);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more request messages to consume");
-                            }
-                        }
-                    },
-                    da = self.da_proposal_receiver.next() => {
-                        match da {
-                            Some(da) => {
-                                if let MessageType::DaProposalMessage(rda_msg) = da {
-                                    tracing::debug!("Received da proposal msg in builder {:?}:\n {:?}", self.parent_block_references, rda_msg.view_number);
-                                    self.process_da_proposal(rda_msg).await;
-                                } else {
-                                    tracing::warn!("Unexpected message on da proposals channel: {:?}", da);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more da proposal messages to consume");
-                            }
-                        }
-                    },
-                    qc = self.qc_receiver.next() => {
-                        match qc {
-                            Some(qc) => {
-                                if let MessageType::QuorumProposalMessage(rqc_msg) = qc {
-                                    tracing::debug!("Received quorum proposal msg in builder {:?}:\n {:?} for view ", self.parent_block_references, rqc_msg.proposal.data.view_number);
-                                    self.process_quorum_proposal(rqc_msg).await;
-                                } else {
-                                    tracing::warn!("Unexpected message on quorum proposals channel: {:?}", qc);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more quorum proposal messages to consume");
-                            }
-                        }
-                    },
-                    decide = self.decide_receiver.next() => {
-                        match decide {
-                            Some(decide) => {
-                                if let MessageType::DecideMessage(rdecide_msg) = decide {
-                                    let latest_decide_view_num = rdecide_msg.latest_decide_view_number;
-                                    tracing::debug!("Received decide msg view {:?} in builder {:?}",
-                                        &latest_decide_view_num,
-                                        self.parent_block_references);
-                                    let decide_status = self.process_decide_event(rdecide_msg).await;
-                                    match decide_status{
-                                        Some(Status::ShouldExit) => {
-                                            tracing::info!("Exiting builder {:?} with decide view {:?}",
-                                                self.parent_block_references,
-                                                &latest_decide_view_num);
-                                            return;
-                                        }
-                                        Some(Status::ShouldContinue) => {
-                                            tracing::debug!("Continuing builder {:?}",
-                                                self.parent_block_references);
-                                            continue;
-                                        }
-                                        None => {
-                                            tracing::warn!("decide_status was None; Continuing builder {:?}",
-                                                self.parent_block_references);
-                                            continue;
-                                        }
-                                    }
-                                } else {
-                                    tracing::warn!("Unexpected message on decide channel: {:?}", decide);
-                                }
-                            }
-                            None => {
-                                tracing::warn!("No more decide messages to consume");
-                            }
-                        }
-                    },
+                    req = self.req_receiver.next() => self.event_loop_helper_handle_request(req).await,
+                    da = self.da_proposal_receiver.next() => self.event_loop_helper_handle_da_proposal(da).await,
+                    qc = self.qc_receiver.next() => self.event_loop_helper_handle_qc_proposal(qc).await,
+                    decide = self.decide_receiver.next() => if let std::ops::ControlFlow::Break(_) = self.event_loop_helper_handle_decide(decide).await { return; },
                 };
             }
         });
@@ -877,7 +1016,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     ) -> Self {
         let txns_in_queue: HashSet<_> = tx_queue.iter().map(|tx| tx.commit).collect();
         BuilderState {
-            txns_in_queue,
+            txn_commits_in_queue: txns_in_queue,
             parent_block_references,
             req_receiver,
             tx_queue,
@@ -902,7 +1041,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         BuilderState {
             included_txns,
-            txns_in_queue: self.txns_in_queue.clone(),
+            txn_commits_in_queue: self.txn_commits_in_queue.clone(),
             parent_block_references: self.parent_block_references.clone(),
             decide_receiver: self.decide_receiver.clone(),
             da_proposal_receiver: self.da_proposal_receiver.clone(),
@@ -926,18 +1065,31 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         while Instant::now() <= timeout_after {
             match self.tx_receiver.try_recv() {
                 Ok(tx) => {
-                    if self.included_txns.contains(&tx.commit)
-                        || self.txns_in_queue.contains(&tx.commit)
-                    {
+                    if self.included_txns.contains(&tx.commit) {
+                        // We've included this transaction in one of our
+                        // recent blocks, and we do not wish to include it
+                        // again.
                         continue;
                     }
-                    self.txns_in_queue.insert(tx.commit);
+
+                    if self.txn_commits_in_queue.contains(&tx.commit) {
+                        // We already have this transaction in our current
+                        // queue, so we do not want to include it again
+                        continue;
+                    }
+
+                    self.txn_commits_in_queue.insert(tx.commit);
                     self.tx_queue.push(tx);
                 }
+
                 Err(async_broadcast::TryRecvError::Empty)
                 | Err(async_broadcast::TryRecvError::Closed) => {
+                    // The transaction receiver is empty, or it's been closed.
+                    // If it's closed that's a big problem and we should
+                    // probably indicate it as such.
                     break;
                 }
+
                 Err(async_broadcast::TryRecvError::Overflowed(lost)) => {
                     tracing::warn!("Missed {lost} transactions due to backlog");
                     continue;
