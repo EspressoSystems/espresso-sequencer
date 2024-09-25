@@ -57,8 +57,6 @@ jobs:
         timeout-minutes: 90
 
       - name: Test
-        env:
-          CARGO_TERM_COLOR: always
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
