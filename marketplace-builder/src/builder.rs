@@ -505,20 +505,15 @@ mod test {
             .unwrap()
     }
 
-    /// Verify that the bundle associated with the received quorum proposal contains the expected
-    /// transaction.
+    /// Get the transactions in the bundle associated with the received quorum proposal.
     ///
     /// # Returns
-    /// * `true` if the verification succeeds.
-    /// * `false` if the expected quorum proposal isn't received yet.
-    ///
-    /// # Panics
-    /// * If the verification fails.
-    async fn verify_bundle(
+    /// * `Some` if the bundle is fetched.
+    /// * `None` if the quorum proposal isn't received or the bundle fetching fails.
+    async fn get_transactions(
         event: Event<SeqTypes>,
         builder_client: Client<ServerError, MarketplaceVersion>,
-        transaction: Transaction,
-    ) -> bool {
+    ) -> Option<Vec<Transaction>> {
         if let EventType::QuorumProposal { proposal, .. } = event.event {
             let parent_view_number = *proposal.data.view_number;
             let parent_commitment = Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
@@ -533,16 +528,12 @@ mod test {
                 .send()
                 .await
             {
-                if bundle.transactions.is_empty() {
-                    return false;
-                }
-                assert_eq!(bundle.transactions, vec![transaction]);
-                return true;
+                return Some(bundle.transactions);
             } else {
-                return false;
+                return None;
             }
         }
-        false
+        None
     }
 
     async fn test_marketplace_reserve_builder(public_mempool: bool) {
@@ -608,10 +599,9 @@ mod test {
         if public_mempool {
             let server = &network.server;
             for transaction in transactions {
-                let _ = server.submit_transaction(transaction).await;
+                server.submit_transaction(transaction).await.unwrap();
             }
             let mut events = server.event_stream().await;
-            task::sleep(std::time::Duration::from_millis(1000)).await;
 
             let start = Instant::now();
             loop {
@@ -620,19 +610,13 @@ mod test {
                 }
                 let event = events.next().await.unwrap();
 
-                if verify_bundle(
-                    event,
-                    builder_client.clone(),
-                    registered_transaction.clone(),
-                )
-                .await
-                {
+                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
+                    assert_eq!(txns, vec![registered_transaction]);
                     break;
                 }
             }
         } else {
             let mut events = submit_transactions_via_private_mempool(transactions, urls).await;
-            task::sleep(std::time::Duration::from_millis(1000)).await;
 
             let start = Instant::now();
             loop {
@@ -640,13 +624,8 @@ mod test {
                     panic!("Didn't get a quorum proposal in 10 seconds");
                 }
                 let event = events.next().await.unwrap().unwrap();
-                if verify_bundle(
-                    event,
-                    builder_client.clone(),
-                    registered_transaction.clone(),
-                )
-                .await
-                {
+                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
+                    assert_eq!(txns, vec![registered_transaction]);
                     break;
                 }
             }
@@ -713,10 +692,9 @@ mod test {
         if public_mempool {
             let server = &network.server;
             for transaction in transactions {
-                let _ = server.submit_transaction(transaction).await;
+                server.submit_transaction(transaction).await.unwrap();
             }
             let mut events = server.event_stream().await;
-            task::sleep(std::time::Duration::from_millis(1000)).await;
 
             let start = Instant::now();
             loop {
@@ -725,33 +703,22 @@ mod test {
                 }
                 let event = events.next().await.unwrap();
 
-                if verify_bundle(
-                    event,
-                    builder_client.clone(),
-                    unregistered_transaction.clone(),
-                )
-                .await
-                {
+                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
+                    assert_eq!(txns, vec![unregistered_transaction]);
                     break;
                 }
             }
         } else {
             let mut events = submit_transactions_via_private_mempool(transactions, urls).await;
-            task::sleep(std::time::Duration::from_millis(1000)).await;
 
             let start = Instant::now();
             loop {
-                if start.elapsed() > Duration::from_secs(15) {
+                if start.elapsed() > Duration::from_secs(10) {
                     panic!("Didn't get a quorum proposal in 10 seconds");
                 }
                 let event = events.next().await.unwrap().unwrap();
-                if verify_bundle(
-                    event,
-                    builder_client.clone(),
-                    unregistered_transaction.clone(),
-                )
-                .await
-                {
+                if let Some(txns) = get_transactions(event, builder_client.clone()).await {
+                    assert_eq!(txns, vec![unregistered_transaction]);
                     break;
                 }
             }
