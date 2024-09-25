@@ -88,7 +88,7 @@ export async function proposeSetProverTransaction(
   proverAddress: string,
 ) {
   // Prepare the transaction data to set the permissioned prover
-  let data = createPermissionedProverTxData(proverAddress);
+  const data = createPermissionedProverTxData(proverAddress);
 
   const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_PROXY_ADDRESS");
   validateEthereumAddress(contractAddress);

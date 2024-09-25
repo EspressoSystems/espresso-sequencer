@@ -21,6 +21,7 @@ export function validateEthereumAddress(address: string) {
  * Function to get the value of an environment variable from the .env file
  * @param {string} name - The name of the environment variable to retrieve
  * @returns {string} - Returns the value of the environment variable
+ * @throws {Error} - Throws an error if the environment variable is not set
  */
 export function getEnvVar(name: string): string {
   const value = process.env[name]; // Retrieve the environment variable value
@@ -32,11 +33,29 @@ export function getEnvVar(name: string): string {
 }
 
 /**
+ * Function to get list of signers from an environment variable in the .env file
+ * @param {string} name - The name of the environment variable to retrieve
+ * @returns {string[]} - Returns an array of signers parsed from the environment variable.
+ * @throws {Error} - Throws an error if the list contains duplicate values.
+ */
+export function getSignersListFromEnv(name: string): string[] {
+  const value = getEnvVar(name);
+  const signersList = value.split(",");
+  if (signersList.length != new Set(signersList).size) {
+    throw new Error(`Please review the SAFE_SIGNERS_LIST env variable, it cannot contain any duplicates.`);
+  }
+
+  return signersList;
+}
+
+/**
  * Function to create safe transaction data to be used with the safe SDK
  * @param {string} to - The destination address for the transaction
  * @param {string} data - The contract data to be sent
  * @param {number} value - The value to be sent
  * @returns {object} - Returns the safe transaction data object
+ * @throws {Error} - Throws an error if the destination address is not set, or if the contract data or contract value are empty
+ *
  */
 export function createSafeTransactionData(to: string, data: string, value: string) {
   // Check if the destination address is specified
@@ -65,7 +84,7 @@ export function createSafeTransactionData(to: string, data: string, value: strin
 export function getSigner(web3Provider: ethers.Provider): ethers.Signer {
   let orchestratorSigner;
   const use_hardware_wallet = getEnvVar("USE_HARDWARE_WALLET");
-  if (use_hardware_wallet == "true") {
+  if (use_hardware_wallet === "true") {
     // Create a signer using the ledger
     orchestratorSigner = new LedgerSigner(HIDTransport, web3Provider);
   } else {
@@ -92,7 +111,7 @@ export async function createSafeTransaction(
   value: string,
 ): Promise<LocalSafeTransaction> {
   // Prepare the safe transaction data with the contract address, data, and value
-  let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
+  const safeTransactionData = createSafeTransactionData(contractAddress, data, value);
   if (getEnvVar("USE_HARDWARE_WALLET")) {
     console.log(`Please sign the message on your connected Ledger device`);
   }

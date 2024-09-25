@@ -1,4 +1,4 @@
-import { createSafeTransactionData, getEnvVar, validateEthereumAddress } from "../safeSDK/utils";
+import { createSafeTransactionData, getEnvVar, getSignersListFromEnv, validateEthereumAddress } from "../safeSDK/utils";
 
 // Mocking process.argv
 const originalArgv = process.argv;
@@ -18,6 +18,23 @@ describe("environment tests", () => {
     process.env.RPC_URL = "http://rpc";
     const result = getEnvVar("RPC_URL");
     expect(result).toEqual("http://rpc");
+  });
+
+  it("should return the signers list of one if there is only one signer in the SAFE_SIGNERS_LIST environment variable", () => {
+    process.env.SAFE_SIGNERS_LIST = "address1";
+    const result = getSignersListFromEnv("SAFE_SIGNERS_LIST");
+    expect(result).toEqual(["address1"]);
+  });
+
+  it("should return the signers list of three if there are three signers in the SAFE_SIGNERS_LIST environment variable", () => {
+    process.env.SAFE_SIGNERS_LIST = "address1,address2,address3";
+    const result = getSignersListFromEnv("SAFE_SIGNERS_LIST");
+    expect(result).toEqual(["address1", "address2", "address3"]);
+  });
+
+  it("should throw an error if SAFE_SIGNERS_LIST environment variable has duplicates", () => {
+    process.env.SAFE_SIGNERS_LIST = "address1,address1";
+    expect(() => getSignersListFromEnv("SAFE_SIGNERS_LIST")).toThrow();
   });
 });
 
