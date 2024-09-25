@@ -218,7 +218,6 @@ pub enum DaConsensusMessage<TYPES: NodeType> {
     /// Initiate VID dispersal.
     ///
     /// Like [`DaProposal`]. Use `Msg` suffix to distinguish from `VidDisperse`.
-    /// TODO this variant should not be a [`DaConsensusMessage`] because <https://github.com/EspressoSystems/HotShot/issues/1696>
     VidDisperseMsg(Proposal<TYPES, VidDisperseShare<TYPES>>),
 }
 

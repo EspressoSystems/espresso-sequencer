@@ -45,7 +45,7 @@ spawns off five integration tests.
 - One that intersperses both broadcast and increments.
 - Two that publishes entries to the DHT and checks that other nodes can access these entries.
 
-This can fail on MacOS (and linux) due to ["too many open files."](https://github.com/EspressoSystems/hotshot-networking-demo/issues/18) The fix is:
+This can fail on MacOS (and linux) due to "too many open files." The fix is:
 
 ```bash
 ulimit -n 4096

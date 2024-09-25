@@ -222,10 +222,6 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
 
             // - Build a gossipsub network behavior
             let gossipsub: Gossipsub = Gossipsub::new(
-                // TODO do we even need this?
-                // <https://github.com/EspressoSystems/hotshot/issues/42>
-                // if messages are signed at the the consensus level AND the network
-                // level (noise), this feels redundant.
                 MessageAuthenticity::Signed(keypair.clone()),
                 gossipsub_config,
             )

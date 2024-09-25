@@ -14,6 +14,7 @@ use async_lock::RwLock;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures::future::join_all;
+use handlers::publish_proposal_from_commitment_and_metadata;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
@@ -38,7 +39,7 @@ use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     consensus::handlers::{
-        handle_quorum_proposal_recv, handle_quorum_proposal_validated, publish_proposal_if_able,
+        handle_quorum_proposal_recv, handle_quorum_proposal_validated,
         update_state_and_vote_if_able, VoteInfo,
     },
     events::HotShotEvent,
@@ -191,7 +192,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
         event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     ) -> Result<()> {
-        let create_and_send_proposal_handle = publish_proposal_if_able(
+        let create_and_send_proposal_handle = publish_proposal_from_commitment_and_metadata(
             view,
             event_sender,
             event_receiver,

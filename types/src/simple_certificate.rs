@@ -198,27 +198,6 @@ impl<TYPES: NodeType> Display for QuorumCertificate<TYPES> {
 }
 
 impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
-    // TODO: Replace this function with `is_relevant` after the following issue is done:
-    // https://github.com/EspressoSystems/HotShot/issues/3357.
-    /// Determines whether or not a certificate is relevant (i.e. we still have time to reach a
-    /// decide)
-    ///
-    /// # Errors
-    /// Returns an error when the certificate is no longer relevant
-    pub fn temp_is_relevant(
-        &self,
-        view_number: TYPES::Time,
-        decided_upgrade_certificate: Option<Self>,
-    ) -> Result<()> {
-        ensure!(
-            self.data.decide_by >= view_number
-                || decided_upgrade_certificate.is_some_and(|cert| cert == *self),
-            "Upgrade certificate is no longer relevant."
-        );
-
-        Ok(())
-    }
-
     /// Determines whether or not a certificate is relevant (i.e. we still have time to reach a
     /// decide)
     ///

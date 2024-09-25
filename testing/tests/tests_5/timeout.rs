@@ -7,8 +7,6 @@
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-// TODO Add memory network tests after this issue is finished:
-// https://github.com/EspressoSystems/HotShot/issues/1790
 async fn test_timeout() {
     use std::time::Duration;
 
@@ -56,8 +54,6 @@ async fn test_timeout() {
             },
         );
 
-    // TODO ED Test with memory network once issue is resolved
-    // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
         .gen_launcher(0)
         .launch()
@@ -120,8 +116,6 @@ async fn test_timeout_libp2p() {
             },
         );
 
-    // TODO ED Test with memory network once issue is resolved
-    // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
         .gen_launcher(0)
         .launch()

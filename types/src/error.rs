@@ -82,8 +82,6 @@ pub enum HotShotError<TYPES: NodeType> {
         threshold: NonZeroU64,
     },
     /// Miscellaneous error
-    /// TODO fix this with
-    /// #181 <https://github.com/EspressoSystems/HotShot/issues/181>
     Misc {
         /// source of error
         context: String,

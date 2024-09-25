@@ -34,7 +34,10 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::constants::SRS_DEGREE;
+use crate::{
+    constants::SRS_DEGREE, data::VidDisperse as HotShotVidDisperse, data::VidDisperseShare,
+    message::Proposal,
+};
 
 /// VID scheme constructor.
 ///
@@ -104,6 +107,11 @@ pub type VidCommon = <VidSchemeType as VidScheme>::Common;
 pub type VidShare = <VidSchemeType as VidScheme>::Share;
 /// VID PrecomputeData type
 pub type VidPrecomputeData = <VidSchemeType as Precomputable>::PrecomputeData;
+/// VID proposal type
+pub type VidProposal<TYPES> = (
+    Proposal<TYPES, HotShotVidDisperse<TYPES>>,
+    Vec<Proposal<TYPES, VidDisperseShare<TYPES>>>,
+);
 
 #[cfg(not(feature = "gpu-vid"))]
 /// Internal Jellyfish VID scheme

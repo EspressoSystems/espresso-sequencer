@@ -39,7 +39,7 @@ use hotshot_types::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 use crate::{events::HotShotEvent, request::REQUEST_TIMEOUT};
 
@@ -699,9 +699,7 @@ pub(crate) async fn update_view<TYPES: NodeType>(
     debug!("Updating view from {} to {}", *old_view, *new_view);
 
     if *old_view / 100 != *new_view / 100 {
-        // TODO (https://github.com/EspressoSystems/HotShot/issues/2296):
-        // switch to info! when INFO logs become less cluttered
-        error!("Progress: entered view {:>6}", *new_view);
+        info!("Progress: entered view {:>6}", *new_view);
     }
 
     *cur_view = new_view;

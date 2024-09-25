@@ -38,7 +38,7 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
     },
     utils::{View, ViewInner},
-    vid::{vid_scheme, VidCommitment, VidSchemeType},
+    vid::{vid_scheme, VidCommitment, VidProposal, VidSchemeType},
     vote::{Certificate, HasViewNumber, Vote},
 };
 use jf_vid::VidScheme;
@@ -291,16 +291,12 @@ pub fn build_payload_commitment<TYPES: NodeType>(
 }
 
 /// TODO: <https://github.com/EspressoSystems/HotShot/issues/2821>
-#[allow(clippy::type_complexity)]
 pub fn build_vid_proposal<TYPES: NodeType>(
     quorum_membership: &<TYPES as NodeType>::Membership,
     view_number: TYPES::Time,
     transactions: Vec<TestTransaction>,
     private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
-) -> (
-    Proposal<TYPES, VidDisperse<TYPES>>,
-    Vec<Proposal<TYPES, VidDisperseShare<TYPES>>>,
-) {
+) -> VidProposal<TYPES> {
     let mut vid = vid_scheme_from_view_number::<TYPES>(quorum_membership, view_number);
     let encoded_transactions = TestTransaction::encode(&transactions);
 

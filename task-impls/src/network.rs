@@ -170,9 +170,6 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                         }
                     },
                 };
-                // TODO (Keyao benchmarking) Update these event variants (similar to the
-                // `TransactionsRecv` event) so we can send one event for a vector of messages.
-                // <https://github.com/EspressoSystems/HotShot/issues/1428>
                 broadcast_event(Arc::new(event), &self.internal_event_stream).await;
             }
 
@@ -298,7 +295,7 @@ impl<
                 sender: sender.clone(),
                 kind: MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
                     DaConsensusMessage::VidDisperseMsg(proposal),
-                )), // TODO not a DaConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
+                )),
             };
             let serialized_message = match self.upgrade_lock.serialize(&message).await {
                 Ok(serialized) => serialized,
@@ -363,7 +360,7 @@ impl<
     /// which will be used to create a message and transmit on the wire.
     /// Returns `None` if the parsing result should not be sent on the wire.
     /// Handles the `VidDisperseSend` event separately using a helper method.
-    #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
+    #[allow(clippy::too_many_lines)]
     async fn parse_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,

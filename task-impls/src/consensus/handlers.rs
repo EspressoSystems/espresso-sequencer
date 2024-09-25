@@ -218,14 +218,16 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
         .filter(|cert| cert.is_valid_for_view(&view))
         .cloned();
 
-    // FIXME - This is not great, and will be fixed later.
-    // If it's > July, 2024 and this is still here, something has gone horribly wrong.
-    let cnm = commitment_and_metadata
-        .clone()
-        .context("Cannot propose because we don't have the VID payload commitment and metadata")?;
+    ensure!(
+        commitment_and_metadata.is_some(),
+        "Cannot propose because we don't have the VID payload commitment and metadata"
+    );
+
+    // This is a safe unwrap due to the prior ensure call.
+    let commitment_and_metadata = commitment_and_metadata.unwrap();
 
     ensure!(
-        cnm.block_view == view,
+        commitment_and_metadata.block_view == view,
         "Cannot propose because our VID payload commitment and metadata is for an older view."
     );
 
@@ -236,7 +238,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
             sender,
             view,
-            cnm,
+            commitment_and_metadata,
             parent_leaf.clone(),
             state,
             proposal_upgrade_certificate,
@@ -256,45 +258,6 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
     });
 
     Ok(create_and_send_proposal_handle)
-}
-
-/// Publishes a proposal if there exists a value which we can propose from. Specifically, we must have either
-/// `commitment_and_metadata`, or a `decided_upgrade_certificate`.
-#[allow(clippy::too_many_arguments)]
-#[instrument(skip_all)]
-pub async fn publish_proposal_if_able<TYPES: NodeType, V: Versions>(
-    view: TYPES::Time,
-    sender: Sender<Arc<HotShotEvent<TYPES>>>,
-    receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
-    quorum_membership: Arc<TYPES::Membership>,
-    public_key: TYPES::SignatureKey,
-    private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-    consensus: OuterConsensus<TYPES>,
-    delay: u64,
-    formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
-    upgrade_lock: UpgradeLock<TYPES, V>,
-    commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
-    proposal_cert: Option<ViewChangeEvidence<TYPES>>,
-    instance_state: Arc<TYPES::InstanceState>,
-    id: u64,
-) -> Result<JoinHandle<()>> {
-    publish_proposal_from_commitment_and_metadata(
-        view,
-        sender,
-        receiver,
-        quorum_membership,
-        public_key,
-        private_key,
-        consensus,
-        delay,
-        formed_upgrade_certificate,
-        upgrade_lock,
-        commitment_and_metadata,
-        proposal_cert,
-        instance_state,
-        id,
-    )
-    .await
 }
 
 /// Handle the received quorum proposal.
@@ -490,23 +453,24 @@ pub(crate) async fn handle_quorum_proposal_recv<
                     "Attempting to publish proposal after voting for liveness; now in view: {}",
                     *new_view
                 );
-                let create_and_send_proposal_handle = publish_proposal_if_able(
-                    qc.view_number + 1,
-                    event_sender,
-                    event_receiver,
-                    Arc::clone(&task_state.quorum_membership),
-                    task_state.public_key.clone(),
-                    task_state.private_key.clone(),
-                    OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
-                    task_state.round_start_delay,
-                    task_state.formed_upgrade_certificate.clone(),
-                    task_state.upgrade_lock.clone(),
-                    task_state.payload_commitment_and_metadata.clone(),
-                    task_state.proposal_cert.clone(),
-                    Arc::clone(&task_state.instance_state),
-                    task_state.id,
-                )
-                .await?;
+                let create_and_send_proposal_handle =
+                    publish_proposal_from_commitment_and_metadata(
+                        qc.view_number + 1,
+                        event_sender,
+                        event_receiver,
+                        Arc::clone(&task_state.quorum_membership),
+                        task_state.public_key.clone(),
+                        task_state.private_key.clone(),
+                        OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
+                        task_state.round_start_delay,
+                        task_state.formed_upgrade_certificate.clone(),
+                        task_state.upgrade_lock.clone(),
+                        task_state.payload_commitment_and_metadata.clone(),
+                        task_state.proposal_cert.clone(),
+                        Arc::clone(&task_state.instance_state),
+                        task_state.id,
+                    )
+                    .await?;
 
                 task_state
                     .spawned_tasks

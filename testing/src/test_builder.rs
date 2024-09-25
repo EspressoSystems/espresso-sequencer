@@ -335,8 +335,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
     pub fn default_multiple_rounds() -> Self {
         let num_nodes_with_stake = 10;
         TestDescription::<TYPES, I, V> {
-            // TODO: remove once we have fixed the DHT timeout issue
-            // https://github.com/EspressoSystems/HotShot/issues/2088
             num_bootstrap_nodes: num_nodes_with_stake,
             num_nodes_with_stake,
             start_nodes: num_nodes_with_stake,
@@ -371,8 +369,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
             // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
             // remaining 6 (i.e., f) nodes. We could remove this restriction after fixing the
             // following issue.
-            // TODO: Update message broadcasting to avoid hanging
-            // <https://github.com/EspressoSystems/HotShot/issues/1567>
             da_staked_committee_size: 14,
             completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                 TimeBasedCompletionTaskDescription {
