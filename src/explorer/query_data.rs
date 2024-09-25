@@ -468,8 +468,8 @@ pub struct GenesisOverview {
 /// `block_transactions` for those `block_heights`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExplorerHistograms {
-    pub block_time: Vec<u64>,
-    pub block_size: Vec<u64>,
+    pub block_time: Vec<Option<u64>>,
+    pub block_size: Vec<Option<u64>>,
     pub block_transactions: Vec<u64>,
     pub block_heights: Vec<u64>,
 }
