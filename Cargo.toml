@@ -12,7 +12,7 @@
 
 [package]
 name = "hotshot-query-service"
-version = "0.1.60"
+version = "0.1.61"
 authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -75,9 +75,9 @@ derivative = "2.2"
 derive_more = "0.99"
 either = "1.12"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.75" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.75", features = ["dependency-tasks"] }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.75" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "bump/rc-0.5.76" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "bump/rc-0.5.76", features = ["dependency-tasks"] }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "bump/rc-0.5.76" }
 itertools = "0.12.1"
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
 	"std",
