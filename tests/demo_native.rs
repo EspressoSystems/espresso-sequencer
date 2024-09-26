@@ -221,17 +221,7 @@ async fn test_smoke() -> Result<()> {
         sleep(Duration::from_secs(1)).await;
 
         let new = testing.test_state().await;
-
         println!("New State:{}", new);
-        if i % 5 == 0 && new <= initial {
-            panic!("Chain state not incrementing");
-        }
-
-        // Transactions don't necessarily increment every second. But
-        // we should definitely see a new one after 3 or 4 seconds.
-        if i % 5 == 0 && new.txn_count <= initial.txn_count {
-            panic!("Transactions not incrementing");
-        }
 
         if initial.builder_balance + initial.recipient_balance
             != new.builder_balance + new.recipient_balance
@@ -251,7 +241,17 @@ async fn test_smoke() -> Result<()> {
             println!("Reached {} block(s)!", testing.expected_block_height());
             break;
         }
-        initial = new;
+
+        if i % 5 == 0 {
+            if new <= initial {
+                panic!("Chain state not incrementing");
+            }
+
+            if new.txn_count <= initial.txn_count {
+                panic!("Transactions not incrementing");
+            }
+            initial = new;
+        }
         i = i + 1;
     }
     Ok(())
