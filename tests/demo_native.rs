@@ -56,11 +56,11 @@ struct TestConfig {
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 struct TestState {
-    block_height: Option<u64>,
-    txn_count: u64,
-    builder_balance: FeeAmount,
-    recipient_balance: FeeAmount,
-    light_client_update: u64,
+    pub block_height: Option<u64>,
+    pub txn_count: u64,
+    pub builder_balance: FeeAmount,
+    pub recipient_balance: FeeAmount,
+    pub light_client_update: u64,
 }
 
 impl fmt::Display for TestState {
@@ -213,7 +213,7 @@ async fn test_smoke() -> Result<()> {
     let testing = TestConfig::new().await.unwrap();
     let _ = testing.readiness().await?;
 
-    let initial = testing.test_state().await;
+    let mut initial = testing.test_state().await;
     println!("Initial State:{}", initial);
 
     loop {
@@ -224,6 +224,10 @@ async fn test_smoke() -> Result<()> {
         println!("New State:{}", new);
         if new <= initial {
             panic!("Chain state not incrementing");
+        }
+
+        if new.txn_count <= initial.txn_count {
+            panic!("Transactions not incrementing");
         }
 
         if initial.builder_balance + initial.recipient_balance
@@ -244,6 +248,7 @@ async fn test_smoke() -> Result<()> {
             println!("Reached {} block(s)!", testing.expected_block_height());
             break;
         }
+        initial = new;
     }
     Ok(())
 }
