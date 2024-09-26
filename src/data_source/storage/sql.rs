@@ -29,7 +29,7 @@ use sqlx::{
     postgres::{PgConnectOptions, PgSslMode},
     ConnectOptions, Connection, Row,
 };
-use std::{cmp::min, fmt::Debug, str::FromStr};
+use std::{cmp::min, fmt::Debug, str::FromStr, time::Duration};
 
 pub extern crate sqlx;
 pub use sqlx::{Database, Postgres, Sqlite};
@@ -323,6 +323,45 @@ impl<DB: Database> Config<DB> {
     pub fn archive(mut self) -> Self {
         self.pruner_cfg = None;
         self.archive = true;
+        self
+    }
+
+    /// Set the maximum idle time of a connection.
+    ///
+    /// Any connection which has been open and unused longer than this duration will be
+    /// automatically closed to reduce load on the server.
+    pub fn idle_connection_timeout(mut self, timeout: Duration) -> Self {
+        self.pool_opt = self.pool_opt.idle_timeout(Some(timeout));
+        self
+    }
+
+    /// Set the maximum lifetime of a connection.
+    ///
+    /// Any connection which has been open longer than this duration will be automatically closed
+    /// (and, if needed, replaced), even if it is otherwise healthy. It is good practice to refresh
+    /// even healthy connections once in a while (e.g. daily) in case of resource leaks in the
+    /// server implementation.
+    pub fn connection_timeout(mut self, timeout: Duration) -> Self {
+        self.pool_opt = self.pool_opt.max_lifetime(Some(timeout));
+        self
+    }
+
+    /// Set the minimum number of connections to maintain at any time.
+    ///
+    /// The data source will, to the best of its ability, maintain at least `min` open connections
+    /// at all times. This can be used to reduce the latency hit of opening new connections when at
+    /// least this many simultaneous connections are frequently needed.
+    pub fn min_connections(mut self, min: u32) -> Self {
+        self.pool_opt = self.pool_opt.min_connections(min);
+        self
+    }
+
+    /// Set the maximum number of connections to maintain at any time.
+    ///
+    /// Once `max` connections are in use simultaneously, further attempts to acquire a connection
+    /// (or begin a transaction) will block until one of the existing connections is released.
+    pub fn max_connections(mut self, max: u32) -> Self {
+        self.pool_opt = self.pool_opt.max_connections(max);
         self
     }
 }
