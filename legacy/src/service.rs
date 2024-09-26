@@ -1189,7 +1189,10 @@ where
 /*
 Running Non-Permissioned Builder Service
 */
-pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, Ver: StaticVersionType>(
+pub async fn run_non_permissioned_standalone_builder_service<
+    Types: NodeType,
+    Ver: StaticVersionType,
+>(
     // sending a DA proposal from the hotshot to the builder states
     da_sender: BroadcastSender<MessageType<Types>>,
 
