@@ -303,14 +303,60 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
+    use ethers::middleware::Middleware;
+    use ethers::prelude::*;
+    use ethers::signers::Signer;
+    use ethers::utils::{Anvil, AnvilInstance};
+    use std::sync::Arc;
+
+    use anyhow::Result;
+
+    use contract_bindings::fee_contract::FeeContract;
     use espresso_types::{
         L1BlockInfo, TimeBasedUpgrade, Timestamp, UpgradeMode, UpgradeType, ViewBasedUpgrade,
     };
-    use ethers::prelude::{Address, H160, H256};
+
+    use sequencer_utils::deployer;
     use sequencer_utils::ser::FromStringOrInteger;
+    use sequencer_utils::test_utils::setup_test;
     use toml::toml;
 
     use super::*;
+
+    /// A wallet with local signer and connected to network via http
+    pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+
+    async fn deploy_fee_contract_for_test(
+        anvil: &AnvilInstance,
+    ) -> Result<(Arc<SignerWallet>, FeeContract<SignerWallet>)> {
+        let provider = Provider::<Http>::try_from(anvil.endpoint())?;
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
+        let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
+
+        let fee_contract_address = deployer::deploy_fee_contract(l1_wallet.clone()).await?;
+
+        let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
+
+        Ok((l1_wallet, fee_contract))
+    }
+
+    async fn deploy_fee_contract_as_proxy_for_test(
+        anvil: &AnvilInstance,
+    ) -> Result<(Arc<SignerWallet>, FeeContract<SignerWallet>)> {
+        let provider = Provider::<Http>::try_from(anvil.endpoint())?;
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
+        let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
+
+        let mut contracts = deployer::Contracts::default();
+        let fee_contract_address =
+            deployer::deploy_fee_contract_as_proxy(l1_wallet.clone(), &mut contracts).await?;
+
+        let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
+
+        Ok((l1_wallet, fee_contract))
+    }
 
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
@@ -464,7 +510,7 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_genesis_fee_contract_is_not_a_proxy() {
+    async fn test_genesis_fee_contract_is_not_a_proxy() -> anyhow::Result<()> {
         let toml = toml! {
             base_version = "0.1"
             upgrade_version = "0.2"
@@ -487,11 +533,17 @@ mod test {
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
+
+        genesis.chain_config.fee_contract = Some(contract.address());
 
         // validate the the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -502,10 +554,11 @@ mod test {
         } else {
             panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
         }
+        Ok(())
     }
 
     #[async_std::test]
-    async fn test_genesis_fee_contract_is_a_proxy() {
+    async fn test_genesis_fee_contract_is_a_proxy() -> anyhow::Result<()> {
         let toml = toml! {
             base_version = "0.1"
             upgrade_version = "0.2"
@@ -528,20 +581,27 @@ mod test {
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
+
+        genesis.chain_config.fee_contract = Some(proxy_contract.address());
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
 
         assert!(
             result.is_ok(),
             "Expected Fee Contract to be a proxy, but it was not"
         );
+        Ok(())
     }
 
     #[async_std::test]
-    async fn test_genesis_fee_contract_is_a_proxy_with_upgrades() {
+    async fn test_genesis_fee_contract_is_a_proxy_with_upgrades() -> anyhow::Result<()> {
         let toml = toml! {
             base_version = "0.1"
             upgrade_version = "0.2"
@@ -591,20 +651,34 @@ mod test {
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
+
+        // now iterate over each upgrade type and set the fee_contract to the proxy contract
+        for upgrade in genesis.upgrades.values_mut() {
+            match &mut upgrade.upgrade_type {
+                UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
+                    chain_config.fee_contract = Some(proxy_contract.clone().address());
+                }
+            }
+        }
 
         // Call the validation logic for the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
 
         assert!(
             result.is_ok(),
             "Expected Fee Contract to be a proxy, but it was not"
         );
+        Ok(())
     }
 
     #[async_std::test]
-    async fn test_genesis_fee_contract_is_not_a_proxy_with_upgrades() {
+    async fn test_genesis_fee_contract_is_not_a_proxy_with_upgrades() -> anyhow::Result<()> {
         let toml = toml! {
             base_version = "0.1"
             upgrade_version = "0.2"
@@ -654,11 +728,24 @@ mod test {
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-        let rpc_url = "https://ethereum-sepolia.publicnode.com";
+        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
-        // validate the fee_contract address
-        let result = genesis.validate_fee_contract(rpc_url.to_string()).await;
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
+
+        // now iterate over each upgrade type and set the fee_contract to the proxy contract
+        for upgrade in genesis.upgrades.values_mut() {
+            match &mut upgrade.upgrade_type {
+                UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
+                    chain_config.fee_contract = Some(contract.clone().address());
+                }
+            }
+        }
+
+        // Call the validation logic for the fee_contract address
+        let result = genesis.validate_fee_contract(anvil.endpoint()).await;
 
         // check if the result from the validation is an error
         if let Err(e) = result {
@@ -669,6 +756,7 @@ mod test {
         } else {
             panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
         }
+        Ok(())
     }
 
     #[async_std::test]
