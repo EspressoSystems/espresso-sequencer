@@ -35,6 +35,9 @@ jobs:
         with:
           version: nightly
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@V27
+
       - uses: taiki-e/install-action@nextest
 
       - name: Checkout Repository
@@ -62,9 +65,6 @@ jobs:
           cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
         timeout-minutes: 5
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@V27
-
       - name: Install process-compose
         run: nix profile install nixpkgs#process-compose
 
@@ -91,7 +91,7 @@ jobs:
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           bash -x scripts/demo-native  -f process-compose.yaml -f process-compose-mp.yml -D
-        
+
       - name: Test Marketplace Integration
         env:
           NEXTEST_PROFILE: integration
