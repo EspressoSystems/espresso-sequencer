@@ -46,6 +46,7 @@ pub use anyhow::Error;
 pub use crate::include_migrations;
 pub use db::Db;
 pub use include_dir::include_dir;
+pub use queries::QueryBuilder;
 pub use refinery::Migration;
 pub use transaction::{query, query_as, Executor, Query, QueryAs, Transaction};
 

@@ -52,18 +52,29 @@ pub(super) mod state;
 /// # Example
 ///
 /// ```
-/// fn search_and_maybe_filter<T: FromRow, Mode>(
+/// # use hotshot_query_service::{
+/// #   data_source::storage::sql::{
+/// #       Database, Db, QueryBuilder, Transaction,
+/// #   },
+/// #   QueryResult,
+/// # };
+/// # use sqlx::FromRow;
+/// async fn search_and_maybe_filter<T, Mode>(
 ///     tx: &mut Transaction<Mode>,
 ///     id: Option<i64>,
-/// ) -> QueryResult<Vec<T>> {
+/// ) -> QueryResult<Vec<T>>
+/// where
+///     for<'r> T: FromRow<'r, <Db as Database>::Row> + Send + Unpin,
+/// {
 ///     let mut query = QueryBuilder::default();
 ///     let mut sql = "SELECT * FROM table".into();
 ///     if let Some(id) = id {
-///         sql = format!("{sql} WHERE id = {}", query.bind(id));
+///         sql = format!("{sql} WHERE id = {}", query.bind(id)?);
 ///     }
 ///     let results = query
 ///         .query_as(&sql)
-///         .fetch_all(tx)?;
+///         .fetch_all(tx.as_mut())
+///         .await?;
 ///     Ok(results)
 /// }
 /// ```
