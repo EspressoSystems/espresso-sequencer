@@ -404,30 +404,12 @@ where
                         let time: Option<i64> = row.try_get("time").map_err(|e| QueryError::Error {
                             message: format!("failed to get column time {e}"),
                         })?;
-                        let size: i32 = row.try_get("size").map_err(|e| QueryError::Error {
+                        let size: Option<i32> = row.try_get("size").map_err(|e| QueryError::Error {
                             message: format!("failed to get column size {e}"),
                         })?;
                         let num_transactions: i64 =
                             row.try_get("transactions").map_err(|e| QueryError::Error {
                                 message: format!("failed to get column transactions {e}"),
-                            })?;
-
-                        let height: u64 = height.try_into().map_err(|e| QueryError::Error {
-                            message: format!("failed to convert height to u64 {e}"),
-                        })?;
-                        let timestamp: u64 =
-                            timestamp.try_into().map_err(|e| QueryError::Error {
-                                message: format!("failed to convert timestamp to u64 {e}"),
-                            })?;
-                        let time: u64 = time.unwrap_or(0).try_into().map_err(|e| QueryError::Error {
-                            message: format!("failed to convert time to u64 {e}"),
-                        })?;
-                        let size: u64 = size.try_into().map_err(|e| QueryError::Error {
-                            message: format!("failed to convert size to u64 {e}"),
-                        })?;
-                        let num_transactions: u64 =
-                            num_transactions.try_into().map_err(|e| QueryError::Error {
-                                message: format!("failed to convert num_transactions to u64 {e}"),
                             })?;
 
                         Ok((height, timestamp, time, size, num_transactions))
@@ -441,14 +423,12 @@ where
                         block_heights: Vec::with_capacity(50),
                     },
                     |mut histograms: ExplorerHistograms,
-                     row: Result<(u64, u64, u64, u64, u64), QueryError>| async {
+                     row: Result<(i64, i64, Option<i64>, Option<i32>, i64), QueryError>| async {
                         let (height, _timestamp, time, size, num_transactions) = row?;
-                        histograms
-                            .block_time
-                            .push(time);
-                        histograms.block_size.push(size);
-                        histograms.block_transactions.push(num_transactions);
-                        histograms.block_heights.push(height);
+                        histograms.block_time.push(time.map(|i| i as u64));
+                        histograms.block_size.push(size.map(|i| i as u64));
+                        histograms.block_transactions.push(num_transactions as u64);
+                        histograms.block_heights.push(height as u64);
                         Ok(histograms)
                     },
                 ).await;
