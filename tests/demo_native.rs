@@ -196,7 +196,7 @@ impl TestConfig {
     async fn readiness(&self) -> Result<Vec<String>> {
         join_all(vec![
             wait_for_service(&self.load_generator_url, 1000, 600),
-            wait_for_service(&self.builder_url, 1000, 60),
+            wait_for_service(&self.builder_url, 1000, 200),
             wait_for_service(&self.prover_url, 1000, 300),
         ])
         .await
