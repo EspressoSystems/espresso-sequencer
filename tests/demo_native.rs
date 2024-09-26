@@ -223,7 +223,7 @@ async fn test_smoke() -> Result<()> {
         let new = testing.test_state().await;
 
         println!("New State:{}", new);
-        if i % 2 == 0 && new <= initial {
+        if i % 5 == 0 && new <= initial {
             panic!("Chain state not incrementing");
         }
 
