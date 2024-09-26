@@ -63,7 +63,7 @@ jobs:
         timeout-minutes: 5
 
       - name: Install Nix
-        uses: cachix/install-nix-action@V27
+        uses: cachix/install-nix-action@V28
 
       - name: Install process-compose
         run: nix profile install nixpkgs#process-compose
