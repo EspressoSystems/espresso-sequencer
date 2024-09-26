@@ -560,7 +560,7 @@ impl ProcessProduceLeafStreamTask {
     {
         // We want to try and ensure that we are connected to the HotShot Query
         // Service, and are consuming leaves.
-        // - If we are able to connect, then we can start relaying Leafs into
+        // - If we are able to connect, then we can start relaying Leaves into
         //   the leaf sender.  If we are unable
         // - If we are not able to connect, then we should sleep, and retry
         //   until we are able to reconnect.  Each failure **should** make some
@@ -582,8 +582,8 @@ impl ProcessProduceLeafStreamTask {
         }
     }
 
-    /// [retrieve_leaf_stream] attempts to retrieve the Stream of Leafs from the
-    /// given [LeafStreamRetriever].
+    /// [retrieve_leaf_stream] attempts to retrieve the Stream of Leaves from
+    /// the given [LeafStreamRetriever].
     ///
     /// This function will loop on failure until it is able to retrieve the
     /// [Stream].  This does mean that it could potentially get in a state
