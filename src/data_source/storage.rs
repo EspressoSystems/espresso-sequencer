@@ -23,6 +23,39 @@
 //! * [`FileSystemStorage`]
 //! * [`NoStorage`]
 //!
+//! # Storage Traits vs Data Source Traits
+//!
+//! Many of the traits defined in this module (e.g. [`NodeStorage`], [`ExplorerStorage`], and
+//! others) are nearly identical to the corresponding data source traits (e.g.
+//! [`NodeDataSource`](crate::node::NodeDataSource),
+//! [`ExplorerDataSource`](crate::explorer::ExplorerDataSource), etc). They typically differ in
+//! mutability: the storage traits are intended to be implemented on storage
+//! [transactions](super::Transaction), and because even reading may update the internal
+//! state of a transaction, such as a buffer or database cursor, these traits typically take `&mut
+//! self`. This is not a barrier for concurrency since there may be many transactions open
+//! simultaneously from a single data source. The data source traits, meanwhile, are implemented on
+//! the data source itself. Internally, they usually open a fresh transaction and do all their work
+//! on the transaction, not modifying the data source itself, so they take `&self`.
+//!
+//! For traits that differ _only_ in the mutability of the `self` parameter, it is almost possible
+//! to combine them into a single trait whose methods take `self` by value, and implementing said
+//! traits for the reference types `&SomeDataSource` and `&mut SomeDataSourceTransaction`. There are
+//! two problems with this approach, which lead us to prefer the slight redundance of having
+//! separate versions of the traits with mutable and immutable methods:
+//! * The trait bounds quickly get out of hand, since we now have trait bounds not only on the type
+//!   itself, but also on references to that type, and the reference also requires the introduction
+//!   of an additional lifetime parameter.
+//! * We run into a longstanding [`rustc` bug](https://github.com/rust-lang/rust/issues/85063) in
+//!   which type inference diverges when given trait bounds on reference types, even when
+//!   theoretically the types are uniquely inferrable. This issue can be worked around by [explicitly
+//!   specifying type paramters at every call site](https://users.rust-lang.org/t/type-recursion-when-trait-bound-is-added-on-reference-type/74525/2),
+//!   but this further exacerbates the ergonomic issues with this approach, past the point of
+//!   viability.
+//!
+//! Occasionally, there may be further differences between the data source traits and corresponding
+//! storage traits. For example, [`AvailabilityStorage`] also differs from
+//! [`AvailabilityDataSource`](crate::availability::AvailabilityDataSource) in fallibility.
+//!
 
 use crate::{
     availability::{
