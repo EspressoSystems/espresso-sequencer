@@ -18,7 +18,6 @@ concurrency:
 
 env:
   RUST_LOG: info,libp2p=off
-  CARGO_INCREMENTAL: 0
 
 jobs:
   contracts:
