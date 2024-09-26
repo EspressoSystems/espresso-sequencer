@@ -20,6 +20,7 @@ concurrency:
 env:
   RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
+  CARGO_INCREMENTAL: 0
 
 jobs:
   demo-native:
