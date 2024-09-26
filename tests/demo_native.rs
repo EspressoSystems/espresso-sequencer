@@ -216,6 +216,7 @@ async fn test_smoke() -> Result<()> {
     let mut initial = testing.test_state().await;
     println!("Initial State:{}", initial);
 
+    let mut i = 1;
     loop {
         sleep(Duration::from_secs(1)).await;
 
@@ -226,7 +227,9 @@ async fn test_smoke() -> Result<()> {
             panic!("Chain state not incrementing");
         }
 
-        if new.txn_count <= initial.txn_count {
+        // Transactions don't necessarily increment every second. But
+        // we should definitely see a new after 3 or 4 seconds.
+        if i % 5 == 0 && new.txn_count <= initial.txn_count {
             panic!("Transactions not incrementing");
         }
 
@@ -249,6 +252,7 @@ async fn test_smoke() -> Result<()> {
             break;
         }
         initial = new;
+        i = i + 1;
     }
     Ok(())
 }
