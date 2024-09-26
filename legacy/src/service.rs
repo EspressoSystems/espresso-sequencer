@@ -23,6 +23,7 @@ use hotshot_types::{
     vid::{VidCommitment, VidPrecomputeData},
 };
 use lru::LruCache;
+use vbs::version::StaticVersionType;
 
 use crate::{
     builder_state::{
@@ -1045,13 +1046,13 @@ trait HotShotEventsService<Types: NodeType> {
     async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError>;
 }
 
-struct HotShotEventsServiceTideDiscoClient<Types: NodeType, V: Versions> {
-    client: surf_disco::Client<hotshot_events_service::events::Error, V::Base>,
+struct HotShotEventsServiceTideDiscoClient<Types: NodeType, Ver: StaticVersionType> {
+    client: surf_disco::Client<hotshot_events_service::events::Error, Ver>,
     _pd: PhantomData<Types>,
 }
 
-impl<Types: NodeType, V: Versions> HotShotEventsServiceTideDiscoClient<Types, V> {
-    fn new(client: surf_disco::Client<hotshot_events_service::events::Error, V::Base>) -> Self {
+impl<Types: NodeType, Ver: StaticVersionType> HotShotEventsServiceTideDiscoClient<Types, Ver> {
+    fn new(client: surf_disco::Client<hotshot_events_service::events::Error, Ver>) -> Self {
         HotShotEventsServiceTideDiscoClient {
             client,
             _pd: Default::default(),
@@ -1059,20 +1060,20 @@ impl<Types: NodeType, V: Versions> HotShotEventsServiceTideDiscoClient<Types, V>
     }
 
     fn from_url(url: Url) -> Self {
-        let client = surf_disco::Client::<hotshot_events_service::events::Error, V::Base>::new(url);
+        let client = surf_disco::Client::<hotshot_events_service::events::Error, Ver>::new(url);
         Self::new(client)
     }
 }
 
 #[async_trait]
-impl<Types: NodeType, V: Versions> HotShotEventsService<Types>
-    for HotShotEventsServiceTideDiscoClient<Types, V>
+impl<Types: NodeType, Ver: StaticVersionType> HotShotEventsService<Types>
+    for HotShotEventsServiceTideDiscoClient<Types, Ver>
 {
     type EventsStream = surf_disco::socket::Connection<
         Event<Types>,
         surf_disco::socket::Unsupported,
         EventStreamError,
-        V::Base,
+        Ver,
     >;
     type EventsError = hotshot_events_service::events::Error;
 
@@ -1188,7 +1189,7 @@ where
 /*
 Running Non-Permissioned Builder Service
 */
-pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, V: Versions>(
+pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, Ver: StaticVersionType>(
     // sending a DA proposal from the hotshot to the builder states
     da_sender: BroadcastSender<MessageType<Types>>,
 
@@ -1206,7 +1207,7 @@ pub async fn run_non_permissioned_standalone_builder_service<Types: NodeType, V:
 ) -> Result<(), anyhow::Error> {
     // connection to the events stream
     let events_service_client =
-        HotShotEventsServiceTideDiscoClient::<Types, V>::from_url(hotshot_events_api_url.clone());
+        HotShotEventsServiceTideDiscoClient::<Types, Ver>::from_url(hotshot_events_api_url.clone());
 
     let connect_to_events_service_result = connect_to_events_service(&events_service_client).await;
     let (mut subscribed_events, mut membership) = match connect_to_events_service_result {
