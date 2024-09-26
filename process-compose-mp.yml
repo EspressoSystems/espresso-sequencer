@@ -56,14 +56,11 @@ processes:
       failure_threshold: 100
 
   permissionless-builder:
-    environment:
-      - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10
+    disabled: true
 
   submit-transactions-public:
+    disabled: true
     command: submit-transactions
-    environment:
-      - ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE=9
-      - ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE=10
 
   submit-transactions-private:
     disabled: true
