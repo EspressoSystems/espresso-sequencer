@@ -540,7 +540,7 @@ pub async fn deploy(
             proxy.transfer_ownership(owner).send().await?.await?;
 
             // Confirm that the multisig address has been set as the owner
-            if !is_valid_proxy_admin(provider.clone(), light_client_proxy_address, owner)
+            if !is_valid_admin_light_client_proxy(l1.clone(), light_client_proxy_address, owner)
                 .await
                 .expect("Failed to find the expected admin on the proxy")
             {
@@ -587,7 +587,7 @@ pub async fn deploy(
             proxy.transfer_ownership(owner).send().await?.await?;
 
             // Confirm that the multisig address has been set as the owner
-            if !is_valid_proxy_admin(provider.clone(), fee_contract_proxy_address, owner)
+            if !is_valid_admin_fee_contract_proxy(l1.clone(), fee_contract_proxy_address, owner)
                 .await
                 .expect("Failed to find the expected admin on the proxy")
             {
@@ -625,24 +625,28 @@ pub async fn is_proxy_contract(
     Ok(implementation_address != H160::zero())
 }
 
-pub async fn is_valid_proxy_admin(
-    provider: Provider<Http>,
+pub async fn is_valid_admin_light_client_proxy<M: Middleware + 'static>(
+    client: Arc<M>,
     proxy_address: H160,
     admin: H160,
 ) -> anyhow::Result<bool> {
-    // confirm that the admin parameter is the admin of the proxy
-    // using the admin slot, 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103, which is the keccak-256 hash of "eip1967.proxy.admin" subtracted by 1
-    let hex_bytes = hex::decode("b53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103")
-        .expect("Failed to decode hex string");
-    let admin_slot = ethers::types::H256::from_slice(&hex_bytes);
-    let storage = provider
-        .get_storage_at(proxy_address, admin_slot, None)
-        .await?;
-
-    let admin_address = H160::from_slice(&storage[12..]);
+    let proxy_contract = LightClient::new(proxy_address, client);
+    let proxy_contract_admin = proxy_contract.owner().await?;
 
     // we expect the admin_address to be equal to the one passed in
-    Ok(admin_address == admin)
+    Ok(proxy_contract_admin == admin)
+}
+
+pub async fn is_valid_admin_fee_contract_proxy<M: Middleware + 'static>(
+    client: Arc<M>,
+    proxy_address: H160,
+    admin: H160,
+) -> anyhow::Result<bool> {
+    let proxy_contract = FeeContract::new(proxy_address, client);
+    let proxy_contract_admin = proxy_contract.owner().await?;
+
+    // we expect the admin_address to be equal to the one passed in
+    Ok(proxy_contract_admin == admin)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
