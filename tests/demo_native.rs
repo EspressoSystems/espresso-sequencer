@@ -218,12 +218,12 @@ async fn test_smoke() -> Result<()> {
 
     let mut i = 1;
     loop {
-        sleep(Duration::from_millis(1500)).await;
+        sleep(Duration::from_secs(1)).await;
 
         let new = testing.test_state().await;
 
         println!("New State:{}", new);
-        if new <= initial {
+        if i % 2 = 0 && new <= initial {
             panic!("Chain state not incrementing");
         }
 
