@@ -228,7 +228,7 @@ async fn test_smoke() -> Result<()> {
         }
 
         // Transactions don't necessarily increment every second. But
-        // we should definitely see a new after 3 or 4 seconds.
+        // we should definitely see a new one after 3 or 4 seconds.
         if i % 5 == 0 && new.txn_count <= initial.txn_count {
             panic!("Transactions not incrementing");
         }
