@@ -1706,7 +1706,6 @@ mod test {
                 EventType::UpgradeProposal { proposal, .. } => {
                     let upgrade = proposal.data.upgrade_proposal;
                     let new_version = upgrade.new_version;
-                    dbg!(&new_version);
                     assert_eq!(new_version, <MockSeqVersions as Versions>::Upgrade::VERSION);
                     break upgrade.new_version_first_view;
                 }
@@ -1746,7 +1745,6 @@ mod test {
 
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
-                dbg!(height, new_version_first_view);
                 if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
