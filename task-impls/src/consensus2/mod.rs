@@ -6,11 +6,6 @@
 
 use std::sync::Arc;
 
-use self::handlers::{
-    handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
-};
-use crate::helpers::broadcast_event;
-use crate::{events::HotShotEvent, vote_collection::VoteCollectorsMap};
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
@@ -33,6 +28,11 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
+
+use self::handlers::{
+    handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
+};
+use crate::{events::HotShotEvent, helpers::broadcast_event, vote_collection::VoteCollectorsMap};
 
 /// Event handlers for use in the `handle` method.
 mod handlers;

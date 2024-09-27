@@ -35,7 +35,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
 use crate::{
-    constants::SRS_DEGREE, data::VidDisperse as HotShotVidDisperse, data::VidDisperseShare,
+    constants::SRS_DEGREE,
+    data::{VidDisperse as HotShotVidDisperse, VidDisperseShare},
     message::Proposal,
 };
 

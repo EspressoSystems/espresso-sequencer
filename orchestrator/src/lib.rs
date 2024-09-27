@@ -504,7 +504,6 @@ where
             });
         }
 
-        self.manual_start_allowed = false;
         Ok(self.config.clone())
     }
 
@@ -595,6 +594,7 @@ where
         self.accepting_new_keys = false;
         self.manual_start_allowed = false;
         self.peer_pub_ready = true;
+        self.start = true;
 
         Ok(())
     }
