@@ -35,6 +35,9 @@ jobs:
         with:
           version: nightly
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@V27
+
       - uses: taiki-e/install-action@nextest
 
       - name: Checkout Repository
@@ -45,25 +48,22 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
 
+      - name: Configure Environment
+        run: |
+          RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          PATH="$PWD/target/release:$PATH"
+
       - name: Build
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
           cargo build --locked --release
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
       - name: Test
         # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
+        run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
         timeout-minutes: 5
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@V27
 
       - name: Install process-compose
         run: nix profile install nixpkgs#process-compose
@@ -72,10 +72,7 @@ jobs:
         run: docker compose pull || docker-compose pull
 
       - name: Run Demo-Native
-        run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
-          bash -x scripts/demo-native -D
+        run: bash -x scripts/demo-native -D
 
       - name: Test Integration
         env:
@@ -87,11 +84,8 @@ jobs:
         run: process-compose down
 
       - name: Run Demo-Native Marketplace
-        run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
-          bash -x scripts/demo-native  -f process-compose.yaml -f process-compose-mp.yml -D
-        
+        run: bash -x scripts/demo-native  -f process-compose.yaml -f process-compose-mp.yml -D
+
       - name: Test Marketplace Integration
         env:
           NEXTEST_PROFILE: integration
