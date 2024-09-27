@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use async_broadcast::{Receiver, Sender};
+use async_broadcast::{Receiver, RecvError, Sender};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::{spawn, JoinHandle};
 use async_trait::async_trait;
@@ -92,6 +92,9 @@ impl<S: TaskState + Send + 'static> Task<S> {
                             S::handle_event(&mut self.state, input, &self.sender, &self.receiver)
                                 .await
                                 .inspect_err(|e| tracing::info!("{e}"));
+                    }
+                    Err(RecvError::Closed) => {
+                        break self.boxed_state();
                     }
                     Err(e) => {
                         tracing::error!("Failed to receive from event stream Error: {}", e);

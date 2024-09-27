@@ -10,7 +10,7 @@
 pub mod task_state;
 use std::{fmt::Debug, sync::Arc};
 
-use async_broadcast::broadcast;
+use async_broadcast::{broadcast, RecvError};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -260,6 +260,9 @@ pub fn create_shutdown_event_monitor<TYPES: NodeType, I: NodeImplementation<TYPE
                     if matches!(event.as_ref(), HotShotEvent::Shutdown) {
                         return;
                     }
+                }
+                Err(RecvError::Closed) => {
+                    return;
                 }
                 Err(e) => {
                     tracing::error!("Shutdown event monitor channel recv error: {}", e);
