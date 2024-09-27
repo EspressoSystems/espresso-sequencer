@@ -56,11 +56,11 @@ struct TestConfig {
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 struct TestState {
-    block_height: Option<u64>,
-    txn_count: u64,
-    builder_balance: FeeAmount,
-    recipient_balance: FeeAmount,
-    light_client_update: u64,
+    pub block_height: Option<u64>,
+    pub txn_count: u64,
+    pub builder_balance: FeeAmount,
+    pub recipient_balance: FeeAmount,
+    pub light_client_update: u64,
 }
 
 impl fmt::Display for TestState {
@@ -196,7 +196,7 @@ impl TestConfig {
     async fn readiness(&self) -> Result<Vec<String>> {
         join_all(vec![
             wait_for_service(&self.load_generator_url, 1000, 600),
-            wait_for_service(&self.builder_url, 1000, 60),
+            wait_for_service(&self.builder_url, 1000, 200),
             wait_for_service(&self.prover_url, 1000, 300),
         ])
         .await
@@ -213,18 +213,16 @@ async fn test_smoke() -> Result<()> {
     let testing = TestConfig::new().await.unwrap();
     let _ = testing.readiness().await?;
 
-    let initial = testing.test_state().await;
+    let mut initial = testing.test_state().await;
+    let initial_block_height = initial.block_height.unwrap();
     println!("Initial State:{}", initial);
 
+    let mut i = 1;
     loop {
         sleep(Duration::from_secs(1)).await;
 
         let new = testing.test_state().await;
-
         println!("New State:{}", new);
-        if new <= initial {
-            panic!("Chain state not incrementing");
-        }
 
         if initial.builder_balance + initial.recipient_balance
             != new.builder_balance + new.recipient_balance
@@ -238,12 +236,22 @@ async fn test_smoke() -> Result<()> {
         }
 
         // test that we progress EXPECTED_BLOCK_HEIGHT blocks from where we started
-        if new.block_height.unwrap()
-            >= testing.expected_block_height() + initial.block_height.unwrap()
-        {
+        if new.block_height.unwrap() >= testing.expected_block_height() + initial_block_height {
             println!("Reached {} block(s)!", testing.expected_block_height());
             break;
         }
+
+        if i % 5 == 0 {
+            if new <= initial {
+                panic!("Chain state not incrementing");
+            }
+
+            if new.txn_count <= initial.txn_count {
+                panic!("Transactions not incrementing");
+            }
+            initial = new;
+        }
+        i += 1;
     }
     Ok(())
 }
