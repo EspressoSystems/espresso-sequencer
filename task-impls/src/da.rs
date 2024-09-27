@@ -245,7 +245,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                             .map(|shares| shares.get(&public_key).cloned())
                         {
                             broadcast_event(
-                                Arc::new(HotShotEvent::VidShareRecv(vid_share.clone())),
+                                Arc::new(HotShotEvent::VidShareRecv(
+                                    public_key.clone(),
+                                    vid_share.clone(),
+                                )),
                                 &chan,
                             )
                             .await;

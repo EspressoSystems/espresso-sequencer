@@ -22,7 +22,10 @@ use hotshot_types::{
     },
     traits::{
         election::Membership,
-        network::{BroadcastDelay, ConnectedNetwork, TransmitType, ViewMessage},
+        network::{
+            BroadcastDelay, ConnectedNetwork, RequestKind, ResponseMessage, TransmitType,
+            ViewMessage,
+        },
         node_implementation::{ConsensusTime, NodeType, Versions},
         storage::Storage,
     },
@@ -64,6 +67,8 @@ pub fn da_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
         HotShotEvent::DaProposalSend(_, _)
             | HotShotEvent::QuorumProposalRequestSend(..)
             | HotShotEvent::QuorumProposalResponseSend(..)
+            | HotShotEvent::VidResponseSend(..)
+            | HotShotEvent::VidRequestSend(..)
             | HotShotEvent::DaVoteSend(_)
             | HotShotEvent::ViewChange(_)
     )
@@ -166,7 +171,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                             HotShotEvent::DaCertificateRecv(cert)
                         }
                         DaConsensusMessage::VidDisperseMsg(proposal) => {
-                            HotShotEvent::VidShareRecv(proposal)
+                            HotShotEvent::VidShareRecv(sender, proposal)
                         }
                     },
                 };
@@ -182,8 +187,31 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                     )
                     .await;
                 }
-                DataMessage::DataResponse(_) | DataMessage::RequestData(_) => {
-                    warn!("Request and Response messages should not be received in the NetworkMessage task");
+                DataMessage::DataResponse(response) => {
+                    if let ResponseMessage::Found(message) = response {
+                        match message {
+                            SequencingMessage::Da(da_message) => {
+                                if let DaConsensusMessage::VidDisperseMsg(proposal) = da_message {
+                                    broadcast_event(
+                                        Arc::new(HotShotEvent::VidResponseRecv(sender, proposal)),
+                                        &self.internal_event_stream,
+                                    )
+                                    .await;
+                                }
+                            }
+                            SequencingMessage::General(_) => {}
+                        }
+                    }
+                }
+                DataMessage::RequestData(data) => {
+                    let req_data = data.clone();
+                    if let RequestKind::Vid(_view_number, _key) = req_data.request {
+                        broadcast_event(
+                            Arc::new(HotShotEvent::VidRequestRecv(data, sender)),
+                            &self.internal_event_stream,
+                        )
+                        .await;
+                    }
                 }
             },
 
@@ -519,7 +547,21 @@ impl<
                     .await;
                 None
             }
-
+            HotShotEvent::VidRequestSend(req, sender, to) => Some((
+                sender,
+                MessageKind::Data(DataMessage::RequestData(req)),
+                TransmitType::Direct(to),
+            )),
+            HotShotEvent::VidResponseSend(sender, to, proposal) => {
+                let da_message = DaConsensusMessage::VidDisperseMsg(proposal);
+                let sequencing_msg = SequencingMessage::Da(da_message);
+                let response_message = ResponseMessage::Found(sequencing_msg);
+                Some((
+                    sender,
+                    MessageKind::Data(DataMessage::DataResponse(response_message)),
+                    TransmitType::Direct(to),
+                ))
+            }
             _ => None,
         }
     }

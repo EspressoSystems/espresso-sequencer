@@ -6,24 +6,17 @@
 
 use std::{sync::Arc, time::Duration};
 
-use async_broadcast::Receiver;
+use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-use futures::{FutureExt, StreamExt};
-use hotshot_task::dependency::{Dependency, EventDependency};
+use committable::Committable;
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState, OuterConsensus},
     data::VidDisperseShare,
-    message::{
-        DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
-        SequencingMessage,
-    },
-    request_response::{NetworkMsgResponseChannel, RequestReceiver},
+    message::Proposal,
     traits::{
-        election::Membership,
-        network::{DataRequest, RequestKind, ResponseMessage},
-        node_implementation::NodeType,
+        election::Membership, network::DataRequest, node_implementation::NodeType,
         signature_key::SignatureKey,
     },
 };
@@ -32,7 +25,7 @@ use sha2::{Digest, Sha256};
 use tokio::task::JoinHandle;
 use tracing::instrument;
 
-use crate::events::HotShotEvent;
+use crate::{events::HotShotEvent, helpers::broadcast_event};
 /// Time to wait for txns before sending `ResponseMessage::NotFound`
 const TXNS_TIMEOUT: Duration = Duration::from_millis(100);
 
@@ -42,8 +35,6 @@ const TXNS_TIMEOUT: Duration = Duration::from_millis(100);
 pub struct NetworkResponseState<TYPES: NodeType> {
     /// Locked consensus state
     consensus: LockedConsensusState<TYPES>,
-    /// Receiver for requests
-    receiver: RequestReceiver,
     /// Quorum membership for checking if requesters have state
     quorum: Arc<TYPES::Membership>,
     /// This replicas public key
@@ -58,7 +49,6 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     /// Create the network request state with the info it needs
     pub fn new(
         consensus: LockedConsensusState<TYPES>,
-        receiver: RequestReceiver,
         quorum: Arc<TYPES::Membership>,
         pub_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
@@ -66,7 +56,6 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     ) -> Self {
         Self {
             consensus,
-            receiver,
             quorum,
             pub_key,
             private_key,
@@ -74,67 +63,71 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         }
     }
 
-    /// Run the request response loop until a `HotShotEvent::Shutdown` is received.
-    /// Or the stream is closed.
-    async fn run_loop(mut self, shutdown: EventDependency<Arc<HotShotEvent<TYPES>>>) {
-        let mut shutdown = Box::pin(shutdown.completed().fuse());
+    /// Process request events or loop until a `HotShotEvent::Shutdown` is received.
+    async fn run_response_loop(
+        self,
+        mut receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
+        event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    ) {
         loop {
-            futures::select! {
-                req = self.receiver.next() => {
-                    match req {
-                        Some((msg, chan)) => self.handle_message(msg, chan).await,
-                        None => return,
-                    }
-                },
-                _ = shutdown => {
-                    return;
-                }
-            }
-        }
-    }
-
-    /// Handle an incoming message.  First validates the sender, then handles the contained request.
-    /// Sends the response via `chan`
-    async fn handle_message(&self, raw_req: Vec<u8>, chan: NetworkMsgResponseChannel<Vec<u8>>) {
-        let req: Message<TYPES> = match bincode::deserialize(&raw_req) {
-            Ok(deserialized) => deserialized,
-            Err(e) => {
-                tracing::error!("Failed to deserialize message! Error: {e}");
-                return;
-            }
-        };
-        let sender = req.sender.clone();
-
-        match req.kind {
-            MessageKind::Data(DataMessage::RequestData(request)) => {
-                if !self.valid_sender(&sender) || !valid_signature::<TYPES>(&request, &sender) {
-                    let serialized_msg = match bincode::serialize(
-                        &self.make_msg(ResponseMessage::Denied),
-                    ) {
-                        Ok(serialized) => serialized,
-                        Err(e) => {
-                            tracing::error!("Failed to serialize outgoing message: this should never happen. Error: {e}");
+            match receiver.recv_direct().await {
+                Ok(event) => {
+                    // break loop when false, this means shutdown received
+                    match event.as_ref() {
+                        HotShotEvent::VidRequestRecv(request, sender) => {
+                            // Verify request is valid
+                            if !self.valid_sender(sender)
+                                || !valid_signature::<TYPES>(request, sender)
+                            {
+                                continue;
+                            }
+                            if let Some(proposal) =
+                                self.get_or_calc_vid_share(request.view, sender).await
+                            {
+                                broadcast_event(
+                                    HotShotEvent::VidResponseSend(
+                                        self.pub_key.clone(),
+                                        sender.clone(),
+                                        proposal,
+                                    )
+                                    .into(),
+                                    &event_sender,
+                                )
+                                .await;
+                            }
+                        }
+                        HotShotEvent::QuorumProposalRequestRecv(req, signature) => {
+                            if let Some(quorum_proposal) = self
+                                .consensus
+                                .read()
+                                .await
+                                .last_proposals()
+                                .get(&req.view_number)
+                            {
+                                // Make sure that this request came from who we think it did
+                                if req.key.validate(signature, req.commit().as_ref()) {
+                                    broadcast_event(
+                                        HotShotEvent::QuorumProposalResponseSend(
+                                            req.key.clone(),
+                                            quorum_proposal.clone(),
+                                        )
+                                        .into(),
+                                        &event_sender,
+                                    )
+                                    .await;
+                                }
+                            }
+                        }
+                        HotShotEvent::Shutdown => {
                             return;
                         }
-                    };
-                    let _ = chan.sender.send(serialized_msg);
-                    return;
-                }
-
-                let response = self.handle_request(request).await;
-                let serialized_response = match bincode::serialize(&response) {
-                    Ok(serialized) => serialized,
-                    Err(e) => {
-                        tracing::error!("Failed to serialize outgoing message: this should never happen. Error: {e}");
-                        return;
+                        _ => {}
                     }
-                };
-                let _ = chan.sender.send(serialized_response);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to receive event. {:?}", e);
+                }
             }
-            msg => tracing::error!(
-                "Received message that wasn't a DataRequest in the request task.  Message: {:?}",
-                msg
-            ),
         }
     }
 
@@ -192,44 +185,9 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             .cloned()
     }
 
-    /// Handle the request contained in the message. Returns the response we should send
-    /// First parses the kind and passes to the appropriate handler for the specific type
-    /// of the request.
-    async fn handle_request(&self, req: DataRequest<TYPES>) -> Message<TYPES> {
-        match req.request {
-            RequestKind::Vid(view, pub_key) => {
-                let Some(share) = self.get_or_calc_vid_share(view, &pub_key).await else {
-                    return self.make_msg(ResponseMessage::NotFound);
-                };
-                let seq_msg = SequencingMessage::Da(DaConsensusMessage::VidDisperseMsg(share));
-                self.make_msg(ResponseMessage::Found(seq_msg))
-            }
-            // TODO impl for DA Proposal: https://github.com/EspressoSystems/HotShot/issues/2651
-            RequestKind::DaProposal(_view) => self.make_msg(ResponseMessage::NotFound),
-            RequestKind::Proposal(view) => self.make_msg(self.respond_with_proposal(view).await),
-        }
-    }
-
-    /// Helper to turn a `ResponseMessage` into a `Message` by filling
-    /// in the surrounding fields and creating the `MessageKind`
-    fn make_msg(&self, msg: ResponseMessage<TYPES>) -> Message<TYPES> {
-        Message {
-            sender: self.pub_key.clone(),
-            kind: MessageKind::Data(DataMessage::DataResponse(msg)),
-        }
-    }
     /// Makes sure the sender is allowed to send a request.
     fn valid_sender(&self, sender: &TYPES::SignatureKey) -> bool {
         self.quorum.has_stake(sender)
-    }
-    /// Lookup the proposal for the view and respond if it's found/not found
-    async fn respond_with_proposal(&self, view: TYPES::Time) -> ResponseMessage<TYPES> {
-        match self.consensus.read().await.last_proposals().get(&view) {
-            Some(prop) => ResponseMessage::Found(SequencingMessage::General(
-                GeneralConsensusMessage::Proposal(prop.clone()),
-            )),
-            None => ResponseMessage::NotFound,
-        }
     }
 }
 
@@ -250,10 +208,7 @@ fn valid_signature<TYPES: NodeType>(
 pub fn run_response_task<TYPES: NodeType>(
     task_state: NetworkResponseState<TYPES>,
     event_stream: Receiver<Arc<HotShotEvent<TYPES>>>,
+    sender: Sender<Arc<HotShotEvent<TYPES>>>,
 ) -> JoinHandle<()> {
-    let dep = EventDependency::new(
-        event_stream,
-        Box::new(|e| matches!(e.as_ref(), HotShotEvent::Shutdown)),
-    );
-    async_spawn(task_state.run_loop(dep))
+    async_spawn(task_state.run_response_loop(event_stream, sender))
 }

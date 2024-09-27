@@ -97,10 +97,10 @@ async fn test_consensus_task() {
         random![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(leaders[0], vid_share(&vids[0].0, handle.public_key())),
         ],
         serial![
-            VidShareRecv(vid_share(&vids[1].0, handle.public_key())),
+            VidShareRecv(leaders[0], vid_share(&vids[1].0, handle.public_key())),
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             QcFormed(either::Left(cert)),
             SendPayloadCommitmentAndMetadata(
@@ -181,7 +181,7 @@ async fn test_consensus_vote() {
     let inputs = vec![random![
         QuorumProposalRecv(proposals[0].clone(), leaders[0]),
         DaCertificateRecv(dacs[0].clone()),
-        VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
+        VidShareRecv(leaders[0], vid_share(&vids[0].0, handle.public_key())),
         QuorumVoteRecv(votes[0].clone()),
     ]];
 
@@ -295,13 +295,19 @@ async fn test_view_sync_finalize_propose() {
     .unwrap();
 
     let inputs = vec![
-        serial![VidShareRecv(vid_share(&vids[0].0, handle.public_key()))],
+        serial![VidShareRecv(
+            leaders[0],
+            vid_share(&vids[0].0, handle.public_key())
+        )],
         random![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
         ],
         serial![Timeout(ViewNumber::new(2)), Timeout(ViewNumber::new(3))],
-        serial![VidShareRecv(vid_share(&vids[1].0, handle.public_key()))],
+        serial![VidShareRecv(
+            leaders[0],
+            vid_share(&vids[1].0, handle.public_key())
+        )],
         random![
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             TimeoutVoteRecv(timeout_vote_view_2),
@@ -412,7 +418,10 @@ async fn test_view_sync_finalize_vote() {
     };
 
     let inputs = vec![
-        serial![VidShareRecv(vid_share(&vids[0].0, handle.public_key()))],
+        serial![VidShareRecv(
+            leaders[0],
+            vid_share(&vids[0].0, handle.public_key())
+        )],
         random![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
@@ -525,7 +534,10 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
             QuorumProposalRecv(good_proposal, leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
         ],
-        serial![VidShareRecv(vid_share(&vids[0].0, handle.public_key()))],
+        serial![VidShareRecv(
+            leaders[0],
+            vid_share(&vids[0].0, handle.public_key())
+        )],
         serial![Timeout(ViewNumber::new(2)), Timeout(ViewNumber::new(3))],
         random![
             ViewSyncFinalizeCertificate2Recv(cert),
@@ -591,7 +603,7 @@ async fn test_vid_disperse_storage_failure() {
     let inputs = vec![random![
         QuorumProposalRecv(proposals[0].clone(), leaders[0]),
         DaCertificateRecv(dacs[0].clone()),
-        VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
+        VidShareRecv(leaders[0], vid_share(&vids[0].0, handle.public_key())),
     ]];
 
     let expectations = vec![Expectations::from_outputs(all_predicates![

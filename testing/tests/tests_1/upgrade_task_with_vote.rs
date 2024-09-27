@@ -113,22 +113,22 @@ async fn test_upgrade_task_with_vote() {
         random![
             QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
             DaCertificateRecv(dacs[1].clone()),
-            VidShareRecv(vids[1].0[0].clone()),
+            VidShareRecv(leaders[1], vids[1].0[0].clone()),
         ],
         random![
             QuorumProposalValidated(proposals[2].data.clone(), leaves[1].clone()),
             DaCertificateRecv(dacs[2].clone()),
-            VidShareRecv(vids[2].0[0].clone()),
+            VidShareRecv(leaders[2], vids[2].0[0].clone()),
         ],
         random![
             QuorumProposalValidated(proposals[3].data.clone(), leaves[2].clone()),
             DaCertificateRecv(dacs[3].clone()),
-            VidShareRecv(vids[3].0[0].clone()),
+            VidShareRecv(leaders[3], vids[3].0[0].clone()),
         ],
         random![
             QuorumProposalValidated(proposals[4].data.clone(), leaves[3].clone()),
             DaCertificateRecv(dacs[4].clone()),
-            VidShareRecv(vids[4].0[0].clone()),
+            VidShareRecv(leaders[4], vids[4].0[0].clone()),
         ],
         random![QuorumProposalValidated(
             proposals[5].data.clone(),

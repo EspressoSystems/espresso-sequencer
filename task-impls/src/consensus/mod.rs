@@ -144,32 +144,30 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
     }
 
     /// Validate the VID disperse is correctly signed and has the correct share.
-    fn validate_disperse(&self, disperse: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> bool {
+    fn validate_disperse(
+        &self,
+        sender: &TYPES::SignatureKey,
+        disperse: &Proposal<TYPES, VidDisperseShare<TYPES>>,
+    ) -> bool {
         let view = disperse.data.view_number();
         let payload_commitment = disperse.data.payload_commitment;
+
+        // Check sender of VID disperse share is signed by DA committee member
+        let validate_sender = sender.validate(&disperse.signature, payload_commitment.as_ref())
+            && self.da_membership.committee_members(view).contains(sender);
 
         // Check whether the data satisfies one of the following.
         // * From the right leader for this view.
         // * Calculated and signed by the current node.
-        // * Signed by one of the staked DA committee members.
-        if !self
-            .quorum_membership
-            .leader(view)
+        let validated = self
+            .public_key
             .validate(&disperse.signature, payload_commitment.as_ref())
-            && !self
-                .public_key
-                .validate(&disperse.signature, payload_commitment.as_ref())
-        {
-            let mut validated = false;
-            for da_member in self.da_membership.committee_members(view) {
-                if da_member.validate(&disperse.signature, payload_commitment.as_ref()) {
-                    validated = true;
-                    break;
-                }
-            }
-            if !validated {
-                return false;
-            }
+            || self
+                .quorum_membership
+                .leader(view)
+                .validate(&disperse.signature, payload_commitment.as_ref());
+        if !validate_sender && !validated {
+            return false;
         }
 
         // Validate the VID share.
@@ -450,7 +448,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 self.spawn_vote_task(view, event_sender, event_receiver)
                     .await;
             }
-            HotShotEvent::VidShareRecv(disperse) => {
+            HotShotEvent::VidShareRecv(sender, disperse) => {
                 let view = disperse.data.view_number();
 
                 debug!(
@@ -469,7 +467,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
 
                 debug!("VID disperse data is not more than one view older.");
 
-                if !self.validate_disperse(disperse) {
+                if !self.validate_disperse(sender, disperse) {
                     warn!("Failed to validated the VID dispersal/share sig.");
                     return;
                 }

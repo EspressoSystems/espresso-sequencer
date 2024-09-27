@@ -36,7 +36,6 @@ use hotshot_types::{
     consensus::Consensus,
     constants::EVENT_CHANNEL_SIZE,
     message::{Message, UpgradeLock},
-    request_response::RequestReceiver,
     traits::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
@@ -80,11 +79,9 @@ pub async fn add_request_network_task<
 /// Add a task which responds to requests on the network.
 pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     handle: &mut SystemContextHandle<TYPES, I, V>,
-    request_receiver: RequestReceiver,
 ) {
     let state = NetworkResponseState::<TYPES>::new(
         handle.hotshot.consensus(),
-        request_receiver,
         handle.hotshot.memberships.quorum_membership.clone().into(),
         handle.public_key().clone(),
         handle.private_key().clone(),
@@ -93,6 +90,7 @@ pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
     handle.network_registry.register(run_response_task::<TYPES>(
         state,
         handle.internal_event_stream.1.activate_cloned(),
+        handle.internal_event_stream.0.clone(),
     ));
 }
 
@@ -563,10 +561,8 @@ pub async fn add_network_message_and_request_receiver_tasks<
     add_network_message_task(handle, &network);
     add_network_message_task(handle, &network);
 
-    if let Some(request_receiver) = network.spawn_request_receiver_task().await {
-        add_request_network_task(handle).await;
-        add_response_task(handle, request_receiver);
-    }
+    add_request_network_task(handle).await;
+    add_response_task(handle);
 }
 
 /// Adds the `NetworkEventTaskState` tasks.
