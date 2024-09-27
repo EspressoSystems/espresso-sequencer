@@ -30,7 +30,7 @@ use libp2p::kad::{
 };
 use libp2p_identity::PeerId;
 use store::ValidatedStore;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// Additional DHT record functionality
 pub mod record;
@@ -464,7 +464,6 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
                 ..
             } => {
                 if num_remaining == 0 {
-                    info!("Finished bootstrapping");
                     self.finish_bootstrap();
                 } else {
                     debug!("Bootstrap in progress, {} nodes remaining", num_remaining);

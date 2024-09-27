@@ -45,7 +45,6 @@ impl DHTBootstrapTask {
     /// Task's loop
     async fn run_loop(mut self) {
         loop {
-            tracing::debug!("looping bootstrap");
             if self.in_progress {
                 match self.rx.next().await {
                     Some(InputEvent::BootstrapFinished) => {
@@ -53,10 +52,13 @@ impl DHTBootstrapTask {
                         self.in_progress = false;
                     }
                     Some(InputEvent::ShutdownBootstrap) => {
-                        tracing::debug!("ShutdownBootstrap received, shutting down");
+                        tracing::info!("ShutdownBootstrap received, shutting down");
                         break;
                     }
-                    Some(_) => {}
+                    Some(InputEvent::StartBootstrap) => {
+                        tracing::warn!("Trying to start bootstrap that's already in progress");
+                        continue;
+                    }
                     None => {
                         tracing::debug!("Bootstrap channel closed, exiting loop");
                         break;
@@ -74,7 +76,9 @@ impl DHTBootstrapTask {
                         tracing::debug!("ShutdownBootstrap received, shutting down");
                         break;
                     }
-                    Some(_) => {}
+                    Some(InputEvent::BootstrapFinished) => {
+                        tracing::debug!("not in progress got bootstrap finished");
+                    }
                     None => {
                         tracing::debug!("Bootstrap channel closed, exiting loop");
                         break;

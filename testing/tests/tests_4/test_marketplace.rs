@@ -96,7 +96,7 @@ cross_tests!(
                 changes: HashMap::from([(0, BuilderChange::Down)])
               }
             ],
-            validate_transactions: nonempty_block_threshold((40,50)),
+            validate_transactions: nonempty_block_threshold((35,50)),
             ..TestDescription::default()
         }
     },

@@ -78,9 +78,6 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     /// Round start delay from config, in milliseconds.
     pub round_start_delay: u64,
 
-    /// timeout task handle
-    pub timeout_task: JoinHandle<()>,
-
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,
 

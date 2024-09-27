@@ -6,24 +6,19 @@
 
 //! Provides an event-streaming handle for a [`SystemContext`] running in the background
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use futures::Stream;
 use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry, Task, TaskState};
-use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
     error::HotShotError,
     traits::{election::Membership, network::ConnectedNetwork, node_implementation::NodeType},
 };
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
 use tracing::instrument;
 
 use crate::{traits::NodeImplementation, types::Event, Memberships, SystemContext, Versions};
@@ -235,27 +230,5 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
     #[must_use]
     pub fn storage(&self) -> Arc<RwLock<I::Storage>> {
         Arc::clone(&self.storage)
-    }
-
-    /// A helper function to spawn the initial timeout task from a given `SystemContextHandle`.
-    #[must_use]
-    pub fn spawn_initial_timeout_task(&self) -> JoinHandle<()> {
-        // Clone the event stream that we send the timeout event to
-        let event_stream = self.internal_event_stream.0.clone();
-        let next_view_timeout = self.hotshot.config.next_view_timeout;
-        let start_view = self.hotshot.start_view;
-
-        // Spawn a task that will sleep for the next view timeout and then send a timeout event
-        // if not cancelled
-        async_spawn({
-            async move {
-                async_sleep(Duration::from_millis(next_view_timeout)).await;
-                broadcast_event(
-                    Arc::new(HotShotEvent::Timeout(start_view + 1)),
-                    &event_stream,
-                )
-                .await;
-            }
-        })
     }
 }

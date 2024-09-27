@@ -6,12 +6,18 @@
 
 use std::sync::Arc;
 
+use self::handlers::{
+    handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
+};
+use crate::helpers::broadcast_event;
+use crate::{events::HotShotEvent, vote_collection::VoteCollectorsMap};
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use committable::Committable;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
@@ -27,11 +33,6 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
-
-use self::handlers::{
-    handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
-};
-use crate::{events::HotShotEvent, vote_collection::VoteCollectorsMap};
 
 /// Event handlers for use in the `handle` method.
 mod handlers;
@@ -110,6 +111,31 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Consensus2TaskS
                     handle_quorum_vote_recv(vote, Arc::clone(&event), &sender, self).await
                 {
                     tracing::debug!("Failed to handle QuorumVoteRecv event; error = {e}");
+                }
+            }
+            HotShotEvent::QuorumProposalRequestRecv(req, signature) => {
+                // Make sure that this request came from who we think it did
+                if !req.key.validate(signature, req.commit().as_ref()) {
+                    tracing::warn!("Invalid signature key on proposal request.");
+                    return;
+                }
+
+                if let Some(quorum_proposal) = self
+                    .consensus
+                    .read()
+                    .await
+                    .last_proposals()
+                    .get(&req.view_number)
+                {
+                    broadcast_event(
+                        HotShotEvent::QuorumProposalResponseSend(
+                            req.key.clone(),
+                            quorum_proposal.clone(),
+                        )
+                        .into(),
+                        &sender,
+                    )
+                    .await;
                 }
             }
             HotShotEvent::TimeoutVoteRecv(ref vote) => {

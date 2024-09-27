@@ -34,7 +34,7 @@ use std::{
 };
 
 use async_broadcast::{broadcast, InactiveReceiver, Receiver, Sender};
-use async_compatibility_layer::art::async_spawn;
+use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::join;
@@ -370,6 +370,24 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
                     self.start_view
                 )
             });
+
+        // Clone the event stream that we send the timeout event to
+        let event_stream = self.internal_event_stream.0.clone();
+        let next_view_timeout = self.config.next_view_timeout;
+        let start_view = self.start_view;
+
+        // Spawn a task that will sleep for the next view timeout and then send a timeout event
+        // if not cancelled
+        async_spawn({
+            async move {
+                async_sleep(Duration::from_millis(next_view_timeout)).await;
+                broadcast_event(
+                    Arc::new(HotShotEvent::Timeout(start_view + 1)),
+                    &event_stream,
+                )
+                .await;
+            }
+        });
         #[cfg(feature = "dependency-tasks")]
         {
             if let Some(validated_state) = consensus.validated_state_map().get(&self.start_view) {

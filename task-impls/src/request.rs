@@ -13,13 +13,12 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{ensure, Result};
+use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use committable::Committable;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
@@ -108,33 +107,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 if view > self.view {
                     self.view = view;
                 }
-                Ok(())
-            }
-            HotShotEvent::QuorumProposalRequestRecv(req, signature) => {
-                // Make sure that this request came from who we think it did
-                ensure!(
-                    req.key.validate(signature, req.commit().as_ref()),
-                    "Invalid signature key on proposal request."
-                );
-
-                if let Some(quorum_proposal) = self
-                    .state
-                    .read()
-                    .await
-                    .last_proposals()
-                    .get(&req.view_number)
-                {
-                    broadcast_event(
-                        HotShotEvent::QuorumProposalResponseSend(
-                            req.key.clone(),
-                            quorum_proposal.clone(),
-                        )
-                        .into(),
-                        sender,
-                    )
-                    .await;
-                }
-
                 Ok(())
             }
             _ => Ok(()),
@@ -323,6 +295,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
                         }
                         Err(e) => {
                             error!("Failed to deserialize response: {e}");
+                            async_sleep(REQUEST_TIMEOUT).await;
                         }
                     }
                 }

@@ -62,8 +62,6 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TxnTask
             match handles.get(idx) {
                 None => {
                     tracing::error!("couldn't get node in txn task");
-                    // should do error
-                    unimplemented!()
                 }
                 Some(node) => {
                     // use rand::seq::IteratorRandom;

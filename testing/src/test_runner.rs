@@ -165,7 +165,6 @@ where
         let completion_task = CompletionTask {
             tx: test_sender.clone(),
             rx: test_receiver.clone(),
-            handles: Arc::clone(&handles),
             duration: time_based.duration,
         };
 
@@ -274,7 +273,6 @@ where
         #[cfg(async_executor_impl = "async-std")]
         {
             let results = join_all(task_futs).await;
-            tracing::error!("test tasks joined");
             for result in results {
                 match result {
                     TestResult::Pass => {
@@ -286,14 +284,17 @@ where
             if let Some(handle) = txn_handle {
                 handle.cancel().await;
             }
-            completion_handle.cancel().await;
+            // Shutdown all of the servers at the end
+            // Aborting here doesn't cause any problems because we don't maintain any state
+            if let Some(solver_server) = solver_server {
+                solver_server.1.cancel().await;
+            }
         }
 
         #[cfg(async_executor_impl = "tokio")]
         {
             let results = join_all(task_futs).await;
 
-            tracing::error!("test tasks joined");
             for result in results {
                 match result {
                     Ok(res) => match res {
@@ -311,7 +312,11 @@ where
             if let Some(handle) = txn_handle {
                 handle.abort();
             }
-            completion_handle.abort();
+            // Shutdown all of the servers at the end
+            // Aborting here doesn't cause any problems because we don't maintain any state
+            if let Some(solver_server) = solver_server {
+                solver_server.1.abort();
+            }
         }
 
         let mut nodes = handles.write().await;
@@ -319,15 +324,12 @@ where
         for node in &mut *nodes {
             node.handle.shut_down().await;
         }
+        tracing::info!("Nodes shtudown");
 
-        // Shutdown all of the servers at the end
-        // Aborting here doesn't cause any problems because we don't maintain any state
-        if let Some(solver_server) = solver_server {
-            #[cfg(async_executor_impl = "async-std")]
-            solver_server.1.cancel().await;
-            #[cfg(async_executor_impl = "tokio")]
-            solver_server.1.abort();
-        }
+        #[cfg(async_executor_impl = "async-std")]
+        completion_handle.cancel().await;
+        #[cfg(async_executor_impl = "tokio")]
+        completion_handle.abort();
 
         assert!(
             error_list.is_empty(),

@@ -66,6 +66,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
                         signature.clone(),
                     ));
                 }
+                consensus.write().await.reset_actions();
 
                 result
             }

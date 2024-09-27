@@ -172,18 +172,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                 match self.ctx.round_results.entry(view_number) {
                     Entry::Occupied(mut o) => {
                         let entry = o.get_mut();
-                        let leaf = entry.insert_into_result(id, paired_up, maybe_block_size);
-
-                        // Here we noticed is a node may start up and time out waiting for a proposal
-                        // So we add the timeout to failed_views, but eventually the proposal is received we decide on the view
-                        // If we do indeed have a view timeout for the node at this point we want to remove it
-                        entry.cleanup_previous_timeouts_on_view(
-                            &mut self.ctx.failed_views,
-                            &view_number,
-                            &(id as u64),
-                        );
-
-                        leaf
+                        entry.insert_into_result(id, paired_up, maybe_block_size)
                     }
                     Entry::Vacant(v) => {
                         let mut round_result = RoundResult::default();
@@ -222,6 +211,8 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
             match view.status.clone() {
                 ViewStatus::Ok => {
                     self.ctx.successful_views.insert(view_number);
+                    // if a view succeeds remove it from the failed views
+                    self.ctx.failed_views.remove(&view_number);
                     if self.ctx.successful_views.len() >= num_successful_views {
                         let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
                     }
@@ -565,40 +556,6 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             }
         }
         leaves
-    }
-
-    fn cleanup_previous_timeouts_on_view(
-        &mut self,
-        failed_views: &mut HashSet<TYPES::Time>,
-        view_number: &TYPES::Time,
-        id: &u64,
-    ) {
-        // check if this node had a previous timeout
-        match self.failed_nodes.get(id) {
-            Some(error) => match error.as_ref() {
-                HotShotError::ViewTimeoutError {
-                    view_number,
-                    state: _,
-                } => {
-                    tracing::debug!(
-                        "Node {} originally timeout for view: {:?}. It has now been decided on.",
-                        id,
-                        view_number
-                    );
-                    self.failed_nodes.remove(id);
-                }
-                _ => return,
-            },
-            None => return,
-        }
-
-        // check if no more failed nodes
-        if self.failed_nodes.is_empty() && failed_views.remove(view_number) {
-            tracing::debug!(
-                "Removed view {:?} from failed views, all nodes have agreed upon view.",
-                view_number
-            );
-        }
     }
 }
 
