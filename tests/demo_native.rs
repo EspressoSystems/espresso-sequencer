@@ -214,6 +214,7 @@ async fn test_smoke() -> Result<()> {
     let _ = testing.readiness().await?;
 
     let mut initial = testing.test_state().await;
+    let initial_block_height = initial.block_height.unwrap();
     println!("Initial State:{}", initial);
 
     let mut i = 1;
@@ -235,9 +236,7 @@ async fn test_smoke() -> Result<()> {
         }
 
         // test that we progress EXPECTED_BLOCK_HEIGHT blocks from where we started
-        if new.block_height.unwrap()
-            >= testing.expected_block_height() + initial.block_height.unwrap()
-        {
+        if new.block_height.unwrap() >= testing.expected_block_height() + initial_block_height {
             println!("Reached {} block(s)!", testing.expected_block_height());
             break;
         }
@@ -252,7 +251,7 @@ async fn test_smoke() -> Result<()> {
             }
             initial = new;
         }
-        i = i + 1;
+        i += 1;
     }
     Ok(())
 }
