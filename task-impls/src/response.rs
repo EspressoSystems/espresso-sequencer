@@ -97,6 +97,12 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                             }
                         }
                         HotShotEvent::QuorumProposalRequestRecv(req, signature) => {
+                            // Make sure that this request came from who we think it did
+                            if !req.key.validate(signature, req.commit().as_ref()) {
+                                tracing::warn!("Invalid signature key on proposal request.");
+                                return;
+                            }
+
                             if let Some(quorum_proposal) = self
                                 .consensus
                                 .read()
@@ -104,18 +110,15 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                                 .last_proposals()
                                 .get(&req.view_number)
                             {
-                                // Make sure that this request came from who we think it did
-                                if req.key.validate(signature, req.commit().as_ref()) {
-                                    broadcast_event(
-                                        HotShotEvent::QuorumProposalResponseSend(
-                                            req.key.clone(),
-                                            quorum_proposal.clone(),
-                                        )
-                                        .into(),
-                                        &event_sender,
+                                broadcast_event(
+                                    HotShotEvent::QuorumProposalResponseSend(
+                                        req.key.clone(),
+                                        quorum_proposal.clone(),
                                     )
-                                    .await;
-                                }
+                                    .into(),
+                                    &event_sender,
+                                )
+                                .await;
                             }
                         }
                         HotShotEvent::Shutdown => {

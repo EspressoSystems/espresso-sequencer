@@ -13,7 +13,6 @@ use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use committable::Committable;
 use futures::future::join_all;
 use handlers::publish_proposal_from_commitment_and_metadata;
 use hotshot_task::task::TaskState;
@@ -308,31 +307,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 .await
                 {
                     warn!("Failed to handle QuorumProposalValidated event {e:#}");
-                }
-            }
-            HotShotEvent::QuorumProposalRequestRecv(req, signature) => {
-                // Make sure that this request came from who we think it did
-                if !req.key.validate(signature, req.commit().as_ref()) {
-                    warn!("Invalid signature key on proposal request.");
-                    return;
-                }
-
-                if let Some(quorum_proposal) = self
-                    .consensus
-                    .read()
-                    .await
-                    .last_proposals()
-                    .get(&req.view_number)
-                {
-                    broadcast_event(
-                        HotShotEvent::QuorumProposalResponseSend(
-                            req.key.clone(),
-                            quorum_proposal.clone(),
-                        )
-                        .into(),
-                        &event_sender,
-                    )
-                    .await;
                 }
             }
             HotShotEvent::QuorumVoteRecv(ref vote) => {

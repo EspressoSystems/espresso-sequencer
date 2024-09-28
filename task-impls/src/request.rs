@@ -214,6 +214,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
             {
                 // Cycle da members we send the request to each time
                 if let Some(recipient) = recipients_it.next() {
+                    if *recipient == public_key {
+                        // no need to send a message to ourselves.
+                        // just check for the data at start of loop in `cancel_vid_request_task`
+                        continue;
+                    }
                     // If we got the data after we make the request then we are done
                     if Self::handle_vid_request_task(
                         &sender,
@@ -229,6 +234,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
                         return;
                     }
                 } else {
+                    // This shouldnt be possible `recipients_it.next()` should clone original and start over if `None`
                     tracing::warn!(
                         "Sent VID request to all available DA members and got no reponse for view: {:?}",
                         view
