@@ -513,23 +513,6 @@ pub mod persistence_tests {
         assert_eq!(leaf, tx.get_leaf(1.into()).await.unwrap());
         assert_eq!(block, tx.get_block(1.into()).await.unwrap());
 
-        // TODO currently the following check causes a deadlock, because it tries to open a new
-        // transaction (implicitly via the NodeDataSource and AvailabilityDataSource traits) while
-        // the current one is still open, which is not yet supported. Once we have proper support
-        // for multiple concurrent connections
-        // (https://github.com/EspressoSystems/hotshot-query-service/issues/567), we should reenable
-        // this.
-        // // The inserted data is _not_ returned when reading through the data source itself (as
-        // // opposed to the transaction) since it is not yet committed.
-        // assert_eq!(
-        //     NodeDataSource::<MockTypes>::block_height(&ds)
-        //         .await
-        //         .unwrap(),
-        //     0
-        // );
-        // ds.get_leaf(1).await.try_resolve().unwrap_err();
-        // ds.get_block(1).await.try_resolve().unwrap_err();
-
         // Revert the changes.
         tx.revert().await;
         assert_eq!(
