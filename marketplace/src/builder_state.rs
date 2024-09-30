@@ -878,25 +878,31 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
     /// [event_loop_helper_handle_quorum_proposal] is a helper function that is used
     /// to handle incoming [MessageType]s, specifically [QuorumProposalMessage]s,
-    /// that are received by the [BuilderState::qc_receiver] channel.
-    async fn event_loop_helper_handle_quorum_proposal(&mut self, qc: Option<MessageType<TYPES>>) {
-        let Some(qc) = qc else {
+    /// that are received by the [BuilderState::quorum_proposal_receiver] channel.
+    async fn event_loop_helper_handle_quorum_proposal(
+        &mut self,
+        quorum: Option<MessageType<TYPES>>,
+    ) {
+        let Some(quorum) = quorum else {
             tracing::warn!("No more quorum proposal messages to consume");
             return;
         };
 
-        let MessageType::QuorumProposalMessage(rqc_msg) = qc else {
-            tracing::warn!("Unexpected message on quorum proposals channel: {:?}", qc);
+        let MessageType::QuorumProposalMessage(quorum_proposal_message) = quorum else {
+            tracing::warn!(
+                "Unexpected message on quorum proposals channel: {:?}",
+                quorum
+            );
             return;
         };
 
         tracing::debug!(
             "Received quorum proposal msg in builder {:?}:\n {:?} for view ",
             self.parent_block_references,
-            rqc_msg.proposal.data.view_number
+            quorum_proposal_message.proposal.data.view_number
         );
 
-        self.process_quorum_proposal(rqc_msg).await;
+        self.process_quorum_proposal(quorum_proposal_message).await;
     }
 
     /// [event_loop_helper_handle_decide] is a helper function that is used to
