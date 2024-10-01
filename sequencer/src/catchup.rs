@@ -135,10 +135,16 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
                 .send()
                 .await
             {
-                Ok(res) => match res.proof.verify(&fee_merkle_tree_root) {
-                    Ok(_) => return Ok(res),
-                    Err(err) => tracing::warn!("Error verifying account proof: {}", err),
-                },
+                Ok(res) => {
+                    if res.proof.account == account.into() {
+                        match res.proof.verify(&fee_merkle_tree_root) {
+                            Ok(_) => return Ok(res),
+                            Err(err) => tracing::warn!("Error verifying account proof: {}", err),
+                        }
+                    } else {
+                        tracing::warn!("Invalid proof received from peer {:?}", client.url);
+                    }
+                }
                 Err(err) => {
                     tracing::warn!("Error fetching account from peer: {}", err);
                 }
@@ -243,9 +249,20 @@ where
         _fee_merkle_tree_root: FeeMerkleCommitment,
         account: FeeAccount,
     ) -> anyhow::Result<AccountQueryData> {
-        self.db
+        let acct = self
+            .db
             .get_account(block_height, view, account.into())
-            .await
+            .await?;
+
+        if acct.proof.account != account.into() {
+            bail!(
+                "Mismatched fee account proof: expected {:?}, got {:?}",
+                account,
+                acct.proof.account
+            );
+        }
+
+        Ok(acct)
     }
 
     #[tracing::instrument(skip(self))]
