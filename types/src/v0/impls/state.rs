@@ -714,15 +714,10 @@ impl HotShotState<SeqTypes> for ValidatedState {
             return Err(BlockError::InvalidBlockHeader);
         }
 
-        let l1_head = instance
+        let _ = instance
             .l1_client
-            .wait_for_finalized_block(proposed_header.l1_head())
+            .wait_for_block(proposed_header.l1_head())
             .await;
-
-        if l1_head.number() != proposed_header.l1_head() {
-            tracing::error!("Invalid proposal: l1_head mismatch");
-            return Err(BlockError::InvalidBlockHeader);
-        }
 
         // validate the proposal
         if let Err(err) = validate_proposal(
