@@ -1,5 +1,4 @@
 use anyhow::bail;
-use async_std::future;
 use committable::{Commitment, Committable};
 use ethers::types::Address;
 use hotshot_query_service::merklized_state::MerklizedState;
@@ -22,7 +21,7 @@ use jf_merkle_tree::{
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::{ops::Add, time::Duration};
+use std::ops::Add;
 use thiserror::Error;
 use time::OffsetDateTime;
 use vbs::version::Version;
@@ -690,30 +689,30 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .resolve()
             .expect("Chain Config not found in validated state");
 
-        let Some(l1_finalized) = proposed_header.l1_finalized() else {
+        let Some(proposed_finalized) = proposed_header.l1_finalized() else {
             tracing::error!("L1 finalized has None value.");
             return Err(BlockError::InvalidBlockHeader);
         };
 
         let parent_finalized = parent_leaf.block_header().l1_finalized().unwrap().number();
-        if l1_finalized.number() <= parent_finalized {
+        if proposed_finalized.number() < parent_finalized {
             tracing::error!(
                 "L1 finalized not incrementing. parent: {}, proposal: {}",
                 parent_finalized,
-                l1_finalized.number()
+                proposed_finalized.number()
             );
         }
         // Wait for l1_finalized with a timeout.
-        if let Err(e) = future::timeout(Duration::from_secs(2), async {
-            instance
-                .l1_client
-                .wait_for_finalized_block(l1_finalized.number())
-                .await;
-        })
-        .await
-        {
-            tracing::error!("Wait for finalized, timeout: {}", e);
-            return Err(BlockError::InvalidBlockHeader);
+        let finalized = instance
+            .l1_client
+            .wait_for_finalized_block(proposed_finalized.number())
+            .await;
+
+        if finalized.hash() != proposed_finalized.hash() {
+            tracing::error!("Invalid proposal: l1_finalized hash mismatch");
+        }
+        if finalized.timestamp() != proposed_finalized.timestamp() {
+            tracing::error!("Invalid proposal: l1_finalized timestamp mismatch");
         }
 
         // validate the proposal
@@ -724,7 +723,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             proposed_header,
             &vid_common,
         ) {
-            tracing::error!("invalid proposal: {err:#}");
+            tracing::error!("Invalid proposal: {err:#}");
             return Err(BlockError::InvalidBlockHeader);
         }
 
