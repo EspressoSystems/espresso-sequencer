@@ -24,6 +24,7 @@ use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
 use std::{ops::Add, time::Duration};
 use thiserror::Error;
+use time::OffsetDateTime;
 use vbs::version::Version;
 
 use super::{
@@ -95,9 +96,9 @@ pub enum ProposalValidationError {
     InvalidNsTable { err: NsTableValidationError },
     #[error("Some fee amount or their sum total out of range")]
     SomeFeeAmountOutOfRange,
-    #[error("Invalid timestamp: parent:={parent_timestamp}, proposal={proposal_timestamp}")]
+    #[error("Invalid timestamp: local:={local_timestamp}, proposal={proposal_timestamp}")]
     InvalidTimestamp {
-        parent_timestamp: u64,
+        local_timestamp: u64,
         proposal_timestamp: u64,
     },
     #[error("l1_finalized has `None` value")]
@@ -316,15 +317,16 @@ pub fn validate_proposal(
         });
     }
 
-    // Check if timestamp is increasing (with some tolerance).
-    if proposal.timestamp() + 10 <= parent_header.timestamp() + 8 {
+    // Check if timestamp is increasing.
+    let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
+    if proposal.timestamp() < system_time - 2 {
         return Err(ProposalValidationError::InvalidTimestamp {
-            parent_timestamp: parent_header.timestamp(),
             proposal_timestamp: proposal.timestamp(),
+            local_timestamp: proposal.timestamp(),
         });
     }
 
-    if proposal.l1_head() <= parent_header.l1_head() {
+    if proposal.l1_head() < parent_header.l1_head() {
         return Err(ProposalValidationError::NonIncrementingL1Head {
             parent: parent_header.l1_head(),
             proposal: proposal.l1_head(),
