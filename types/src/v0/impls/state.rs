@@ -101,7 +101,9 @@ pub enum ProposalValidationError {
         proposal_timestamp: u64,
     },
     #[error("l1_finalized has `None` value")]
-    L1FinalizedNotFound
+    L1FinalizedNotFound,
+    #[error("Invalid timestamp: parent:={parent}, proposal={proposal}")]
+    NonIncrementingL1Head { parent: u64, proposal: u64 },
 }
 
 impl StateDelta for Delta {}
@@ -322,6 +324,13 @@ pub fn validate_proposal(
         });
     }
 
+    if proposal.l1_head() <= parent_header.l1_head() {
+        return Err(ProposalValidationError::NonIncrementingL1Head {
+            parent: parent_header.l1_head(),
+            proposal: proposal.l1_head(),
+        });
+    }
+
     let ValidatedState {
         block_merkle_tree,
         fee_merkle_tree,
@@ -439,15 +448,6 @@ impl ValidatedState {
         if Some(chain_config) != validated_state.chain_config.resolve() {
             validated_state.chain_config = chain_config.into();
         }
-
-        // Wait for l1_finalized with a timeout.
-        if let Some(l1_finalized) = proposed_header.l1_finalized() {
-            future::timeout(Duration::from_secs(2), async {
-                let _ = instance.l1_client.wait_for_finalized_block(l1_finalized.number());
-            }).await.map_err(|e| anyhow::anyhow!("Wait for finalized, timeout: {}", e))?;
-        } else {
-            return Err(ProposalValidationError::L1FinalizedNotFound)?;
-        };
 
         let l1_deposits = get_l1_deposits(
             instance,
@@ -687,6 +687,32 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .chain_config
             .resolve()
             .expect("Chain Config not found in validated state");
+
+        let Some(l1_finalized) = proposed_header.l1_finalized() else {
+            tracing::error!("L1 finalized has None value.");
+            return Err(BlockError::InvalidBlockHeader);
+        };
+
+        let parent_finalized = parent_leaf.block_header().l1_finalized().unwrap().number();
+        if l1_finalized.number() <= parent_finalized {
+            tracing::error!(
+                "L1 finalized not incrementing. parent: {}, proposal: {}",
+                parent_finalized,
+                l1_finalized.number()
+            );
+        }
+        // Wait for l1_finalized with a timeout.
+        if let Err(e) = future::timeout(Duration::from_secs(2), async {
+            instance
+                .l1_client
+                .wait_for_finalized_block(l1_finalized.number())
+                .await;
+        })
+        .await
+        {
+            tracing::error!("Wait for finalized, timeout: {}", e);
+            return Err(BlockError::InvalidBlockHeader);
+        }
 
         // validate the proposal
         if let Err(err) = validate_proposal(
