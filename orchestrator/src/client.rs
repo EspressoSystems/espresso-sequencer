@@ -48,6 +48,8 @@ pub struct BenchResults {
     pub total_num_views: usize,
     /// The number of failed views during benchmarking
     pub failed_num_views: usize,
+    /// The membership committee type used
+    pub committee_type: String,
 }
 
 impl BenchResults {
@@ -55,6 +57,7 @@ impl BenchResults {
     pub fn printout(&self) {
         println!("=====================");
         println!("{0} Benchmark results:", self.partial_results);
+        println!("Committee type: {}", self.committee_type);
         println!(
             "Average latency: {} seconds, Minimum latency: {} seconds, Maximum latency: {} seconds",
             self.avg_latency_in_sec, self.minimum_latency_in_sec, self.maximum_latency_in_sec
@@ -90,8 +93,6 @@ pub struct BenchResultsDownloadConfig {
     pub transaction_size: u64,
     /// The number of rounds
     pub rounds: usize,
-    /// The type of leader election: static, fixed, random
-    pub leader_election_type: String,
 
     // Results starting here
     /// Whether the results are partially collected
@@ -115,6 +116,8 @@ pub struct BenchResultsDownloadConfig {
     pub total_num_views: usize,
     /// The number of failed views during benchmarking
     pub failed_num_views: usize,
+    /// The membership committee type used
+    pub committee_type: String,
 }
 
 // VALIDATOR

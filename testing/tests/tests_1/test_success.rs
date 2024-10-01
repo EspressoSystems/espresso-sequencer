@@ -6,13 +6,13 @@
 
 use std::time::Duration;
 
+use hotshot_example_types::node_types::{
+    Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestTypes,
+    TestTypesRandomizedLeader, TestVersions,
+};
 #[cfg(feature = "dependency-tasks")]
 use hotshot_example_types::testable_delay::{
     DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay,
-};
-use hotshot_example_types::{
-    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestVersions},
-    state_types::TestTypes,
 };
 use hotshot_macros::cross_tests;
 use hotshot_testing::{
@@ -25,7 +25,7 @@ use hotshot_testing::{
 cross_tests!(
     TestName: test_success,
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
-    Types: [TestTypes],
+    Types: [TestTypes, TestTypesRandomizedLeader],
     Versions: [TestVersions],
     Ignore: false,
     Metadata: {

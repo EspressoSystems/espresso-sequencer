@@ -10,7 +10,7 @@ use std::{sync::Arc, time::Duration};
 use async_compatibility_layer::{art::async_timeout, logging::setup_logging};
 use hotshot::{
     traits::{
-        election::static_committee::GeneralStaticCommittee,
+        election::static_committee::StaticCommittee,
         implementations::{MasterMap, MemoryNetwork},
         NodeImplementation,
     },
@@ -60,7 +60,7 @@ impl NodeType for Test {
     type Transaction = TestTransaction;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
-    type Membership = GeneralStaticCommittee<Test>;
+    type Membership = StaticCommittee<Test>;
     type BuilderSignatureKey = BuilderKey;
 }
 

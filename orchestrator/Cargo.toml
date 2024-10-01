@@ -3,10 +3,6 @@ name = "hotshot-orchestrator"
 version = { workspace = true }
 edition = { workspace = true }
 
-[features]
-randomized-leader-election = []
-fixed-leader-election = []
-
 [dependencies]
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }

@@ -381,7 +381,16 @@ pub trait RunDa<
 
         let network = self.network();
 
-        let all_nodes = config.config.known_nodes_with_stake.clone();
+        let all_nodes = if cfg!(feature = "fixed-leader-election") {
+            let mut vec = config.config.known_nodes_with_stake.clone();
+
+            vec.truncate(config.config.fixed_leader_for_gpuvid);
+
+            vec
+        } else {
+            config.config.known_nodes_with_stake.clone()
+        };
+
         let da_nodes = config.config.known_da_nodes.clone();
 
         // Create the quorum membership from all nodes
@@ -389,19 +398,12 @@ pub trait RunDa<
             all_nodes.clone(),
             all_nodes.clone(),
             Topic::Global,
-            #[cfg(feature = "fixed-leader-election")]
-            config.config.fixed_leader_for_gpuvid,
         );
 
         // Create the quorum membership from all nodes, specifying the committee
         // as the known da nodes
-        let da_membership = <TYPES as NodeType>::Membership::new(
-            all_nodes.clone(),
-            da_nodes,
-            Topic::Da,
-            #[cfg(feature = "fixed-leader-election")]
-            config.config.fixed_leader_for_gpuvid,
-        );
+        let da_membership =
+            <TYPES as NodeType>::Membership::new(all_nodes.clone(), da_nodes, Topic::Da);
 
         let memberships = Memberships {
             quorum_membership: quorum_membership.clone(),
@@ -557,6 +559,12 @@ pub trait RunDa<
         }
         let consensus_lock = context.hotshot.consensus();
         let consensus = consensus_lock.read().await;
+        let num_eligible_leaders = context
+            .hotshot
+            .memberships
+            .quorum_membership
+            .committee_leaders(TYPES::Time::genesis())
+            .len();
         let total_num_views = usize::try_from(consensus.locked_view().u64()).unwrap();
         // `failed_num_views` could include uncommitted views
         let failed_num_views = total_num_views - num_successful_commits;
@@ -574,6 +582,7 @@ pub trait RunDa<
                 / total_time_elapsed_sec;
             let avg_latency_in_sec = total_latency / num_latency;
             println!("[{node_index}]: throughput: {throughput_bytes_per_sec} bytes/sec, avg_latency: {avg_latency_in_sec} sec.");
+
             BenchResults {
                 partial_results: "Unset".to_string(),
                 avg_latency_in_sec,
@@ -586,6 +595,10 @@ pub trait RunDa<
                 total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
                 total_num_views,
                 failed_num_views,
+                committee_type: format!(
+                    "{} with {num_eligible_leaders} eligible leaders",
+                    std::any::type_name::<TYPES::Membership>()
+                ),
             }
         } else {
             // all values with zero

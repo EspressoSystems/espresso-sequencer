@@ -446,16 +446,8 @@ where
                     all_nodes.clone(),
                     all_nodes.clone(),
                     Topic::Global,
-                    #[cfg(feature = "fixed-leader-election")]
-                    config.fixed_leader_for_gpuvid,
                 ),
-                da_membership: <TYPES as NodeType>::Membership::new(
-                    all_nodes,
-                    da_nodes,
-                    Topic::Da,
-                    #[cfg(feature = "fixed-leader-election")]
-                    config.fixed_leader_for_gpuvid,
-                ),
+                da_membership: <TYPES as NodeType>::Membership::new(all_nodes, da_nodes, Topic::Da),
             };
             config.builder_urls = builder_urls
                 .clone()

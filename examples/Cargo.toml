@@ -18,7 +18,6 @@ bin-orchestrator = ["clap"]
 docs = []
 doc-images = []
 hotshot-testing = ["hotshot/hotshot-testing"]
-randomized-leader-election = []
 fixed-leader-election = []
 
 # Common

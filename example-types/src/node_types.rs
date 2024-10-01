@@ -6,7 +6,7 @@
 
 use hotshot::traits::{
     election::{
-        static_committee::{GeneralStaticCommittee, StaticCommittee},
+        randomized_committee::RandomizedCommittee, static_committee::StaticCommittee,
         static_committee_leader_two_views::StaticCommitteeLeaderForTwoViews,
     },
     implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork},
@@ -52,7 +52,36 @@ impl NodeType for TestTypes {
     type Transaction = TestTransaction;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
-    type Membership = GeneralStaticCommittee<TestTypes>;
+    type Membership = StaticCommittee<TestTypes>;
+    type BuilderSignatureKey = BuilderKey;
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+/// filler struct to implement node type and allow us
+/// to select our traits
+pub struct TestTypesRandomizedLeader;
+impl NodeType for TestTypesRandomizedLeader {
+    type AuctionResult = TestAuctionResult;
+    type Time = ViewNumber;
+    type BlockHeader = TestBlockHeader;
+    type BlockPayload = TestBlockPayload;
+    type SignatureKey = BLSPubKey;
+    type Transaction = TestTransaction;
+    type ValidatedState = TestValidatedState;
+    type InstanceState = TestInstanceState;
+    type Membership = RandomizedCommittee<TestTypesRandomizedLeader>;
     type BuilderSignatureKey = BuilderKey;
 }
 

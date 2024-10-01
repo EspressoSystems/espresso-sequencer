@@ -16,11 +16,13 @@ use hotshot_types::{
     },
     PeerConfig,
 };
+use rand::{rngs::StdRng, Rng};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 
 /// The static committee election
-pub struct StaticCommittee<T: NodeType> {
+
+pub struct RandomizedCommittee<T: NodeType> {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
@@ -37,7 +39,7 @@ pub struct StaticCommittee<T: NodeType> {
     committee_topic: Topic,
 }
 
-impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
+impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     /// Create a new election
     fn new(
         eligible_leaders: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>,
@@ -129,9 +131,14 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
 
     /// Index the vector of public keys with the current view number
     fn leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey {
+        let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
+
+        let randomized_view_number: u64 = rng.gen_range(0..=u64::MAX);
         #[allow(clippy::cast_possible_truncation)]
-        let index = *view_number as usize % self.eligible_leaders.len();
+        let index = randomized_view_number as usize % self.eligible_leaders.len();
+
         let res = self.eligible_leaders[index].clone();
+
         TYPES::SignatureKey::public_key(&res)
     }
 

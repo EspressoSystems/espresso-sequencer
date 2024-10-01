@@ -33,18 +33,9 @@ pub struct StaticCommitteeLeaderForTwoViews<T: NodeType> {
     indexed_stake_table:
         BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
-    // /// The members of the committee
-    // committee_members: BTreeSet<T::SignatureKey>,
-    #[cfg(feature = "fixed-leader-election")]
-    /// The number of fixed leaders for gpuvid
-    fixed_leader_for_gpuvid: usize,
-
     /// The network topic of the committee
     committee_topic: Topic,
 }
-
-/// static committee using a vrf kp
-pub type StaticCommittee<T> = StaticCommitteeLeaderForTwoViews<T>;
 
 impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYPES> {
     /// Create a new election
@@ -52,7 +43,6 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
         eligible_leaders: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>,
         committee_members: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>,
         committee_topic: Topic,
-        #[cfg(feature = "fixed-leader-election")] fixed_leader_for_gpuvid: usize,
     ) -> Self {
         // For each eligible leader, get the stake table entry
         let eligible_leaders: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> =
@@ -84,8 +74,6 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
             stake_table: members,
             indexed_stake_table,
             committee_topic,
-            #[cfg(feature = "fixed-leader-election")]
-            fixed_leader_for_gpuvid,
         }
     }
 
@@ -102,6 +90,17 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
         _view_number: <TYPES as NodeType>::Time,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.stake_table
+            .iter()
+            .map(TYPES::SignatureKey::public_key)
+            .collect()
+    }
+
+    /// Get all eligible leaders of the committee for the current view
+    fn committee_leaders(
+        &self,
+        _view_number: <TYPES as NodeType>::Time,
+    ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
+        self.eligible_leaders
             .iter()
             .map(TYPES::SignatureKey::public_key)
             .collect()

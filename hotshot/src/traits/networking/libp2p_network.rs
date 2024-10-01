@@ -1145,8 +1145,9 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
 #[cfg(test)]
 mod test {
     mod derive_multiaddr {
-        use super::super::*;
         use std::net::Ipv6Addr;
+
+        use super::super::*;
 
         /// Test derivation of a valid IPv4 address -> Multiaddr
         #[test]

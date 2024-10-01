@@ -59,13 +59,8 @@ async fn test_network_task() {
 
     let all_nodes = config.known_nodes_with_stake.clone();
 
-    let membership = <TestTypes as NodeType>::Membership::new(
-        all_nodes.clone(),
-        all_nodes,
-        Topic::Global,
-        #[cfg(feature = "fixed-leader-election")]
-        config.fixed_leader_for_gpuvid,
-    );
+    let membership =
+        <TestTypes as NodeType>::Membership::new(all_nodes.clone(), all_nodes, Topic::Global);
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             channel: network.clone(),
@@ -140,13 +135,8 @@ async fn test_network_storage_fail() {
     let all_nodes = config.known_nodes_with_stake.clone();
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
 
-    let membership = <TestTypes as NodeType>::Membership::new(
-        all_nodes.clone(),
-        all_nodes,
-        Topic::Global,
-        #[cfg(feature = "fixed-leader-election")]
-        config.fixed_leader_for_gpuvid,
-    );
+    let membership =
+        <TestTypes as NodeType>::Membership::new(all_nodes.clone(), all_nodes, Topic::Global);
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             channel: network.clone(),

@@ -21,7 +21,6 @@ pub trait Membership<TYPES: NodeType>:
         eligible_leaders: Vec<PeerConfig<TYPES::SignatureKey>>,
         committee_members: Vec<PeerConfig<TYPES::SignatureKey>>,
         committee_topic: Topic,
-        #[cfg(feature = "fixed-leader-election")] fixed_leader_for_gpuvid: usize,
     ) -> Self;
 
     /// Get all participants in the committee (including their stake)
@@ -29,6 +28,9 @@ pub trait Membership<TYPES: NodeType>:
 
     /// Get all participants in the committee for a specific view
     fn committee_members(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+
+    /// Get all leaders in the committee for a specific view
+    fn committee_leaders(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get the stake table entry for a public key, returns `None` if the
     /// key is not in the table

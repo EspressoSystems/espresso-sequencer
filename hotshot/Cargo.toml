@@ -21,8 +21,6 @@ bin-orchestrator = ["clap"]
 docs = []
 doc-images = []
 hotshot-testing = []
-randomized-leader-election = []
-fixed-leader-election = []
 
 [dependencies]
 anyhow = { workspace = true }
