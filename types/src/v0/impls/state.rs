@@ -95,10 +95,15 @@ pub enum ProposalValidationError {
     InvalidNsTable { err: NsTableValidationError },
     #[error("Some fee amount or their sum total out of range")]
     SomeFeeAmountOutOfRange,
-    #[error("Invalid timestamp: local:={local_timestamp}, proposal={proposal_timestamp}")]
-    InvalidTimestamp {
-        local_timestamp: u64,
+    #[error("Invalid timestamp: proposal={proposal_timestamp}, parent={parent_timestamp}")]
+    InvalidTimestampNonIncrementing {
         proposal_timestamp: u64,
+        parent_timestamp: u64,
+    },
+    #[error("Invalid timestamp: local:={local_timestamp}, proposal={proposal_timestamp}")]
+    InvalidTimestampDrift {
+        proposal_timestamp: u64,
+        local_timestamp: u64,
     },
     #[error("l1_finalized has `None` value")]
     L1FinalizedNotFound,
@@ -316,12 +321,18 @@ pub fn validate_proposal(
         });
     }
 
-    // Check if timestamp is increasing.
+    // Validate timestamp increasing.
+    if proposal.timestamp() < parent_header.timestamp() {
+        return Err(ProposalValidationError::InvalidTimestampNonIncrementing {
+            proposal_timestamp: proposal.timestamp(),
+            parent_timestamp: parent_header.timestamp(),
+        });
+    }
+
+    // Validate timestamp hasn't drifted too much from system time.
     let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
-    if proposal.timestamp() < parent_header.timestamp()
-        || proposal.timestamp().abs_diff(system_time) > 2
-    {
-        return Err(ProposalValidationError::InvalidTimestamp {
+    if proposal.timestamp().abs_diff(system_time) > 2 {
+        return Err(ProposalValidationError::InvalidTimestampDrift {
             proposal_timestamp: proposal.timestamp(),
             local_timestamp: system_time,
         });
