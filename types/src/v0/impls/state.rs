@@ -317,7 +317,7 @@ pub fn validate_proposal(
     }
 
     // Check if timestamp is increasing (with some tolerance).
-    if proposal.timestamp() <= parent_header.timestamp() - 2 {
+    if proposal.timestamp() + 10 <= parent_header.timestamp() + 8 {
         return Err(ProposalValidationError::InvalidTimestamp {
             parent_timestamp: parent_header.timestamp(),
             proposal_timestamp: proposal.timestamp(),

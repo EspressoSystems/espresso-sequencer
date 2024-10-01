@@ -1390,6 +1390,8 @@ mod test_headers {
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
+        *proposal.timestamp_mut() = 5;
+        *proposal.l1_head_mut() = 5;
 
         let ver = StaticVersion::<0, 1>::version();
 
