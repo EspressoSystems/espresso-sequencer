@@ -94,6 +94,11 @@ pub enum ProposalValidationError {
     InvalidNsTable { err: NsTableValidationError },
     #[error("Some fee amount or their sum total out of range")]
     SomeFeeAmountOutOfRange,
+    #[error("Invalid timestamp: parent:={parent_timestamp}, proposal={proposal_timestamp}")]
+    InvalidTimestamp {
+        parent_timestamp: u64,
+        proposal_timestamp: u64,
+    },
 }
 
 impl StateDelta for Delta {}
@@ -303,6 +308,14 @@ pub fn validate_proposal(
         return Err(ProposalValidationError::InvalidHeight {
             parent_height: parent_header.height(),
             proposal_height: proposal.height(),
+        });
+    }
+
+    // Check if timestamp is increasing (with some tolerance).
+    if proposal.timestamp() <= parent_header.timestamp() - 2 {
+        return Err(ProposalValidationError::InvalidTimestamp {
+            parent_timestamp: parent_header.timestamp(),
+            proposal_timestamp: proposal.timestamp(),
         });
     }
 
