@@ -1,4 +1,5 @@
 use anyhow::bail;
+use async_std::future;
 use committable::{Commitment, Committable};
 use ethers::types::Address;
 use hotshot_query_service::merklized_state::MerklizedState;
@@ -21,7 +22,7 @@ use jf_merkle_tree::{
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::ops::Add;
+use std::{ops::Add, time::Duration};
 use thiserror::Error;
 use vbs::version::Version;
 
@@ -99,6 +100,8 @@ pub enum ProposalValidationError {
         parent_timestamp: u64,
         proposal_timestamp: u64,
     },
+    #[error("l1_finalized has `None` value")]
+    L1FinalizedNotFound
 }
 
 impl StateDelta for Delta {}
@@ -436,6 +439,15 @@ impl ValidatedState {
         if Some(chain_config) != validated_state.chain_config.resolve() {
             validated_state.chain_config = chain_config.into();
         }
+
+        // Wait for l1_finalized with a timeout.
+        if let Some(l1_finalized) = proposed_header.l1_finalized() {
+            future::timeout(Duration::from_secs(2), async {
+                let _ = instance.l1_client.wait_for_finalized_block(l1_finalized.number());
+            }).await.map_err(|e| anyhow::anyhow!("Wait for finalized, timeout: {}", e))?;
+        } else {
+            return Err(ProposalValidationError::L1FinalizedNotFound)?;
+        };
 
         let l1_deposits = get_l1_deposits(
             instance,
