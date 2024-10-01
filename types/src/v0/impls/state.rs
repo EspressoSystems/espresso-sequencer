@@ -318,8 +318,8 @@ pub fn validate_proposal(
 
     // Check if timestamp is increasing.
     let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
-    if proposal.timestamp() >= parent_header.timestamp()
-        && proposal.timestamp().abs_diff(system_time) <= 2
+    if proposal.timestamp() < parent_header.timestamp()
+        || proposal.timestamp().abs_diff(system_time) > 2
     {
         return Err(ProposalValidationError::InvalidTimestamp {
             proposal_timestamp: proposal.timestamp(),
