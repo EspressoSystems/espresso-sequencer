@@ -129,7 +129,7 @@ pub struct ValidatorArgs {
     /// The address the orchestrator runs on
     pub url: Url,
     /// The optional advertise address to use for Libp2p
-    pub advertise_address: Option<SocketAddr>,
+    pub advertise_address: Option<String>,
     /// Optional address to run builder on. Address must be accessible by other nodes
     pub builder_address: Option<SocketAddr>,
     /// An optional network config file to save to/load from
@@ -146,7 +146,7 @@ pub struct MultiValidatorArgs {
     /// The address the orchestrator runs on
     pub url: Url,
     /// The optional advertise address to use for Libp2p
-    pub advertise_address: Option<SocketAddr>,
+    pub advertise_address: Option<String>,
     /// An optional network config file to save to/load from
     /// Allows for rejoining the network on a complete state loss
     #[arg(short, long)]
@@ -193,8 +193,8 @@ impl ValidatorArgs {
 impl OrchestratorClient {
     /// Creates the client that will connect to the orchestrator
     #[must_use]
-    pub fn new(args: ValidatorArgs) -> Self {
-        let client = surf_disco::Client::<ClientError, OrchestratorVersion>::new(args.url);
+    pub fn new(url: Url) -> Self {
+        let client = surf_disco::Client::<ClientError, OrchestratorVersion>::new(url);
         // TODO ED: Add healthcheck wait here
         OrchestratorClient { client }
     }
@@ -212,23 +212,12 @@ impl OrchestratorClient {
     #[allow(clippy::type_complexity)]
     pub async fn get_config_without_peer<K: SignatureKey>(
         &self,
-        libp2p_address: Option<SocketAddr>,
+        libp2p_advertise_address: Option<Multiaddr>,
         libp2p_public_key: Option<PeerId>,
     ) -> anyhow::Result<NetworkConfig<K>> {
-        // Get the (possible) Libp2p advertise address from our args
-        let libp2p_address = libp2p_address.map(|f| {
-            Multiaddr::try_from(format!(
-                "/{}/{}/udp/{}/quic-v1",
-                if f.is_ipv4() { "ip4" } else { "ip6" },
-                f.ip(),
-                f.port()
-            ))
-            .expect("failed to create multiaddress")
-        });
-
         // Serialize our (possible) libp2p-specific data
         let request_body = vbs::Serializer::<OrchestratorVersion>::serialize(&(
-            libp2p_address,
+            libp2p_advertise_address,
             libp2p_public_key,
         ))?;
 
@@ -370,27 +359,16 @@ impl OrchestratorClient {
     pub async fn post_and_wait_all_public_keys<K: SignatureKey>(
         &self,
         mut validator_config: ValidatorConfig<K>,
-        libp2p_address: Option<SocketAddr>,
+        libp2p_advertise_address: Option<Multiaddr>,
         libp2p_public_key: Option<PeerId>,
     ) -> NetworkConfig<K> {
-        // Get the (possible) Libp2p advertise address from our args
-        let libp2p_address: Option<Multiaddr> = libp2p_address.map(|f| {
-            Multiaddr::try_from(format!(
-                "/{}/{}/udp/{}/quic-v1",
-                if f.is_ipv4() { "ip4" } else { "ip6" },
-                f.ip(),
-                f.port()
-            ))
-            .expect("failed to create multiaddress")
-        });
-
         let pubkey: Vec<u8> = PeerConfig::<K>::to_bytes(&validator_config.public_config()).clone();
         let da_requested: bool = validator_config.is_da;
 
         // Serialize our (possible) libp2p-specific data
         let request_body = vbs::Serializer::<OrchestratorVersion>::serialize(&(
             pubkey,
-            libp2p_address,
+            libp2p_advertise_address,
             libp2p_public_key,
         ))
         .expect("failed to serialize request");

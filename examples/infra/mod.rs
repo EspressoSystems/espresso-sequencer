@@ -9,7 +9,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     fs,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
     num::NonZeroUsize,
     sync::Arc,
     time::{Duration, Instant},
@@ -27,8 +27,9 @@ use futures::StreamExt;
 use hotshot::{
     traits::{
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, Libp2pMetricsValue,
-            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_multiaddr, derive_libp2p_peer_id, CdnMetricsValue, CdnTopic,
+            CombinedNetworks, Libp2pMetricsValue, Libp2pNetwork, PushCdnNetwork,
+            WrappedSignatureKey,
         },
         BlockPayload, NodeImplementation,
     },
@@ -359,7 +360,7 @@ pub trait RunDa<
     /// Initializes networking, returns self
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey>,
-        libp2p_advertise_address: Option<SocketAddr>,
+        libp2p_advertise_address: Option<String>,
     ) -> Self;
 
     /// Initializes the genesis state and HotShot instance; does not start HotShot consensus
@@ -633,7 +634,7 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey>,
-        _libp2p_advertise_address: Option<SocketAddr>,
+        _libp2p_advertise_address: Option<String>,
     ) -> PushCdnDaRun<TYPES> {
         // Get our own key
         let key = config.config.my_own_validator_config.clone();
@@ -711,7 +712,7 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey>,
-        libp2p_advertise_address: Option<SocketAddr>,
+        libp2p_advertise_address: Option<String>,
     ) -> Libp2pDaRun<TYPES> {
         // Extrapolate keys for ease of use
         let keys = config.clone().config.my_own_validator_config;
@@ -721,11 +722,16 @@ where
         // In an example, we can calculate the libp2p bind address as a function
         // of the advertise address.
         let bind_address = if let Some(libp2p_advertise_address) = libp2p_advertise_address {
+            let libp2p_advertise_address: SocketAddrV4 = libp2p_advertise_address
+                .parse()
+                .expect("failed to parse advertise address");
+
             // If we have supplied one, use it
             SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::UNSPECIFIED),
                 libp2p_advertise_address.port(),
             )
+            .to_string()
         } else {
             // If not, index a base port with our node index
             SocketAddr::new(
@@ -733,7 +739,12 @@ where
                 8000 + (u16::try_from(config.node_index)
                     .expect("failed to create advertise address")),
             )
+            .to_string()
         };
+
+        // Derive the bind address
+        let bind_address =
+            derive_libp2p_multiaddr(&bind_address).expect("failed to derive bind address");
 
         // Create the Libp2p network
         let libp2p_network = Libp2pNetwork::from_config::<TYPES>(
@@ -799,7 +810,7 @@ where
 {
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey>,
-        libp2p_advertise_address: Option<SocketAddr>,
+        libp2p_advertise_address: Option<String>,
     ) -> CombinedDaRun<TYPES> {
         // Initialize our Libp2p network
         let libp2p_network: Libp2pDaRun<TYPES> =
@@ -808,7 +819,7 @@ where
                 Libp2pNetwork<TYPES::SignatureKey>,
                 Libp2pImpl,
                 V,
-            >>::initialize_networking(config.clone(), libp2p_advertise_address)
+            >>::initialize_networking(config.clone(), libp2p_advertise_address.clone())
             .await;
 
         // Initialize our CDN network
@@ -874,7 +885,7 @@ pub async fn main_entry_point<
 
     info!("Starting validator");
 
-    let orchestrator_client: OrchestratorClient = OrchestratorClient::new(args.clone());
+    let orchestrator_client: OrchestratorClient = OrchestratorClient::new(args.url.clone());
 
     // We assume one node will not call this twice to generate two validator_config-s with same identity.
     let my_own_validator_config =
@@ -895,6 +906,11 @@ pub async fn main_entry_point<
         PeerConfig::<TYPES::SignatureKey>::to_bytes(&my_own_validator_config.public_config())
             .clone();
 
+    // Derive the advertise multiaddress from the supplied string
+    let advertise_multiaddress = args.advertise_address.clone().map(|advertise_address| {
+        derive_libp2p_multiaddr(&advertise_address).expect("failed to derive Libp2p multiaddr")
+    });
+
     // conditionally save/load config from file or orchestrator
     // This is a function that will return correct complete config from orchestrator.
     // It takes in a valid args.network_config_file when loading from file, or valid validator_config when loading from orchestrator, the invalid one will be ignored.
@@ -904,7 +920,7 @@ pub async fn main_entry_point<
     let (mut run_config, source) = NetworkConfig::<TYPES::SignatureKey>::get_complete_config(
         &orchestrator_client,
         my_own_validator_config,
-        args.advertise_address,
+        advertise_multiaddress,
         Some(libp2p_public_key),
     )
     .await

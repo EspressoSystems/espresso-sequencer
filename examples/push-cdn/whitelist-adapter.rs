@@ -14,10 +14,7 @@ use anyhow::{Context, Result};
 use cdn_broker::reexports::discovery::{DiscoveryClient, Embedded, Redis};
 use clap::Parser;
 use hotshot_example_types::node_types::TestTypes;
-use hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::NetworkConfig,
-};
+use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use surf_disco::Url;
 
@@ -50,12 +47,9 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     // Create a new `OrchestratorClient` from the supplied URL
-    let orchestrator_client = OrchestratorClient::new(ValidatorArgs {
-        url: Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
-        advertise_address: None,
-        builder_address: None,
-        network_config_file: None,
-    });
+    let orchestrator_client = OrchestratorClient::new(
+        Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
+    );
 
     // Attempt to get the config from the orchestrator.
     // Loops internally until the config is received.

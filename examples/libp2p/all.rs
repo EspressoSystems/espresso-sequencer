@@ -54,7 +54,7 @@ async fn main() {
             infra::main_entry_point::<TestTypes, Network, NodeImpl, TestVersions, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,
-                    advertise_address: Some(advertise_address),
+                    advertise_address: Some(advertise_address.to_string()),
                     builder_address: Some(builder_address),
                     network_config_file: None,
                 },

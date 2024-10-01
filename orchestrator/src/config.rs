@@ -6,7 +6,6 @@
 
 use std::{
     env, fs,
-    net::SocketAddr,
     num::NonZeroUsize,
     ops::Range,
     path::{Path, PathBuf},
@@ -210,7 +209,7 @@ impl<K: SignatureKey> NetworkConfig<K> {
     pub async fn from_file_or_orchestrator(
         client: &OrchestratorClient,
         file: Option<String>,
-        libp2p_address: Option<SocketAddr>,
+        libp2p_advertise_address: Option<Multiaddr>,
         libp2p_public_key: Option<PeerId>,
     ) -> anyhow::Result<(NetworkConfig<K>, NetworkConfigSource)> {
         if let Some(file) = file {
@@ -223,7 +222,7 @@ impl<K: SignatureKey> NetworkConfig<K> {
                     error!("{e}, falling back to orchestrator");
 
                     let config = client
-                        .get_config_without_peer(libp2p_address, libp2p_public_key)
+                        .get_config_without_peer(libp2p_advertise_address, libp2p_public_key)
                         .await?;
 
                     // save to file if we fell back
@@ -240,7 +239,7 @@ impl<K: SignatureKey> NetworkConfig<K> {
             // otherwise just get from orchestrator
             Ok((
                 client
-                    .get_config_without_peer(libp2p_address, libp2p_public_key)
+                    .get_config_without_peer(libp2p_advertise_address, libp2p_public_key)
                     .await?,
                 NetworkConfigSource::Orchestrator,
             ))
@@ -266,14 +265,14 @@ impl<K: SignatureKey> NetworkConfig<K> {
     pub async fn get_complete_config(
         client: &OrchestratorClient,
         my_own_validator_config: ValidatorConfig<K>,
-        libp2p_address: Option<SocketAddr>,
+        libp2p_advertise_address: Option<Multiaddr>,
         libp2p_public_key: Option<PeerId>,
     ) -> anyhow::Result<(NetworkConfig<K>, NetworkConfigSource)> {
         // get the configuration from the orchestrator
         let run_config: NetworkConfig<K> = client
             .post_and_wait_all_public_keys::<K>(
                 my_own_validator_config,
-                libp2p_address,
+                libp2p_advertise_address,
                 libp2p_public_key,
             )
             .await;

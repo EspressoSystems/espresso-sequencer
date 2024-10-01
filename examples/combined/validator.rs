@@ -5,7 +5,6 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 //! A validator using both the web server and libp2p
-use std::{net::SocketAddr, str::FromStr};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
@@ -34,12 +33,7 @@ async fn main() {
 
     // If we did not set the advertise address, use our local IP and port 8000
     let local_ip = local_ip().expect("failed to get local IP");
-    args.advertise_address = Some(
-        args.advertise_address.unwrap_or(
-            SocketAddr::from_str(&format!("{local_ip}:8000"))
-                .expect("failed to convert local IP to socket address"),
-        ),
-    );
+    args.advertise_address = Some(args.advertise_address.unwrap_or(format!("{local_ip}:8000")));
 
     debug!("connecting to orchestrator at {:?}", args.url);
     infra::main_entry_point::<TestTypes, Network, NodeImpl, TestVersions, ThisRun>(args).await;
