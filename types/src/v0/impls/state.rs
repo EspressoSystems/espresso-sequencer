@@ -710,9 +710,11 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         if finalized.hash() != proposed_finalized.hash() {
             tracing::error!("Invalid proposal: l1_finalized hash mismatch");
+            return Err(BlockError::InvalidBlockHeader);
         }
         if finalized.timestamp() != proposed_finalized.timestamp() {
             tracing::error!("Invalid proposal: l1_finalized timestamp mismatch");
+            return Err(BlockError::InvalidBlockHeader);
         }
 
         // validate the proposal
