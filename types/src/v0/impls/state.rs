@@ -318,17 +318,12 @@ pub fn validate_proposal(
 
     // Check if timestamp is increasing.
     let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
-    if proposal.timestamp() < system_time - 2 {
+    if proposal.timestamp() >= parent_header.timestamp()
+        && proposal.timestamp().abs_diff(system_time) <= 2
+    {
         return Err(ProposalValidationError::InvalidTimestamp {
             proposal_timestamp: proposal.timestamp(),
-            local_timestamp: proposal.timestamp(),
-        });
-    }
-
-    if proposal.l1_head() < parent_header.l1_head() {
-        return Err(ProposalValidationError::NonIncrementingL1Head {
-            parent: parent_header.l1_head(),
-            proposal: proposal.l1_head(),
+            local_timestamp: system_time,
         });
     }
 
@@ -689,6 +684,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .resolve()
             .expect("Chain Config not found in validated state");
 
+        // Validate l1_finalized.
         let Some(proposed_finalized) = proposed_header.l1_finalized() else {
             tracing::error!("L1 finalized has None value.");
             return Err(BlockError::InvalidBlockHeader);
@@ -702,18 +698,29 @@ impl HotShotState<SeqTypes> for ValidatedState {
                 proposed_finalized.number()
             );
         }
-        // Wait for l1_finalized with a timeout.
         let finalized = instance
             .l1_client
             .wait_for_finalized_block(proposed_finalized.number())
             .await;
 
-        if finalized.hash() != proposed_finalized.hash() {
-            tracing::error!("Invalid proposal: l1_finalized hash mismatch");
+        if finalized != proposed_finalized {
+            tracing::error!("Invalid proposal: l1_finalized mismatch");
             return Err(BlockError::InvalidBlockHeader);
         }
-        if finalized.timestamp() != proposed_finalized.timestamp() {
-            tracing::error!("Invalid proposal: l1_finalized timestamp mismatch");
+
+        // Validate `l1_head`.
+        if proposed_header.l1_head() < parent_leaf.block_header().l1_head() {
+            tracing::error!("Invalid proposal: l1_head not increasing");
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
+        let l1_head = instance
+            .l1_client
+            .wait_for_finalized_block(proposed_header.l1_head())
+            .await;
+
+        if l1_head.number() != proposed_header.l1_head() {
+            tracing::error!("Invalid proposal: l1_head mismatch");
             return Err(BlockError::InvalidBlockHeader);
         }
 
