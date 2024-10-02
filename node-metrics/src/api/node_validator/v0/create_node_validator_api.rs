@@ -294,12 +294,7 @@ pub async fn create_node_validator_processing(
         .await
         .map_err(CreateNodeValidatorProcessingError::FailedToGetStakeTable)?;
 
-    let data_state = DataState::new(
-        Default::default(),
-        Default::default(),
-        stake_table,
-        Default::default(),
-    );
+    let data_state = DataState::new(Default::default(), Default::default(), stake_table);
 
     let data_state = Arc::new(RwLock::new(data_state));
     let client_thread_state = Arc::new(RwLock::new(client_thread_state));

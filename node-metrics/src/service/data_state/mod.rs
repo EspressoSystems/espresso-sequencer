@@ -46,8 +46,17 @@ impl DataState {
         latest_blocks: CircularBuffer<MAX_HISTORY, BlockDetail<SeqTypes>>,
         latest_voters: CircularBuffer<MAX_HISTORY, BitVec<u16>>,
         stake_table: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-        node_identity: Vec<NodeIdentity>,
     ) -> Self {
+        let node_identity = {
+            let stake_table_iter_result = stake_table.try_iter(SnapshotVersion::Head);
+            match stake_table_iter_result {
+                Ok(into_iter) => into_iter
+                    .map(|(key, _, _)| NodeIdentity::from_public_key(key))
+                    .collect(),
+                Err(_) => vec![],
+            }
+        };
+
         Self {
             latest_blocks,
             latest_voters,
