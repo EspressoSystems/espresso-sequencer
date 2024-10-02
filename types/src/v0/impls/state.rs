@@ -322,6 +322,7 @@ pub fn validate_proposal(
     }
 
     // Validate timestamp increasing.
+    // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
     if proposal.timestamp() < parent_header.timestamp() {
         return Err(ProposalValidationError::InvalidTimestampNonIncrementing {
             proposal_timestamp: proposal.timestamp(),
@@ -698,6 +699,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .expect("Chain Config not found in validated state");
 
         // Validate l1_finalized.
+        // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
         let proposed_finalized = proposed_header.l1_finalized();
         let parent_finalized = parent_leaf.block_header().l1_finalized();
         if proposed_finalized < parent_finalized {
@@ -718,8 +720,8 @@ impl HotShotState<SeqTypes> for ValidatedState {
                 return Err(BlockError::InvalidBlockHeader);
             }
         }
-
         // Validate `l1_head`.
+        // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
         if proposed_header.l1_head() < parent_leaf.block_header().l1_head() {
             tracing::error!("Invalid proposal: l1_head decreasing");
             return Err(BlockError::InvalidBlockHeader);

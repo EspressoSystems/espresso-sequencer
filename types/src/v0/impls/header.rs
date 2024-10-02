@@ -1374,6 +1374,7 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_validate_proposal_error_cases() {
+        // TODO add assertion for timestamp validation
         let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
