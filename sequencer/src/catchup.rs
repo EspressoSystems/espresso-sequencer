@@ -279,8 +279,9 @@ where
         let cf = self.db.get_chain_config(commitment).await?;
 
         if cf.commit() != commitment {
-            bail!(
-                "Invalid chain config: expected {:?}, got {:?}",
+            panic!(
+                "Critical error: Mismatched chain config detected. Expected chain config: {:?}, but got: {:?}. 
+                This may indicate a compromised database",
                 commitment,
                 cf.commit()
             )
