@@ -719,7 +719,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // Validate `l1_head`.
         if proposed_header.l1_head() < parent_leaf.block_header().l1_head() {
-            tracing::error!("Invalid proposal: l1_head not increasing");
+            tracing::error!("Invalid proposal: l1_head decreasing");
             return Err(BlockError::InvalidBlockHeader);
         }
 
