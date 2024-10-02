@@ -347,12 +347,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         );
     }
 
-    /// @notice checks if the state updates lag behind the specified threshold based on the provided
+    /// @notice checks if the state updates lag behind the specified block threshold based on the
+    /// provided
     /// block number.
     /// @param blockNumber The block number to compare against the latest state updates
-    /// @param threshold The number of blocks updates to this contract is allowed to lag behind
-    /// @return bool returns true if the lag exceeds the threshold; otherwise, false
-    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 threshold)
+    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind
+    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false
+    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 blockThreshold)
         public
         view
         virtual
@@ -395,7 +396,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InsufficientSnapshotHistory();
         }
 
-        return blockNumber - prevBlock > threshold;
+        return blockNumber - prevBlock > blockThreshold;
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
