@@ -79,6 +79,34 @@ impl L1Client {
         L1Snapshot { head, finalized }
     }
 
+    pub async fn wait_for_block(&self, number: u64) -> L1BlockInfo {
+        let interval = self.provider.get_interval();
+        loop {
+            let block = match self.provider.get_block(number).await {
+                Ok(Some(block)) => block,
+                Ok(None) => {
+                    tracing::info!(number, "no such block");
+                    sleep(interval).await;
+                    continue;
+                }
+                Err(err) => {
+                    tracing::error!(%err, number, "failed to get L1 block");
+                    sleep(interval).await;
+                    continue;
+                }
+            };
+            let Some(hash) = block.hash else {
+                tracing::error!(number, ?block, "L1 block has no hash");
+                sleep(interval).await;
+                continue;
+            };
+            break L1BlockInfo {
+                number,
+                hash,
+                timestamp: block.timestamp,
+            };
+        }
+    }
     /// Get information about the given block.
     ///
     /// If the desired block number is not finalized yet, this function will block until it becomes
@@ -107,31 +135,7 @@ impl L1Client {
 
         // The finalized block may have skipped over the block of interest. In this case, our block
         // is still finalized, since it is before the finalized block. We just need to fetch it.
-        loop {
-            let block = match self.provider.get_block(number).await {
-                Ok(Some(block)) => block,
-                Ok(None) => {
-                    tracing::error!(number, "no such block");
-                    sleep(interval).await;
-                    continue;
-                }
-                Err(err) => {
-                    tracing::error!(%err, number, "failed to get L1 block");
-                    sleep(interval).await;
-                    continue;
-                }
-            };
-            let Some(hash) = block.hash else {
-                tracing::error!(number, ?block, "L1 block has no hash");
-                sleep(interval).await;
-                continue;
-            };
-            break L1BlockInfo {
-                number,
-                hash,
-                timestamp: block.timestamp,
-            };
-        }
+        self.wait_for_block(number).await
     }
 
     /// Proxy to `Provider.get_block_number`.

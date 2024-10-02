@@ -23,6 +23,7 @@ use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use thiserror::Error;
+use time::OffsetDateTime;
 use vbs::version::Version;
 
 use super::{
@@ -94,6 +95,20 @@ pub enum ProposalValidationError {
     InvalidNsTable { err: NsTableValidationError },
     #[error("Some fee amount or their sum total out of range")]
     SomeFeeAmountOutOfRange,
+    #[error("Invalid timestamp: proposal={proposal_timestamp}, parent={parent_timestamp}")]
+    InvalidTimestampNonIncrementing {
+        proposal_timestamp: u64,
+        parent_timestamp: u64,
+    },
+    #[error("Invalid timestamp: local:={local_timestamp}, proposal={proposal_timestamp}")]
+    InvalidTimestampDrift {
+        proposal_timestamp: u64,
+        local_timestamp: u64,
+    },
+    #[error("l1_finalized has `None` value")]
+    L1FinalizedNotFound,
+    #[error("Invalid timestamp: parent:={parent}, proposal={proposal}")]
+    NonIncrementingL1Head { parent: u64, proposal: u64 },
 }
 
 impl StateDelta for Delta {}
@@ -303,6 +318,26 @@ pub fn validate_proposal(
         return Err(ProposalValidationError::InvalidHeight {
             parent_height: parent_header.height(),
             proposal_height: proposal.height(),
+        });
+    }
+
+    // Validate timestamp increasing.
+    // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
+    if proposal.timestamp() < parent_header.timestamp() {
+        return Err(ProposalValidationError::InvalidTimestampNonIncrementing {
+            proposal_timestamp: proposal.timestamp(),
+            parent_timestamp: parent_header.timestamp(),
+        });
+    }
+
+    // Validate timestamp hasn't drifted too much from system time.
+    let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
+    // TODO 2 seconds of tolerance should be enough for reasonably
+    // configured nodes, but we should make this configurable.
+    if proposal.timestamp().abs_diff(system_time) > 2 {
+        return Err(ProposalValidationError::InvalidTimestampDrift {
+            proposal_timestamp: proposal.timestamp(),
+            local_timestamp: system_time,
         });
     }
 
@@ -663,6 +698,40 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .resolve()
             .expect("Chain Config not found in validated state");
 
+        // Validate l1_finalized.
+        // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
+        let proposed_finalized = proposed_header.l1_finalized();
+        let parent_finalized = parent_leaf.block_header().l1_finalized();
+        if proposed_finalized < parent_finalized {
+            tracing::error!(
+                "L1 finalized not incrementing. parent: {:?}, proposal: {:?}",
+                parent_finalized,
+                proposed_finalized,
+            );
+        }
+        if let Some(proposed_finalized) = proposed_finalized {
+            let finalized = instance
+                .l1_client
+                .wait_for_finalized_block(proposed_finalized.number())
+                .await;
+
+            if finalized != proposed_finalized {
+                tracing::error!("Invalid proposal: l1_finalized mismatch");
+                return Err(BlockError::InvalidBlockHeader);
+            }
+        }
+        // Validate `l1_head`.
+        // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
+        if proposed_header.l1_head() < parent_leaf.block_header().l1_head() {
+            tracing::error!("Invalid proposal: l1_head decreasing");
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
+        let _ = instance
+            .l1_client
+            .wait_for_block(proposed_header.l1_head())
+            .await;
+
         // validate the proposal
         if let Err(err) = validate_proposal(
             &validated_state,
@@ -671,7 +740,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             proposed_header,
             &vid_common,
         ) {
-            tracing::error!("invalid proposal: {err:#}");
+            tracing::error!("Invalid proposal: {err:#}");
             return Err(BlockError::InvalidBlockHeader);
         }
 
