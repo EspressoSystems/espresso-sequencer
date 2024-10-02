@@ -12,10 +12,7 @@ use async_lock::RwLock;
 use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
 use hotshot_task::task::{ConsensusTaskRegistry, Task};
-use hotshot_task_impls::{
-    events::HotShotEvent,
-    network::{self, NetworkEventTaskState},
-};
+use hotshot_task_impls::{events::HotShotEvent, network::NetworkEventTaskState};
 use hotshot_testing::{
     helpers::build_system_handle, test_builder::TestDescription,
     test_task::add_network_message_test_task, view_generator::TestViewGenerator,
@@ -63,10 +60,10 @@ async fn test_network_task() {
         <TestTypes as NodeType>::Membership::new(all_nodes.clone(), all_nodes, Topic::Global);
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
-            channel: network.clone(),
+            network: network.clone(),
             view: ViewNumber::new(0),
-            membership: membership.clone(),
-            filter: network::quorum_filter,
+            quorum_membership: membership.clone(),
+            da_membership: membership.clone(),
             upgrade_lock: upgrade_lock.clone(),
             storage,
             consensus,
@@ -139,10 +136,10 @@ async fn test_network_storage_fail() {
         <TestTypes as NodeType>::Membership::new(all_nodes.clone(), all_nodes, Topic::Global);
     let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
-            channel: network.clone(),
+            network: network.clone(),
             view: ViewNumber::new(0),
-            membership: membership.clone(),
-            filter: network::quorum_filter,
+            quorum_membership: membership.clone(),
+            da_membership: membership.clone(),
             upgrade_lock: upgrade_lock.clone(),
             storage,
             consensus,

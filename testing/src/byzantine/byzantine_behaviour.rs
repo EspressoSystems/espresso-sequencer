@@ -340,15 +340,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
     fn add_network_event_task(
         &self,
         handle: &mut SystemContextHandle<TYPES, I, V>,
-        channel: Arc<<I as NodeImplementation<TYPES>>::Network>,
-        membership: TYPES::Membership,
-        filter: fn(&Arc<HotShotEvent<TYPES>>) -> bool,
+        network: Arc<<I as NodeImplementation<TYPES>>::Network>,
+        quorum_membership: TYPES::Membership,
+        da_membership: TYPES::Membership,
     ) {
         let network_state: NetworkEventTaskState<_, V, _, _> = NetworkEventTaskState {
-            channel,
+            network,
             view: TYPES::Time::genesis(),
-            membership,
-            filter,
+            quorum_membership,
+            da_membership,
             storage: Arc::clone(&handle.storage()),
             consensus: Arc::clone(&handle.consensus()),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),

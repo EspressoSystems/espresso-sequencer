@@ -38,63 +38,6 @@ use crate::{
     helpers::broadcast_event,
 };
 
-/// quorum filter
-pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
-    !matches!(
-        event.as_ref(),
-        HotShotEvent::QuorumProposalSend(_, _)
-            | HotShotEvent::QuorumVoteSend(_)
-            | HotShotEvent::DacSend(_, _)
-            | HotShotEvent::TimeoutVoteSend(_)
-            | HotShotEvent::ViewChange(_)
-    )
-}
-
-/// upgrade filter
-pub fn upgrade_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
-    !matches!(
-        event.as_ref(),
-        HotShotEvent::UpgradeProposalSend(_, _)
-            | HotShotEvent::UpgradeVoteSend(_)
-            | HotShotEvent::ViewChange(_)
-    )
-}
-
-/// DA filter
-pub fn da_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
-    !matches!(
-        event.as_ref(),
-        HotShotEvent::DaProposalSend(_, _)
-            | HotShotEvent::QuorumProposalRequestSend(..)
-            | HotShotEvent::QuorumProposalResponseSend(..)
-            | HotShotEvent::VidResponseSend(..)
-            | HotShotEvent::VidRequestSend(..)
-            | HotShotEvent::DaVoteSend(_)
-            | HotShotEvent::ViewChange(_)
-    )
-}
-
-/// vid filter
-pub fn vid_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
-    !matches!(
-        event.as_ref(),
-        HotShotEvent::VidDisperseSend(_, _) | HotShotEvent::ViewChange(_)
-    )
-}
-
-/// view sync filter
-pub fn view_sync_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
-    !matches!(
-        event.as_ref(),
-        HotShotEvent::ViewSyncPreCommitCertificate2Send(_, _)
-            | HotShotEvent::ViewSyncCommitCertificate2Send(_, _)
-            | HotShotEvent::ViewSyncFinalizeCertificate2Send(_, _)
-            | HotShotEvent::ViewSyncPreCommitVoteSend(_)
-            | HotShotEvent::ViewSyncCommitVoteSend(_)
-            | HotShotEvent::ViewSyncFinalizeVoteSend(_)
-            | HotShotEvent::ViewChange(_)
-    )
-}
 /// the network message task state
 #[derive(Clone)]
 pub struct NetworkMessageTaskState<TYPES: NodeType> {
@@ -235,18 +178,17 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 pub struct NetworkEventTaskState<
     TYPES: NodeType,
     V: Versions,
-    COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+    NET: ConnectedNetwork<TYPES::SignatureKey>,
     S: Storage<TYPES>,
 > {
-    /// comm channel
-    pub channel: Arc<COMMCHANNEL>,
+    /// comm network
+    pub network: Arc<NET>,
     /// view number
     pub view: TYPES::Time,
-    /// membership for the channel
-    pub membership: TYPES::Membership,
-    // TODO ED Need to add exchange so we can get the recipient key and our own key?
-    /// Filter which returns false for the events that this specific network task cares about
-    pub filter: fn(&Arc<HotShotEvent<TYPES>>) -> bool,
+    /// quorum for the network
+    pub quorum_membership: TYPES::Membership,
+    /// da for the network
+    pub da_membership: TYPES::Membership,
     /// Storage to store actionable events
     pub storage: Arc<RwLock<S>>,
     /// Shared consensus state
@@ -259,9 +201,9 @@ pub struct NetworkEventTaskState<
 impl<
         TYPES: NodeType,
         V: Versions,
-        COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+        NET: ConnectedNetwork<TYPES::SignatureKey>,
         S: Storage<TYPES> + 'static,
-    > TaskState for NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>
+    > TaskState for NetworkEventTaskState<TYPES, V, NET, S>
 {
     type Event = HotShotEvent<TYPES>;
 
@@ -271,11 +213,7 @@ impl<
         _sender: &Sender<Arc<Self::Event>>,
         _receiver: &Receiver<Arc<Self::Event>>,
     ) -> Result<()> {
-        let membership = self.membership.clone();
-
-        if !(self.filter)(&event) {
-            self.handle(event, &membership).await;
-        }
+        self.handle(event).await;
 
         Ok(())
     }
@@ -286,24 +224,20 @@ impl<
 impl<
         TYPES: NodeType,
         V: Versions,
-        COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+        NET: ConnectedNetwork<TYPES::SignatureKey>,
         S: Storage<TYPES> + 'static,
-    > NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>
+    > NetworkEventTaskState<TYPES, V, NET, S>
 {
     /// Handle the given event.
     ///
     /// Returns the completion status.
     #[instrument(skip_all, fields(view = *self.view), name = "Network Task", level = "error")]
-    pub async fn handle(
-        &mut self,
-        event: Arc<HotShotEvent<TYPES>>,
-        membership: &TYPES::Membership,
-    ) {
+    pub async fn handle(&mut self, event: Arc<HotShotEvent<TYPES>>) {
         let mut maybe_action = None;
         if let Some((sender, message_kind, transmit)) =
-            self.parse_event(event, &mut maybe_action, membership).await
+            self.parse_event(event, &mut maybe_action).await
         {
-            self.spawn_transmit_task(message_kind, membership, maybe_action, transmit, sender);
+            self.spawn_transmit_task(message_kind, maybe_action, transmit, sender);
         };
     }
 
@@ -336,11 +270,11 @@ impl<
             messages.insert(recipient, serialized_message);
         }
 
-        let net = Arc::clone(&self.channel);
+        let net = Arc::clone(&self.network);
         let storage = Arc::clone(&self.storage);
         let state = Arc::clone(&self.consensus);
         async_spawn(async move {
-            if NetworkEventTaskState::<TYPES, V, COMMCHANNEL, S>::maybe_record_action(
+            if NetworkEventTaskState::<TYPES, V, NET, S>::maybe_record_action(
                 Some(HotShotAction::VidDisperse),
                 storage,
                 state,
@@ -393,7 +327,6 @@ impl<
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         maybe_action: &mut Option<HotShotAction>,
-        membership: &TYPES::Membership,
     ) -> Option<(
         <TYPES as NodeType>::SignatureKey,
         MessageKind<TYPES>,
@@ -419,7 +352,7 @@ impl<
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::Vote(vote.clone()),
                     )),
-                    TransmitType::Direct(membership.leader(vote.view_number() + 1)),
+                    TransmitType::Direct(self.quorum_membership.leader(vote.view_number() + 1)),
                 ))
             }
             HotShotEvent::QuorumProposalRequestSend(req, signature) => Some((
@@ -427,7 +360,9 @@ impl<
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                     GeneralConsensusMessage::ProposalRequested(req.clone(), signature),
                 )),
-                TransmitType::DaCommitteeAndLeaderBroadcast(membership.leader(req.view_number)),
+                TransmitType::DaCommitteeAndLeaderBroadcast(
+                    self.quorum_membership.leader(req.view_number),
+                ),
             )),
             HotShotEvent::QuorumProposalResponseSend(sender_key, proposal) => Some((
                 sender_key.clone(),
@@ -457,10 +392,9 @@ impl<
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
                         DaConsensusMessage::DaVote(vote.clone()),
                     )),
-                    TransmitType::Direct(membership.leader(vote.view_number())),
+                    TransmitType::Direct(self.quorum_membership.leader(vote.view_number())),
                 ))
             }
-            // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
             HotShotEvent::DacSend(certificate, sender) => {
                 *maybe_action = Some(HotShotAction::DaCert);
                 Some((
@@ -476,21 +410,30 @@ impl<
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                     GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
                 )),
-                TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
+                TransmitType::Direct(
+                    self.quorum_membership
+                        .leader(vote.view_number() + vote.date().relay),
+                ),
             )),
             HotShotEvent::ViewSyncCommitVoteSend(vote) => Some((
                 vote.signing_key(),
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                     GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
                 )),
-                TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
+                TransmitType::Direct(
+                    self.quorum_membership
+                        .leader(vote.view_number() + vote.date().relay),
+                ),
             )),
             HotShotEvent::ViewSyncFinalizeVoteSend(vote) => Some((
                 vote.signing_key(),
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                     GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
                 )),
-                TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
+                TransmitType::Direct(
+                    self.quorum_membership
+                        .leader(vote.view_number() + vote.date().relay),
+                ),
             )),
             HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => Some((
                 sender,
@@ -520,7 +463,7 @@ impl<
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::TimeoutVote(vote.clone()),
                     )),
-                    TransmitType::Direct(membership.leader(vote.view_number() + 1)),
+                    TransmitType::Direct(self.quorum_membership.leader(vote.view_number() + 1)),
                 ))
             }
             HotShotEvent::UpgradeProposalSend(proposal, sender) => Some((
@@ -537,13 +480,13 @@ impl<
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::UpgradeVote(vote.clone()),
                     )),
-                    TransmitType::Direct(membership.leader(vote.view_number())),
+                    TransmitType::Direct(self.quorum_membership.leader(vote.view_number())),
                 ))
             }
             HotShotEvent::ViewChange(view) => {
                 self.view = view;
-                self.channel
-                    .update_view::<TYPES>(self.view.u64(), membership)
+                self.network
+                    .update_view::<TYPES>(self.view.u64(), &self.quorum_membership)
                     .await;
                 None
             }
@@ -570,7 +513,6 @@ impl<
     fn spawn_transmit_task(
         &self,
         message_kind: MessageKind<TYPES>,
-        membership: &TYPES::Membership,
         maybe_action: Option<HotShotAction>,
         transmit: TransmitType<TYPES>,
         sender: TYPES::SignatureKey,
@@ -587,14 +529,14 @@ impl<
             kind: message_kind,
         };
         let view = message.kind.view_number();
-        let committee = membership.committee_members(view);
-        let committee_topic = membership.committee_topic();
-        let net = Arc::clone(&self.channel);
+        let committee_topic = self.quorum_membership.committee_topic();
+        let da_committee = self.da_membership.committee_members(view);
+        let net = Arc::clone(&self.network);
         let storage = Arc::clone(&self.storage);
         let state = Arc::clone(&self.consensus);
         let upgrade_lock = self.upgrade_lock.clone();
         async_spawn(async move {
-            if NetworkEventTaskState::<TYPES, V, COMMCHANNEL, S>::maybe_record_action(
+            if NetworkEventTaskState::<TYPES, V, NET, S>::maybe_record_action(
                 maybe_action,
                 Arc::clone(&storage),
                 state,
@@ -631,23 +573,19 @@ impl<
                         .await
                 }
                 TransmitType::DaCommitteeBroadcast => {
-                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
+                    net.da_broadcast_message(serialized_message, da_committee, broadcast_delay)
                         .await
                 }
                 TransmitType::DaCommitteeAndLeaderBroadcast(recipient) => {
-                    // Short-circuit exit from this call if we get an error during the direct leader broadcast.
-                    // NOTE: An improvement to this is to check if the leader is in the DA committee but it's
-                    // just a single extra message to the leader, so it's not an optimization that we need now.
                     if let Err(e) = net
                         .direct_message(serialized_message.clone(), recipient)
                         .await
                     {
                         error!("Failed to send message from network task: {e:?}");
-                        return;
                     }
 
                     // Otherwise, send the next message.
-                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
+                    net.da_broadcast_message(serialized_message, da_committee, broadcast_delay)
                         .await
                 }
             };
@@ -685,11 +623,11 @@ pub mod test {
     pub struct NetworkEventTaskStateModifier<
         TYPES: NodeType,
         V: Versions,
-        COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+        NET: ConnectedNetwork<TYPES::SignatureKey>,
         S: Storage<TYPES>,
     > {
         /// The real `NetworkEventTaskState`
-        pub network_event_task_state: NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>,
+        pub network_event_task_state: NetworkEventTaskState<TYPES, V, NET, S>,
         /// A function that takes the result of `NetworkEventTaskState::parse_event` and
         /// changes it before transmitting on the network.
         pub modifier: Arc<ModifierClosure<TYPES>>,
@@ -698,23 +636,24 @@ pub mod test {
     impl<
             TYPES: NodeType,
             V: Versions,
-            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            NET: ConnectedNetwork<TYPES::SignatureKey>,
             S: Storage<TYPES> + 'static,
-        > NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+        > NetworkEventTaskStateModifier<TYPES, V, NET, S>
     {
         /// Handles the received event modifying it before sending on the network.
-        pub async fn handle(
-            &mut self,
-            event: Arc<HotShotEvent<TYPES>>,
-            membership: &TYPES::Membership,
-        ) {
+        pub async fn handle(&mut self, event: Arc<HotShotEvent<TYPES>>) {
             let mut maybe_action = None;
             if let Some((mut sender, mut message_kind, mut transmit)) =
-                self.parse_event(event, &mut maybe_action, membership).await
+                self.parse_event(event, &mut maybe_action).await
             {
                 // Modify the values acquired by parsing the event.
-                (self.modifier)(&mut sender, &mut message_kind, &mut transmit, membership);
-                self.spawn_transmit_task(message_kind, membership, maybe_action, transmit, sender);
+                (self.modifier)(
+                    &mut sender,
+                    &mut message_kind,
+                    &mut transmit,
+                    &self.quorum_membership,
+                );
+                self.spawn_transmit_task(message_kind, maybe_action, transmit, sender);
             }
         }
     }
@@ -723,9 +662,9 @@ pub mod test {
     impl<
             TYPES: NodeType,
             V: Versions,
-            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            NET: ConnectedNetwork<TYPES::SignatureKey>,
             S: Storage<TYPES> + 'static,
-        > TaskState for NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+        > TaskState for NetworkEventTaskStateModifier<TYPES, V, NET, S>
     {
         type Event = HotShotEvent<TYPES>;
 
@@ -735,11 +674,7 @@ pub mod test {
             _sender: &Sender<Arc<Self::Event>>,
             _receiver: &Receiver<Arc<Self::Event>>,
         ) -> Result<()> {
-            let membership = self.network_event_task_state.membership.clone();
-
-            if !(self.network_event_task_state.filter)(&event) {
-                self.handle(event, &membership).await;
-            }
+            self.handle(event).await;
 
             Ok(())
         }
@@ -750,11 +685,11 @@ pub mod test {
     impl<
             TYPES: NodeType,
             V: Versions,
-            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            NET: ConnectedNetwork<TYPES::SignatureKey>,
             S: Storage<TYPES>,
-        > Deref for NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+        > Deref for NetworkEventTaskStateModifier<TYPES, V, NET, S>
     {
-        type Target = NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>;
+        type Target = NetworkEventTaskState<TYPES, V, NET, S>;
 
         fn deref(&self) -> &Self::Target {
             &self.network_event_task_state
@@ -764,9 +699,9 @@ pub mod test {
     impl<
             TYPES: NodeType,
             V: Versions,
-            COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+            NET: ConnectedNetwork<TYPES::SignatureKey>,
             S: Storage<TYPES>,
-        > DerefMut for NetworkEventTaskStateModifier<TYPES, V, COMMCHANNEL, S>
+        > DerefMut for NetworkEventTaskStateModifier<TYPES, V, NET, S>
     {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.network_event_task_state

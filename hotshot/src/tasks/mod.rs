@@ -24,7 +24,7 @@ use hotshot_task_impls::rewind::RewindTaskState;
 use hotshot_task_impls::{
     da::DaTaskState,
     events::HotShotEvent,
-    network::{self, NetworkEventTaskState, NetworkMessageTaskState},
+    network::{NetworkEventTaskState, NetworkMessageTaskState},
     request::NetworkRequestState,
     response::{run_response_task, NetworkResponseState},
     transactions::TransactionTaskState,
@@ -163,15 +163,15 @@ pub fn add_network_event_task<
     NET: ConnectedNetwork<TYPES::SignatureKey>,
 >(
     handle: &mut SystemContextHandle<TYPES, I, V>,
-    channel: Arc<NET>,
-    membership: TYPES::Membership,
-    filter: fn(&Arc<HotShotEvent<TYPES>>) -> bool,
+    network: Arc<NET>,
+    quorum_membership: TYPES::Membership,
+    da_membership: TYPES::Membership,
 ) {
     let network_state: NetworkEventTaskState<_, V, _, _> = NetworkEventTaskState {
-        channel,
+        network,
         view: TYPES::Time::genesis(),
-        membership,
-        filter,
+        quorum_membership,
+        da_membership,
         storage: Arc::clone(&handle.storage()),
         consensus: Arc::clone(&handle.consensus()),
         upgrade_lock: handle.hotshot.upgrade_lock.clone(),
@@ -502,31 +502,7 @@ where
             handle,
             Arc::clone(&network),
             quorum_membership.clone(),
-            network::quorum_filter,
-        );
-        self.add_network_event_task(
-            handle,
-            Arc::clone(&network),
-            quorum_membership.clone(),
-            network::upgrade_filter,
-        );
-        self.add_network_event_task(
-            handle,
-            Arc::clone(&network),
             da_membership,
-            network::da_filter,
-        );
-        self.add_network_event_task(
-            handle,
-            Arc::clone(&network),
-            quorum_membership.clone(),
-            network::view_sync_filter,
-        );
-        self.add_network_event_task(
-            handle,
-            Arc::clone(&network),
-            quorum_membership,
-            network::vid_filter,
         );
     }
 
@@ -535,10 +511,10 @@ where
         &self,
         handle: &mut SystemContextHandle<TYPES, I, V>,
         channel: Arc<<I as NodeImplementation<TYPES>>::Network>,
-        membership: TYPES::Membership,
-        filter: fn(&Arc<HotShotEvent<TYPES>>) -> bool,
+        quorum_membership: TYPES::Membership,
+        da_membership: TYPES::Membership,
     ) {
-        add_network_event_task(handle, channel, membership, filter);
+        add_network_event_task(handle, channel, quorum_membership, da_membership);
     }
 }
 
@@ -562,7 +538,6 @@ pub async fn add_network_message_and_request_receiver_tasks<
     let network = Arc::clone(&handle.network);
 
     add_network_message_task(handle, &network);
-    add_network_message_task(handle, &network);
 
     add_request_network_task(handle).await;
     add_response_task(handle);
@@ -572,38 +547,13 @@ pub async fn add_network_message_and_request_receiver_tasks<
 pub fn add_network_event_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     handle: &mut SystemContextHandle<TYPES, I, V>,
 ) {
-    let network = Arc::clone(&handle.network);
     let quorum_membership = handle.memberships.quorum_membership.clone();
     let da_membership = handle.memberships.da_membership.clone();
 
     add_network_event_task(
         handle,
-        Arc::clone(&network),
-        quorum_membership.clone(),
-        network::quorum_filter,
-    );
-    add_network_event_task(
-        handle,
-        Arc::clone(&network),
-        quorum_membership.clone(),
-        network::upgrade_filter,
-    );
-    add_network_event_task(
-        handle,
-        Arc::clone(&network),
-        da_membership,
-        network::da_filter,
-    );
-    add_network_event_task(
-        handle,
-        Arc::clone(&network),
-        quorum_membership.clone(),
-        network::view_sync_filter,
-    );
-    add_network_event_task(
-        handle,
-        Arc::clone(&network),
+        Arc::clone(&handle.network),
         quorum_membership,
-        network::vid_filter,
+        da_membership,
     );
 }
