@@ -423,11 +423,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 );
             }
         }
-
-        return (
-            stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockCommRoot,
-            stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight
-        );
     }
 
     /// @notice get the number of state history commitments
