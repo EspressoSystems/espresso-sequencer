@@ -63,7 +63,7 @@ jobs:
       - name: Test
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
-        timeout-minutes: 5
+        timeout-minutes: 20
 
       - name: Install process-compose
         run: nix profile install nixpkgs#process-compose
