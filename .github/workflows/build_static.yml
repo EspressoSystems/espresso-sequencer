@@ -71,7 +71,7 @@ jobs:
           nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c cargo build --locked --release
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.TARGET_TRIPLET }}-services
           path: |
