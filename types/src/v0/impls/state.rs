@@ -696,27 +696,25 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .expect("Chain Config not found in validated state");
 
         // Validate l1_finalized.
-        let Some(proposed_finalized) = proposed_header.l1_finalized() else {
-            tracing::error!("L1 finalized has None value.");
-            return Err(BlockError::InvalidBlockHeader);
-        };
-
-        let parent_finalized = parent_leaf.block_header().l1_finalized().unwrap().number();
-        if proposed_finalized.number() < parent_finalized {
+        let proposed_finalized = proposed_header.l1_finalized();
+        let parent_finalized = parent_leaf.block_header().l1_finalized();
+        if proposed_finalized < parent_finalized {
             tracing::error!(
-                "L1 finalized not incrementing. parent: {}, proposal: {}",
+                "L1 finalized not incrementing. parent: {:?}, proposal: {:?}",
                 parent_finalized,
-                proposed_finalized.number()
+                proposed_finalized,
             );
         }
-        let finalized = instance
-            .l1_client
-            .wait_for_finalized_block(proposed_finalized.number())
-            .await;
+        if let Some(proposed_finalized) = proposed_finalized {
+            let finalized = instance
+                .l1_client
+                .wait_for_finalized_block(proposed_finalized.number())
+                .await;
 
-        if finalized != proposed_finalized {
-            tracing::error!("Invalid proposal: l1_finalized mismatch");
-            return Err(BlockError::InvalidBlockHeader);
+            if finalized != proposed_finalized {
+                tracing::error!("Invalid proposal: l1_finalized mismatch");
+                return Err(BlockError::InvalidBlockHeader);
+            }
         }
 
         // Validate `l1_head`.
