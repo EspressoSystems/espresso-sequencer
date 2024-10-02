@@ -3477,7 +3477,7 @@
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned(<span class="string">"threshold"</span>),
+                                name: ::std::borrow::ToOwned::to_owned(<span class="string">"blockThreshold"</span>),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(<span class="number">256usize</span>,),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned(<span class="string">"uint256"</span>),
@@ -4225,10 +4225,10 @@
         </span><span class="kw">pub fn </span>lag_over_escape_hatch_threshold(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
             block_number: ::ethers::core::types::U256,
-            threshold: ::ethers::core::types::U256,
+            block_threshold: ::ethers::core::types::U256,
         ) -&gt; ::ethers::contract::builders::ContractCall&lt;M, bool&gt; {
             <span class="self">self</span>.<span class="number">0
-                </span>.method_hash([<span class="number">224</span>, <span class="number">48</span>, <span class="number">51</span>, <span class="number">1</span>], (block_number, threshold))
+                </span>.method_hash([<span class="number">224</span>, <span class="number">48</span>, <span class="number">51</span>, <span class="number">1</span>], (block_number, block_threshold))
                 .expect(<span class="string">"method not found (this should never happen)"</span>)
         }
         <span class="doccomment">///Calls the contract's `newFinalizedState` (0x2063d4f7) function
@@ -5552,7 +5552,7 @@
     </span>)]
     </span><span class="kw">pub struct </span>LagOverEscapeHatchThresholdCall {
         <span class="kw">pub </span>block_number: ::ethers::core::types::U256,
-        <span class="kw">pub </span>threshold: ::ethers::core::types::U256,
+        <span class="kw">pub </span>block_threshold: ::ethers::core::types::U256,
     }
     <span class="doccomment">///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x2063d4f7`
     </span><span class="attr">#[derive(
