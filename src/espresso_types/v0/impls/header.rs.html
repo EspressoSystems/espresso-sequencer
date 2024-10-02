@@ -1678,6 +1678,9 @@
 <a href="#1678" id="1678">1678</a>
 <a href="#1679" id="1679">1679</a>
 <a href="#1680" id="1680">1680</a>
+<a href="#1681" id="1681">1681</a>
+<a href="#1682" id="1682">1682</a>
+<a href="#1683" id="1683">1683</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -3054,7 +3057,8 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_validate_proposal_error_cases() {
-        <span class="kw">let </span>genesis = GenesisForTest::default().<span class="kw">await</span>;
+        <span class="comment">// TODO add assertion for timestamp validation
+        </span><span class="kw">let </span>genesis = GenesisForTest::default().<span class="kw">await</span>;
         <span class="kw">let </span>vid_common = vid_scheme(<span class="number">1</span>).disperse([]).unwrap().common;
 
         <span class="kw">let </span><span class="kw-2">mut </span>validated_state = ValidatedState::default();
@@ -3070,6 +3074,8 @@
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         <span class="kw-2">*</span>parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         <span class="kw">let </span><span class="kw-2">mut </span>proposal = parent_header.clone();
+        <span class="kw-2">*</span>proposal.timestamp_mut() = OffsetDateTime::now_utc().unix_timestamp() <span class="kw">as </span>u64;
+        <span class="kw-2">*</span>proposal.l1_head_mut() = <span class="number">5</span>;
 
         <span class="kw">let </span>ver = StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version();
 

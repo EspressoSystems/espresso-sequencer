@@ -482,6 +482,10 @@
 <a href="#482" id="482">482</a>
 <a href="#483" id="483">483</a>
 <a href="#484" id="484">484</a>
+<a href="#485" id="485">485</a>
+<a href="#486" id="486">486</a>
+<a href="#487" id="487">487</a>
+<a href="#488" id="488">488</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::{min, Ordering},
     sync::Arc,
@@ -563,6 +567,34 @@
         L1Snapshot { head, finalized }
     }
 
+    <span class="kw">pub async fn </span>wait_for_block(<span class="kw-2">&amp;</span><span class="self">self</span>, number: u64) -&gt; L1BlockInfo {
+        <span class="kw">let </span>interval = <span class="self">self</span>.provider.get_interval();
+        <span class="kw">loop </span>{
+            <span class="kw">let </span>block = <span class="kw">match </span><span class="self">self</span>.provider.get_block(number).<span class="kw">await </span>{
+                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(block)) =&gt; block,
+                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {
+                    <span class="macro">tracing::info!</span>(number, <span class="string">"no such block"</span>);
+                    sleep(interval).<span class="kw">await</span>;
+                    <span class="kw">continue</span>;
+                }
+                <span class="prelude-val">Err</span>(err) =&gt; {
+                    <span class="macro">tracing::error!</span>(%err, number, <span class="string">"failed to get L1 block"</span>);
+                    sleep(interval).<span class="kw">await</span>;
+                    <span class="kw">continue</span>;
+                }
+            };
+            <span class="kw">let </span><span class="prelude-val">Some</span>(hash) = block.hash <span class="kw">else </span>{
+                <span class="macro">tracing::error!</span>(number, <span class="question-mark">?</span>block, <span class="string">"L1 block has no hash"</span>);
+                sleep(interval).<span class="kw">await</span>;
+                <span class="kw">continue</span>;
+            };
+            <span class="kw">break </span>L1BlockInfo {
+                number,
+                hash,
+                timestamp: block.timestamp,
+            };
+        }
+    }
     <span class="doccomment">/// Get information about the given block.
     ///
     /// If the desired block number is not finalized yet, this function will block until it becomes
@@ -591,32 +623,8 @@
 
         <span class="comment">// The finalized block may have skipped over the block of interest. In this case, our block
         // is still finalized, since it is before the finalized block. We just need to fetch it.
-        </span><span class="kw">loop </span>{
-            <span class="kw">let </span>block = <span class="kw">match </span><span class="self">self</span>.provider.get_block(number).<span class="kw">await </span>{
-                <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(block)) =&gt; block,
-                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {
-                    <span class="macro">tracing::error!</span>(number, <span class="string">"no such block"</span>);
-                    sleep(interval).<span class="kw">await</span>;
-                    <span class="kw">continue</span>;
-                }
-                <span class="prelude-val">Err</span>(err) =&gt; {
-                    <span class="macro">tracing::error!</span>(%err, number, <span class="string">"failed to get L1 block"</span>);
-                    sleep(interval).<span class="kw">await</span>;
-                    <span class="kw">continue</span>;
-                }
-            };
-            <span class="kw">let </span><span class="prelude-val">Some</span>(hash) = block.hash <span class="kw">else </span>{
-                <span class="macro">tracing::error!</span>(number, <span class="question-mark">?</span>block, <span class="string">"L1 block has no hash"</span>);
-                sleep(interval).<span class="kw">await</span>;
-                <span class="kw">continue</span>;
-            };
-            <span class="kw">break </span>L1BlockInfo {
-                number,
-                hash,
-                timestamp: block.timestamp,
-            };
-        }
-    }
+        </span><span class="self">self</span>.wait_for_block(number).<span class="kw">await
+    </span>}
 
     <span class="doccomment">/// Proxy to `Provider.get_block_number`.
     </span><span class="kw">async fn </span>get_block_number(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
