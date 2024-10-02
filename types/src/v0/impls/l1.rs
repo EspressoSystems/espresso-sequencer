@@ -85,7 +85,7 @@ impl L1Client {
             let block = match self.provider.get_block(number).await {
                 Ok(Some(block)) => block,
                 Ok(None) => {
-                    tracing::error!(number, "no such block");
+                    tracing::info!(number, "no such block");
                     sleep(interval).await;
                     continue;
                 }
