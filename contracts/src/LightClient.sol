@@ -339,7 +339,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             stateHistoryFirstIndex++;
         }
 
-        // add the L1 Block & HotShot commitment to the genesis state
+        // add the L1 Block & HotShot commitment to the stateHistoryCommitments
         stateHistoryCommitments.push(
             StateHistoryCommitment(
                 blockNumber, blockTimestamp, state.blockHeight, state.blockCommRoot
