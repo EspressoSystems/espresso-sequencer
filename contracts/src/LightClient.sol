@@ -399,9 +399,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
-    /// the provided HotShot height
+    /// the provided hotShotBlockHeight where the block height in the array is greater than
+    // or equal to the provided hotShotBlockHeight.
+    /// @dev if the provided hotShotBlockHeight is greater than the latest commitment in the array,
+    /// the function reverts.
     /// @param hotShotBlockHeight the HotShot block height
     /// @return hotShotBlockCommRoot the HotShot commitment root
+    /// @return hotshotBlockHeight the HotShot block height for the corresponding commitment root
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
@@ -409,14 +413,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         returns (BN254.ScalarField hotShotBlockCommRoot, uint64 hotshotBlockHeight)
     {
         uint256 commitmentsHeight = stateHistoryCommitments.length;
-        if (hotShotBlockHeight >= stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
+        if (hotShotBlockHeight > stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
         {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
-            if (stateHistoryCommitments[i].hotShotBlockHeight > hotShotBlockHeight) {
+            if (stateHistoryCommitments[i].hotShotBlockHeight >= hotShotBlockHeight) {
                 return (
                     stateHistoryCommitments[i].hotShotBlockCommRoot,
                     stateHistoryCommitments[i].hotShotBlockHeight
