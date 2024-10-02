@@ -331,6 +331,8 @@ pub fn validate_proposal(
 
     // Validate timestamp hasn't drifted too much from system time.
     let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
+    // TODO 2 seconds of tolerance should be enough for reasonably
+    // configured nodes, but we should make this configurable.
     if proposal.timestamp().abs_diff(system_time) > 2 {
         return Err(ProposalValidationError::InvalidTimestampDrift {
             proposal_timestamp: proposal.timestamp(),
