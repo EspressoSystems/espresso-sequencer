@@ -276,7 +276,17 @@ where
         &self,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        self.db.get_chain_config(commitment).await
+        let cf = self.db.get_chain_config(commitment).await?;
+
+        if cf.commit() != commitment {
+            bail!(
+                "Invalid chain config: expected {:?}, got {:?}",
+                commitment,
+                cf.commit()
+            )
+        }
+
+        Ok(cf)
     }
 
     fn backoff(&self) -> &BackoffParams {
