@@ -1374,6 +1374,7 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_validate_proposal_error_cases() {
+        // TODO add assertion for timestamp validation
         let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
@@ -1390,6 +1391,8 @@ mod test_headers {
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
+        *proposal.timestamp_mut() = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        *proposal.l1_head_mut() = 5;
 
         let ver = StaticVersion::<0, 1>::version();
 
