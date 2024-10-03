@@ -17,8 +17,7 @@ use crate::{
     types::HeightIndexed,
 };
 use hotshot::traits::{
-    election::static_committee::StaticCommittee, implementations::MemoryNetwork,
-    NodeImplementation,
+    election::static_committee::StaticCommittee, implementations::MemoryNetwork, NodeImplementation,
 };
 use hotshot_example_types::{
     auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
