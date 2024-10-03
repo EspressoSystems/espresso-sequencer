@@ -46,3 +46,6 @@ vbs = { workspace = true }
 
 [dev-dependencies]
 sequencer = { path = "../sequencer", features = ["testing"] }
+hotshot-query-service = { workspace = true, features = ["testing"] }
+sequencer-utils = { path = "../utils" }
+tempfile = { workspace = true }
