@@ -44,12 +44,9 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     // Create a new `OrchestratorClient` from the supplied URL
-    let orchestrator_client = OrchestratorClient::new(ValidatorArgs {
-        url: Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
-        advertise_address: None,
-        builder_address: None,
-        network_config_file: None,
-    });
+    let orchestrator_client = OrchestratorClient::new(
+        Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
+    );
 
     tracing::info!(
         "Waiting for config from orchestrator on {}",
