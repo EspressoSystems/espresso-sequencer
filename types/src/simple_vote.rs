@@ -11,7 +11,7 @@ use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 use anyhow::Result;
 use committable::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
     data::Leaf,
@@ -240,10 +240,16 @@ impl<TYPES: NodeType, DATA: Voteable, V: Versions> Committable
     for VersionedVoteData<TYPES, DATA, V>
 {
     fn commit(&self) -> Commitment<Self> {
-        committable::RawCommitmentBuilder::new("Vote")
-            .var_size_bytes(self.data.commit().as_ref())
-            .u64(*self.view)
-            .finalize()
+        if self.version < V::Marketplace::VERSION {
+            let bytes: [u8; 32] = self.data.commit().into();
+
+            Commitment::<Self>::from_raw(bytes)
+        } else {
+            committable::RawCommitmentBuilder::new("Vote")
+                .var_size_bytes(self.data.commit().as_ref())
+                .u64(*self.view)
+                .finalize()
+        }
     }
 }
 
