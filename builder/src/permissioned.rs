@@ -41,7 +41,7 @@ use futures::{
 };
 use hotshot::{
     traits::{
-        election::static_committee::GeneralStaticCommittee,
+        election::static_committee::StaticCommittee,
         implementations::{
             derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, GossipConfig,
             KeyPair, Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
@@ -342,12 +342,12 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
         None => config.known_nodes_with_stake.clone(),
     };
 
-    let quorum_membership = GeneralStaticCommittee::new(
+    let quorum_membership = StaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake.clone(),
         Topic::Global,
     );
-    let da_membership = GeneralStaticCommittee::new(
+    let da_membership = StaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
         Topic::Da,

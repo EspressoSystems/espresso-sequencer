@@ -39,7 +39,7 @@ use derivative::Derivative;
 use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 pub use genesis::Genesis;
 #[cfg(feature = "libp2p")]
-use hotshot::traits::implementations::{CombinedNetworks, GossipConfig, Libp2pNetwork};
+use hotshot::traits::implementations::{CombinedNetworks, GossipConfig, Libp2pNetwork, derive_libp2p_multiaddr};
 use hotshot::{
     traits::implementations::{
         derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
@@ -205,11 +205,11 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
-        advertise_address: Some(network_params.libp2p_advertise_address),
+        advertise_address: Some(network_params.libp2p_advertise_address.to_string()),
         builder_address: None,
         network_config_file: None,
     };
-    let orchestrator_client = OrchestratorClient::new(validator_args);
+    let orchestrator_client = OrchestratorClient::new(validator_args.url);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
         public_key: pub_key,
@@ -254,12 +254,14 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
             tracing::error!(
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
             );
+            let multiaddr =
+                derive_libp2p_multiaddr(&network_params.libp2p_advertise_address.to_string()).expect("Failed to derive valid multiaddr, {}");
             let config = NetworkConfig::get_complete_config(
                 &orchestrator_client,
                 my_config.clone(),
                 // Register in our Libp2p advertise address and public key so other nodes
                 // can contact us on startup
-                Some(network_params.libp2p_advertise_address),
+                Some(multiaddr),
                 Some(libp2p_public_key),
             )
             .await?
@@ -328,7 +330,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
             GossipConfig::default(),
-            network_params.libp2p_bind_address,
+            network_params.libp2p_bind_address.to_string(),
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair
             // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
