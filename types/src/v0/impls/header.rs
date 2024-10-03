@@ -1101,27 +1101,15 @@ impl ExplorerHeader<SeqTypes> for Header {
 
 #[cfg(test)]
 mod test_headers {
-    use std::sync::Arc;
 
-    use ethers::{
-        types::{Address, U256},
-        utils::Anvil,
-    };
-    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
-    use jf_vid::VidScheme;
+    use ethers::types::Address;
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
+
     use sequencer_utils::test_utils::setup_test;
-    use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
-    use vbs::{
-        bincode_serializer::BincodeSerializer,
-        version::{StaticVersion, StaticVersionType},
-        BinarySerializer,
-    };
+    use v0_1::{BlockMerkleTree, FeeMerkleTree};
+    use vbs::{bincode_serializer::BincodeSerializer, version::StaticVersion, BinarySerializer};
 
     use super::*;
-    use crate::{
-        eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal, ProposalValidationError,
-    };
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -1408,227 +1396,230 @@ mod test_headers {
         }
     }
 
-    #[async_std::test]
-    async fn test_validate_proposal_error_cases() {
-        // TODO add assertion for timestamp validation
-        let genesis = GenesisForTest::default().await;
-        let vid_common = vid_scheme(1).disperse([]).unwrap().common;
+    // #[async_std::test]
+    // // TODO validate proposal is replaces w/ ValidatedTransition. We
+    // // may can reuse some mocks from state.  In that case we should
+    // // probably move these tests there
+    // async fn test_validate_proposal_error_cases() {
+    //     // TODO add assertion for timestamp validation
+    //     let genesis = GenesisForTest::default().await;
+    //     let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
-        let mut validated_state = ValidatedState::default();
-        let mut block_merkle_tree = validated_state.block_merkle_tree.clone();
+    //     let mut validated_state = ValidatedState::default();
+    //     let mut block_merkle_tree = validated_state.block_merkle_tree.clone();
 
-        let mut parent_header = genesis.header.clone();
-        let mut parent_leaf = genesis.leaf.clone();
-        *parent_leaf.block_header_mut() = parent_header.clone();
+    //     let mut parent_header = genesis.header.clone();
+    //     let mut parent_leaf = genesis.leaf.clone();
+    //     *parent_leaf.block_header_mut() = parent_header.clone();
 
-        // Populate the tree with an initial `push`.
-        block_merkle_tree.push(genesis.header.commit()).unwrap();
-        let block_merkle_tree_root = block_merkle_tree.commitment();
-        validated_state.block_merkle_tree = block_merkle_tree.clone();
-        *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
-        let mut proposal = parent_header.clone();
-        *proposal.timestamp_mut() = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        *proposal.l1_head_mut() = 5;
+    //     // Populate the tree with an initial `push`.
+    //     block_merkle_tree.push(genesis.header.commit()).unwrap();
+    //     let block_merkle_tree_root = block_merkle_tree.commitment();
+    //     validated_state.block_merkle_tree = block_merkle_tree.clone();
+    //     *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
+    //     let mut proposal = parent_header.clone();
+    //     *proposal.timestamp_mut() = OffsetDateTime::now_utc().unix_timestamp() as u64;
+    //     *proposal.l1_head_mut() = 5;
 
-        let ver = StaticVersion::<0, 1>::version();
+    //     let ver = StaticVersion::<0, 1>::version();
 
-        // Pass a different chain config to trigger a chain config validation error.
-        let state = validated_state
-            .apply_header(
-                &genesis.instance_state,
-                &genesis.instance_state.peers,
-                &parent_leaf,
-                &proposal,
-                ver,
-            )
-            .await
-            .unwrap()
-            .0;
+    //     // Pass a different chain config to trigger a chain config validation error.
+    //     let state = validated_state
+    //         .apply_header(
+    //             &genesis.instance_state,
+    //             &genesis.instance_state.peers,
+    //             &parent_leaf,
+    //             &proposal,
+    //             ver,
+    //         )
+    //         .await
+    //         .unwrap()
+    //         .0;
 
-        let chain_config = ChainConfig {
-            chain_id: U256::zero().into(),
-            ..Default::default()
-        };
-        let err = validate_proposal(&state, chain_config, &parent_leaf, &proposal, &vid_common)
-            .unwrap_err();
+    //     let chain_config = ChainConfig {
+    //         chain_id: U256::zero().into(),
+    //         ..Default::default()
+    //     };
+    //     let err = validate_proposal(&state, chain_config, &parent_leaf, &proposal, &vid_common)
+    //         .unwrap_err();
 
-        assert_eq!(
-            ProposalValidationError::InvalidChainConfig {
-                expected: format!("{:?}", chain_config),
-                proposal: format!("{:?}", proposal.chain_config())
-            },
-            err
-        );
+    //     assert_eq!(
+    //         ProposalValidationError::InvalidChainConfig {
+    //             expected: format!("{:?}", chain_config),
+    //             proposal: format!("{:?}", proposal.chain_config())
+    //         },
+    //         err
+    //     );
 
-        // Advance `proposal.height` to trigger validation error.
+    //     // Advance `proposal.height` to trigger validation error.
 
-        let validated_state = validated_state
-            .apply_header(
-                &genesis.instance_state,
-                &genesis.instance_state.peers,
-                &parent_leaf,
-                &proposal,
-                ver,
-            )
-            .await
-            .unwrap()
-            .0;
-        let err = validate_proposal(
-            &validated_state,
-            genesis.instance_state.chain_config,
-            &parent_leaf,
-            &proposal,
-            &vid_common,
-        )
-        .unwrap_err();
-        assert_eq!(
-            ProposalValidationError::InvalidHeight {
-                parent_height: 0,
-                proposal_height: 0
-            },
-            err
-        );
+    //     let validated_state = validated_state
+    //         .apply_header(
+    //             &genesis.instance_state,
+    //             &genesis.instance_state.peers,
+    //             &parent_leaf,
+    //             &proposal,
+    //             ver,
+    //         )
+    //         .await
+    //         .unwrap()
+    //         .0;
+    //     let err = validate_proposal(
+    //         &validated_state,
+    //         genesis.instance_state.chain_config,
+    //         &parent_leaf,
+    //         &proposal,
+    //         &vid_common,
+    //     )
+    //     .unwrap_err();
+    //     assert_eq!(
+    //         ProposalValidationError::InvalidHeight {
+    //             parent_height: 0,
+    //             proposal_height: 0
+    //         },
+    //         err
+    //     );
 
-        // proposed `Header` root should include parent + parent.commit
-        *proposal.height_mut() += 1;
+    //     // proposed `Header` root should include parent + parent.commit
+    //     *proposal.height_mut() += 1;
 
-        let validated_state = validated_state
-            .apply_header(
-                &genesis.instance_state,
-                &genesis.instance_state.peers,
-                &parent_leaf,
-                &proposal,
-                ver,
-            )
-            .await
-            .unwrap()
-            .0;
+    //     let validated_state = validated_state
+    //         .apply_header(
+    //             &genesis.instance_state,
+    //             &genesis.instance_state.peers,
+    //             &parent_leaf,
+    //             &proposal,
+    //             ver,
+    //         )
+    //         .await
+    //         .unwrap()
+    //         .0;
 
-        let err = validate_proposal(
-            &validated_state,
-            genesis.instance_state.chain_config,
-            &parent_leaf,
-            &proposal,
-            &vid_common,
-        )
-        .unwrap_err();
-        // Fails b/c `proposal` has not advanced from `parent`
-        assert_eq!(
-            ProposalValidationError::InvalidBlockRoot {
-                expected_root: validated_state.block_merkle_tree.commitment(),
-                proposal_root: proposal.block_merkle_tree_root()
-            },
-            err
-        );
-    }
+    //     let err = validate_proposal(
+    //         &validated_state,
+    //         genesis.instance_state.chain_config,
+    //         &parent_leaf,
+    //         &proposal,
+    //         &vid_common,
+    //     )
+    //     .unwrap_err();
+    //     // Fails b/c `proposal` has not advanced from `parent`
+    //     assert_eq!(
+    //         ProposalValidationError::InvalidBlockRoot {
+    //             expected_root: validated_state.block_merkle_tree.commitment(),
+    //             proposal_root: proposal.block_merkle_tree_root()
+    //         },
+    //         err
+    //     );
+    // }
 
-    #[async_std::test]
-    async fn test_validate_proposal_success() {
-        setup_test();
+    // #[async_std::test]
+    // async fn test_validate_proposal_success() {
+    //     setup_test();
 
-        let anvil = Anvil::new().block_time(1u32).spawn();
-        let mut genesis_state = NodeState::mock()
-            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
-            .with_current_version(StaticVersion::<0, 1>::version());
+    //     let anvil = Anvil::new().block_time(1u32).spawn();
+    //     let mut genesis_state = NodeState::mock()
+    //         .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
+    //         .with_current_version(StaticVersion::<0, 1>::version());
 
-        let genesis = GenesisForTest::default().await;
-        let vid_common = vid_scheme(1).disperse([]).unwrap().common;
+    //     let genesis = GenesisForTest::default().await;
+    //     let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
-        let mut parent_state = genesis.validated_state.clone();
+    //     let mut parent_state = genesis.validated_state.clone();
 
-        let mut block_merkle_tree = parent_state.block_merkle_tree.clone();
-        let fee_merkle_tree = parent_state.fee_merkle_tree.clone();
+    //     let mut block_merkle_tree = parent_state.block_merkle_tree.clone();
+    //     let fee_merkle_tree = parent_state.fee_merkle_tree.clone();
 
-        // Populate the tree with an initial `push`.
-        block_merkle_tree.push(genesis.header.commit()).unwrap();
-        let block_merkle_tree_root = block_merkle_tree.commitment();
-        let fee_merkle_tree_root = fee_merkle_tree.commitment();
-        parent_state.block_merkle_tree = block_merkle_tree.clone();
-        parent_state.fee_merkle_tree = fee_merkle_tree.clone();
+    //     // Populate the tree with an initial `push`.
+    //     block_merkle_tree.push(genesis.header.commit()).unwrap();
+    //     let block_merkle_tree_root = block_merkle_tree.commitment();
+    //     let fee_merkle_tree_root = fee_merkle_tree.commitment();
+    //     parent_state.block_merkle_tree = block_merkle_tree.clone();
+    //     parent_state.fee_merkle_tree = fee_merkle_tree.clone();
 
-        let mut parent_header = genesis.header.clone();
-        *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
-        *parent_header.fee_merkle_tree_root_mut() = fee_merkle_tree_root;
+    //     let mut parent_header = genesis.header.clone();
+    //     *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
+    //     *parent_header.fee_merkle_tree_root_mut() = fee_merkle_tree_root;
 
-        let mut parent_leaf = genesis.leaf.clone();
-        *parent_leaf.block_header_mut() = parent_header.clone();
+    //     let mut parent_leaf = genesis.leaf.clone();
+    //     *parent_leaf.block_header_mut() = parent_header.clone();
 
-        // Forget the state to trigger lookups in Header::new
-        let forgotten_state = parent_state.forget();
-        genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
-            parent_leaf.view_number(),
-            Arc::new(parent_state.clone()),
-        )]));
-        // Get a proposal from a parent
+    //     // Forget the state to trigger lookups in Header::new
+    //     let forgotten_state = parent_state.forget();
+    //     genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
+    //         parent_leaf.view_number(),
+    //         Arc::new(parent_state.clone()),
+    //     )]));
+    //     // Get a proposal from a parent
 
-        // TODO this currently fails because after fetching the blocks frontier
-        // the element (header commitment) does not match the one in the proof.
-        let key_pair = EthKeyPair::for_test();
-        let fee_amount = 0u64;
-        let payload_commitment = parent_header.payload_commitment();
-        let builder_commitment = parent_header.builder_commitment();
-        let ns_table = genesis.ns_table;
-        let fee_signature =
-            FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table, &payload_commitment).unwrap();
-        let builder_fee = BuilderFee {
-            fee_amount,
-            fee_account: key_pair.fee_account(),
-            fee_signature,
-        };
-        let proposal = Header::new_legacy(
-            &forgotten_state,
-            &genesis_state,
-            &parent_leaf,
-            payload_commitment,
-            builder_commitment.clone(),
-            ns_table,
-            builder_fee,
-            vid_common.clone(),
-            StaticVersion::<0, 1>::version(),
-        )
-        .await
-        .unwrap();
+    //     // TODO this currently fails because after fetching the blocks frontier
+    //     // the element (header commitment) does not match the one in the proof.
+    //     let key_pair = EthKeyPair::for_test();
+    //     let fee_amount = 0u64;
+    //     let payload_commitment = parent_header.payload_commitment();
+    //     let builder_commitment = parent_header.builder_commitment();
+    //     let ns_table = genesis.ns_table;
+    //     let fee_signature =
+    //         FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table, &payload_commitment).unwrap();
+    //     let builder_fee = BuilderFee {
+    //         fee_amount,
+    //         fee_account: key_pair.fee_account(),
+    //         fee_signature,
+    //     };
+    //     let proposal = Header::new_legacy(
+    //         &forgotten_state,
+    //         &genesis_state,
+    //         &parent_leaf,
+    //         payload_commitment,
+    //         builder_commitment.clone(),
+    //         ns_table,
+    //         builder_fee,
+    //         vid_common.clone(),
+    //         StaticVersion::<0, 1>::version(),
+    //     )
+    //     .await
+    //     .unwrap();
 
-        let mut proposal_state = parent_state.clone();
-        for fee_info in genesis_state
-            .l1_client
-            .get_finalized_deposits(Address::default(), None, 0)
-            .await
-        {
-            proposal_state.insert_fee_deposit(fee_info).unwrap();
-        }
+    //     let mut proposal_state = parent_state.clone();
+    //     for fee_info in genesis_state
+    //         .l1_client
+    //         .get_finalized_deposits(Address::default(), None, 0)
+    //         .await
+    //     {
+    //         proposal_state.insert_fee_deposit(fee_info).unwrap();
+    //     }
 
-        let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
-        block_merkle_tree.push(proposal.commit()).unwrap();
+    //     let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
+    //     block_merkle_tree.push(proposal.commit()).unwrap();
 
-        let proposal_state = proposal_state
-            .apply_header(
-                &genesis_state,
-                &genesis_state.peers,
-                &parent_leaf,
-                &proposal,
-                StaticVersion::<0, 1>::version(),
-            )
-            .await
-            .unwrap()
-            .0;
-        validate_proposal(
-            &proposal_state,
-            genesis.instance_state.chain_config,
-            &parent_leaf,
-            &proposal.clone(),
-            &vid_common,
-        )
-        .unwrap();
+    //     let proposal_state = proposal_state
+    //         .apply_header(
+    //             &genesis_state,
+    //             &genesis_state.peers,
+    //             &parent_leaf,
+    //             &proposal,
+    //             StaticVersion::<0, 1>::version(),
+    //         )
+    //         .await
+    //         .unwrap()
+    //         .0;
+    //     validate_proposal(
+    //         &proposal_state,
+    //         genesis.instance_state.chain_config,
+    //         &parent_leaf,
+    //         &proposal.clone(),
+    //         &vid_common,
+    //     )
+    //     .unwrap();
 
-        assert_eq!(
-            proposal_state.block_merkle_tree.commitment(),
-            proposal.block_merkle_tree_root()
-        );
-    }
+    //     assert_eq!(
+    //         proposal_state.block_merkle_tree.commitment(),
+    //         proposal.block_merkle_tree_root()
+    //     );
+    // }
 
     #[test]
-    fn verify_header_signature() {
+    fn verify_builder_signature() {
         // simulate a fixed size hash by padding our message
         let message = ";)";
         let mut commitment = [0u8; 32];
