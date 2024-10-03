@@ -561,7 +561,7 @@ impl ProcessProduceLeafStreamTask {
         // We want to try and ensure that we are connected to the HotShot Query
         // Service, and are consuming leaves.
         // - If we are able to connect, then we can start relaying Leaves into
-        //   the leaf sender.  If we are unable
+        //   the leaf sender.
         // - If we are not able to connect, then we should sleep, and retry
         //   until we are able to reconnect.  Each failure **should** make some
         //   noise so that if we are never able to reconnect, we are at least
