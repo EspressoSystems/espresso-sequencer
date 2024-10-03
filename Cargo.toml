@@ -151,4 +151,4 @@ hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git"
 hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch5" }
 hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch5" }
 libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", tag = "0.5.74-patch5" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch5" } 
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.74-patch5" }
