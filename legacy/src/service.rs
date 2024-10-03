@@ -1,5 +1,5 @@
 use hotshot::{
-    traits::{election::static_committee::GeneralStaticCommittee, NodeImplementation},
+    traits::{election::static_committee::StaticCommittee, NodeImplementation},
     types::{Event, SystemContextHandle},
 };
 use hotshot_builder_api::v0_1::{
@@ -1139,7 +1139,7 @@ impl Display for ConnectToEventsServiceError {
 /// stream, and membership information derived from the startup info.
 async fn connect_to_events_service<Types: NodeType, C, S>(
     client: &C,
-) -> Result<(C::EventsStream, GeneralStaticCommittee<Types>), ConnectToEventsServiceError>
+) -> Result<(C::EventsStream, StaticCommittee<Types>), ConnectToEventsServiceError>
 where
     C: HotShotEventsService<
         Types,
@@ -1171,7 +1171,7 @@ where
         .await
         .map_err(ConnectToEventsServiceError::StartupInfo)?;
 
-    let membership: GeneralStaticCommittee<Types> = GeneralStaticCommittee::<Types>::new(
+    let membership: StaticCommittee<Types> = StaticCommittee::<Types>::new(
         known_node_with_stake.clone(),
         known_node_with_stake.clone(),
         Topic::Global,

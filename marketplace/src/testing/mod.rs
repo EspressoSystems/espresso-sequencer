@@ -11,7 +11,7 @@ use crate::{
 use async_broadcast::broadcast;
 use async_compatibility_layer::channel::{unbounded, UnboundedReceiver};
 use hotshot::{
-    traits::{election::static_committee::GeneralStaticCommittee, BlockPayload},
+    traits::{election::static_committee::StaticCommittee, BlockPayload},
     types::{BLSPubKey, SignatureKey},
 };
 use hotshot_types::{
@@ -56,7 +56,7 @@ impl NodeType for TestTypes {
     type Transaction = TestTransaction;
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
-    type Membership = GeneralStaticCommittee<Self>;
+    type Membership = StaticCommittee<Self>;
     type BuilderSignatureKey = BuilderKey;
     type AuctionResult = TestAuctionResult;
 }

@@ -1,4 +1,4 @@
-pub use hotshot::traits::election::static_committee::GeneralStaticCommittee;
+pub use hotshot::traits::election::static_committee::StaticCommittee;
 pub use hotshot_types::{
     data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
     message::Proposal,
@@ -82,7 +82,7 @@ mod tests {
             type Transaction = TestTransaction;
             type ValidatedState = TestValidatedState;
             type InstanceState = TestInstanceState;
-            type Membership = GeneralStaticCommittee<Self>;
+            type Membership = StaticCommittee<Self>;
             type BuilderSignatureKey = BuilderKey;
             type AuctionResult = TestAuctionResult;
         }
