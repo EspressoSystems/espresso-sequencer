@@ -1,6 +1,4 @@
-use std::{
-    collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, time::Duration,
-};
+use std::{collections::HashMap, num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use anyhow::{bail, Context};
 use builder::permissioned::init_node;

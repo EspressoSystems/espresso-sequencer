@@ -47,7 +47,7 @@ use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersio
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 use crate::run_builder_api_service;
 
@@ -195,7 +195,7 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, V>(
+            let res = run_non_permissioned_standalone_builder_service::<_, StaticVersion<0, 1>>(
                 da_sender,
                 qc_sender,
                 decide_sender,

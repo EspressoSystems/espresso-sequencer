@@ -8,10 +8,7 @@ use anyhow::{Context, Result};
 use cdn_broker::reexports::discovery::{DiscoveryClient, Embedded, Redis};
 use clap::Parser;
 use espresso_types::SeqTypes;
-use hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::NetworkConfig,
-};
+use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use surf_disco::Url;
 
