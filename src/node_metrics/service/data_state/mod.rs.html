@@ -781,6 +781,15 @@
 <a href="#781" id="781">781</a>
 <a href="#782" id="782">782</a>
 <a href="#783" id="783">783</a>
+<a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a>
+<a href="#788" id="788">788</a>
+<a href="#789" id="789">789</a>
+<a href="#790" id="790">790</a>
+<a href="#791" id="791">791</a>
+<a href="#792" id="792">792</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>location_details;
 <span class="kw">pub mod </span>node_identity;
 
@@ -829,8 +838,17 @@
         latest_blocks: CircularBuffer&lt;MAX_HISTORY, BlockDetail&lt;SeqTypes&gt;&gt;,
         latest_voters: CircularBuffer&lt;MAX_HISTORY, BitVec&lt;u16&gt;&gt;,
         stake_table: StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;,
-        node_identity: Vec&lt;NodeIdentity&gt;,
     ) -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span>node_identity = {
+            <span class="kw">let </span>stake_table_iter_result = stake_table.try_iter(SnapshotVersion::Head);
+            <span class="kw">match </span>stake_table_iter_result {
+                <span class="prelude-val">Ok</span>(into_iter) =&gt; into_iter
+                    .map(|(key, <span class="kw">_</span>, <span class="kw">_</span>)| NodeIdentity::from_public_key(key))
+                    .collect(),
+                <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="macro">vec!</span>[],
+            }
+        };
+
         <span class="self">Self </span>{
             latest_blocks,
             latest_voters,
