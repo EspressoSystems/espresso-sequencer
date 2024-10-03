@@ -5,7 +5,7 @@ use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
 use async_std::task::JoinHandle;
-use espresso_types::SeqTypes;
+use espresso_types::{BackoffParams, SeqTypes};
 use futures::channel::mpsc::SendError;
 use futures::future::Either;
 use futures::{
@@ -20,7 +20,6 @@ use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::Sta
 use hotshot_types::PeerConfig;
 use prometheus_parse::{Sample, Scrape};
 use serde::{Deserialize, Serialize};
-use std::cmp::max;
 use std::fmt;
 use std::future::Future;
 use std::io::BufRead;
@@ -597,6 +596,9 @@ impl ProcessProduceLeafStreamTask {
     where
         R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
     {
+        let backoff_params = BackoffParams::default();
+        let mut delay = Duration::ZERO;
+
         for attempt in 1..=100 {
             let leaves_stream_result = leaf_stream_receiver.retrieve_stream(None).await;
 
@@ -614,13 +616,11 @@ impl ProcessProduceLeafStreamTask {
                     // For every failed iteration, we will double our delay, up
                     // to the maximum of 5 seconds.
 
-                    let retry_penalty = max(
-                        Duration::from_millis(100) * 2u32.pow(attempt),
-                        Duration::from_secs(5),
-                    );
-                    async_std::task::sleep(retry_penalty).await;
+                    delay = backoff_params.backoff(delay);
+                    async_std::task::sleep(delay).await;
                     continue;
                 }
+
                 Ok(leaves_stream) => leaves_stream,
             };
 
