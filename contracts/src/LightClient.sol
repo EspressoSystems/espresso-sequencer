@@ -348,11 +348,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice checks if the state updates lag behind the specified block threshold based on the
-    /// provided
-    /// block number.
-    /// @param blockNumber The block number to compare against the latest state updates
-    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind
-    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false
+    /// provided block number.
+    /// @param blockNumber The block number to compare against the latest state updates.
+    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind.
+    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false.
     function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 blockThreshold)
         public
         view
@@ -362,8 +361,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 updatesCount = stateHistoryCommitments.length;
 
         // Handling Edge Cases
-        // Edgecase 1: The block is in the future or
-        // before HotShot was live, allow for at least two updates before considering HotShot live
+        // Edgecase 1: blockNumber is greater than current block.number or
+        // less than 3 updates exist which means the history is insufficient to determine a lag.
         if (blockNumber > block.number || updatesCount < 3) {
             revert InsufficientSnapshotHistory();
         }
@@ -371,31 +370,34 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 prevBlock;
         bool prevUpdateFound;
 
+        // Start searching from the latest update
         uint256 i = updatesCount - 1;
         while (!prevUpdateFound) {
+            // Skip the first two updates as per logic mentioned above.
+            if (i < 2) {
+                break;
+            }
+
+            // Find the first update where the block height is less than or equal to the given
+            // blockNumber.
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
                 prevUpdateFound = true;
                 prevBlock = stateHistoryCommitments[i].l1BlockHeight;
             }
 
-            // We don't consider the lag time for the first two updates
-            if (i < 2) {
-                break;
-            }
-
-            // We've reached the first recorded block
+            // Stop if we reach the first recorded state in the history.
             if (i == stateHistoryFirstIndex) {
                 break;
             }
             i--;
         }
 
-        // If no snapshot is found, we don't have enough history stored
-        // to tell whether HotShot was down.
+        // If no snapshot is found, there is insufficient history to determine the lag.
         if (!prevUpdateFound) {
             revert InsufficientSnapshotHistory();
         }
 
+        // If the lag exceeds the user specified, blockThreshold, return true.
         return blockNumber - prevBlock > blockThreshold;
     }
 
