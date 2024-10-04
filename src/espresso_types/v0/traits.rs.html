@@ -658,6 +658,10 @@
 <a href="#658" id="658">658</a>
 <a href="#659" id="659">659</a>
 <a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
@@ -716,7 +720,11 @@
                 .retry(<span class="self">self</span>, |provider| {
                     provider
                         .try_fetch_account(height, view, fee_merkle_tree_root, account)
-                        .map_err(|err| err.context(<span class="string">"fetching account {account}"</span>))
+                        .map_err(|err| {
+                            err.context(<span class="macro">format!</span>(
+                                <span class="string">"fetching account {account}, height {height}, view {view:?}"
+                            </span>))
+                        })
                         .boxed()
                 })
                 .<span class="kw">await</span>;
