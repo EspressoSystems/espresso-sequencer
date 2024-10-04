@@ -8,7 +8,8 @@ use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as Broker
 use cdn_marshal::{Config as MarshalConfig, Marshal};
 use derivative::Derivative;
 use espresso_types::{
-    traits::PersistenceOptions, MockSequencerVersions, PrivKey, PubKey, SeqTypes,
+    eth_signature_key::EthKeyPair, traits::PersistenceOptions, v0_3::ChainConfig, FeeAccount,
+    MockSequencerVersions, PrivKey, PubKey, SeqTypes, Transaction,
 };
 use ethers::utils::{Anvil, AnvilInstance};
 use futures::{
@@ -19,6 +20,10 @@ use hotshot::traits::implementations::derive_libp2p_peer_id;
 use hotshot_orchestrator::{
     config::{Libp2pConfig, NetworkConfig},
     run_orchestrator,
+};
+use hotshot_testing::{
+    block_builder::{SimpleBuilderImplementation, TestBuilderImplementation},
+    test_builder::BuilderChange,
 };
 use hotshot_types::{
     event::{Event, EventType},
@@ -31,11 +36,15 @@ use sequencer::{
     api::{self, data_source::testing::TestableSequencerDataSource, options::Http},
     genesis::{L1Finalized, StakeTableConfig},
     network::cdn::{TestingDef, WrappedSignatureKey},
+    testing::wait_for_decide_on_handle,
+    SequencerApiVersion,
 };
 use sequencer_utils::test_utils::setup_test;
 use std::{collections::HashSet, path::Path, time::Duration};
+use surf_disco::{error::ClientError, Url};
 use tempfile::TempDir;
 use vbs::version::Version;
+use vec1::vec1;
 
 async fn test_restart_helper(network: (usize, usize), restart: (usize, usize), cdn: bool) {
     setup_test();
@@ -150,6 +159,34 @@ async fn slow_test_restart_all_without_cdn() {
 #[async_std::test]
 async fn slow_test_restart_all_da_without_cdn() {
     test_restart_helper((2, 8), (2, 0), false).await;
+}
+
+#[ignore]
+#[async_std::test]
+async fn slow_test_restart_staggered() {
+    setup_test();
+
+    let mut network = TestNetwork::new(4, 6, false).await;
+
+    // Check that the builder works at the beginning.
+    network.check_builder().await;
+
+    // Restart nodes in a staggered fashion, so that progress never halts, but eventually every node
+    // has been restarted. This can lead to a situation where no node has the full validated state
+    // in memory, so we will need a pretty advanced form of catchup in order to make progress and
+    // process blocks after this.
+    for i in 0..4 {
+        network.restart_and_progress([i], []).await;
+    }
+    // Restart the remaining regular nodes.
+    for i in 0..6 {
+        network.restart_and_progress([], [i]).await;
+    }
+
+    // Check that we can still build blocks after the restart.
+    network.check_builder().await;
+
+    network.shut_down().await;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -272,16 +309,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
             // with a backoff.
             let mut retries = 5;
             let mut delay = Duration::from_secs(1);
-            let genesis = Genesis {
-                chain_config: Default::default(),
-                stake_table: StakeTableConfig { capacity: 10 },
-                accounts: Default::default(),
-                l1_finalized: L1Finalized::Number { number: 0 },
-                header: Default::default(),
-                upgrades: Default::default(),
-                base_version: Version { major: 0, minor: 1 },
-                upgrade_version: Version { major: 0, minor: 2 },
-            };
+            let genesis = Genesis::from_file(&self.opt.genesis_file).unwrap();
             let ctx = loop {
                 match init_with_storage(
                     genesis.clone(),
@@ -394,6 +422,51 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
 
         bail!("node {node_id} event stream ended unexpectedly");
     }
+
+    async fn check_builder(&self, port: u16) {
+        tracing::info!("testing builder liveness");
+
+        // Configure the builder to shut down in 100 views, so we don't leak resources or ports.
+        let ctx = self.context.as_ref().unwrap();
+        let down_view = ctx.consensus().read().await.cur_view().await + 100;
+
+        // Start a builder.
+        let url: Url = format!("http://localhost:{port}").parse().unwrap();
+        let task = <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+            self.num_nodes,
+            format!("http://0.0.0.0:{port}").parse().unwrap(),
+            (),
+            [(down_view.u64(), BuilderChange::Down)]
+                .into_iter()
+                .collect(),
+        )
+        .await;
+        task.start(Box::new(ctx.event_stream().await));
+
+        // Wait for the API to start serving.
+        let client = surf_disco::Client::<ClientError, SequencerApiVersion>::new(url);
+        assert!(
+            client.connect(Some(Duration::from_secs(60))).await,
+            "timed out connecting to builder API"
+        );
+
+        // Submit a transaction and wait for it to be sequenced.
+        let mut events = ctx.event_stream().await;
+        let tx = Transaction::random(&mut rand::thread_rng());
+        ctx.submit_transaction(tx.clone()).await.unwrap();
+        let block = async_timeout(
+            Duration::from_secs(60),
+            wait_for_decide_on_handle(&mut events, &tx),
+        )
+        .await
+        .expect("timed out waiting for transaction to be sequenced");
+        tracing::info!(block, "transaction sequenced");
+
+        // Wait until the builder is cleaned up.
+        while ctx.consensus().read().await.cur_view().await <= down_view {
+            sleep(Duration::from_secs(1)).await;
+        }
+    }
 }
 
 #[derive(Derivative)]
@@ -402,6 +475,7 @@ struct TestNetwork {
     da_nodes: Vec<TestNode<api::sql::DataSource>>,
     regular_nodes: Vec<TestNode<api::sql::DataSource>>,
     tmp: TempDir,
+    builder_port: u16,
     orchestrator_task: Option<JoinHandle<()>>,
     broker_task: Option<JoinHandle<()>>,
     marshal_task: Option<JoinHandle<()>>,
@@ -430,14 +504,21 @@ impl TestNetwork {
         let tmp = TempDir::new().unwrap();
         let genesis_file = tmp.path().join("genesis.toml");
         let genesis = Genesis {
-            chain_config: Default::default(),
+            chain_config: ChainConfig {
+                base_fee: 1.into(),
+                ..Default::default()
+            },
             stake_table: StakeTableConfig { capacity: 10 },
-            accounts: Default::default(),
             l1_finalized: L1Finalized::Number { number: 0 },
             header: Default::default(),
             upgrades: Default::default(),
             base_version: Version { major: 0, minor: 1 },
             upgrade_version: Version { major: 0, minor: 2 },
+
+            // Start with a funded account, so we can test catchup after restart.
+            accounts: [(builder_account(), 1000000000.into())]
+                .into_iter()
+                .collect(),
         };
         genesis.to_file(&genesis_file).unwrap();
 
@@ -446,7 +527,12 @@ impl TestNetwork {
             .collect::<Vec<_>>();
 
         let orchestrator_port = ports.pick();
-        let orchestrator_task = Some(start_orchestrator(orchestrator_port, &node_params));
+        let builder_port = ports.pick();
+        let orchestrator_task = Some(start_orchestrator(
+            orchestrator_port,
+            &node_params,
+            builder_port,
+        ));
 
         let cdn_dir = tmp.path().join("cdn");
         let cdn_port = ports.pick();
@@ -488,6 +574,7 @@ impl TestNetwork {
             )
             .await,
             tmp,
+            builder_port,
             orchestrator_task,
             broker_task,
             marshal_task,
@@ -521,24 +608,73 @@ impl TestNetwork {
         .unwrap();
     }
 
+    async fn check_builder(&self) {
+        self.da_nodes[0].check_builder(self.builder_port).await;
+    }
+
     /// Restart indicated number of DA and non-DA nodes.
     ///
     /// If possible (less than a quorum of nodes have been stopped), check that remaining nodes can
     /// still make progress without the restarted nodes. In any case, check that the network as a
     /// whole makes progress once the restarted nodes are back online.
     async fn restart(&mut self, da_nodes: usize, regular_nodes: usize) {
-        tracing::info!(da_nodes, regular_nodes, "shutting down some nodes");
-        join_all(
-            self.da_nodes[..da_nodes]
-                .iter_mut()
-                .map(TestNode::stop)
-                .chain(
-                    self.regular_nodes[..regular_nodes]
-                        .iter_mut()
-                        .map(TestNode::stop),
-                ),
-        )
-        .await;
+        self.restart_helper(0..da_nodes, 0..regular_nodes, false)
+            .await;
+        self.check_progress().await;
+    }
+
+    /// Restart indicated nodes, ensuring progress is maintained at all times.
+    ///
+    /// This is a lighter weight version of [`restart`](Self::restart). While the former includes
+    /// heavy checks that all nodes are progressing, which makes it useful as a stress test, this
+    /// function does the minimum required to check that progress is maintained at all times across
+    /// the network as a whole. This makes it a useful building block for more complex patterns,
+    /// like a staggered restart.
+    async fn restart_and_progress(
+        &mut self,
+        da_nodes: impl IntoIterator<Item = usize>,
+        regular_nodes: impl IntoIterator<Item = usize>,
+    ) {
+        self.restart_helper(da_nodes, regular_nodes, true).await;
+
+        // Just wait for one decide after the restart, so we don't restart subsequent nodes too
+        // quickly.
+        tracing::info!("waiting for progress after restart");
+        let mut events = self.da_nodes[0].event_stream().await.unwrap();
+        let timeout = Duration::from_secs((2 * self.num_nodes()) as u64);
+        async_timeout(timeout, async {
+            loop {
+                let event = events
+                    .next()
+                    .await
+                    .expect("event stream terminated unexpectedly");
+                let EventType::Decide { leaf_chain, .. } = event.event else {
+                    continue;
+                };
+                tracing::info!(?leaf_chain, "got decide, chain is progressing");
+                break;
+            }
+        })
+        .await
+        .expect("timed out waiting for progress after restart");
+    }
+
+    async fn restart_helper(
+        &mut self,
+        da_nodes: impl IntoIterator<Item = usize>,
+        regular_nodes: impl IntoIterator<Item = usize>,
+        assert_progress: bool,
+    ) {
+        let da_nodes = da_nodes.into_iter().collect::<Vec<_>>();
+        let regular_nodes = regular_nodes.into_iter().collect::<Vec<_>>();
+        tracing::info!(?da_nodes, ?regular_nodes, "shutting down nodes");
+
+        for i in &da_nodes {
+            self.da_nodes[*i].stop().await;
+        }
+        for i in &regular_nodes {
+            self.regular_nodes[*i].stop().await;
+        }
 
         // We use 3n/4 + 1 as the quorum threshold (fault tolerance f = n/4), even though the
         // theoretical fault tolerance of HotStuff consensus is n/3, because our implementation does
@@ -547,8 +683,8 @@ impl TestNetwork {
         // and have one dishonest leader every 4, thus preventing consensus from progressing.
         let quorum_threshold = 3 * self.num_nodes() / 4 + 1;
         let da_threshold = 2 * self.da_nodes.len() / 3 + 1;
-        if self.num_nodes() - da_nodes - regular_nodes > quorum_threshold
-            && self.da_nodes.len() - da_nodes >= da_threshold
+        if self.num_nodes() - da_nodes.len() - regular_nodes.len() > quorum_threshold
+            && self.da_nodes.len() - da_nodes.len() >= da_threshold
         {
             // If we are shutting down less than f nodes, the remaining nodes should be able to make
             // progress, and we will check that that is the case.
@@ -559,16 +695,23 @@ impl TestNetwork {
             // after it and will be able to commit. Thus, we just grab an event stream and look for
             // any decide.
             tracing::info!("waiting for remaining nodes to progress");
-            let mut events = if da_nodes < self.da_nodes.len() {
-                self.da_nodes[da_nodes].event_stream().await.unwrap()
-            } else {
-                self.regular_nodes[regular_nodes]
-                    .event_stream()
-                    .await
-                    .unwrap()
-            };
+            // Find the first DA node we _didn't_ shut down.
+            let da_node = self
+                .da_nodes
+                .iter()
+                .enumerate()
+                .find_map(|(i, node)| {
+                    if da_nodes.contains(&i) {
+                        None
+                    } else {
+                        Some(node)
+                    }
+                })
+                .unwrap();
+            let mut events = da_node.event_stream().await.unwrap();
+
             // Wait for a few decides, the first couple may be from before the restart.
-            for _ in 0..self.num_nodes() {
+            for _ in 0..5 {
                 let timeout = Duration::from_secs((2 * self.num_nodes()) as u64);
                 async_timeout(timeout, async {
                     loop {
@@ -587,6 +730,15 @@ impl TestNetwork {
                 .expect("timed out waiting for progress with nodes down");
             }
         } else {
+            assert!(
+                !assert_progress,
+                "test requested that progress continue after shutdown, but also requested that too many nodes be shut down: {}/{} DA, {}/{} regular",
+                da_nodes.len(),
+                self.da_nodes.len(),
+                regular_nodes.len(),
+                self.regular_nodes.len(),
+            );
+
             // Make sure there is a brief delay before restarting the nodes; we need the OS to
             // have time to clean up the ports they were using.
             tracing::info!(
@@ -595,18 +747,12 @@ impl TestNetwork {
             sleep(Duration::from_secs(2)).await;
         }
 
-        join_all(
-            self.da_nodes[..da_nodes]
-                .iter_mut()
-                .map(TestNode::start)
-                .chain(
-                    self.regular_nodes[..regular_nodes]
-                        .iter_mut()
-                        .map(TestNode::start),
-                ),
-        )
-        .await;
-        self.check_progress().await;
+        for i in da_nodes {
+            self.da_nodes[i].start().await;
+        }
+        for i in regular_nodes {
+            self.regular_nodes[i].start().await;
+        }
     }
 
     async fn shut_down(mut self) {
@@ -625,10 +771,10 @@ impl TestNetwork {
     }
 }
 
-fn start_orchestrator(port: u16, nodes: &[NodeParams]) -> JoinHandle<()> {
+fn start_orchestrator(port: u16, nodes: &[NodeParams], builder_port: u16) -> JoinHandle<()> {
     // We don't run a builder in these tests, so use a very short timeout before nodes decide to
     // build an empty block on their own.
-    let builder_timeout = Duration::from_millis(10);
+    let builder_timeout = Duration::from_millis(100);
     // These tests frequently have nodes down and views failing, so we use a fairly short view
     // timeout.
     let view_timeout = Duration::from_secs(2);
@@ -658,6 +804,7 @@ fn start_orchestrator(port: u16, nodes: &[NodeParams]) -> JoinHandle<()> {
     config.config.known_nodes_without_stake = vec![];
     config.config.next_view_timeout = view_timeout.as_millis() as u64;
     config.config.builder_timeout = builder_timeout;
+    config.config.builder_urls = vec1![format!("http://localhost:{builder_port}").parse().unwrap()];
 
     let bind = format!("http://0.0.0.0:{port}").parse().unwrap();
     spawn(async move {
@@ -747,4 +894,13 @@ impl PortPicker {
             tracing::warn!(port, "picked port which is already allocated, will try again. If this error persists, try reducing the number of ports being used.");
         }
     }
+}
+
+fn builder_key_pair() -> EthKeyPair {
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
+    FeeAccount::generated_from_seed_indexed([1; 32], 0).1
+}
+
+fn builder_account() -> FeeAccount {
+    builder_key_pair().fee_account()
 }
