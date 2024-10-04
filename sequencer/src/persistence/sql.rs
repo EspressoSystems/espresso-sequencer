@@ -554,7 +554,7 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt("SELECT * FROM upgrade_certificate where id = 0", [&(0i32)])
+            .query_opt_static("SELECT * FROM upgrade_certificate where id = 0")
             .await?;
 
         result
