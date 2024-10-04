@@ -305,20 +305,21 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice updates the stateHistoryCommitments array each time a new
-    /// finalized state is added to the LightClient contract.
-    /// Ensures that the time difference between the most recent and oldest
-    /// elements in this array does not exceed the stateHistoryRetentionPeriod (in seconds).
+    /// @notice Updates the `stateHistoryCommitments` array when a new finalized state is added
+    /// and ensures that the array does not retain states older than the
+    /// `stateHistoryRetentionPeriod`.
     /// @dev the block timestamp is used to determine if the stateHistoryCommitments array
-    /// should be pruned, based on the stateHistoryRetentionPeriod.
+    /// should be pruned, based on the stateHistoryRetentionPeriod (seconds).
     /// @dev a FIFO approach is used to delete elements from the start of the array,
-    /// ensuring that only the most recent states are retained within the
-    /// stateHistoryRetentionPeriod
+    /// ensuring that only the most recent states that only recent states are kept within
+    /// the retention window.
     /// @dev the `delete` method does not reduce the array length but resets the value at the
-    /// specified index to zero.
-    /// the stateHistoryFirstIndex variable acts as an offset to indicate the starting point for
-    /// reading the array,
-    /// since the length of the array is not reduced even after deletion.
+    /// specified index to zero. the stateHistoryFirstIndex variable acts as an offset to indicate
+    /// the starting point for reading the array, since the length of the array is not reduced
+    /// even after deletion.
+    /// @param blockNumber The block number of the new finalized state.
+    /// @param blockTimestamp The block timestamp used to check the retention period.
+    /// @param state The new `LightClientState` being added to the array.
     function updateStateHistory(
         uint64 blockNumber,
         uint64 blockTimestamp,
@@ -326,9 +327,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ) internal {
         if (
             stateHistoryCommitments.length != 0
-                && stateHistoryCommitments[stateHistoryCommitments.length - 1].l1BlockTimestamp
-                    - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
-                    >= stateHistoryRetentionPeriod
+                && blockTimestamp - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
+                    > stateHistoryRetentionPeriod
         ) {
             // The stateHistoryCommitments array has reached the maximum retention period
             // delete the oldest (first) non-empty element to maintain the FIFO structure.
