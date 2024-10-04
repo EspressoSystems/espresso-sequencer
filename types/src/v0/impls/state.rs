@@ -519,9 +519,8 @@ impl ValidatedState {
                 .await?;
 
             // Remember the fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
+            for proof in missing_account_proofs.iter() {
+                proof
                     .remember(&mut validated_state.fee_merkle_tree)
                     .expect("proof previously verified");
             }

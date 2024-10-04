@@ -8,10 +8,10 @@ use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, MockSequencerVersions, NodeState, PubKey, Transaction,
+    retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
+    BlockMerkleTree, FeeAccount, FeeMerkleTree, MockSequencerVersions, NodeState, PubKey,
+    Transaction,
 };
-use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::BoxStream,
@@ -197,22 +197,25 @@ impl<
     > CatchupDataSource for StorageState<N, P, D, V>
 {
     #[tracing::instrument(skip(self))]
-    async fn get_account(
+    async fn get_accounts(
         &self,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_account(height, view, account).await {
-            Ok(account) => return Ok(account),
+        match self.as_ref().get_accounts(height, view, accounts).await {
+            Ok(accounts) => return Ok(accounts),
             Err(err) => {
-                tracing::info!("account is not in memory, trying storage: {err:#}");
+                tracing::info!("accounts not in memory, trying storage: {err:#}");
             }
         }
 
         // Try storage.
-        self.inner().get_account(height, view, account).await
+        self.inner()
+            .get_accounts(height, view, accounts)
+            .await
+            .context("accounts not in memory, and could not fetch from storage")
     }
 
     #[tracing::instrument(skip(self))]
@@ -269,12 +272,12 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
     for ApiState<N, P, V>
 {
     #[tracing::instrument(skip(self))]
-    async fn get_account(
+    async fn get_accounts(
         &self,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         let state = self
             .consensus()
             .await
@@ -285,10 +288,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
             .context(format!(
                 "state not available for height {height}, view {view:?}"
             ))?;
-        let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
-            format!("account {account} not available for height {height}, view {view:?}"),
-        )?;
-        Ok(AccountQueryData { balance, proof })
+        retain_accounts(&state.fee_merkle_tree, accounts.iter().copied())
     }
 
     #[tracing::instrument(skip(self))]
