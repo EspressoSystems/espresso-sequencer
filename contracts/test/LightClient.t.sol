@@ -109,6 +109,13 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         lc = new LCMock(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
     }
 
+    // test that initiazing the contract reverts when the stateHistoryRetentionPeriod is below the
+    // required threshold
+    function test_RevertWhen_InvalidStateHistoryRetentionPeriodOnSetUp() public {
+        uint32 invalidRetentionPeriod = 10;
+        initWithExpectRevert(genesis, genesisStakeTableState, invalidRetentionPeriod);
+    }
+
     function test_RevertWhen_InvalidGenesis() external {
         LC.LightClientState memory badGenesis = genesis;
         LC.StakeTableState memory badGenesisStakeTableState = genesisStakeTableState;
