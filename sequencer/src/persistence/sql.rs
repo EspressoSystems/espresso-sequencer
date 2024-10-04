@@ -20,7 +20,7 @@ use hotshot_types::{
     data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
     vote::HasViewNumber,
@@ -546,6 +546,41 @@ impl SequencerPersistence for Persistence {
         .await?;
         tx.commit().await
     }
+
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {
+        let result = self
+            .db
+            .read()
+            .await?
+            .query_opt("SELECT * FROM upgrade_certificate where id = 0", [&(0i32)])
+            .await?;
+
+        result
+            .map(|row| {
+                let bytes: Vec<u8> = row.get("data");
+                anyhow::Result::<_>::Ok(bincode::deserialize(&bytes)?)
+            })
+            .transpose()
+    }
+
+    async fn store_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let upgrade_certificate_bytes =
+            bincode::serialize(&decided_upgrade_certificate).context("serializing proposal")?;
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "upgrade_certificate",
+            ["id", "data"],
+            ["id"],
+            [[sql_param(&0i32), sql_param(&upgrade_certificate_bytes)]],
+        )
+        .await?;
+        tx.commit().await
+    }
 }
 
 async fn collect_garbage(
@@ -623,6 +658,10 @@ async fn collect_garbage(
         [&(view.u64() as i64)],
     )
     .await?;
+
+    // Cleanup upgrade certificate, should only be 1
+    tx.execute("DELETE FROM upgrade_certificate where id <= $1", [&(0i32)])
+        .await?;
 
     // Exclude from the decide event any leaves which have definitely already been processed. We may
     // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in

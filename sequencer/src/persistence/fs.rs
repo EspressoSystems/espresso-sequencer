@@ -11,7 +11,7 @@ use hotshot_types::{
     data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{block_contents::BlockPayload, node_implementation::ConsensusTime},
     utils::View,
     vote::HasViewNumber,
@@ -120,6 +120,10 @@ impl Inner {
 
     fn quorum_proposals_dir_path(&self) -> PathBuf {
         self.path.join("quorum_proposals")
+    }
+
+    fn upgrade_certificate_dir_path(&self) -> PathBuf {
+        self.path.join("upgrade_certificate")
     }
 
     /// Overwrite a file if a condition is met.
@@ -697,6 +701,41 @@ impl SequencerPersistence for Persistence {
         }
 
         Ok(map)
+    }
+
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {
+        let inner = self.inner.read().await;
+        let path = inner.upgrade_certificate_dir_path();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path).context("read")?;
+        Ok(Some(
+            bincode::deserialize(&bytes).context("deserialize upgrade certificate")?,
+        ))
+    }
+
+    async fn store_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let mut inner = self.inner.write().await;
+        let path = &inner.upgrade_certificate_dir_path();
+        inner.replace(
+            path,
+            |_| {
+                // Always overwrite the previous file.
+                Ok(true)
+            },
+            |mut file| {
+                let bytes = bincode::serialize(&decided_upgrade_certificate)
+                    .context("serializing upgrade certificate")?;
+                file.write_all(&bytes)?;
+                Ok(())
+            },
+        )
     }
 }
 
