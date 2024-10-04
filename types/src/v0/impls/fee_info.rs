@@ -420,6 +420,34 @@ impl From<(FeeAccountProof, U256)> for AccountQueryData {
     }
 }
 
+/// Get a partial snapshot of the given fee state, which contains only the specified accounts.
+///
+/// Fails if one of the requested accounts is not represented in the original `state`.
+pub fn retain_accounts(
+    state: &FeeMerkleTree,
+    accounts: impl IntoIterator<Item = FeeAccount>,
+) -> anyhow::Result<FeeMerkleTree> {
+    let mut snapshot = FeeMerkleTree::from_commitment(state.commitment());
+    for account in accounts {
+        match state.universal_lookup(account) {
+            LookupResult::Ok(elem, proof) => {
+                // This remember cannot fail, since we just constructed a valid proof, and are
+                // remembering into a tree with the same commitment.
+                snapshot.remember(account, *elem, proof).unwrap();
+            }
+            LookupResult::NotFound(proof) => {
+                // Likewise this cannot fail.
+                snapshot.non_membership_remember(account, proof).unwrap()
+            }
+            LookupResult::NotInMemory => {
+                bail!("missing account {account}");
+            }
+        }
+    }
+
+    Ok(snapshot)
+}
+
 #[cfg(test)]
 mod test {
     use ethers::abi::Address;
