@@ -56,7 +56,11 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
                 .retry(self, |provider| {
                     provider
                         .try_fetch_account(height, view, fee_merkle_tree_root, account)
-                        .map_err(|err| err.context("fetching account {account}"))
+                        .map_err(|err| {
+                            err.context(format!(
+                                "fetching account {account}, height {height}, view {view:?}"
+                            ))
+                        })
                         .boxed()
                 })
                 .await;
