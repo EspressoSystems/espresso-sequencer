@@ -148,7 +148,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice This contract is called by the proxy when you deploy this contract
     /// @param _genesis The initial state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
-    /// history. the min retention period allowed is 1 hour
+    /// history. the min retention period allowed is 1 hour and max 365 days
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
@@ -184,7 +184,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param _genesis The initial state of the light client
     /// @param _genesisStakeTableState The initial stake table state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
-    /// history. The min retention period allowed is 1 hour
+    /// history. The min retention period allowed is 1 hour and the max is 365 days.
     function _initializeState(
         LightClientState memory _genesis,
         StakeTableState memory _genesisStakeTableState,
@@ -193,14 +193,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // The viewNum and blockHeight in the genesis state must be zero to indicate that this is
         // the initial state. Stake table commitments and threshold cannot be zero, otherwise it's
         // impossible to generate valid proof to move finalized state forward. The
-        // stateHistoryRetentionPeriod
-        // must be at least 1 hour to ensure proper state retention.
+        // stateHistoryRetentionPeriod must be at least 1 hour and no more than 365 days
+        // to ensure proper state retention.
         if (
             _genesis.viewNum != 0 || _genesis.blockHeight != 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.blsKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.schnorrKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.amountComm) == 0
                 || _genesisStakeTableState.threshold == 0 || _stateHistoryRetentionPeriod < 1 hours
+                || _stateHistoryRetentionPeriod > 365 days
         ) {
             revert InvalidArgs();
         }
@@ -442,11 +443,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice sets the maximum retention period for storing block state history.
     /// @param historySeconds The maximum number of seconds for which state history updates
     /// will be stored, based on the block timestamp. It must be greater than or equal to
-    /// the current state history retention period and must be at least 1 hour.
-    /// @dev Reverts with `InvalidMaxStateHistory` if the provided value is less than 1 hour
-    /// or less than or equal to the current state history retention period.
+    /// the current state history retention period and must be at least 1 hour and max 365 days.
+    /// @dev Reverts with `InvalidMaxStateHistory` if the provided value is less than 1 hour,
+    /// more than 365 days or less than or equal to the current state history retention period.
     function setstateHistoryRetentionPeriod(uint32 historySeconds) public onlyOwner {
-        if (historySeconds < 1 hours || historySeconds <= stateHistoryRetentionPeriod) {
+        if (
+            historySeconds < 1 hours || historySeconds > 365 days
+                || historySeconds <= stateHistoryRetentionPeriod
+        ) {
             revert InvalidMaxStateHistory();
         }
 
