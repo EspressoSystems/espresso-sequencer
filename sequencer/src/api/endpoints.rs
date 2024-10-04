@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{FeeAccount, NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
@@ -243,6 +243,34 @@ where
                 .get_account(height, ViewNumber::new(view), account)
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+        }
+        .boxed()
+    })?
+    .at("accounts", |req, state| {
+        async move {
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
+            let accounts = req
+                .body_auto::<Vec<FeeAccount>, ApiVer>(ApiVer::instance())
+                .map_err(Error::from_request_error)?;
+
+            state
+                .read(|state| {
+                    async move {
+                        state
+                            .get_accounts(height, ViewNumber::new(view), &accounts)
+                            .await
+                            .map_err(|err| {
+                                Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}"))
+                            })
+                    }
+                    .boxed()
+                })
+                .await
         }
         .boxed()
     })?

@@ -1,23 +1,26 @@
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
-use espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccountProof, FeeMerkleTree};
-use ethers::prelude::Address;
+use espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccount, FeeMerkleTree};
 use hotshot_query_service::{
+    availability::BlockId,
     data_source::{
         sql::{Config, SqlDataSource, Transaction},
-        storage::SqlStorage,
+        storage::{AvailabilityStorage, SqlStorage},
         VersionedDataSource,
     },
     merklized_state::{MerklizedStateDataSource, Snapshot},
     Resolvable,
 };
 use hotshot_types::data::ViewNumber;
-use jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
+use jf_merkle_tree::{
+    prelude::MerkleNode, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
+    MerkleTreeScheme,
+};
 
 use super::{
     data_source::{CatchupDataSource, Provider, SequencerDataSource},
-    AccountQueryData, BlocksFrontier,
+    BlocksFrontier,
 };
 use crate::{
     persistence::{
@@ -60,41 +63,44 @@ impl SequencerDataSource for DataSource {
 }
 
 impl CatchupDataSource for SqlStorage {
-    async fn get_account(
+    async fn get_accounts(
         &self,
         height: u64,
         _view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
-        let proof = self
-            .read()
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
+        let tx = self.read().await.context(format!(
+            "opening transaction to fetch account {accounts:?}; height {height}"
+        ))?;
+        let header = tx
+            .get_header(BlockId::<SeqTypes>::from(height as usize))
             .await
-            .context(format!(
-                "opening transaction to fetch account {account}; height {height}"
-            ))?
-            .get_path(
-                Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(height),
-                account.into(),
-            )
-            .await
-            .context(format!("fetching account {account}; height {height}"))?;
-
-        match proof.proof.first().context(format!(
-            "empty proof for account {account}; height {height}"
-        ))? {
-            MerkleNode::Leaf { pos, elem, .. } => Ok(AccountQueryData {
-                balance: (*elem).into(),
-                proof: FeeAccountProof::presence(*pos, proof),
-            }),
-
-            MerkleNode::Empty => Ok(AccountQueryData {
-                balance: 0_u64.into(),
-                proof: FeeAccountProof::absence(account.into(), proof),
-            }),
-            _ => {
-                bail!("Invalid proof");
+            .context(format!("loading header {height}"))?;
+        let mut snapshot = FeeMerkleTree::from_commitment(header.fee_merkle_tree_root());
+        for account in accounts {
+            let proof = tx
+                .get_path(
+                    Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(height),
+                    *account,
+                )
+                .await
+                .context(format!("fetching account {account}; height {height}"))?;
+            match proof.proof.first().context(format!(
+                "empty proof for account {account}; height {height}"
+            ))? {
+                MerkleNode::Leaf { pos, elem, .. } => {
+                    snapshot.remember(*pos, *elem, proof)?;
+                }
+                MerkleNode::Empty => {
+                    snapshot.non_membership_remember(*account, proof)?;
+                }
+                _ => {
+                    bail!("Invalid proof");
+                }
             }
         }
+
+        Ok(snapshot)
     }
 
     async fn get_frontier(&self, height: u64, _view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
@@ -134,13 +140,13 @@ impl CatchupDataSource for SqlStorage {
 }
 
 impl CatchupDataSource for DataSource {
-    async fn get_account(
+    async fn get_accounts(
         &self,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
-        self.as_ref().get_account(height, view, account).await
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
+        self.as_ref().get_accounts(height, view, accounts).await
     }
 
     async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
