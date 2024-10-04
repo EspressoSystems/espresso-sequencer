@@ -1,6 +1,6 @@
-use crate::{
-    v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
-    Timestamp, Upgrade, UpgradeMode,
+use crate::v0::{
+    retain_accounts, traits::StateCatchup, v0_3::ChainConfig, FeeMerkleTree, GenesisHeader,
+    L1BlockInfo, L1Client, PubKey, Timestamp, Upgrade, UpgradeMode,
 };
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
@@ -173,10 +173,7 @@ pub mod mock {
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 
     use super::*;
-    use crate::{
-        v0_1::{AccountQueryData, FeeAccountProof},
-        BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
-    };
+    use crate::{BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment};
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {
@@ -195,20 +192,18 @@ pub mod mock {
 
     #[async_trait]
     impl StateCatchup for MockStateCatchup {
-        async fn try_fetch_account(
+        async fn try_fetch_accounts(
             &self,
             _height: u64,
             view: ViewNumber,
             fee_merkle_tree_root: FeeMerkleCommitment,
-            account: FeeAccount,
-        ) -> anyhow::Result<AccountQueryData> {
+            accounts: &[FeeAccount],
+        ) -> anyhow::Result<FeeMerkleTree> {
             let src = &self.state[&view].fee_merkle_tree;
             assert_eq!(src.commitment(), fee_merkle_tree_root);
 
-            tracing::info!("catchup: fetching account {account:?} for view {view:?}");
-            Ok(FeeAccountProof::prove(src, account.into())
-                .unwrap_or_else(|| panic!("Account {account:?} not in memory"))
-                .into())
+            tracing::info!("catchup: fetching accounts {accounts:?} for view {view:?}");
+            retain_accounts(src, accounts.iter().copied())
         }
 
         async fn try_remember_blocks_merkle_tree(

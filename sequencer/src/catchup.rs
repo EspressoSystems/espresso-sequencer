@@ -7,7 +7,8 @@ use committable::Committable;
 use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
     v0_3::ChainConfig,
-    AccountQueryData, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+    BackoffParams, BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment,
+    FeeMerkleTree,
 };
 use futures::future::FutureExt;
 use hotshot_orchestrator::config::NetworkConfig;
@@ -118,38 +119,47 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
 #[async_trait]
 impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
     #[tracing::instrument(skip(self))]
-    async fn try_fetch_account(
+    async fn try_fetch_accounts(
         &self,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         for client in self.clients.iter() {
-            tracing::info!("Fetching account {account:?} from {}", client.url);
-            match client
-                .get::<AccountQueryData>(&format!(
-                    "catchup/{height}/{}/account/{account}",
-                    view.u64(),
-                ))
-                .send()
-                .await
+            tracing::info!("Fetching accounts from {}", client.url);
+            let req = match client
+                .inner
+                .post::<FeeMerkleTree>(&format!("catchup/{height}/{}/accounts", view.u64(),))
+                .body_binary(&accounts.to_vec())
             {
-                Ok(res) => {
-                    if res.proof.account != account.into() {
-                        tracing::warn!("Invalid proof received from peer {:?}", client.url);
-                        continue;
-                    }
-
-                    match res.proof.verify(&fee_merkle_tree_root) {
-                        Ok(_) => return Ok(res),
-                        Err(err) => tracing::warn!("Error verifying account proof: {}", err),
-                    }
-                }
+                Ok(req) => req,
                 Err(err) => {
-                    tracing::warn!("Error fetching account from peer: {}", err);
+                    tracing::warn!("failed to construct accounts catchup request: {err:#}");
+                    continue;
+                }
+            };
+            let snapshot = match req.send().await {
+                Ok(res) => res,
+                Err(err) => {
+                    tracing::warn!("Error fetching accounts from peer: {err:#}");
+                    continue;
+                }
+            };
+
+            // Verify proofs.
+            for account in accounts {
+                let Some((proof, _)) = FeeAccountProof::prove(&snapshot, (*account).into()) else {
+                    tracing::warn!("response from peer missing account {account}");
+                    continue;
+                };
+                if let Err(err) = proof.verify(&fee_merkle_tree_root) {
+                    tracing::warn!("peer gave invalid proof for account {account}: {err:#}");
+                    continue;
                 }
             }
+
+            return Ok(snapshot);
         }
         bail!("Could not fetch account from any peer");
     }
@@ -245,33 +255,14 @@ where
     // TODO: add a test for the account proof validation
     // issue # 2102 (https://github.com/EspressoSystems/espresso-sequencer/issues/2102)
     #[tracing::instrument(skip(self))]
-    async fn try_fetch_account(
+    async fn try_fetch_accounts(
         &self,
         block_height: u64,
         view: ViewNumber,
-        fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
-        let res = self
-            .db
-            .get_account(block_height, view, account.into())
-            .await?;
-
-        if res.proof.account != account.into() {
-            panic!(
-                "Critical error: Mismatched fee account proof: expected {:?}, got {:?}.
-                This may indicate a compromised database",
-                account, res.proof.account
-            );
-        }
-
-        match res.proof.verify(&fee_merkle_tree_root) {
-            Ok(_) => return Ok(res),
-            Err(err) => panic!(
-                "Critical error: failed to verify account proof from the database: {}",
-                err
-            ),
-        }
+        _fee_merkle_tree_root: FeeMerkleCommitment,
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
+        self.db.get_accounts(block_height, view, accounts).await
     }
 
     #[tracing::instrument(skip(self))]

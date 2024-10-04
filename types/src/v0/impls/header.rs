@@ -815,9 +815,8 @@ impl BlockHeader<SeqTypes> for Header {
                 .await?;
 
             // Insert missing fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
+            for proof in missing_account_proofs.iter() {
+                proof
                     .remember(&mut validated_state.fee_merkle_tree)
                     .context("remembering fee account")?;
             }
@@ -929,9 +928,8 @@ impl BlockHeader<SeqTypes> for Header {
                 .await?;
 
             // Insert missing fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
+            for proof in missing_account_proofs.iter() {
+                proof
                     .remember(&mut validated_state.fee_merkle_tree)
                     .context("remembering fee account")?;
             }
