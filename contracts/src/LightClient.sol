@@ -370,23 +370,23 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         uint256 prevBlock;
         bool prevUpdateFound;
-
         uint256 i = updatesCount - 1;
         while (!prevUpdateFound) {
-            if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
-                prevUpdateFound = true;
-                prevBlock = stateHistoryCommitments[i].l1BlockHeight;
-            }
-
             // We don't consider the lag time for the first two updates
             if (i < 2) {
                 break;
             }
 
             // We've reached the first recorded block
-            if (i == stateHistoryFirstIndex) {
+            if (i < stateHistoryFirstIndex) {
                 break;
             }
+
+            if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
+                prevUpdateFound = true;
+                prevBlock = stateHistoryCommitments[i].l1BlockHeight;
+            }
+
             i--;
         }
 
@@ -395,7 +395,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (!prevUpdateFound) {
             revert InsufficientSnapshotHistory();
         }
-
         return blockNumber - prevBlock > blockThreshold;
     }
 
