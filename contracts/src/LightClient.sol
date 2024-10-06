@@ -378,6 +378,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 break;
             }
 
+            // Stop if we've already assessed the first recorded state in the history.
+            if (i < stateHistoryFirstIndex) {
+                break;
+            }
+
             // Find the first update where the block height is less than or equal to the given
             // blockNumber.
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
@@ -385,10 +390,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 prevBlock = stateHistoryCommitments[i].l1BlockHeight;
             }
 
-            // Stop if we reach the first recorded state in the history.
-            if (i == stateHistoryFirstIndex) {
-                break;
-            }
             i--;
         }
 
