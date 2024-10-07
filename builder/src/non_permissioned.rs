@@ -195,7 +195,7 @@ impl BuilderConfig {
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, V>(
+            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion>(
                 da_sender,
                 qc_sender,
                 decide_sender,
