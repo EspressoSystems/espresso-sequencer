@@ -185,6 +185,17 @@ pub struct BuilderState<TYPES: NodeType> {
 
     /// time of next garbage collection for txns
     pub next_txn_garbage_collect_time: Instant,
+
+    /// allow_empty_block_until is a variable that dictates the time until which
+    /// a builder should stop producing empty blocks. This is done specifically
+    /// to allow for faster finalization of previous blocks that have had
+    /// transactions included in them.
+    pub allow_empty_block_until: Option<TYPES::Time>,
+
+    /// allow_empty_block_period is used in conjunction with [TYPES::Time] to
+    /// determine the time period that empty blocks are allowed to be built
+    /// for.
+    pub allow_empty_block_period: u64,
 }
 
 /// [best_builder_states_to_extend] is a utility function that is used to
@@ -665,6 +676,12 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.tx_queue
             .retain(|tx| self.txns_in_queue.contains(&tx.commit));
 
+        if !txn_commitments.is_empty() {
+            self.allow_empty_block_until = Some(TYPES::Time::new(
+                da_proposal_info.view_number.u64() + self.allow_empty_block_period,
+            ));
+        }
+
         // register the spawned builder state to spawned_builder_states in the global state
         self.global_state.write_arc().await.register_builder_state(
             BuilderStateId {
@@ -700,8 +717,16 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             async_sleep(sleep_interval).await
         }
 
-        // Don't build an empty block
-        if self.tx_queue.is_empty() {
+        // should_prioritize_finalization is a flag that is used to determine
+        // whether we should return empty blocks or not.
+
+        let should_prioritize_finalization = self
+            .allow_empty_block_until
+            .map(|until| state_id.view < until)
+            .unwrap_or(false);
+
+        if self.tx_queue.is_empty() && !should_prioritize_finalization {
+            // Don't build an empty block
             return None;
         }
 
@@ -748,7 +773,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // be included, because it alone goes over sequencer's block size limit.
         // We need to drop it and mark as "included" so that if we receive
         // it again we don't even bother with it.
-        if actual_txn_count == 0 {
+        if actual_txn_count == 0 && !should_prioritize_finalization {
             if let Some(txn) = self.tx_queue.pop_front() {
                 self.txns_in_queue.remove(&txn.commit);
                 self.included_txns.insert(txn.commit);
@@ -1010,6 +1035,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         instance_state: Arc<TYPES::InstanceState>,
         txn_garbage_collect_duration: Duration,
         validated_state: Arc<TYPES::ValidatedState>,
+        allow_empty_block_period: Option<u64>,
     ) -> Self {
         let txns_in_queue: HashSet<_> = tx_queue.iter().map(|tx| tx.commit).collect();
         BuilderState {
@@ -1035,6 +1061,11 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             txn_garbage_collect_duration,
             next_txn_garbage_collect_time: Instant::now() + txn_garbage_collect_duration,
             validated_state,
+            allow_empty_block_until: None,
+            // We specify the default value for allow_empty_block_period to be
+            // 3 as it currently takes 3 rounds of consensus to finalize the
+            // transactions previously proposed.
+            allow_empty_block_period: allow_empty_block_period.unwrap_or(3),
         }
     }
     pub fn clone_with_receiver(&self, req_receiver: BroadcastReceiver<MessageType<TYPES>>) -> Self {
@@ -1083,6 +1114,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             txn_garbage_collect_duration: self.txn_garbage_collect_duration,
             next_txn_garbage_collect_time,
             validated_state: self.validated_state.clone(),
+            allow_empty_block_until: self.allow_empty_block_until,
+            allow_empty_block_period: self.allow_empty_block_period,
         }
     }
 
