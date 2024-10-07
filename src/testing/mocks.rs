@@ -17,8 +17,7 @@ use crate::{
     types::HeightIndexed,
 };
 use hotshot::traits::{
-    election::static_committee::GeneralStaticCommittee, implementations::MemoryNetwork,
-    NodeImplementation,
+    election::static_committee::StaticCommittee, implementations::MemoryNetwork, NodeImplementation,
 };
 use hotshot_example_types::{
     auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
@@ -133,7 +132,7 @@ impl NodeType for MockTypes {
     type Transaction = MockTransaction;
     type InstanceState = TestInstanceState;
     type ValidatedState = TestValidatedState;
-    type Membership = GeneralStaticCommittee<Self>;
+    type Membership = StaticCommittee<Self>;
     type BuilderSignatureKey = BLSPubKey;
     type AuctionResult = TestAuctionResult;
 }
@@ -155,7 +154,7 @@ impl Versions for MockVersions {
 /// A type alias for the mock base version
 pub type MockBase = <MockVersions as Versions>::Base;
 
-pub type MockMembership = GeneralStaticCommittee<MockTypes>;
+pub type MockMembership = StaticCommittee<MockTypes>;
 pub type MockQuorumProposal = QuorumProposal<MockTypes>;
 pub type MockNetwork = MemoryNetwork<BLSPubKey>;
 
