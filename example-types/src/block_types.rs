@@ -25,7 +25,7 @@ use hotshot_types::{
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
-use snafu::Snafu;
+use thiserror::Error;
 use time::OffsetDateTime;
 use vbs::version::Version;
 
@@ -41,14 +41,17 @@ use crate::{
 #[serde(try_from = "Vec<u8>")]
 pub struct TestTransaction(Vec<u8>);
 
-#[derive(Debug, Snafu)]
-pub struct TransactionTooLong;
+#[derive(Debug, Error)]
+pub enum TransactionError {
+    #[error("Transaction too long")]
+    TransactionTooLong,
+}
 
 impl TryFrom<Vec<u8>> for TestTransaction {
-    type Error = TransactionTooLong;
+    type Error = TransactionError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        Self::try_new(value).ok_or(TransactionTooLong)
+        Self::try_new(value).ok_or(TransactionError::TransactionTooLong)
     }
 }
 

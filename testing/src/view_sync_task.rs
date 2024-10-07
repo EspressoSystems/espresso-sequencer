@@ -10,15 +10,15 @@ use anyhow::Result;
 use async_trait::async_trait;
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::traits::node_implementation::{NodeType, TestableNodeImplementation};
-use snafu::Snafu;
+use thiserror::Error;
 
 use crate::test_task::{TestResult, TestTaskState};
 
 /// `ViewSync` Task error
-#[derive(Snafu, Debug, Clone)]
-pub struct ViewSyncTaskErr {
-    /// set of node ids that hit view sync
-    hit_view_sync: HashSet<usize>,
+#[derive(Error, Debug, Clone)]
+pub enum ViewSyncTaskError {
+    #[error("{} nodes hit view sync", hit_view_sync.len())]
+    HitViewSync { hit_view_sync: HashSet<usize> },
 }
 
 /// `ViewSync` task state
@@ -70,7 +70,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                 if min <= num_hits && num_hits <= max {
                     TestResult::Pass
                 } else {
-                    TestResult::Fail(Box::new(ViewSyncTaskErr {
+                    TestResult::Fail(Box::new(ViewSyncTaskError::HitViewSync {
                         hit_view_sync: self.hit_view_sync.clone(),
                     }))
                 }

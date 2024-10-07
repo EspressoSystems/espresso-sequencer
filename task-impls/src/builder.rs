@@ -17,47 +17,42 @@ use hotshot_types::{
     vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
 use surf_disco::{client::HealthStatus, Client, Url};
 use tagged_base64::TaggedBase64;
+use thiserror::Error;
 use vbs::version::StaticVersionType;
 
-#[derive(Debug, Snafu, Serialize, Deserialize)]
-/// Represents errors than builder client may return
+#[derive(Debug, Error, Serialize, Deserialize)]
+/// Represents errors that can occur while interacting with the builder
 pub enum BuilderClientError {
-    // NOTE: folds BuilderError::NotFound & builderError::Missing
-    // into one. Maybe we'll want to handle that separately in
-    // the future
-    /// Block not found
-    #[snafu(display("Requested block not found"))]
-    NotFound,
-    /// Generic error while accessing the API,
-    /// i.e. when API isn't available or compatible
-    #[snafu(display("Builder API error: {message}"))]
-    Api {
-        /// Underlying error
-        message: String,
-    },
+    /// The requested block was not found
+    #[error("Requested block not found")]
+    BlockNotFound,
+
+    /// The requested block was missing
+    #[error("Requested block was missing")]
+    BlockMissing,
+
+    /// Generic error while accessing the API
+    #[error("Builder API error: {0}")]
+    Api(String),
 }
 
 impl From<BuilderApiError> for BuilderClientError {
     fn from(value: BuilderApiError) -> Self {
         match value {
-            BuilderApiError::Request { source } | BuilderApiError::TxnUnpack { source } => {
-                Self::Api {
-                    message: source.to_string(),
-                }
+            BuilderApiError::Request(source) | BuilderApiError::TxnUnpack(source) => {
+                Self::Api(source.to_string())
             }
-            BuilderApiError::TxnSubmit { source } | BuilderApiError::BuilderAddress { source } => {
-                Self::Api {
-                    message: source.to_string(),
-                }
+            BuilderApiError::TxnSubmit(source) | BuilderApiError::BuilderAddress(source) => {
+                Self::Api(source.to_string())
             }
-            BuilderApiError::Custom { message, .. } => Self::Api { message },
+            BuilderApiError::Custom { message, .. } => Self::Api(message),
             BuilderApiError::BlockAvailable { source, .. }
             | BuilderApiError::BlockClaim { source, .. } => match source {
-                BuildError::NotFound | BuildError::Missing => Self::NotFound,
-                BuildError::Error { message } => Self::Api { message },
+                BuildError::NotFound => Self::BlockNotFound,
+                BuildError::Missing => Self::BlockMissing,
+                BuildError::Error(message) => Self::Api(message),
             },
         }
     }
@@ -110,7 +105,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     /// Query builder for available blocks
     ///
     /// # Errors
-    /// - [`BuilderClientError::NotFound`] if blocks aren't available for this parent
+    /// - [`BuilderClientError::BlockNotFound`] if blocks aren't available for this parent
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
     pub async fn available_blocks(
         &self,
@@ -150,7 +145,7 @@ pub mod v0_1 {
         /// Claim block header input
         ///
         /// # Errors
-        /// - [`BuilderClientError::NotFound`] if block isn't available
+        /// - [`BuilderClientError::BlockNotFound`] if block isn't available
         /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
         pub async fn claim_block_header_input(
             &self,
@@ -172,7 +167,7 @@ pub mod v0_1 {
         /// Claim block
         ///
         /// # Errors
-        /// - [`BuilderClientError::NotFound`] if block isn't available
+        /// - [`BuilderClientError::BlockNotFound`] if block isn't available
         /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
         pub async fn claim_block(
             &self,
@@ -221,7 +216,7 @@ pub mod v0_3 {
         /// Claim block
         ///
         /// # Errors
-        /// - [`BuilderClientError::NotFound`] if block isn't available
+        /// - [`BuilderClientError::BlockNotFound`] if block isn't available
         /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
         pub async fn bundle(
             &self,

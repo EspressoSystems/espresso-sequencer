@@ -115,5 +115,5 @@ async fn test_random_block_builder() {
             &signature,
         )
         .await;
-    assert!(matches!(result, Err(BuilderClientError::NotFound)));
+    assert!(matches!(result, Err(BuilderClientError::BlockNotFound)));
 }

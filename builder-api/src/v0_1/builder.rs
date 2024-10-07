@@ -12,8 +12,8 @@ use derive_more::From;
 use futures::FutureExt;
 use hotshot_types::{traits::node_implementation::NodeType, utils::BuilderCommitment};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, Snafu};
 use tagged_base64::TaggedBase64;
+use thiserror::Error;
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, RequestParams, StatusCode};
 use vbs::version::StaticVersionType;
 
@@ -40,55 +40,38 @@ pub struct Options {
     pub extensions: Vec<toml::Value>,
 }
 
-#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
-#[snafu(visibility(pub))]
+#[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum BuildError {
-    /// The requested resource does not exist or is not known to this builder service.
+    #[error("The requested resource does not exist or is not known to this builder service")]
     NotFound,
-    /// The requested resource exists but is not currently available.
+    #[error("The requested resource exists but is not currently available")]
     Missing,
-    /// There was an error while trying to fetch the requested resource.
-    #[snafu(display("Failed to fetch requested resource: {message}"))]
-    Error { message: String },
+    #[error("Error trying to fetch the requested resource: {0}")]
+    Error(String),
 }
 
-#[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
-#[snafu(visibility(pub))]
+#[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum Error {
-    Request {
-        source: RequestError,
-    },
-    #[snafu(display("error building block from {resource}: {source}"))]
-    #[from(ignore)]
+    #[error("Error processing request: {0}")]
+    Request(#[from] RequestError),
+    #[error("Error building block from {resource}: {source}")]
     BlockAvailable {
         source: BuildError,
         resource: String,
     },
-    #[snafu(display("error claiming block {resource}: {source}"))]
-    #[from(ignore)]
+    #[error("Error claiming block {resource}: {source}")]
     BlockClaim {
         source: BuildError,
         resource: String,
     },
-    #[snafu(display("error unpacking transaction: {source}"))]
-    #[from(ignore)]
-    TxnUnpack {
-        source: RequestError,
-    },
-    #[snafu(display("error submitting transaction: {source}"))]
-    #[from(ignore)]
-    TxnSubmit {
-        source: BuildError,
-    },
-    #[snafu(display("error getting builder address: {source}"))]
-    #[from(ignore)]
-    BuilderAddress {
-        source: BuildError,
-    },
-    Custom {
-        message: String,
-        status: StatusCode,
-    },
+    #[error("Error unpacking transactions: {0}")]
+    TxnUnpack(RequestError),
+    #[error("Error submitting transaction: {0}")]
+    TxnSubmit(BuildError),
+    #[error("Error getting builder address: {0}")]
+    BuilderAddress(#[from] BuildError),
+    #[error("Custom error {status}: {message}")]
+    Custom { message: String, status: StatusCode },
 }
 
 impl tide_disco::error::Error for Error {
@@ -152,7 +135,8 @@ where
                 state
                     .available_blocks(&hash, view_number, sender, &signature)
                     .await
-                    .context(BlockAvailableSnafu {
+                    .map_err(|source| Error::BlockAvailable {
+                        source,
                         resource: hash.to_string(),
                     })
             }
@@ -167,7 +151,8 @@ where
                 state
                     .claim_block(&block_hash, view_number, sender, &signature)
                     .await
-                    .context(BlockClaimSnafu {
+                    .map_err(|source| Error::BlockClaim {
+                        source,
                         resource: block_hash.to_string(),
                     })
             }
@@ -182,14 +167,15 @@ where
                 state
                     .claim_block_header_input(&block_hash, view_number, sender, &signature)
                     .await
-                    .context(BlockClaimSnafu {
+                    .map_err(|source| Error::BlockClaim {
+                        source,
                         resource: block_hash.to_string(),
                     })
             }
             .boxed()
         })?
         .get("builder_address", |_req, state| {
-            async move { state.builder_address().await.context(BuilderAddressSnafu) }.boxed()
+            async move { state.builder_address().await.map_err(|e| e.into()) }.boxed()
         })?;
     Ok(api)
 }
@@ -210,9 +196,12 @@ where
             async move {
                 let tx = req
                     .body_auto::<<Types as NodeType>::Transaction, Ver>(Ver::instance())
-                    .context(TxnUnpackSnafu)?;
+                    .map_err(Error::TxnUnpack)?;
                 let hash = tx.commit();
-                state.submit_txns(vec![tx]).await.context(TxnSubmitSnafu)?;
+                state
+                    .submit_txns(vec![tx])
+                    .await
+                    .map_err(Error::TxnSubmit)?;
                 Ok(hash)
             }
             .boxed()
@@ -221,9 +210,9 @@ where
             async move {
                 let txns = req
                     .body_auto::<Vec<<Types as NodeType>::Transaction>, Ver>(Ver::instance())
-                    .context(TxnUnpackSnafu)?;
+                    .map_err(Error::TxnUnpack)?;
                 let hashes = txns.iter().map(|tx| tx.commit()).collect::<Vec<_>>();
-                state.submit_txns(txns).await.context(TxnSubmitSnafu)?;
+                state.submit_txns(txns).await.map_err(Error::TxnSubmit)?;
                 Ok(hashes)
             }
             .boxed()

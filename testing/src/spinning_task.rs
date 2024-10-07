@@ -36,7 +36,6 @@ use hotshot_types::{
     vote::HasViewNumber,
     ValidatorConfig,
 };
-use snafu::Snafu;
 
 use crate::{
     test_runner::{LateNodeContext, LateNodeContextParameters, LateStartNode, Node, TestRunner},
@@ -45,10 +44,6 @@ use crate::{
 
 /// convience type for state and block
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
-
-/// error for the spinning task
-#[derive(Snafu, Debug)]
-pub struct SpinningTaskErr {}
 
 /// Spinning task state
 pub struct SpinningTask<

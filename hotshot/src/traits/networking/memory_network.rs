@@ -316,7 +316,9 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
             .iter()
             .find(|v| v.value().iter().all(|(k, _)| recipients.contains(k)))
             .map(|v| v.key().clone())
-            .ok_or(NetworkError::NotFound)?;
+            .ok_or(NetworkError::MessageSendError(
+                "no topic found for recipients".to_string(),
+            ))?;
 
         self.broadcast_message(message, topic, broadcast_delay)
             .await
@@ -352,18 +354,15 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
                         trace!(?recipient, "Delivered message to remote");
                         Ok(())
                     }
-                    Err(e) => {
-                        warn!(?e, ?recipient, "Error delivering direct message");
-                        Err(NetworkError::CouldNotDeliver)
-                    }
+                    Err(e) => Err(NetworkError::MessageSendError(format!(
+                        "error sending direct message to node: {e}",
+                    ))),
                 }
             }
         } else {
-            warn!(
-                "{:#?} {:#?} {:#?}",
-                recipient, self.inner.master_map.map, "Node does not exist in map"
-            );
-            Err(NetworkError::NoSuchNode)
+            Err(NetworkError::MessageSendError(
+                "node does not exist".to_string(),
+            ))
         }
     }
 

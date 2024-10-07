@@ -28,7 +28,7 @@ use derivative::Derivative;
 use jf_vid::{precomputable::Precomputable, VidDisperse as JfVidDisperse, VidScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use thiserror::Error;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 use tracing::error;
@@ -85,6 +85,12 @@ impl ConsensusTime for ViewNumber {
     /// Returen the u64 format
     fn u64(&self) -> u64 {
         self.0
+    }
+}
+
+impl Display for ViewNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -393,13 +399,14 @@ impl<TYPES: NodeType> HasViewNumber<TYPES> for UpgradeProposal<TYPES> {
 }
 
 /// The error type for block and its transactions.
-#[derive(Snafu, Debug, Serialize, Deserialize)]
+#[derive(Error, Debug, Serialize, Deserialize)]
 pub enum BlockError {
-    /// Invalid block header.
-    InvalidBlockHeader,
-    /// Invalid transaction length.
-    InvalidTransactionLength,
-    /// Inconsistent payload commitment.
+    /// The block header is invalid
+    #[error("Invalid block header: {0}")]
+    InvalidBlockHeader(String),
+
+    /// The payload commitment does not match the block header's payload commitment
+    #[error("Inconsistent payload commitment")]
     InconsistentPayloadCommitment,
 }
 

@@ -1,15 +1,11 @@
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
-use snafu::ResultExt;
 use tide_disco::{api::ApiError, method::ReadState, Api};
 
 use super::{data_source::BuilderDataSource, Version};
 use crate::api::load_api;
 /// No changes to these types
-pub use crate::v0_1::builder::{
-    submit_api, BlockAvailableSnafu, BlockClaimSnafu, BuildError, BuilderAddressSnafu, Error,
-    Options,
-};
+pub use crate::v0_1::builder::{submit_api, BuildError, Error, Options};
 
 pub fn define_api<State, Types: NodeType>(
     options: &Options,
@@ -32,7 +28,8 @@ where
                 state
                     .bundle(parent_view, &parent_hash, view_number)
                     .await
-                    .with_context(|_| BlockClaimSnafu {
+                    .map_err(|source| Error::BlockClaim {
+                        source,
                         resource: format!(
                             "Block for parent {parent_hash}@{parent_view} and view {view_number}"
                         ),
@@ -41,7 +38,7 @@ where
             .boxed()
         })?
         .get("builder_address", |_req, state| {
-            async move { state.builder_address().await.context(BuilderAddressSnafu) }.boxed()
+            async move { state.builder_address().await.map_err(Error::BuilderAddress) }.boxed()
         })?;
     Ok(api)
 }

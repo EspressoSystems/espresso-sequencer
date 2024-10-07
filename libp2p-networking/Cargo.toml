@@ -30,7 +30,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-snafu = { workspace = true }
+thiserror = { workspace = true }
 tide = { version = "0.16", optional = true, default-features = false, features = [
   "h1-server",
 ] }

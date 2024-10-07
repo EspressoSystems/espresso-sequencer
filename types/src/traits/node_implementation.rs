@@ -10,7 +10,7 @@
 //! describing the overall behavior of a node, as a composition of implementations of the node trait.
 
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     hash::Hash,
     ops::{self, Deref, Sub},
     sync::Arc,
@@ -210,7 +210,7 @@ pub trait NodeType:
     /// The time type that this hotshot setup is using.
     ///
     /// This should be the same `Time` that `ValidatedState::Time` is using.
-    type Time: ConsensusTime;
+    type Time: ConsensusTime + Display;
     /// The AuctionSolverResult is a type that holds the data associated with a particular solver
     /// run, for a particular view.
     type AuctionResult: Debug

@@ -22,7 +22,7 @@ use hotshot_types::{
     traits::node_implementation::{ConsensusTime, NodeType, Versions},
     vid::VidCommitment,
 };
-use snafu::Snafu;
+use thiserror::Error;
 use tracing::error;
 
 use crate::{
@@ -46,48 +46,38 @@ pub enum ViewStatus<TYPES: NodeType> {
 }
 
 /// possible errors
-#[derive(Snafu, Debug, Clone)]
+#[derive(Error, Debug, Clone)]
 pub enum OverallSafetyTaskErr<TYPES: NodeType> {
-    /// inconsistent txn nums
-    InconsistentTxnsNum {
-        /// number of transactions -> number of nodes reporting that number
-        map: HashMap<u64, usize>,
-    },
-    /// too many failed  views
-    TooManyFailures {
-        /// vec of failed views
-        failed_views: HashSet<TYPES::Time>,
-    },
-    /// not enough decides
-    NotEnoughDecides {
-        /// expected number of decides
-        expected: usize,
-        /// actual number of decides
-        got: usize,
-    },
-    /// mismatched leaves for a view
+    #[error("Mismatched leaf")]
     MismatchedLeaf,
-    /// mismatched states for a view
-    InconsistentStates,
-    /// mismatched blocks for a view
-    InconsistentBlocks,
-    /// not enough failures. this likely means there is an issue in the test
-    NotEnoughFailures {
-        expected: usize,
 
-        failed_views: HashSet<TYPES::Time>,
-    },
-    /// mismatched expected failed view vs actual failed view
+    #[error("Inconsistent blocks")]
+    InconsistentBlocks,
+
+    #[error("Inconsistent number of transactions: {map:?}")]
+    InconsistentTxnsNum { map: HashMap<u64, usize> },
+
+    #[error("Not enough decides: got: {got}, expected: {expected}")]
+    NotEnoughDecides { got: usize, expected: usize },
+
+    #[error("Too many view failures: {0:?}")]
+    TooManyFailures(HashSet<TYPES::Time>),
+
+    #[error("Inconsistent failed views: expected: {expected_failed_views:?}, actual: {actual_failed_views:?}")]
     InconsistentFailedViews {
-        expected_failed_views: HashSet<TYPES::Time>,
+        expected_failed_views: Vec<TYPES::Time>,
         actual_failed_views: HashSet<TYPES::Time>,
     },
-    /// This is a case where we have too many failed + succesful views over round results
-    /// This should never be the case and requires debugging if we see this get thrown
+    #[error(
+        "Not enough round results: results_count: {results_count}, views_count: {views_count}"
+    )]
     NotEnoughRoundResults {
         results_count: usize,
         views_count: usize,
     },
+
+    #[error("View timed out")]
+    ViewTimeout,
 }
 
 /// Data availability task state
@@ -113,9 +103,9 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions>
         self.ctx.failed_views.insert(view_number);
         if self.ctx.failed_views.len() > num_failed_views {
             let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
-            self.error = Some(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
-                failed_views: self.ctx.failed_views.clone(),
-            }));
+            self.error = Some(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures(
+                self.ctx.failed_views.clone(),
+            )));
         } else if !expected_views_to_fail.is_empty() {
             match expected_views_to_fail.entry(view_number) {
                 Entry::Occupied(mut view_seen) => {
@@ -183,7 +173,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                 }
             }
             EventType::ReplicaViewTimeout { view_number } => {
-                let error = Arc::new(HotShotError::<TYPES>::ViewTimeoutError {
+                let error = Arc::new(HotShotError::<TYPES>::ViewTimedOut {
                     view_number,
                     state: RoundTimedoutState::TestCollectRoundEventsTimedOut,
                 });
@@ -281,9 +271,9 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
         }
 
         if self.ctx.failed_views.len() + num_incomplete_views > num_failed_rounds_total {
-            return TestResult::Fail(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
-                failed_views: self.ctx.failed_views.clone(),
-            }));
+            return TestResult::Fail(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures(
+                self.ctx.failed_views.clone(),
+            )));
         }
 
         if !expected_views_to_fail

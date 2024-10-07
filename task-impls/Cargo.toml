@@ -33,7 +33,7 @@ jf-vid = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
-snafu = { workspace = true }
+thiserror = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
 time = { workspace = true }

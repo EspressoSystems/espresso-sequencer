@@ -483,11 +483,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             kind: MessageKind::from(message_kind),
         };
 
-        let serialized_message = self
-            .upgrade_lock
-            .serialize(&message)
-            .await
-            .map_err(|_| HotShotError::FailedToSerialize)?;
+        let serialized_message = self.upgrade_lock.serialize(&message).await.map_err(|err| {
+            HotShotError::FailedToSerialize(format!("failed to serialize transaction: {err}"))
+        })?;
 
         async_spawn(async move {
             let da_membership = &api.memberships.da_membership.clone();

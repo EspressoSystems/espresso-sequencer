@@ -44,7 +44,7 @@ use hotshot_types::{
     request_response::NetworkMsgResponseChannel,
     traits::{
         metrics::{Counter, Metrics, NoMetrics},
-        network::{BroadcastDelay, ConnectedNetwork, PushCdnNetworkError, Topic as HotShotTopic},
+        network::{BroadcastDelay, ConnectedNetwork, Topic as HotShotTopic},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -247,14 +247,14 @@ impl<K: SignatureKey + 'static> PushCdnNetwork<K> {
         }
 
         // Send the message
-        // TODO: check if we need to print this error
-        if self
+        if let Err(err) = self
             .client
             .send_broadcast_message(vec![topic as u8], message)
             .await
-            .is_err()
         {
-            return Err(NetworkError::CouldNotDeliver);
+            return Err(NetworkError::MessageReceiveError(format!(
+                "failed to send broadcast message: {err}"
+            )));
         };
 
         Ok(())
@@ -526,15 +526,15 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
         }
 
         // Send the message
-        // TODO: check if we need to print this error
-        if self
+        if let Err(e) = self
             .client
             .send_direct_message(&WrappedSignatureKey(recipient), message)
             .await
-            .is_err()
         {
             self.metrics.num_failed_messages.add(1);
-            return Err(NetworkError::CouldNotDeliver);
+            return Err(NetworkError::MessageSendError(format!(
+                "failed to send direct message: {e}"
+            )));
         };
 
         Ok(())
@@ -559,10 +559,9 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
         let message = match message {
             Ok(message) => message,
             Err(error) => {
-                error!("failed to receive message: {error}");
-                return Err(NetworkError::PushCdnNetwork {
-                    source: PushCdnNetworkError::FailedToReceive,
-                });
+                return Err(NetworkError::MessageReceiveError(format!(
+                    "failed to receive message: {error}"
+                )));
             }
         };
 

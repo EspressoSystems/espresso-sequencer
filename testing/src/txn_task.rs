@@ -14,7 +14,6 @@ use async_std::task::JoinHandle;
 use hotshot::traits::TestableNodeImplementation;
 use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use rand::thread_rng;
-use snafu::Snafu;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 
@@ -22,10 +21,6 @@ use crate::{test_runner::Node, test_task::TestEvent};
 
 // the obvious idea here is to pass in a "stream" that completes every `n` seconds
 // the stream construction can definitely be fancier but that's the baseline idea
-
-/// Data Availability task error
-#[derive(Snafu, Debug)]
-pub struct TxnTaskErr {}
 
 /// state of task that decides when things are completed
 pub struct TxnTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> {

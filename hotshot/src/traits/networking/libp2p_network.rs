@@ -76,7 +76,7 @@ use libp2p_networking::{
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 
 use crate::BroadcastDelay;
 
@@ -558,7 +558,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     ) -> Result<Libp2pNetwork<K>, NetworkError> {
         let (mut rx, network_handle) = spawn_network_node::<K>(config.clone(), id)
             .await
-            .map_err(Into::<NetworkError>::into)?;
+            .map_err(|e| NetworkError::ConfigError(format!("failed to spawn network node: {e}")))?;
 
         // Add our own address to the bootstrap addresses
         let addr = network_handle.listen_addr();
@@ -694,7 +694,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                 // Wait for the network to connect to the required number of peers
                 if let Err(e) = handle.wait_to_connect(4, id).await {
                     error!("Failed to connect to peers: {:?}", e);
-                    return Err::<(), NetworkError>(e.into());
+                    return Err::<(), NetworkError>(e);
                 }
                 info!("Connected to required number of peers");
 
@@ -716,23 +716,26 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     ) -> Result<(), NetworkError> {
         match msg {
             GossipMsg(msg) => {
-                sender
-                    .send(msg)
-                    .await
-                    .map_err(|_| NetworkError::ChannelSend)?;
+                sender.send(msg).await.map_err(|err| {
+                    NetworkError::ChannelSendError(format!("failed to send gossip message: {err}"))
+                })?;
             }
             DirectRequest(msg, _pid, chan) => {
-                sender
-                    .send(msg)
-                    .await
-                    .map_err(|_| NetworkError::ChannelSend)?;
+                sender.send(msg).await.map_err(|err| {
+                    NetworkError::ChannelSendError(format!(
+                        "failed to send direct request message: {err}"
+                    ))
+                })?;
                 if self
                     .inner
                     .handle
                     .direct_response(
                         chan,
-                        &bincode::serialize(&Empty { byte: 0u8 })
-                            .map_err(|e| NetworkError::Libp2p { source: e.into() })?,
+                        &bincode::serialize(&Empty { byte: 0u8 }).map_err(|e| {
+                            NetworkError::FailedToSerialize(format!(
+                                "failed to serialize acknowledgement: {e}"
+                            ))
+                        })?,
                     )
                     .await
                     .is_err()
@@ -746,7 +749,11 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
             }
             NetworkEvent::ResponseRequested(Request(msg), chan) => {
                 let res = request_tx.try_send((msg, chan));
-                res.map_err(|_| NetworkError::ChannelSend)?;
+                res.map_err(|err| {
+                    NetworkError::ChannelSendError(format!(
+                        "failed to respond to a peer's data request: {err}"
+                    ))
+                })?;
             }
             NetworkEvent::ConnectedPeersUpdate(_) => {}
         }
@@ -822,7 +829,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         // If we're not ready, return an error
         if !self.is_ready() {
             self.inner.metrics.num_failed_messages.add(1);
-            return Err(NetworkError::NotReady);
+            return Err(NetworkError::NotReadyYet);
         };
 
         let pid = match self
@@ -834,25 +841,24 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
             Ok(pid) => pid,
             Err(err) => {
                 self.inner.metrics.num_failed_messages.add(1);
-                debug!(
-                    "Failed to message {:?} because could not find recipient peer id for pk {:?}",
-                    request, recipient
-                );
-                return Err(NetworkError::Libp2p {
-                    source: Box::new(err),
-                });
+                return Err(NetworkError::LookupError(format!(
+                    "failed to look up node: {err}"
+                )));
             }
         };
         let result = match self.inner.handle.request_data(&request, pid).await {
             Ok(response) => match response {
                 Some(msg) => {
                     if msg.0.len() < 8 {
-                        return Err(NetworkError::FailedToDeserialize {
-                            source: anyhow!("insufficient bytes"),
-                        });
+                        return Err(NetworkError::FailedToDeserialize(
+                            "message was too small".to_string(),
+                        ));
                     }
-                    let res: Message<TYPES> = bincode::deserialize(&msg.0)
-                        .map_err(|e| NetworkError::FailedToDeserialize { source: e.into() })?;
+                    let res: Message<TYPES> = bincode::deserialize(&msg.0).map_err(|err| {
+                        NetworkError::FailedToDeserialize(format!(
+                            "failed to serialize request data: {err}"
+                        ))
+                    })?;
 
                     match res.kind {
                         MessageKind::Data(DataResponse(data)) => data,
@@ -863,13 +869,13 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
             },
             Err(e) => {
                 self.inner.metrics.num_failed_messages.add(1);
-                return Err(e.into());
+                return Err(e);
             }
         };
 
-        Ok(bincode::serialize(&result).map_err(|e| {
+        Ok(bincode::serialize(&result).map_err(|err| {
             self.inner.metrics.num_failed_messages.add(1);
-            NetworkError::Libp2p { source: e.into() }
+            NetworkError::FailedToSerialize(format!("failed to serialize request response: {err}"))
         })?)
     }
 
@@ -940,7 +946,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         // If we're not ready, return an error
         if !self.is_ready() {
             self.inner.metrics.num_failed_messages.add(1);
-            return Err(NetworkError::NotReady);
+            return Err(NetworkError::NotReadyYet);
         };
 
         // If we are subscribed to the topic,
@@ -981,7 +987,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
 
         if let Err(e) = self.inner.handle.gossip(topic, &message).await {
             self.inner.metrics.num_failed_messages.add(1);
-            return Err(e.into());
+            return Err(e);
         }
 
         Ok(())
@@ -997,7 +1003,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         // If we're not ready, return an error
         if !self.is_ready() {
             self.inner.metrics.num_failed_messages.add(1);
-            return Err(NetworkError::NotReady);
+            return Err(NetworkError::NotReadyYet);
         };
 
         let future_results = recipients
@@ -1008,7 +1014,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         let errors: Vec<_> = results
             .into_iter()
             .filter_map(|r| match r {
-                Err(NetworkError::Libp2p { source }) => Some(source),
+                Err(err) => Some(err),
                 _ => None,
             })
             .collect();
@@ -1016,7 +1022,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(NetworkError::Libp2pMulti { sources: errors })
+            Err(NetworkError::Multiple(errors))
         }
     }
 
@@ -1025,7 +1031,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         // If we're not ready, return an error
         if !self.is_ready() {
             self.inner.metrics.num_failed_messages.add(1);
-            return Err(NetworkError::NotReady);
+            return Err(NetworkError::NotReadyYet);
         };
 
         // short circuit if we're dming ourselves
@@ -1047,13 +1053,9 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
             Ok(pid) => pid,
             Err(err) => {
                 self.inner.metrics.num_failed_messages.add(1);
-                debug!(
-                    "Failed to message {:?} because could not find recipient peer id for pk {:?}",
-                    message, recipient
-                );
-                return Err(NetworkError::Libp2p {
-                    source: Box::new(err),
-                });
+                return Err(NetworkError::LookupError(format!(
+                    "failed to look up node for direct message: {err}"
+                )));
             }
         };
 
@@ -1085,7 +1087,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
             Ok(()) => Ok(()),
             Err(e) => {
                 self.inner.metrics.num_failed_messages.add(1);
-                Err(e.into())
+                Err(e)
             }
         }
     }

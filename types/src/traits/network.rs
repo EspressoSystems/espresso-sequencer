@@ -9,16 +9,13 @@
 //! Contains types and traits used by `HotShot` to abstract over network access
 
 use async_compatibility_layer::art::async_sleep;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::future::TimeoutError;
 use derivative::Derivative;
 use dyn_clone::DynClone;
 use futures::{
     channel::mpsc::{self},
     Future,
 };
-#[cfg(async_executor_impl = "tokio")]
-use tokio::time::error::Elapsed as TimeoutError;
+use thiserror::Error;
 
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
@@ -39,7 +36,6 @@ use rand::{
     prelude::Distribution,
 };
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
 
 use super::{node_implementation::NodeType, signature_key::SignatureKey};
 use crate::{
@@ -49,31 +45,9 @@ use crate::{
     BoxSyncFuture,
 };
 
-/// for any errors we decide to add to memory network
-#[derive(Debug, Snafu, Serialize, Deserialize)]
-#[snafu(visibility(pub))]
-pub enum MemoryNetworkError {
-    /// stub
-    Stub,
-}
-
 /// Centralized server specific errors
-#[derive(Debug, Snafu, Serialize, Deserialize)]
-#[snafu(visibility(pub))]
-pub enum CentralizedServerNetworkError {
-    /// The centralized server could not find a specific message.
-    NoMessagesInQueue,
-}
-
-/// Centralized server specific errors
-#[derive(Debug, Snafu, Serialize, Deserialize)]
-#[snafu(visibility(pub))]
-pub enum PushCdnNetworkError {
-    /// Failed to receive a message from the server
-    FailedToReceive,
-    /// Failed to send a message to the server
-    FailedToSend,
-}
+#[derive(Debug, Error, Serialize, Deserialize)]
+pub enum PushCdnNetworkError {}
 
 /// the type of transmission
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,74 +62,68 @@ pub enum TransmitType<TYPES: NodeType> {
     DaCommitteeAndLeaderBroadcast(TYPES::SignatureKey),
 }
 
-/// Error type for networking
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub))]
+/// Errors that can occur in the network
+#[derive(Debug, Error)]
 pub enum NetworkError {
-    /// Libp2p specific errors
-    Libp2p {
-        /// source of error
-        source: Box<dyn std::error::Error + Send + Sync>,
-    },
-    /// collection of libp2p specific errors
-    Libp2pMulti {
-        /// sources of errors
-        sources: Vec<Box<dyn std::error::Error + Send + Sync>>,
-    },
-    /// memory network specific errors
-    MemoryNetwork {
-        /// source of error
-        source: MemoryNetworkError,
-    },
-    /// Push CDN network-specific errors
-    PushCdnNetwork {
-        /// source of error
-        source: PushCdnNetworkError,
-    },
-    /// Centralized server specific errors
-    CentralizedServer {
-        /// source of error
-        source: CentralizedServerNetworkError,
-    },
-    /// unimplemented functionality
-    UnimplementedFeature,
-    /// Could not deliver a message to a specified recipient
-    CouldNotDeliver,
-    /// Attempted to deliver a message to an unknown node
-    NoSuchNode,
-    /// No bootstrap nodes were specified on network creation
-    NoBootstrapNodesSpecified,
-    /// Failed to serialize a network message
-    FailedToSerialize {
-        /// Originating bincode error
-        source: anyhow::Error,
-    },
-    /// Failed to deserealize a network message
-    FailedToDeserialize {
-        /// originating bincode error
-        source: anyhow::Error,
-    },
-    /// A timeout occurred
-    Timeout {
-        /// Source of error
-        source: TimeoutError,
-    },
-    /// Error sending output to consumer of NetworkingImplementation
-    /// TODO this should have more information
-    ChannelSend,
-    /// The underlying connection has been shut down
+    /// Multiple errors. Allows us to roll up multiple errors into one.
+    #[error("Multiple errors: {0:?}")]
+    Multiple(Vec<NetworkError>),
+
+    /// A configuration error
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+
+    /// An error occurred while sending a message
+    #[error("Failed to send message: {0}")]
+    MessageSendError(String),
+
+    /// An error occurred while receiving a message
+    #[error("Failed to receive message: {0}")]
+    MessageReceiveError(String),
+
+    /// The feature is unimplemented
+    #[error("Unimplemented")]
+    Unimplemented,
+
+    /// An error occurred while attempting to listen
+    #[error("Listen error: {0}")]
+    ListenError(String),
+
+    /// Failed to send over a channel
+    #[error("Channel send error: {0}")]
+    ChannelSendError(String),
+
+    /// Failed to receive over a channel
+    #[error("Channel receive error: {0}")]
+    ChannelReceiveError(String),
+
+    /// The network has been shut down and can no longer be used
+    #[error("Network has been shut down")]
     ShutDown,
-    /// unable to cancel a request, the request has already been cancelled
-    UnableToCancel,
-    /// The requested data was not found
-    NotFound,
-    /// Multiple errors
-    MultipleErrors {
-        /// vec of errors
-        errors: Vec<Box<NetworkError>>,
-    },
-    /// The network is not ready yet
-    NotReady,
+
+    /// Failed to serialize
+    #[error("Failed to serialize: {0}")]
+    FailedToSerialize(String),
+
+    /// Failed to deserialize
+    #[error("Failed to deserialize: {0}")]
+    FailedToDeserialize(String),
+
+    /// Timed out performing an operation
+    #[error("Timeout: {0}")]
+    Timeout(String),
+
+    /// The network request had been cancelled before it could be fulfilled
+    #[error("The request was cancelled before it could be fulfilled")]
+    RequestCancelled,
+
+    /// The network was not ready yet
+    #[error("The network was not ready yet")]
+    NotReadyYet,
+
+    /// Failed to look up a node on the network
+    #[error("Node lookup failed: {0}")]
+    LookupError(String),
 }
 
 /// common traits we would like our network messages to implement
@@ -284,7 +252,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
         let errors: Vec<_> = results
             .into_iter()
             .filter_map(|r| match r {
-                Err(error) => Some(Box::new(error)),
+                Err(error) => Some(error),
                 _ => None,
             })
             .collect();
@@ -292,7 +260,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(NetworkError::MultipleErrors { errors })
+            Err(NetworkError::Multiple(errors))
         }
     }
 
@@ -313,7 +281,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
         _request: Vec<u8>,
         _recipient: &K,
     ) -> Result<Vec<u8>, NetworkError> {
-        Err(NetworkError::UnimplementedFeature)
+        Err(NetworkError::Unimplemented)
     }
 
     /// Spawn a request task in the given network layer.  If it supports

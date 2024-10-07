@@ -33,7 +33,7 @@ lazy_static = { workspace = true }
 memoize = { workspace = true }
 rand = { workspace = true }
 sha2 = { workspace = true }
-snafu = { workspace = true }
+thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 typenum = { workspace = true }

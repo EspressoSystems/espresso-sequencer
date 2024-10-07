@@ -13,15 +13,17 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::prelude::StreamExt;
-use common::{test_bed, HandleSnafu, HandleWithState, TestError};
-use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+use common::{test_bed, HandleWithState, TestError};
+use hotshot_types::{
+    signature_key::BLSPubKey,
+    traits::{network::NetworkError, signature_key::SignatureKey},
+};
 use libp2p_networking::network::{
     behaviours::dht::record::{Namespace, RecordKey, RecordValue},
-    NetworkEvent, NetworkNodeHandleError,
+    NetworkEvent,
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
 #[cfg(async_executor_impl = "tokio")]
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info, instrument, warn};
@@ -75,7 +77,7 @@ fn random_handle<S: Debug + Default + Send + Clone, K: SignatureKey + 'static>(
 pub async fn counter_handle_network_event<K: SignatureKey + 'static>(
     event: NetworkEvent,
     handle: HandleWithState<CounterState, K>,
-) -> Result<(), NetworkNodeHandleError> {
+) -> Result<(), NetworkError> {
     use CounterMessage::*;
     use NetworkEvent::*;
     match event {
@@ -194,7 +196,7 @@ async fn run_request_response_increment<'a, K: SignatureKey + 'static>(
         requester_handle.handle
             .direct_request(requestee_pid, &bincode::serialize(&CounterMessage::AskForCounter).unwrap())
             .await
-            .context(HandleSnafu)?;
+            .map_err(|e| TestError::HandleError(format!("failed to send direct request: {e}")))?;
         match stream.next().await.unwrap() {
             Ok(()) => {}
             Err(e) => {error!("timed out waiting for {requestee_pid:?} to update state: {e}");
@@ -206,7 +208,7 @@ async fn run_request_response_increment<'a, K: SignatureKey + 'static>(
         if s1 == new_state {
             Ok(())
         } else {
-            Err(TestError::State {
+            Err(TestError::InconsistentState {
                 id: requester_handle.handle.id(),
                 expected: new_state,
                 actual: s1,
@@ -264,7 +266,7 @@ async fn run_gossip_round<K: SignatureKey + 'static>(
         .handle
         .gossip("global".to_string(), &bincode::serialize(&msg).unwrap())
         .await
-        .context(HandleSnafu)?;
+        .map_err(|e| TestError::HandleError(format!("failed to gossip: {e}")))?;
 
     for _ in 0..len - 1 {
         // wait for all events to finish
@@ -287,7 +289,7 @@ async fn run_gossip_round<K: SignatureKey + 'static>(
             .map(|h| h.handle)
             .collect::<Vec<_>>();
         print_connections(nodes.as_slice()).await;
-        return Err(TestError::GossipTimeout { failing });
+        return Err(TestError::Timeout(failing, "gossiping".to_string()));
     }
 
     Ok(())
@@ -406,7 +408,7 @@ async fn run_dht_rounds<K: SignatureKey + 'static>(
 
         // get the key from the other nodes
         for handle in handles {
-            let result: Result<Vec<u8>, NetworkNodeHandleError> =
+            let result: Result<Vec<u8>, NetworkError> =
                 handle.handle.get_record_timeout(key.clone(), timeout).await;
             match result {
                 Err(e) => {

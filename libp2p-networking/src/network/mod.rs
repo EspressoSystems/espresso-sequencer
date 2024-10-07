@@ -8,8 +8,6 @@
 pub mod behaviours;
 /// defines the swarm and network definition (internal)
 mod def;
-/// libp2p network errors
-pub mod error;
 /// functionality of a libp2p network node
 mod node;
 /// Alternative Libp2p transport implementations
@@ -20,7 +18,7 @@ use std::{collections::HashSet, fmt::Debug};
 use futures::channel::oneshot::{self, Sender};
 use hotshot_types::{
     request_response::{Request, Response},
-    traits::signature_key::SignatureKey,
+    traits::{network::NetworkError, signature_key::SignatureKey},
 };
 #[cfg(async_executor_impl = "async-std")]
 use libp2p::dns::async_std::Transport as DnsTransport;
@@ -46,11 +44,10 @@ use transport::StakeTableAuthentication;
 
 pub use self::{
     def::NetworkDef,
-    error::NetworkError,
     node::{
-        network_node_handle_error, spawn_network_node, GossipConfig, NetworkNode,
-        NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError,
-        NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeReceiver, DEFAULT_REPLICATION_FACTOR,
+        spawn_network_node, GossipConfig, NetworkNode, NetworkNodeConfig, NetworkNodeConfigBuilder,
+        NetworkNodeConfigBuilderError, NetworkNodeHandle, NetworkNodeReceiver,
+        DEFAULT_REPLICATION_FACTOR,
     },
 };
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
@@ -215,7 +212,7 @@ pub async fn gen_transport<K: SignatureKey + 'static>(
             DnsTransport::system(transport)
         }
     }
-    .map_err(|e| NetworkError::TransportLaunch { source: e })?;
+    .map_err(|e| NetworkError::ConfigError(format!("failed to build DNS transport: {e}")))?;
 
     Ok(transport
         .map(|(peer_id, connection), _| (peer_id, StreamMuxerBox::new(connection)))

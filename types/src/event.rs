@@ -89,7 +89,7 @@ pub mod error_adaptor {
         deserializer: D,
     ) -> Result<Arc<HotShotError<TYPES>>, D::Error> {
         let str = String::deserialize(deserializer)?;
-        Ok(Arc::new(HotShotError::Misc { context: str }))
+        Ok(Arc::new(HotShotError::FailedToDeserialize(str)))
     }
 }
 /// The type and contents of a status event emitted by a `HotShot` instance

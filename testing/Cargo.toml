@@ -42,7 +42,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 sha3 = "^0.10"
-snafu = { workspace = true }
+thiserror = { workspace = true }
 tide-disco = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }

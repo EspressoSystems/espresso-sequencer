@@ -660,16 +660,15 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         ) -> bool,
     {
         let mut next_leaf = if let Some(view) = self.validated_state_map.get(&start_from) {
-            view.leaf_commitment()
-                .ok_or_else(|| HotShotError::InvalidState {
-                    context: format!(
-                        "Visited failed view {start_from:?} leaf. Expected successful leaf"
-                    ),
-                })?
+            view.leaf_commitment().ok_or_else(|| {
+                HotShotError::InvalidState(format!(
+                    "Visited failed view {start_from:?} leaf. Expected successful leaf"
+                ))
+            })?
         } else {
-            return Err(HotShotError::InvalidState {
-                context: format!("View {start_from:?} leaf does not exist in state map "),
-            });
+            return Err(HotShotError::InvalidState(format!(
+                "View {start_from:?} leaf does not exist in state map "
+            )));
         };
 
         while let Some(leaf) = self.saved_leaves.get(&next_leaf) {
@@ -696,12 +695,12 @@ impl<TYPES: NodeType> Consensus<TYPES> {
                     }
                 }
             } else {
-                return Err(HotShotError::InvalidState {
-                    context: format!("View {view:?} state does not exist in state map "),
-                });
+                return Err(HotShotError::InvalidState(format!(
+                    "View {view:?} state does not exist in state map"
+                )));
             }
         }
-        Err(HotShotError::LeafNotFound {})
+        Err(HotShotError::MissingLeaf(next_leaf))
     }
 
     /// Garbage collects based on state change right now, this removes from both the

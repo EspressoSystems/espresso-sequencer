@@ -100,7 +100,7 @@ libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
-snafu = { workspace = true }
+thiserror = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 derive_more = { workspace = true }

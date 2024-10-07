@@ -48,7 +48,7 @@ lru.workspace = true
 portpicker = "0.1"
 rand = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
-snafu = { workspace = true }
+thiserror = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }

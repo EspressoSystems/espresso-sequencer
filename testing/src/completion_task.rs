@@ -11,17 +11,10 @@ use async_compatibility_layer::art::{async_spawn, async_timeout};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use hotshot_task_impls::helpers::broadcast_event;
-use snafu::Snafu;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 
 use crate::test_task::TestEvent;
-
-/// the idea here is to run as long as we want
-
-/// Completion Task error
-#[derive(Snafu, Debug)]
-pub struct CompletionTaskErr {}
 
 /// Completion task state
 pub struct CompletionTask {

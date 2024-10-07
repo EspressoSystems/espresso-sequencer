@@ -166,16 +166,12 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     }
     /// Publish a key/value to the kv store.
     /// Once replicated upon all nodes, the caller is notified over
-    /// `chan`. If there is an error, a [`crate::network::error::DHTError`] is
-    /// sent instead.
+    /// `chan`
     pub fn put_record(&mut self, id: QueryId, query: KadPutQuery) {
         self.in_progress_put_record_queries.insert(id, query);
     }
 
     /// Retrieve a value for a key from the DHT.
-    /// Value (serialized) is sent over `chan`, and if a value is not found,
-    /// a [`crate::network::error::DHTError`] is sent instead.
-    /// NOTE: noop if `retry_count` is 0
     pub fn get_record(
         &mut self,
         key: Vec<u8>,

@@ -16,18 +16,18 @@ use std::{
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
     async_primitives::subscribable_mutex::SubscribableMutex,
-    channel::{bounded, RecvError},
+    channel::bounded,
     logging::{setup_backtrace, setup_logging},
 };
 use futures::{future::join_all, Future, FutureExt};
-use hotshot_types::traits::signature_key::SignatureKey;
+use hotshot_types::traits::{network::NetworkError, signature_key::SignatureKey};
 use libp2p::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_networking::network::{
-    network_node_handle_error::NodeConfigSnafu, spawn_network_node, NetworkEvent,
-    NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeHandleError, NetworkNodeReceiver,
+    spawn_network_node, NetworkEvent, NetworkNodeConfigBuilder, NetworkNodeHandle,
+    NetworkNodeReceiver,
 };
-use snafu::{ResultExt, Snafu};
+use thiserror::Error;
 use tracing::{instrument, warn};
 
 #[derive(Clone, Debug)]
@@ -48,7 +48,7 @@ pub fn spawn_handler<F, RET, S, K: SignatureKey + 'static>(
 ) -> impl Future
 where
     F: Fn(NetworkEvent, HandleWithState<S, K>) -> RET + Sync + Send + 'static,
-    RET: Future<Output = Result<(), NetworkNodeHandleError>> + Send + 'static,
+    RET: Future<Output = Result<(), NetworkError>> + Send + 'static,
     S: Debug + Default + Send + Clone + 'static,
 {
     async_spawn(async move {
@@ -111,7 +111,7 @@ pub async fn test_bed<
     timeout: Duration,
 ) where
     FutF: Future<Output = ()>,
-    FutG: Future<Output = Result<(), NetworkNodeHandleError>> + 'static + Send + Sync,
+    FutG: Future<Output = Result<(), NetworkError>> + 'static + Send + Sync,
     F: FnOnce(Vec<HandleWithState<S, K>>, Duration) -> FutF,
     G: Fn(NetworkEvent, HandleWithState<S, K>) -> FutG + 'static + Send + Sync + Clone,
 {
@@ -206,8 +206,7 @@ pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static
             .bind_address(Some(addr.clone()))
             .to_connect_addrs(HashSet::default())
             .build()
-            .context(NodeConfigSnafu)
-            .context(HandleSnafu)?;
+            .map_err(|e| TestError::ConfigError(format!("failed to build network node: {e}")))?;
 
         let (rx, node) = spawn_network_node(config.clone(), i).await.unwrap();
 
@@ -236,7 +235,7 @@ pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static
             .handle
             .add_known_peers(to_share)
             .await
-            .context(HandleSnafu)?;
+            .map_err(|e| TestError::HandleError(format!("failed to add known peers: {e}")))?;
     }
 
     let res = join_all(connecting_futs.into_iter()).await;
@@ -247,7 +246,7 @@ pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static
         }
     }
     if !failing_nodes.is_empty() {
-        return Err(TestError::SpinupTimeout { failing_nodes });
+        return Err(TestError::Timeout(failing_nodes, "spinning up".to_string()));
     }
 
     for (handle, _) in &handles {
@@ -255,7 +254,7 @@ pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static
             .handle
             .subscribe("global".to_string())
             .await
-            .context(HandleSnafu)?;
+            .map_err(|e| TestError::HandleError(format!("failed to subscribe: {e}")))?;
     }
 
     async_sleep(Duration::from_secs(5)).await;
@@ -263,39 +262,19 @@ pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static
     Ok(handles)
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(visibility(pub))]
+#[derive(Debug, Error)]
 pub enum TestError<S: Debug> {
-    #[snafu(display("Channel error {source:?}"))]
-    Recv {
-        source: RecvError,
-    },
-    #[snafu(display(
-        "Timeout while running direct message round. Timed out when {requester} dmed {requestee}"
-    ))]
-    DirectTimeout {
-        requester: usize,
-        requestee: usize,
-    },
-    #[snafu(display("Timeout while running gossip round. Timed out on {failing:?}."))]
-    GossipTimeout {
-        failing: Vec<usize>,
-    },
-    #[snafu(display(
+    #[error("Error with network node handle: {0}")]
+    HandleError(String),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+
+    #[error("The following nodes timed out: {0:?} while {1}")]
+    Timeout(Vec<usize>, String),
+
+    #[error(
         "Inconsistent state while running test. Expected {expected:?}, got {actual:?} on node {id}"
-    ))]
-    State {
-        id: usize,
-        expected: S,
-        actual: S,
-    },
-    #[snafu(display("Handler error while running test. {source:?}"))]
-    Handle {
-        source: NetworkNodeHandleError,
-    },
-    #[snafu(display("Failed to spin up nodes. Hit timeout instead. {failing_nodes:?}"))]
-    SpinupTimeout {
-        failing_nodes: Vec<usize>,
-    },
-    DHTTimeout,
+    )]
+    InconsistentState { id: usize, expected: S, actual: S },
 }
