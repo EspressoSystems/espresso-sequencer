@@ -9849,6 +9849,7 @@ dependencies = [
  "futures",
  "reqwest 0.12.8",
  "surf-disco",
+ "vbs",
 ]
 
 [[package]]
