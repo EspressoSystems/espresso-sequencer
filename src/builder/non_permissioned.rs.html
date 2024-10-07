@@ -540,7 +540,7 @@
         <span class="kw">let </span>global_state_clone = global_state.clone();
         <span class="macro">tracing::info!</span>(<span class="string">"Running permissionless builder against hotshot events API at {events_url}"</span>,);
         async_spawn(<span class="kw">async move </span>{
-            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, V&gt;(
+            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerApiVersion&gt;(
                 da_sender,
                 qc_sender,
                 decide_sender,
