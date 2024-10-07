@@ -27,7 +27,7 @@ async fn test_upgrade() -> Result<()> {
     let clients = testing.sequencer_clients;
 
     // Test is limited to those sequencers with correct modules
-    // enabled. It would be less fragile if we could discover them .
+    // enabled. It would be less fragile if we could discover them.
     let subscriptions = vec![
         clients[0].subscribe_headers(0).await?,
         clients[1].subscribe_headers(0).await?,
