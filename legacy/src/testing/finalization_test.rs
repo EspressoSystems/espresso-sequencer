@@ -43,6 +43,8 @@ type TestSetup = (
     async_broadcast::Sender<Arc<ReceivedTransaction<TestTypes>>>,
 );
 
+/// [TEST_NUM_NODES_IN_VID_COMPUTATION] controls the number of nodes that are
+/// used in the VID computation for the test.
 const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
 const TEST_NUM_CONSENSUS_RETRIES: usize = 4;
 
