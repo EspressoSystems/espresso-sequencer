@@ -46,6 +46,10 @@ type TestSetup = (
 /// [TEST_NUM_NODES_IN_VID_COMPUTATION] controls the number of nodes that are
 /// used in the VID computation for the test.
 const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
+
+/// [TEST_NUM_CONSENSUS_RETRIES] controls the number of attempts that the
+/// simulated consensus will perform when an error is returned from the
+/// Builder when asking for available blocks.
 const TEST_NUM_CONSENSUS_RETRIES: usize = 4;
 
 /// [setup_builder_for_test] sets up a test environment for the builder state.
