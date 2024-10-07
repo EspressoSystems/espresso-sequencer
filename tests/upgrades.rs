@@ -41,7 +41,7 @@ async fn test_upgrade() -> Result<()> {
         let header = header.unwrap();
 
         // TODO is it possible to discover the view at which upgrade should be finished?
-        // First few views should be `FeeVersion`.
+        // First few views should be `Base` version.
         if header.height() <= 5 {
             assert_eq!(header.version(), versions.0)
         }
