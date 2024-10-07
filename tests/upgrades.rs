@@ -33,8 +33,7 @@ async fn test_upgrade() -> Result<()> {
         clients[1].subscribe_headers(0).await?,
     ];
     let subscriptions_size = subscriptions.len();
-    let mut streams = stream::iter(subscriptions)
-        .flatten_unordered(usize::try_from(SEQUENCER_BLOCKS_TIMEOUT).ok());
+    let mut streams = stream::iter(subscriptions).flatten_unordered(None);
 
     let mut upgraded_nodes: usize = 0;
     while let Some(header) = streams.next().await {
