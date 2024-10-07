@@ -186,9 +186,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
 
     // Wait for Espresso to catch up to the L1.
     let espresso_height = espresso.get_height().await?;
-    let mut headers = espresso
-        .subscribe_headers(espresso_height)
-        .await?;
+    let mut headers = espresso.subscribe_headers(espresso_height).await?;
     let espresso_block = loop {
         let header: Header = match headers.next().await.context("header stream ended")? {
             Ok(header) => header,
