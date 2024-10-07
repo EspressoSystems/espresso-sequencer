@@ -570,7 +570,7 @@ impl SequencerPersistence for Persistence {
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let upgrade_certificate_bytes =
-            bincode::serialize(&decided_upgrade_certificate).context("serializing proposal")?;
+            bincode::serialize(&decided_upgrade_certificate).context("serializing upgrade certificate")?;
         let mut tx = self.db.write().await?;
         tx.upsert(
             "upgrade_certificate",
