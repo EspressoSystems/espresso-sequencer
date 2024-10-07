@@ -52,12 +52,17 @@ const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
 /// Builder when asking for available blocks.
 const TEST_NUM_CONSENSUS_RETRIES: usize = 4;
 
+/// [TEST_CHANNEL_BUFFER_SIZE] governs the buffer size used for the test
+/// channels. All of the channels created need a capacity.  The specific
+/// capacity isn't specifically bounded, so it is set to an arbitrary value.
+const TEST_CHANNEL_BUFFER_SIZE: usize = 32;
+
 /// [setup_builder_for_test] sets up a test environment for the builder state.
 /// It returns a tuple containing the proxy global state, the sender for decide
 /// messages, the sender for data availability proposals,
 fn setup_builder_for_test(allow_empty_block_period: Option<u64>) -> TestSetup {
-    let (req_sender, req_receiver) = broadcast(32);
-    let (tx_sender, tx_receiver) = broadcast(32);
+    let (req_sender, req_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
+    let (tx_sender, tx_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
 
     let bootstrap_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
@@ -81,9 +86,9 @@ fn setup_builder_for_test(allow_empty_block_period: Option<u64>) -> TestSetup {
         max_api_duration,
     );
 
-    let (decide_sender, decide_receiver) = broadcast(32);
-    let (da_proposal_sender, da_proposal_receiver) = broadcast(32);
-    let (quorum_proposal_sender, quorum_proposal_receiver) = broadcast(32);
+    let (decide_sender, decide_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
+    let (da_proposal_sender, da_proposal_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
+    let (quorum_proposal_sender, quorum_proposal_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
     let bootstrap_builder_state = BuilderState::<TestTypes>::new(
         ParentBlockReferences {
             vid_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
