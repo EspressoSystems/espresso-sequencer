@@ -14,7 +14,6 @@ async fn test_smoke() -> Result<()> {
     let _ = testing.readiness().await?;
 
     let mut initial = testing.test_state().await;
-    let initial_block_height = initial.block_height.unwrap();
     println!("Initial State:{}", initial);
 
     let mut i = 1;
