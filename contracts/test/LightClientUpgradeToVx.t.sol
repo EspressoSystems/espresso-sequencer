@@ -12,12 +12,16 @@ import { LightClientV3 as LCV3 } from "../test/LightClientV3.sol";
 import { DeployLightClientContractWithoutMultiSigScript as DeployScript } from
     "./script/LightClientTestScript.s.sol";
 import { UpgradeLightClientScript as UpgradeScript } from "./script/UpgradeLightClientToV2.s.sol";
+import { DowngradeLightClientScript as DowngradeScript } from
+    "./script/DowngradeLightClientV2ToV1.s.sol";
+
 import { UpgradeLightClientScript as ULCV3 } from "./script/UpgradeLightClientToV3.s.sol";
 import { OwnableUpgradeable } from
     "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
+import { Upgrades } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract LightClientUpgradeToVxTest is Test {
     LCV1 public lcV1Proxy;
@@ -26,6 +30,7 @@ contract LightClientUpgradeToVxTest is Test {
 
     DeployScript public deployer = new DeployScript();
     UpgradeScript public upgraderV2 = new UpgradeScript();
+    DowngradeScript public downgrader = new DowngradeScript();
     ULCV3 public upgraderV3 = new ULCV3();
 
     LCV1.LightClientState public stateV1;
@@ -33,6 +38,7 @@ contract LightClientUpgradeToVxTest is Test {
 
     address public admin;
     address public proxy;
+    address public lcV1Impl;
 
     uint32 public constant MAX_HISTORY_SECONDS = 864000; //10 days
 
@@ -40,6 +46,8 @@ contract LightClientUpgradeToVxTest is Test {
     function setUp() public {
         (proxy, admin, stateV1, stakeStateV1) = deployer.run(5, MAX_HISTORY_SECONDS);
         lcV1Proxy = LCV1(proxy);
+        lcV1Impl = Upgrades.getImplementationAddress(proxy);
+        assertNotEq(lcV1Impl, address(0));
     }
 
     function testCorrectInitialization() public view {
@@ -95,6 +103,66 @@ contract LightClientUpgradeToVxTest is Test {
         );
         assertEq(extraFieldV2, expectedExtendedLightClientState.extraField);
     }
+
+    // test that the data remains the same after upgrading the implementation
+    function testRollbackV2toV1() public {
+        // Upgrade LightClient and check that the genesis state is not changed and that the new
+        // field
+        // of the upgraded contract is set to 0
+        uint256 myNewField = 123;
+        uint256 extraField = 2;
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, extraField, admin));
+
+        assertEq(lcV2Proxy.newField(), myNewField);
+
+        LCV1.LightClientState memory expectedLightClientState =
+            LCV1.LightClientState(stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot);
+
+        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState = LCV2
+            .ExtendedLightClientState(
+            stateV1.viewNum, stateV1.blockHeight, stateV1.blockCommRoot, extraField
+        );
+
+        // compare with the current version of the light client state
+        (uint64 viewNum, uint64 blockHeight, BN254.ScalarField blockCommRoot) =
+            lcV2Proxy.finalizedState();
+        assertEq(viewNum, expectedLightClientState.viewNum);
+        assertEq(blockHeight, expectedLightClientState.blockHeight);
+        assertEq(abi.encode(blockCommRoot), abi.encode(expectedLightClientState.blockCommRoot));
+
+        // compare with the extended light client state
+        (
+            uint64 viewNumV2,
+            uint64 blockHeightV2,
+            BN254.ScalarField blockCommRootV2,
+            uint256 extraFieldV2
+        ) = lcV2Proxy.extendedFinalizedState();
+        assertEq(viewNumV2, expectedExtendedLightClientState.viewNum);
+        assertEq(blockHeightV2, expectedExtendedLightClientState.blockHeight);
+        assertEq(
+            abi.encode(blockCommRootV2), abi.encode(expectedExtendedLightClientState.blockCommRoot)
+        );
+        assertEq(extraFieldV2, expectedExtendedLightClientState.extraField);
+
+        // Now time to downgrade
+        // rollback to lightclient v1 by upgrading v2 to v1
+        lcV1Proxy = LCV1(downgrader.run(proxy, admin, lcV1Impl));
+
+        // re-confirm that the proxy address is the same for both versions
+        assertEq(address(lcV1Proxy), address(lcV2Proxy));
+
+        // confirm that the implementation address is the same as the first time we deployed, so we
+        // know the downgrade worked
+        assertEq(address(Upgrades.getImplementationAddress(address(lcV1Proxy))), address(lcV1Impl));
+
+        // ensure that the genesis states are still the same as the original contract
+        testCorrectInitialization();
+    }
+
+    /**
+     * TODO:
+     * show that downgrading to the wrong light client impl should fail
+     */
 
     // test that the data remains the same after upgrading the implementation
     function testExpectRevertUpgradeSameDataV1ToV2ReinitializeTwice() public {
