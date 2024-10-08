@@ -51,6 +51,8 @@ jobs:
         with:
           cache-all-crates: "true"
 
+      - uses: rui314/setup-mold@v1
+
       - name: Configure Environment
         run: |
           RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
