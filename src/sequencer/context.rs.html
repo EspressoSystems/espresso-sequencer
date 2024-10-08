@@ -458,7 +458,7 @@
     stream::{Stream, StreamExt},
 };
 <span class="kw">use </span>hotshot::{
-    traits::election::static_committee::GeneralStaticCommittee,
+    traits::election::static_committee::StaticCommittee,
     types::{Event, EventType, SystemContextHandle},
     MarketplaceConfig, Memberships, SystemContext,
 };
@@ -546,13 +546,13 @@
             .load_consensus_state::&lt;V&gt;(instance_state.clone())
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
-        <span class="kw">let </span>committee_membership = GeneralStaticCommittee::new(
+        <span class="kw">let </span>committee_membership = StaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_nodes_with_stake.clone(),
             Topic::Global,
         );
 
-        <span class="kw">let </span>da_membership = GeneralStaticCommittee::new(
+        <span class="kw">let </span>da_membership = StaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
             Topic::Da,

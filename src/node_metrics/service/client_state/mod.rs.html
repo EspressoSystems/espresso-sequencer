@@ -2424,14 +2424,14 @@
         block_size: data_state_read_lock_guard
             .latest_blocks()
             .skip(<span class="number">1</span>)
-            .map(|block| block.size)
+            .map(|block| <span class="prelude-val">Some</span>(block.size))
             .collect(),
         block_time: data_state_read_lock_guard
             .latest_blocks()
             .skip(<span class="number">1</span>)
             .zip(data_state_read_lock_guard.latest_blocks())
             .map(|(block_i, block_i_sub_1)| {
-                (block_i.time.<span class="number">0 </span>- block_i_sub_1.time.<span class="number">0</span>).whole_seconds() <span class="kw">as </span>u64
+                <span class="prelude-val">Some</span>((block_i.time.<span class="number">0 </span>- block_i_sub_1.time.<span class="number">0</span>).whole_seconds() <span class="kw">as </span>u64)
             })
             .collect(),
         block_transactions: data_state_read_lock_guard

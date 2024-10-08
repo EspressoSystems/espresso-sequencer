@@ -143,6 +143,17 @@
 <a href="#143" id="143">143</a>
 <a href="#144" id="144">144</a>
 <a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Mock implementation of persistence, for testing.
 </span><span class="attr">#![cfg(any(test, feature = <span class="string">"testing"</span>))]
 
@@ -157,7 +168,7 @@
     data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     utils::View,
 };
 <span class="kw">use </span>std::collections::BTreeMap;
@@ -258,6 +269,11 @@
     ) -&gt; anyhow::Result&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt; {
         <span class="prelude-val">Ok</span>(Default::default())
     }
+    <span class="kw">async fn </span>load_upgrade_certificate(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+    ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;UpgradeCertificate&lt;SeqTypes&gt;&gt;&gt; {
+        <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+    }
 
     <span class="kw">async fn </span>append_vid(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
@@ -284,6 +300,12 @@
     <span class="kw">async fn </span>append_quorum_proposal(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         _proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
+    ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="prelude-val">Ok</span>(())
+    }
+    <span class="kw">async fn </span>store_upgrade_certificate(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        _decided_upgrade_certificate: <span class="prelude-ty">Option</span>&lt;UpgradeCertificate&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
         <span class="prelude-val">Ok</span>(())
     }

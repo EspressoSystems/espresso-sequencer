@@ -324,27 +324,7 @@
 <a href="#324" id="324">324</a>
 <a href="#325" id="325">325</a>
 <a href="#326" id="326">326</a>
-<a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a>
-<a href="#329" id="329">329</a>
-<a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
-<a href="#332" id="332">332</a>
-<a href="#333" id="333">333</a>
-<a href="#334" id="334">334</a>
-<a href="#335" id="335">335</a>
-<a href="#336" id="336">336</a>
-<a href="#337" id="337">337</a>
-<a href="#338" id="338">338</a>
-<a href="#339" id="339">339</a>
-<a href="#340" id="340">340</a>
-<a href="#341" id="341">341</a>
-<a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
-<a href="#344" id="344">344</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
-    collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, time::Duration,
-};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::HashMap, num::NonZeroUsize, path::PathBuf, time::Duration};
 
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>builder::permissioned::init_node;
@@ -579,26 +559,10 @@
 
     <span class="kw">let </span>builder_key_pair = EthKeyPair::from_mnemonic(<span class="kw-2">&amp;</span>opt.eth_mnemonic, opt.eth_account_index)<span class="question-mark">?</span>;
 
-    <span class="comment">// Parse supplied Libp2p addresses to their socket form
-    // We expect all nodes to be reachable via IPv4, so we filter out any IPv6 addresses.
-    // Downstream in HotShot we pin the IP address to v4, but this can be fixed in the future.
-    </span><span class="kw">let </span>libp2p_advertise_address = opt
-        .libp2p_advertise_address
-        .to_socket_addrs()<span class="question-mark">?
-        </span>.find(|x| x.is_ipv4())
-        .ok_or(<span class="macro">anyhow::anyhow!</span>(
-            <span class="string">"Failed to resolve Libp2p advertise address"
-        </span>))<span class="question-mark">?</span>;
-    <span class="kw">let </span>libp2p_bind_address = opt
-        .libp2p_bind_address
-        .to_socket_addrs()<span class="question-mark">?
-        </span>.find(|x| x.is_ipv4())
-        .ok_or(<span class="macro">anyhow::anyhow!</span>(<span class="string">"Failed to resolve Libp2p bind address"</span>))<span class="question-mark">?</span>;
-
     <span class="kw">let </span>network_params = NetworkParams {
         cdn_endpoint: opt.cdn_endpoint,
-        libp2p_advertise_address,
-        libp2p_bind_address,
+        libp2p_advertise_address: opt.libp2p_advertise_address,
+        libp2p_bind_address: opt.libp2p_bind_address,
         libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
