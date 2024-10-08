@@ -659,10 +659,6 @@ async fn collect_garbage(
     )
     .await?;
 
-    // Cleanup upgrade certificate, should only be 1
-    tx.execute("DELETE FROM upgrade_certificate where id <= $1", [&(0i32)])
-        .await?;
-
     // Exclude from the decide event any leaves which have definitely already been processed. We may
     // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in
     // the previous decide event -- remained in the database to serve as the anchor leaf, so our
