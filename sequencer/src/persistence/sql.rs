@@ -20,7 +20,7 @@ use hotshot_types::{
     data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
     vote::HasViewNumber,
@@ -542,6 +542,45 @@ impl SequencerPersistence for Persistence {
             ["view", "data"],
             ["view"],
             [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
+        )
+        .await?;
+        tx.commit().await
+    }
+
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {
+        let result = self
+            .db
+            .read()
+            .await?
+            .query_opt_static("SELECT * FROM upgrade_certificate where id = true")
+            .await?;
+
+        result
+            .map(|row| {
+                let bytes: Vec<u8> = row.get("data");
+                anyhow::Result::<_>::Ok(bincode::deserialize(&bytes)?)
+            })
+            .transpose()
+    }
+
+    async fn store_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let certificate = match decided_upgrade_certificate {
+            Some(cert) => cert,
+            None => return Ok(()),
+        };
+        let upgrade_certificate_bytes =
+            bincode::serialize(&certificate).context("serializing upgrade certificate")?;
+        let mut tx = self.db.write().await?;
+        tx.upsert(
+            "upgrade_certificate",
+            ["id", "data"],
+            ["id"],
+            [[sql_param(&true), sql_param(&upgrade_certificate_bytes)]],
         )
         .await?;
         tx.commit().await
