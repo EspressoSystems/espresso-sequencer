@@ -554,7 +554,7 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt_static("SELECT * FROM upgrade_certificate where id = 0")
+            .query_opt_static("SELECT * FROM upgrade_certificate where id = true")
             .await?;
 
         result
@@ -580,7 +580,7 @@ impl SequencerPersistence for Persistence {
             "upgrade_certificate",
             ["id", "data"],
             ["id"],
-            [[sql_param(&0i32), sql_param(&upgrade_certificate_bytes)]],
+            [[sql_param(&true), sql_param(&upgrade_certificate_bytes)]],
         )
         .await?;
         tx.commit().await

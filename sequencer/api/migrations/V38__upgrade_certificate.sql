@@ -1,6 +1,5 @@
 CREATE TABLE upgrade_certificate (
-     -- The ID is always set to 0. Setting it explicitly allows us to enforce with every insert or
-    -- update that there is only a single entry in this table: the latest known state.
-    id INT PRIMARY KEY,
+    id bool PRIMARY KEY DEFAULT true,
     data BYTEA
 );
+REVOKE DELETE, TRUNCATE ON upgrade_certificate FROM public;
