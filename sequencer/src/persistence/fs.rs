@@ -723,6 +723,10 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let path = &inner.upgrade_certificate_dir_path();
+        let certificate = match decided_upgrade_certificate {
+            Some(cert) => cert,
+            None => return Ok(()),
+        };
         inner.replace(
             path,
             |_| {
@@ -730,8 +734,8 @@ impl SequencerPersistence for Persistence {
                 Ok(true)
             },
             |mut file| {
-                let bytes = bincode::serialize(&decided_upgrade_certificate)
-                    .context("serializing upgrade certificate")?;
+                let bytes =
+                    bincode::serialize(&certificate).context("serializing upgrade certificate")?;
                 file.write_all(&bytes)?;
                 Ok(())
             },

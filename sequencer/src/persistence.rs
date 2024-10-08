@@ -497,10 +497,10 @@ mod persistence_tests {
             Default::default(),
             Default::default(),
         );
-        storage
+        let res = storage
             .store_upgrade_certificate(Some(decide_upgrade_certificate.clone()))
-            .await
-            .unwrap();
+            .await;
+        assert!(res.is_ok());
 
         let res = storage.load_upgrade_certificate().await.unwrap();
         let view_number = res.unwrap().view_number;
@@ -509,6 +509,11 @@ mod persistence_tests {
         let new_view_number_for_certificate = ViewNumber::new(50);
         let mut new_upgrade_certificate = decide_upgrade_certificate.clone();
         new_upgrade_certificate.view_number = new_view_number_for_certificate;
+
+        let res = storage
+            .store_upgrade_certificate(Some(new_upgrade_certificate.clone()))
+            .await;
+        assert!(res.is_ok());
 
         let res = storage.load_upgrade_certificate().await.unwrap();
         let view_number = res.unwrap().view_number;
