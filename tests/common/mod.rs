@@ -84,7 +84,7 @@ impl TestConfig {
         // Varies between v0 and v3.
         let load_generator_url = if sequencer_version >= 03 {
             url_from_port(dotenvy::var(
-                "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_FALLBACK_PORT",
+                "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_RESERVE_PORT",
             )?)?
         } else {
             url_from_port(dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT")?)?
