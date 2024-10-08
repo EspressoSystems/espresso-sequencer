@@ -283,6 +283,17 @@
 <a href="#283" id="283">283</a>
 <a href="#284" id="284">284</a>
 <a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -561,8 +572,19 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         commitment: Commitment&lt;ChainConfig&gt;,
     ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
-        <span class="self">self</span>.db.get_chain_config(commitment).<span class="kw">await
-    </span>}
+        <span class="kw">let </span>cf = <span class="self">self</span>.db.get_chain_config(commitment).<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="kw">if </span>cf.commit() != commitment {
+            <span class="macro">panic!</span>(
+                <span class="string">"Critical error: Mismatched chain config detected. Expected chain config: {:?}, but got: {:?}. 
+                This may indicate a compromised database"</span>,
+                commitment,
+                cf.commit()
+            )
+        }
+
+        <span class="prelude-val">Ok</span>(cf)
+    }
 
     <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {
         <span class="kw-2">&amp;</span><span class="self">self</span>.backoff
