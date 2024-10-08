@@ -241,28 +241,36 @@ impl<T> StateCatchup for SqlStateCatchup<T>
 where
     T: CatchupDataSource + std::fmt::Debug + Send + Sync,
 {
+    // TODO: add a test for the account proof validation
+    // issue # 2102 (https://github.com/EspressoSystems/espresso-sequencer/issues/2102)
     #[tracing::instrument(skip(self))]
     async fn try_fetch_account(
         &self,
         block_height: u64,
         view: ViewNumber,
-        _fee_merkle_tree_root: FeeMerkleCommitment,
+        fee_merkle_tree_root: FeeMerkleCommitment,
         account: FeeAccount,
     ) -> anyhow::Result<AccountQueryData> {
-        let acct = self
+        let res = self
             .db
             .get_account(block_height, view, account.into())
             .await?;
 
-        if acct.proof.account != account.into() {
-            bail!(
-                "Mismatched fee account proof: expected {:?}, got {:?}",
-                account,
-                acct.proof.account
+        if res.proof.account != account.into() {
+            panic!(
+                "Critical error: Mismatched fee account proof: expected {:?}, got {:?}.
+                This may indicate a compromised database",
+                account, res.proof.account
             );
         }
 
-        Ok(acct)
+        match res.proof.verify(&fee_merkle_tree_root) {
+            Ok(_) => return Ok(res),
+            Err(err) => panic!(
+                "Critical error: failed to verify account proof from the database: {}",
+                err
+            ),
+        }
     }
 
     #[tracing::instrument(skip(self))]
