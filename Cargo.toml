@@ -158,9 +158,10 @@ libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", t
 hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.75-patch1" }
 
 [profile.dev]
-opt-level = 1
-# Skip compiling the debug information in the first place.
-debug = 0
+# No optimizations
+opt-level = 0
+# Skip compiling the debug information.
+debug = false
 # Skip linking debug information.
 strip = "debuginfo"
 [profile.dev.package."*"]
