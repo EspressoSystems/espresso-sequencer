@@ -25,7 +25,7 @@ use async_compatibility_layer::{
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
-use futures::{channel::mpsc, join, select, FutureExt};
+use futures::{join, select, FutureExt};
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{
     AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
@@ -37,7 +37,6 @@ use hotshot_types::{
         COMBINED_NETWORK_MIN_PRIMARY_FAILURES, COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
     },
     data::ViewNumber,
-    request_response::NetworkMsgResponseChannel,
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, Topic},
         node_implementation::NodeType,
@@ -335,22 +334,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
 
 #[async_trait]
 impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks<TYPES> {
-    async fn request_data<T: NodeType>(
-        &self,
-        request: Vec<u8>,
-        recipient: &TYPES::SignatureKey,
-    ) -> Result<Vec<u8>, NetworkError> {
-        self.secondary()
-            .request_data::<TYPES>(request, recipient)
-            .await
-    }
-
-    async fn spawn_request_receiver_task(
-        &self,
-    ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
-        self.secondary().spawn_request_receiver_task().await
-    }
-
     fn pause(&self) {
         self.networks.0.pause();
     }

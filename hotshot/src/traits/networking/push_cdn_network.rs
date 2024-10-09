@@ -33,7 +33,6 @@ use cdn_client::{
 };
 #[cfg(feature = "hotshot-testing")]
 use cdn_marshal::{Config as MarshalConfig, Marshal};
-use futures::channel::mpsc;
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{
     AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
@@ -41,7 +40,6 @@ use hotshot_types::traits::network::{
 use hotshot_types::{
     boxed_sync,
     data::ViewNumber,
-    request_response::NetworkMsgResponseChannel,
     traits::{
         metrics::{Counter, Metrics, NoMetrics},
         network::{BroadcastDelay, ConnectedNetwork, Topic as HotShotTopic},
@@ -436,20 +434,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
 
 #[async_trait]
 impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
-    async fn request_data<TYPES: NodeType>(
-        &self,
-        _request: Vec<u8>,
-        _recipient: &K,
-    ) -> Result<Vec<u8>, NetworkError> {
-        Ok(vec![])
-    }
-
-    async fn spawn_request_receiver_task(
-        &self,
-    ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
-        None
-    }
-
     /// Pause sending and receiving on the PushCDN network.
     fn pause(&self) {
         #[cfg(feature = "hotshot-testing")]

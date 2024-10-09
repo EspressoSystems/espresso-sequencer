@@ -7,15 +7,10 @@
 //! Types for the request/response implementations. This module incorporates all
 //! of the shared types for all of the network backends.
 
-use async_lock::Mutex;
 use committable::{Committable, RawCommitmentBuilder};
-use futures::channel::{mpsc::Receiver, oneshot};
-use libp2p::request_response::ResponseChannel;
 use serde::{Deserialize, Serialize};
 
-use crate::traits::{
-    network::NetworkMsg, node_implementation::NodeType, signature_key::SignatureKey,
-};
+use crate::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 
 /// Request for Consenus data
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,21 +23,6 @@ pub struct Response(
     #[serde(with = "serde_bytes")]
     pub Vec<u8>,
 );
-
-/// Wraps a oneshot channel for responding to requests. This is a
-/// specialized version of the libp2p request-response `ResponseChannel`
-/// which accepts any generic response.
-pub struct NetworkMsgResponseChannel<M: NetworkMsg> {
-    /// underlying sender for this channel
-    pub sender: oneshot::Sender<M>,
-}
-
-/// Type alias for the channel that we receive requests from the network on.
-pub type RequestReceiver = Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>;
-
-/// Locked Option of a receiver for moving the value out of the option. This
-/// type takes any `Response` type depending on the underlying network impl.
-pub type TakeReceiver = Mutex<Option<Receiver<(Vec<u8>, ResponseChannel<Response>)>>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 /// A signed request for a proposal.

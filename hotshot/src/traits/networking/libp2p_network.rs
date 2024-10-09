@@ -30,13 +30,12 @@ use async_compatibility_layer::{
         TrySendError, UnboundedReceiver, UnboundedSender,
     },
 };
-use async_lock::{Mutex, RwLock};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use bimap::BiHashMap;
 use futures::{
-    channel::mpsc::{self, channel, Sender},
     future::{join_all, Either},
-    FutureExt, StreamExt,
+    FutureExt,
 };
 use hotshot_orchestrator::config::NetworkConfig;
 #[cfg(feature = "hotshot-testing")]
@@ -47,12 +46,11 @@ use hotshot_types::{
     boxed_sync,
     constants::LOOK_AHEAD,
     data::ViewNumber,
-    message::{DataMessage::DataResponse, Message, MessageKind},
-    request_response::{NetworkMsgResponseChannel, Request, Response, TakeReceiver},
+    request_response::Request,
     traits::{
         election::Membership,
         metrics::{Counter, Gauge, Metrics, NoMetrics},
-        network::{ConnectedNetwork, NetworkError, ResponseMessage, Topic},
+        network::{ConnectedNetwork, NetworkError, Topic},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
     },
@@ -72,7 +70,7 @@ use libp2p_networking::{
         NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeReceiver,
         DEFAULT_REPLICATION_FACTOR,
     },
-    reexport::{Multiaddr, ResponseChannel},
+    reexport::Multiaddr,
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
@@ -153,10 +151,6 @@ struct Libp2pNetworkInner<K: SignatureKey + 'static> {
     handle: Arc<NetworkNodeHandle<K>>,
     /// Message Receiver
     receiver: UnboundedReceiver<Vec<u8>>,
-    /// Receiver for Requests for Data, includes the request and the response chan
-    /// Lock should only be used once to take the channel and move it into the request
-    /// handler task
-    requests_rx: TakeReceiver,
     /// Sender for broadcast messages
     sender: UnboundedSender<Vec<u8>>,
     /// Sender for node lookup (relevant view number, key of node) (None for shutdown)
@@ -577,7 +571,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         // unbounded channels may not be the best choice (spammed?)
         // if bounded figure out a way to log dropped msgs
         let (sender, receiver) = unbounded();
-        let (requests_tx, requests_rx) = channel(100);
         let (node_lookup_send, node_lookup_recv) = bounded(10);
         let (kill_tx, kill_rx) = bounded(1);
         rx.set_kill_switch(kill_rx);
@@ -586,7 +579,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
             inner: Arc::new(Libp2pNetworkInner {
                 handle: Arc::new(network_handle),
                 receiver,
-                requests_rx: Mutex::new(Some(requests_rx)),
                 sender: sender.clone(),
                 pk,
                 bootstrap_addrs,
@@ -611,7 +603,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         // Set the network as not ready
         result.inner.metrics.is_ready.set(0);
 
-        result.handle_event_generator(sender, requests_tx, rx);
+        result.handle_event_generator(sender, rx);
         result.spawn_node_lookup(node_lookup_recv);
         result.spawn_connect(id, lookup_record_value);
 
@@ -712,7 +704,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         &self,
         msg: NetworkEvent,
         sender: &UnboundedSender<Vec<u8>>,
-        mut request_tx: Sender<(Vec<u8>, ResponseChannel<Response>)>,
     ) -> Result<(), NetworkError> {
         match msg {
             GossipMsg(msg) => {
@@ -747,13 +738,8 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
             NetworkEvent::IsBootstrapped => {
                 error!("handle_recvd_events received `NetworkEvent::IsBootstrapped`, which should be impossible.");
             }
-            NetworkEvent::ResponseRequested(Request(msg), chan) => {
-                let res = request_tx.try_send((msg, chan));
-                res.map_err(|err| {
-                    NetworkError::ChannelSendError(format!(
-                        "failed to respond to a peer's data request: {err}"
-                    ))
-                })?;
+            NetworkEvent::ResponseRequested(..) => {
+                error!("received unexpected `NetworkEvent::ResponseRequested`");
             }
             NetworkEvent::ConnectedPeersUpdate(_) => {}
         }
@@ -765,7 +751,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     fn handle_event_generator(
         &self,
         sender: UnboundedSender<Vec<u8>>,
-        request_tx: Sender<(Vec<u8>, ResponseChannel<Response>)>,
         mut network_rx: NetworkNodeReceiver,
     ) {
         let handle = self.clone();
@@ -792,9 +777,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                             | DirectRequest(_, _, _)
                             | DirectResponse(_, _)
                             | NetworkEvent::ResponseRequested(Request(_), _) => {
-                                let _ = handle
-                                    .handle_recvd_events(message, &sender, request_tx.clone())
-                                    .await;
+                                let _ = handle.handle_recvd_events(message, &sender).await;
                             }
                             NetworkEvent::ConnectedPeersUpdate(num_peers) => {
                                 handle.inner.metrics.num_connected_peers.set(*num_peers);
@@ -821,94 +804,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 
 #[async_trait]
 impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
-    async fn request_data<TYPES: NodeType>(
-        &self,
-        request: Vec<u8>,
-        recipient: &K,
-    ) -> Result<Vec<u8>, NetworkError> {
-        // If we're not ready, return an error
-        if !self.is_ready() {
-            self.inner.metrics.num_failed_messages.add(1);
-            return Err(NetworkError::NotReadyYet);
-        };
-
-        let pid = match self
-            .inner
-            .handle
-            .lookup_node(&recipient.to_bytes(), self.inner.dht_timeout)
-            .await
-        {
-            Ok(pid) => pid,
-            Err(err) => {
-                self.inner.metrics.num_failed_messages.add(1);
-                return Err(NetworkError::LookupError(format!(
-                    "failed to look up node: {err}"
-                )));
-            }
-        };
-        let result = match self.inner.handle.request_data(&request, pid).await {
-            Ok(response) => match response {
-                Some(msg) => {
-                    if msg.0.len() < 8 {
-                        return Err(NetworkError::FailedToDeserialize(
-                            "message was too small".to_string(),
-                        ));
-                    }
-                    let res: Message<TYPES> = bincode::deserialize(&msg.0).map_err(|err| {
-                        NetworkError::FailedToDeserialize(format!(
-                            "failed to serialize request data: {err}"
-                        ))
-                    })?;
-
-                    match res.kind {
-                        MessageKind::Data(DataResponse(data)) => data,
-                        _ => ResponseMessage::NotFound,
-                    }
-                }
-                None => ResponseMessage::NotFound,
-            },
-            Err(e) => {
-                self.inner.metrics.num_failed_messages.add(1);
-                return Err(e);
-            }
-        };
-
-        Ok(bincode::serialize(&result).map_err(|err| {
-            self.inner.metrics.num_failed_messages.add(1);
-            NetworkError::FailedToSerialize(format!("failed to serialize request response: {err}"))
-        })?)
-    }
-
-    async fn spawn_request_receiver_task(
-        &self,
-    ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
-        let mut internal_rx = self.inner.requests_rx.lock().await.take()?;
-        let handle = Arc::clone(&self.inner.handle);
-        let (mut tx, rx) = mpsc::channel(100);
-        async_spawn(async move {
-            while let Some((request, chan)) = internal_rx.next().await {
-                let (response_tx, response_rx) = futures::channel::oneshot::channel();
-                if tx
-                    .try_send((
-                        request,
-                        NetworkMsgResponseChannel {
-                            sender: response_tx,
-                        },
-                    ))
-                    .is_err()
-                {
-                    continue;
-                }
-                let Ok(response) = response_rx.await else {
-                    continue;
-                };
-
-                let _ = handle.respond_data(response, chan).await;
-            }
-        });
-
-        Some(rx)
-    }
     #[instrument(name = "Libp2pNetwork::ready_blocking", skip_all)]
     async fn wait_for_ready(&self) {
         self.wait_for_ready().await;

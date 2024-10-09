@@ -11,10 +11,7 @@
 use async_compatibility_layer::art::async_sleep;
 use derivative::Derivative;
 use dyn_clone::DynClone;
-use futures::{
-    channel::mpsc::{self},
-    Future,
-};
+use futures::Future;
 use thiserror::Error;
 
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
@@ -41,7 +38,6 @@ use super::{node_implementation::NodeType, signature_key::SignatureKey};
 use crate::{
     data::ViewNumber,
     message::{MessagePurpose, SequencingMessage},
-    request_response::NetworkMsgResponseChannel,
     BoxSyncFuture,
 };
 
@@ -273,28 +269,6 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
     /// # Errors
     /// If there is a network-related failure.
     async fn recv_message(&self) -> Result<Vec<u8>, NetworkError>;
-
-    /// Ask request the network for some data.  Returns the request ID for that data,
-    /// The ID returned can be used for cancelling the request
-    async fn request_data<TYPES: NodeType>(
-        &self,
-        _request: Vec<u8>,
-        _recipient: &K,
-    ) -> Result<Vec<u8>, NetworkError> {
-        Err(NetworkError::Unimplemented)
-    }
-
-    /// Spawn a request task in the given network layer.  If it supports
-    /// Request and responses it will return the receiving end of a channel.
-    /// Requests the network receives will be sent over this channel along
-    /// with a return channel to send the response back to.
-    ///
-    /// Returns `None`` if network does not support handling requests
-    async fn spawn_request_receiver_task(
-        &self,
-    ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
-        None
-    }
 
     /// queues lookup of a node
     ///
