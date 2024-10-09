@@ -554,7 +554,7 @@
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API options and initialization.
 
 </span><span class="kw">use </span>anyhow::{bail, Context};
-<span class="kw">use </span>async_std::sync::{Arc, RwLock};
+<span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>espresso_types::{
     v0::traits::{EventConsumer, NullEventConsumer, SequencerPersistence},
@@ -753,9 +753,9 @@
                 // storage.
                 </span><span class="kw">let </span>ds = MetricsDataSource::default();
                 <span class="kw">let </span>metrics = ds.populate_metrics();
-                <span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, Error&gt;::with_state(Arc::new(RwLock::new(
+                <span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, Error&gt;::with_state(AppState::from(
                     ExtensibleDataSource::new(ds, state.clone()),
-                )));
+                ));
 
                 <span class="comment">// Initialize status API.
                 </span><span class="kw">let </span>status_api =
@@ -781,7 +781,7 @@
                 //
                 // If we have no availability API, we cannot load a saved leaf from local storage,
                 // so we better have been provided the leaf ahead of time if we want it at all.
-                </span><span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, Error&gt;::with_state(RwLock::new(state.clone()));
+                </span><span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, Error&gt;::with_state(AppState::from(state.clone()));
 
                 <span class="self">self</span>.init_hotshot_modules(<span class="kw-2">&amp;mut </span>app)<span class="question-mark">?</span>;
 
@@ -990,7 +990,7 @@
         // EventsSource trait, which is currently intended not to implement to separate hotshot-query-service crate, and
         // hotshot-events-service crate.
 
-        </span><span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, EventStreamingError&gt;::with_state(RwLock::new(state));
+        </span><span class="kw">let </span><span class="kw-2">mut </span>app = App::&lt;<span class="kw">_</span>, EventStreamingError&gt;::with_state(AppState::from(state));
 
         <span class="macro">tracing::info!</span>(<span class="string">"initializing hotshot events API"</span>);
         <span class="kw">let </span>hotshot_events_api = hotshot_events_service::events::define_api(
