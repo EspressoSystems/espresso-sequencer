@@ -136,13 +136,14 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
                 .await
             {
                 Ok(res) => {
-                    if res.proof.account == account.into() {
-                        match res.proof.verify(&fee_merkle_tree_root) {
-                            Ok(_) => return Ok(res),
-                            Err(err) => tracing::warn!("Error verifying account proof: {}", err),
-                        }
-                    } else {
+                    if res.proof.account != account.into() {
                         tracing::warn!("Invalid proof received from peer {:?}", client.url);
+                        continue;
+                    }
+
+                    match res.proof.verify(&fee_merkle_tree_root) {
+                        Ok(_) => return Ok(res),
+                        Err(err) => tracing::warn!("Error verifying account proof: {}", err),
                     }
                 }
                 Err(err) => {
