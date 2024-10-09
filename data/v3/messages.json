@@ -54,11 +54,11 @@
               "justify_qc": {
                 "_pd": null,
                 "data": {
-                  "leaf_commit": "COMMIT~eaBGKF8-lw-t211wxLq7tcXEEqacbvDVcFFR9aCddO3G"
+                  "leaf_commit": "COMMIT~tqpBNqqt63akxJWcfI46uDV8c_Sn_aZ777yCj4X_ukDG"
                 },
                 "signatures": null,
                 "view_number": 0,
-                "vote_commitment": "COMMIT~0-ZxNgMSsUEPeGDdq5-TZE8PDsYwgI4O2fVGMKooP87D"
+                "vote_commitment": "COMMIT~f11eqw2KFTy-i-EaXUfEC1v0CPo8gPcd2My10Y5zSNok"
               },
               "proposal_certificate": {
                 "Timeout": {
@@ -106,7 +106,7 @@
         "General": {
           "Vote": {
             "data": {
-              "leaf_commit": "COMMIT~eaBGKF8-lw-t211wxLq7tcXEEqacbvDVcFFR9aCddO3G"
+              "leaf_commit": "COMMIT~fsZh-FgUxkCZL28k-vYe7OyZHXg7-DBhYT8NivRgR4JP"
             },
             "signature": [
               "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U",
