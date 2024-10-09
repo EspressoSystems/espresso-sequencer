@@ -56,7 +56,7 @@ jobs:
       - name: Build
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          cargo build --locked --workspace
+          cargo build --locked
           cargo nextest run --locked --workspace --all-features --no-run
         timeout-minutes: 90
 
