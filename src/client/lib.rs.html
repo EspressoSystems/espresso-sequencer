@@ -107,11 +107,9 @@
 <a href="#107" id="107">107</a>
 <a href="#108" id="108">108</a>
 <a href="#109" id="109">109</a>
-<a href="#110" id="110">110</a>
-<a href="#111" id="111">111</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::task::sleep;
-<span class="kw">use </span>espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree};
+<span class="kw">use </span>espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header};
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
@@ -120,16 +118,14 @@
 <span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>surf_disco::{
     error::ClientError,
-    http::convert::DeserializeOwned,
     socket::{Connection, Unsupported},
     Url,
 };
 <span class="kw">use </span>vbs::version::StaticVersion;
 
 <span class="kw">pub type </span>SequencerApiVersion = StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;;
-<span class="comment">// pub type EspressoClient = surf_disco::Client&lt;ClientError, SequencerApiVersion&gt;;
 
-</span><span class="attr">#[derive(Clone, Debug)]
+<span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>SequencerClient(surf_disco::Client&lt;ClientError, SequencerApiVersion&gt;);
 
 <span class="kw">pub type </span>FeeMerkleProof = MerkleProof&lt;FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }&gt;;
@@ -157,13 +153,13 @@
             </span>.context(<span class="string">"getting Espresso transaction count"</span>)
     }
 
-    <span class="doccomment">/// Subscribe to a stream to Block Headers
-    </span><span class="kw">pub async fn </span>subscribe_headers&lt;FromServer: DeserializeOwned&gt;(
+    <span class="doccomment">/// Subscribe to a stream of Block Headers
+    </span><span class="kw">pub async fn </span>subscribe_headers(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        connect: <span class="kw-2">&amp;</span>str,
-    ) -&gt; anyhow::Result&lt;Connection&lt;FromServer, Unsupported, ClientError, SequencerApiVersion&gt;&gt; {
+        height: u64,
+    ) -&gt; anyhow::Result&lt;Connection&lt;Header, Unsupported, ClientError, SequencerApiVersion&gt;&gt; {
         <span class="self">self</span>.<span class="number">0
-            </span>.socket(connect)
+            </span>.socket(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/stream/headers/{height}"</span>))
             .subscribe()
             .<span class="kw">await
             </span>.context(<span class="string">"subscribing to Espresso headers"</span>)
