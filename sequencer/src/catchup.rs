@@ -135,10 +135,17 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
                 .send()
                 .await
             {
-                Ok(res) => match res.proof.verify(&fee_merkle_tree_root) {
-                    Ok(_) => return Ok(res),
-                    Err(err) => tracing::warn!("Error verifying account proof: {}", err),
-                },
+                Ok(res) => {
+                    if res.proof.account != account.into() {
+                        tracing::warn!("Invalid proof received from peer {:?}", client.url);
+                        continue;
+                    }
+
+                    match res.proof.verify(&fee_merkle_tree_root) {
+                        Ok(_) => return Ok(res),
+                        Err(err) => tracing::warn!("Error verifying account proof: {}", err),
+                    }
+                }
                 Err(err) => {
                     tracing::warn!("Error fetching account from peer: {}", err);
                 }
@@ -235,17 +242,36 @@ impl<T> StateCatchup for SqlStateCatchup<T>
 where
     T: CatchupDataSource + std::fmt::Debug + Send + Sync,
 {
+    // TODO: add a test for the account proof validation
+    // issue # 2102 (https://github.com/EspressoSystems/espresso-sequencer/issues/2102)
     #[tracing::instrument(skip(self))]
     async fn try_fetch_account(
         &self,
         block_height: u64,
         view: ViewNumber,
-        _fee_merkle_tree_root: FeeMerkleCommitment,
+        fee_merkle_tree_root: FeeMerkleCommitment,
         account: FeeAccount,
     ) -> anyhow::Result<AccountQueryData> {
-        self.db
+        let res = self
+            .db
             .get_account(block_height, view, account.into())
-            .await
+            .await?;
+
+        if res.proof.account != account.into() {
+            panic!(
+                "Critical error: Mismatched fee account proof: expected {:?}, got {:?}.
+                This may indicate a compromised database",
+                account, res.proof.account
+            );
+        }
+
+        match res.proof.verify(&fee_merkle_tree_root) {
+            Ok(_) => return Ok(res),
+            Err(err) => panic!(
+                "Critical error: failed to verify account proof from the database: {}",
+                err
+            ),
+        }
     }
 
     #[tracing::instrument(skip(self))]
