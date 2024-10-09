@@ -292,7 +292,8 @@ impl<'a> Transaction<'a> {
                         &format!(
                             "SELECT {header_state_commitment_field} AS root_commmitment
                          FROM header
-                         WHERE height = $1"
+                         WHERE height = $1
+                         LIMIT 1"
                         ),
                         [sql_param(&created)],
                     )
