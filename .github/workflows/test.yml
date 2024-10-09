@@ -56,13 +56,13 @@ jobs:
       - name: Build
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          cargo build --locked --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
+          cargo build --locked --workspace
+          cargo nextest run --locked --workspace --all-features --no-run
         timeout-minutes: 90
 
       - name: Test
         # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
+        run: cargo nextest run --locked --workspace --all-features --verbose --no-fail-fast
         timeout-minutes: 20
 
       - name: Install process-compose
@@ -78,7 +78,7 @@ jobs:
         env:
           NEXTEST_PROFILE: integration
           INTEGRATION_TEST_SEQUENCER_VERSION: 02
-        run: cargo nextest run --locked --release --all-features --verbose --nocapture
+        run: cargo nextest run --locked --all-features --verbose --nocapture
         timeout-minutes: 40
 
       - name: Process Compose Down
@@ -91,7 +91,7 @@ jobs:
         env:
           NEXTEST_PROFILE: integration
           INTEGRATION_TEST_SEQUENCER_VERSION: 03
-        run: cargo nextest run --locked --release --all-features --verbose --nocapture
+        run: cargo nextest run --locked --all-features --verbose --nocapture
         timeout-minutes: 40
 
       - name: Process Compose Down
