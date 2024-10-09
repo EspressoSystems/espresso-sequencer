@@ -9,7 +9,7 @@ demo *args:
 
 demo-native:
     cargo build --release
-    scripts/demo-native -D
+    scripts/demo-native
 
 demo-native-mp:
     cargo build --release
