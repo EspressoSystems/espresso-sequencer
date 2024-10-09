@@ -674,7 +674,14 @@ impl HotShotState<SeqTypes> for ValidatedState {
         let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
         // TODO 12 seconds of tolerance should be enough for reasonably
         // configured nodes, but we should make this configurable.
-        if proposed_header.timestamp().abs_diff(system_time) > 12 {
+        let diff = proposed_header.timestamp().abs_diff(system_time);
+        if diff > 12 {
+            tracing::warn!(
+                "Timestamp drift too high proposed={} system={} diff={}",
+                proposed_header.timestamp(),
+                system_time,
+                diff
+            );
             return Err(BlockError::InvalidBlockHeader);
         }
 
