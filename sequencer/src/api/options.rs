@@ -1,7 +1,7 @@
 //! Sequencer-specific API options and initialization.
 
 use anyhow::{bail, Context};
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use clap::Parser;
 use espresso_types::{
     v0::traits::{EventConsumer, NullEventConsumer, SequencerPersistence},
@@ -200,9 +200,9 @@ impl Options {
                 // storage.
                 let ds = MetricsDataSource::default();
                 let metrics = ds.populate_metrics();
-                let mut app = App::<_, Error>::with_state(Arc::new(RwLock::new(
+                let mut app = App::<_, Error>::with_state(AppState::from(
                     ExtensibleDataSource::new(ds, state.clone()),
-                )));
+                ));
 
                 // Initialize status API.
                 let status_api =
@@ -228,7 +228,7 @@ impl Options {
                 //
                 // If we have no availability API, we cannot load a saved leaf from local storage,
                 // so we better have been provided the leaf ahead of time if we want it at all.
-                let mut app = App::<_, Error>::with_state(RwLock::new(state.clone()));
+                let mut app = App::<_, Error>::with_state(AppState::from(state.clone()));
 
                 self.init_hotshot_modules(&mut app)?;
 
@@ -437,7 +437,7 @@ impl Options {
         // EventsSource trait, which is currently intended not to implement to separate hotshot-query-service crate, and
         // hotshot-events-service crate.
 
-        let mut app = App::<_, EventStreamingError>::with_state(RwLock::new(state));
+        let mut app = App::<_, EventStreamingError>::with_state(AppState::from(state));
 
         tracing::info!("initializing hotshot events API");
         let hotshot_events_api = hotshot_events_service::events::define_api(
