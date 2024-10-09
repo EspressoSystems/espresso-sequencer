@@ -323,7 +323,8 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
 }
 
 /// A channel generator for types that need asynchronous execution
-pub type AsyncGenerator<T> = Pin<Box<dyn Fn(u64) -> Pin<Box<dyn Future<Output = T>>>>>;
+pub type AsyncGenerator<T> =
+    Pin<Box<dyn Fn(u64) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>>;
 
 /// Describes additional functionality needed by the test network implementation
 pub trait TestableNetworkingImplementation<TYPES: NodeType>

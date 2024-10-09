@@ -30,7 +30,7 @@ use hotshot_types::{
     event::Event,
     simple_certificate::QuorumCertificate,
     traits::{
-        network::ConnectedNetwork,
+        network::{AsyncGenerator, ConnectedNetwork},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
     },
     vote::HasViewNumber,
@@ -38,6 +38,7 @@ use hotshot_types::{
 };
 
 use crate::{
+    test_launcher::Network,
     test_runner::{LateNodeContext, LateNodeContextParameters, LateStartNode, Node, TestRunner},
     test_task::{TestResult, TestTaskState},
 };
@@ -68,6 +69,8 @@ pub struct SpinningTask<
     pub(crate) async_delay_config: DelayConfig,
     /// Context stored for nodes to be restarted with
     pub(crate) restart_contexts: HashMap<usize, RestartContext<TYPES, N, I, V>>,
+    /// Generate network channel for restart nodes
+    pub(crate) channel_generator: AsyncGenerator<Network<TYPES, I>>,
 }
 
 #[async_trait]
@@ -127,6 +130,13 @@ where
                             let node_id = idx.try_into().unwrap();
                             if let Some(node) = self.late_start.remove(&node_id) {
                                 tracing::error!("Node {} spinning up late", idx);
+                                let network = if let Some(network) = node.network {
+                                    network
+                                } else {
+                                    let generated_network = (self.channel_generator)(node_id).await;
+                                    generated_network.wait_for_ready().await;
+                                    generated_network
+                                };
                                 let node_id = idx.try_into().unwrap();
                                 let context = match node.context {
                                     LateNodeContext::InitializedContext(context) => context,
@@ -162,9 +172,10 @@ where
                                                 // For tests, make the node DA based on its index
                                                 node_id < config.da_staked_committee_size as u64,
                                             );
+
                                         TestRunner::add_node_with_config(
                                             node_id,
-                                            node.network.clone(),
+                                            network.clone(),
                                             memberships,
                                             initializer,
                                             config,
@@ -186,7 +197,7 @@ where
                                 // safety task.
                                 let node = Node {
                                     node_id,
-                                    network: node.network,
+                                    network,
                                     handle,
                                 };
                                 node.handle.hotshot.start_consensus().await;
@@ -205,13 +216,15 @@ where
                             if let Some(node) = self.handles.write().await.get_mut(idx) {
                                 tracing::error!("Node {} shutting down", idx);
                                 node.handle.shut_down().await;
+                                // For restarted nodes generate the network on correct view
+                                let generated_network = (self.channel_generator)(node_id).await;
 
                                 let Some(LateStartNode {
-                                    network,
+                                    network: _,
                                     context: LateNodeContext::Restart,
                                 }) = self.late_start.get(&node_id)
                                 else {
-                                    panic!("Restated Nodes must have an unitialized context");
+                                    panic!("Restarted Nodes must have an unitialized context");
                                 };
 
                                 let storage = node.handle.storage().clone();
@@ -250,7 +263,7 @@ where
                                 let context =
                                     TestRunner::<TYPES, I, V, N>::add_node_with_config_and_channels(
                                         node_id,
-                                        network.clone(),
+                                        generated_network.clone(),
                                         (*memberships).clone(),
                                         initializer,
                                         config,
@@ -266,7 +279,7 @@ where
                                     .await;
                                 if delay_views == 0 {
                                     new_nodes.push((context, idx));
-                                    new_networks.push(network.clone());
+                                    new_networks.push(generated_network.clone());
                                 } else {
                                     let up_view = view_number + delay_views;
                                     let change = ChangeNode {
@@ -276,7 +289,7 @@ where
                                     self.changes.entry(up_view).or_default().push(change);
                                     let new_ctx = RestartContext {
                                         context,
-                                        network: network.clone(),
+                                        network: generated_network.clone(),
                                     };
                                     self.restart_contexts.insert(idx, new_ctx);
                                 }

@@ -9,10 +9,6 @@ use std::time::Duration;
 use hotshot_example_types::node_types::{
     CombinedImpl, PushCdnImpl, TestTypes, TestTypesRandomizedLeader, TestVersions,
 };
-#[cfg(feature = "dependency-tasks")]
-use hotshot_example_types::testable_delay::{
-    DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay,
-};
 use hotshot_macros::cross_tests;
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,

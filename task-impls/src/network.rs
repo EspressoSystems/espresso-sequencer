@@ -360,9 +360,7 @@ impl<
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                     GeneralConsensusMessage::ProposalRequested(req.clone(), signature),
                 )),
-                TransmitType::DaCommitteeAndLeaderBroadcast(
-                    self.quorum_membership.leader(req.view_number),
-                ),
+                TransmitType::Broadcast,
             )),
             HotShotEvent::QuorumProposalResponseSend(sender_key, proposal) => Some((
                 sender_key.clone(),
