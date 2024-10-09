@@ -294,6 +294,32 @@
 <a href="#294" id="294">294</a>
 <a href="#295" id="295">295</a>
 <a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -431,10 +457,17 @@
                 .send()
                 .<span class="kw">await
             </span>{
-                <span class="prelude-val">Ok</span>(res) =&gt; <span class="kw">match </span>res.proof.verify(<span class="kw-2">&amp;</span>fee_merkle_tree_root) {
-                    <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(res),
-                    <span class="prelude-val">Err</span>(err) =&gt; <span class="macro">tracing::warn!</span>(<span class="string">"Error verifying account proof: {}"</span>, err),
-                },
+                <span class="prelude-val">Ok</span>(res) =&gt; {
+                    <span class="kw">if </span>res.proof.account != account.into() {
+                        <span class="macro">tracing::warn!</span>(<span class="string">"Invalid proof received from peer {:?}"</span>, client.url);
+                        <span class="kw">continue</span>;
+                    }
+
+                    <span class="kw">match </span>res.proof.verify(<span class="kw-2">&amp;</span>fee_merkle_tree_root) {
+                        <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(res),
+                        <span class="prelude-val">Err</span>(err) =&gt; <span class="macro">tracing::warn!</span>(<span class="string">"Error verifying account proof: {}"</span>, err),
+                    }
+                }
                 <span class="prelude-val">Err</span>(err) =&gt; {
                     <span class="macro">tracing::warn!</span>(<span class="string">"Error fetching account from peer: {}"</span>, err);
                 }
@@ -531,18 +564,37 @@
 <span class="kw">where
     </span>T: CatchupDataSource + std::fmt::Debug + Send + Sync,
 {
-    <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
+    <span class="comment">// TODO: add a test for the account proof validation
+    // issue # 2102 (https://github.com/EspressoSystems/espresso-sequencer/issues/2102)
+    </span><span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
     </span><span class="kw">async fn </span>try_fetch_account(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         block_height: u64,
         view: ViewNumber,
-        _fee_merkle_tree_root: FeeMerkleCommitment,
+        fee_merkle_tree_root: FeeMerkleCommitment,
         account: FeeAccount,
     ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
-        <span class="self">self</span>.db
+        <span class="kw">let </span>res = <span class="self">self
+            </span>.db
             .get_account(block_height, view, account.into())
-            .<span class="kw">await
-    </span>}
+            .<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="kw">if </span>res.proof.account != account.into() {
+            <span class="macro">panic!</span>(
+                <span class="string">"Critical error: Mismatched fee account proof: expected {:?}, got {:?}.
+                This may indicate a compromised database"</span>,
+                account, res.proof.account
+            );
+        }
+
+        <span class="kw">match </span>res.proof.verify(<span class="kw-2">&amp;</span>fee_merkle_tree_root) {
+            <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(res),
+            <span class="prelude-val">Err</span>(err) =&gt; <span class="macro">panic!</span>(
+                <span class="string">"Critical error: failed to verify account proof from the database: {}"</span>,
+                err
+            ),
+        }
+    }
 
     <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
     </span><span class="kw">async fn </span>try_remember_blocks_merkle_tree(
