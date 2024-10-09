@@ -139,7 +139,6 @@ mod tests {
             Arc::new(TestInstanceState::default()),
             Duration::from_millis(100),
             Arc::new(TestValidatedState::default()),
-            None,
         );
 
         // Kick off async look for the bootstrap builder state

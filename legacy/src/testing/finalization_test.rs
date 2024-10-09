@@ -1,7 +1,7 @@
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use crate::{
-    builder_state::{DaProposalMessage, QuorumProposalMessage},
+    builder_state::{DaProposalMessage, QuorumProposalMessage, ALLOW_EMPTY_BLOCK_PERIOD},
     service::{GlobalState, ProxyGlobalState, ReceivedTransaction},
     BuilderStateId, ParentBlockReferences,
 };
@@ -60,7 +60,7 @@ const TEST_CHANNEL_BUFFER_SIZE: usize = 32;
 /// [setup_builder_for_test] sets up a test environment for the builder state.
 /// It returns a tuple containing the proxy global state, the sender for decide
 /// messages, the sender for data availability proposals,
-fn setup_builder_for_test(allow_empty_block_period: Option<u64>) -> TestSetup {
+fn setup_builder_for_test() -> TestSetup {
     let (req_sender, req_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
     let (tx_sender, tx_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
 
@@ -109,7 +109,6 @@ fn setup_builder_for_test(allow_empty_block_period: Option<u64>) -> TestSetup {
         Default::default(),
         Duration::from_secs(1),
         Default::default(),
-        allow_empty_block_period,
     );
 
     bootstrap_builder_state.event_loop();
@@ -372,7 +371,7 @@ async fn progress_round_with_transactions(
 #[async_std::test]
 async fn test_empty_block_rate() {
     let (proxy_global_state, _, da_proposal_sender, quorum_proposal_sender, _) =
-        setup_builder_for_test(None);
+        setup_builder_for_test();
 
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
@@ -422,9 +421,8 @@ async fn test_empty_block_rate() {
 /// |> block is an integral part of this test.
 #[async_std::test]
 async fn test_eager_block_rate() {
-    let allow_empty_block_period = 3;
     let (proxy_global_state, _, da_proposal_sender, quorum_proposal_sender, _) =
-        setup_builder_for_test(Some(allow_empty_block_period));
+        setup_builder_for_test();
 
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
@@ -497,9 +495,9 @@ async fn test_eager_block_rate() {
         .await;
     }
 
-    // rounds 2 through 2 + allow_empty_block_period - 1 should propose empty
+    // rounds 2 through 2 + ALLOW_EMPTY_BLOCK_PERIOD - 1 should propose empty
     // blocks.
-    for round in 2..(2 + allow_empty_block_period) {
+    for round in 2..(2 + ALLOW_EMPTY_BLOCK_PERIOD) {
         let (attempts, available_blocks_result) = process_available_blocks_round(
             &proxy_global_state,
             current_builder_state_id.clone(),
@@ -535,8 +533,8 @@ async fn test_eager_block_rate() {
         .await;
     }
 
-    // rounds 2 + allow_empty_block_period through 9 should not propose empty
-    for round in (2 + allow_empty_block_period)..10 {
+    // rounds 2 + ALLOW_EMPTY_BLOCK_PERIOD through 9 should not propose empty
+    for round in (2 + ALLOW_EMPTY_BLOCK_PERIOD)..10 {
         let (attempts, available_blocks_result) = process_available_blocks_round(
             &proxy_global_state,
             current_builder_state_id.clone(),

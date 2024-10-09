@@ -112,6 +112,14 @@ pub struct DAProposalInfo<TYPES: NodeType> {
     pub num_nodes: usize,
 }
 
+/// [ALLOW_EMPTY_BLOCK_PERIOD] is a constant that is used to determine the
+/// number of future views that we will allow building empty blocks for.
+///
+/// This value governs the ability for the Builder to prioritize finalizing
+/// transactions by producing empty blocks rather than avoiding the creation
+/// of them, following the proposal that contains transactions.
+pub(crate) const ALLOW_EMPTY_BLOCK_PERIOD: u64 = 3;
+
 #[derive(Debug)]
 pub struct BuilderState<TYPES: NodeType> {
     /// Recent included txs set while building blocks
@@ -191,11 +199,6 @@ pub struct BuilderState<TYPES: NodeType> {
     /// to allow for faster finalization of previous blocks that have had
     /// transactions included in them.
     pub allow_empty_block_until: Option<TYPES::Time>,
-
-    /// allow_empty_block_period is used in conjunction with [TYPES::Time] to
-    /// determine the time period that empty blocks are allowed to be built
-    /// for.
-    pub allow_empty_block_period: u64,
 }
 
 /// [best_builder_states_to_extend] is a utility function that is used to
@@ -678,7 +681,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         if !txn_commitments.is_empty() {
             self.allow_empty_block_until = Some(TYPES::Time::new(
-                da_proposal_info.view_number.u64() + self.allow_empty_block_period,
+                da_proposal_info.view_number.u64() + ALLOW_EMPTY_BLOCK_PERIOD,
             ));
         }
 
@@ -1035,7 +1038,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         instance_state: Arc<TYPES::InstanceState>,
         txn_garbage_collect_duration: Duration,
         validated_state: Arc<TYPES::ValidatedState>,
-        allow_empty_block_period: Option<u64>,
     ) -> Self {
         let txns_in_queue: HashSet<_> = tx_queue.iter().map(|tx| tx.commit).collect();
         BuilderState {
@@ -1062,10 +1064,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             next_txn_garbage_collect_time: Instant::now() + txn_garbage_collect_duration,
             validated_state,
             allow_empty_block_until: None,
-            // We specify the default value for allow_empty_block_period to be
-            // 3 as it currently takes 3 rounds of consensus to finalize the
-            // transactions previously proposed.
-            allow_empty_block_period: allow_empty_block_period.unwrap_or(3),
         }
     }
     pub fn clone_with_receiver(&self, req_receiver: BroadcastReceiver<MessageType<TYPES>>) -> Self {
@@ -1115,7 +1113,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             next_txn_garbage_collect_time,
             validated_state: self.validated_state.clone(),
             allow_empty_block_until: self.allow_empty_block_until,
-            allow_empty_block_period: self.allow_empty_block_period,
         }
     }
 
