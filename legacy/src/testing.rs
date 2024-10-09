@@ -3,3 +3,5 @@
 //
 
 pub mod basic_test;
+
+pub mod finalization_test;

@@ -112,6 +112,14 @@ pub struct DAProposalInfo<TYPES: NodeType> {
     pub num_nodes: usize,
 }
 
+/// [ALLOW_EMPTY_BLOCK_PERIOD] is a constant that is used to determine the
+/// number of future views that we will allow building empty blocks for.
+///
+/// This value governs the ability for the Builder to prioritize finalizing
+/// transactions by producing empty blocks rather than avoiding the creation
+/// of them, following the proposal that contains transactions.
+pub(crate) const ALLOW_EMPTY_BLOCK_PERIOD: u64 = 3;
+
 #[derive(Debug)]
 pub struct BuilderState<TYPES: NodeType> {
     /// Recent included txs set while building blocks
@@ -185,6 +193,12 @@ pub struct BuilderState<TYPES: NodeType> {
 
     /// time of next garbage collection for txns
     pub next_txn_garbage_collect_time: Instant,
+
+    /// allow_empty_block_until is a variable that dictates the time until which
+    /// a builder should stop producing empty blocks. This is done specifically
+    /// to allow for faster finalization of previous blocks that have had
+    /// transactions included in them.
+    pub allow_empty_block_until: Option<TYPES::Time>,
 }
 
 /// [best_builder_states_to_extend] is a utility function that is used to
@@ -665,6 +679,12 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.tx_queue
             .retain(|tx| self.txns_in_queue.contains(&tx.commit));
 
+        if !txn_commitments.is_empty() {
+            self.allow_empty_block_until = Some(TYPES::Time::new(
+                da_proposal_info.view_number.u64() + ALLOW_EMPTY_BLOCK_PERIOD,
+            ));
+        }
+
         // register the spawned builder state to spawned_builder_states in the global state
         self.global_state.write_arc().await.register_builder_state(
             BuilderStateId {
@@ -700,8 +720,16 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             async_sleep(sleep_interval).await
         }
 
-        // Don't build an empty block
-        if self.tx_queue.is_empty() {
+        // should_prioritize_finalization is a flag that is used to determine
+        // whether we should return empty blocks or not.
+
+        let should_prioritize_finalization = self
+            .allow_empty_block_until
+            .map(|until| state_id.view < until)
+            .unwrap_or(false);
+
+        if self.tx_queue.is_empty() && !should_prioritize_finalization {
+            // Don't build an empty block
             return None;
         }
 
@@ -748,7 +776,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // be included, because it alone goes over sequencer's block size limit.
         // We need to drop it and mark as "included" so that if we receive
         // it again we don't even bother with it.
-        if actual_txn_count == 0 {
+        if actual_txn_count == 0 && !should_prioritize_finalization {
             if let Some(txn) = self.tx_queue.pop_front() {
                 self.txns_in_queue.remove(&txn.commit);
                 self.included_txns.insert(txn.commit);
@@ -1035,6 +1063,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             txn_garbage_collect_duration,
             next_txn_garbage_collect_time: Instant::now() + txn_garbage_collect_duration,
             validated_state,
+            allow_empty_block_until: None,
         }
     }
     pub fn clone_with_receiver(&self, req_receiver: BroadcastReceiver<MessageType<TYPES>>) -> Self {
@@ -1083,6 +1112,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             txn_garbage_collect_duration: self.txn_garbage_collect_duration,
             next_txn_garbage_collect_time,
             validated_state: self.validated_state.clone(),
+            allow_empty_block_until: self.allow_empty_block_until,
         }
     }
 
