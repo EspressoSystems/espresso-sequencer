@@ -9,7 +9,7 @@ use contract_bindings::{
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
-    plonk_verifier_2::PlonkVerifier2,
+    plonk_verifier::PlonkVerifier,
 };
 use derive_more::Display;
 use ethers::{
@@ -191,7 +191,7 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
     let plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier2::deploy(l1.clone(), ())?,
+            PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
     let vk = contracts
@@ -254,7 +254,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     let plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier2::deploy(l1.clone(), ())?,
+            PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
     let vk = contracts
