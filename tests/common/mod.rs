@@ -90,6 +90,7 @@ impl TestConfig {
             url_from_port(dotenvy::var("ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT")?)?
         };
 
+        // TODO test both builders (probably requires some refactoring).
         let builder_url = if sequencer_version >= 03 {
             let url = url_from_port(dotenvy::var("ESPRESSO_RESERVE_BUILDER_SERVER_PORT")?)?;
 

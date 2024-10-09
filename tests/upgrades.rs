@@ -59,5 +59,6 @@ async fn test_upgrade() -> Result<()> {
             panic!("Exceeded maximum block height. Upgrade should have finished by now :(");
         }
     }
+    // TODO assert transactions are incrementing
     Ok(())
 }
