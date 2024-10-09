@@ -330,17 +330,6 @@ pub fn validate_proposal(
         });
     }
 
-    // Validate timestamp hasn't drifted too much from system time.
-    let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
-    // TODO 2 seconds of tolerance should be enough for reasonably
-    // configured nodes, but we should make this configurable.
-    if proposal.timestamp().abs_diff(system_time) > 2 {
-        return Err(ProposalValidationError::InvalidTimestampDrift {
-            proposal_timestamp: proposal.timestamp(),
-            local_timestamp: system_time,
-        });
-    }
-
     let ValidatedState {
         block_merkle_tree,
         fee_merkle_tree,
@@ -680,6 +669,22 @@ impl HotShotState<SeqTypes> for ValidatedState {
         vid_common: VidCommon,
         version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
+        // Validate timestamp hasn't drifted too much from system time.
+        // Do this check first so we don't add unnecessary drift.
+        let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        // TODO 12 seconds of tolerance should be enough for reasonably
+        // configured nodes, but we should make this configurable.
+        let diff = proposed_header.timestamp().abs_diff(system_time);
+        if diff > 12 {
+            tracing::warn!(
+                "Timestamp drift too high proposed={} system={} diff={}",
+                proposed_header.timestamp(),
+                system_time,
+                diff
+            );
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
             tracing::error!("invalid builder fee: {err:#}");
