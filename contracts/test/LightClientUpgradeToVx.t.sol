@@ -22,6 +22,7 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 import { Upgrades } from "openzeppelin-foundry-upgrades/Upgrades.sol";
+import { ERC1967Utils } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 
 contract LightClientUpgradeToVxTest is Test {
     LCV1 public lcV1Proxy;
@@ -154,6 +155,39 @@ contract LightClientUpgradeToVxTest is Test {
         // confirm that the implementation address is the same as the first time we deployed, so we
         // know the downgrade worked
         assertEq(address(Upgrades.getImplementationAddress(address(lcV1Proxy))), address(lcV1Impl));
+
+        // ensure that the genesis states are still the same as the original contract
+        testCorrectInitialization();
+    }
+
+    // test that the data remains the same after upgrading the implementation
+    function testExpectRevertRollbackV2toInvalidAddress() public {
+        // Upgrade LightClient and check that the genesis state is not changed and that the new
+        // field
+        // of the upgraded contract is set to 0
+        uint256 myNewField = 123;
+        uint256 extraField = 2;
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, extraField, admin));
+
+        assertEq(lcV2Proxy.newField(), myNewField);
+
+        // get current light client implementation address
+        address lcV2Impl = Upgrades.getImplementationAddress(address(lcV2Proxy));
+
+        // Now time to downgrade, use invalid lcV1 impl address
+        // we expect a revert when you try to downgrade to an invalid address, the proxy address
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC1967Utils.ERC1967InvalidImplementation.selector, proxy)
+        );
+        LCV1(downgrader.run(proxy, admin, proxy));
+
+        // re-confirm that the proxy address is the same for both versions
+        assertEq(address(lcV1Proxy), address(lcV2Proxy));
+
+        // confirm that the implementation address is the same as the recently deployed light client
+        // v2
+        // since the downgrade would have reverted
+        assertEq(address(Upgrades.getImplementationAddress(address(lcV2Proxy))), lcV2Impl);
 
         // ensure that the genesis states are still the same as the original contract
         testCorrectInitialization();
