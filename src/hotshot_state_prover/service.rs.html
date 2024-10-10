@@ -832,6 +832,68 @@
 <a href="#832" id="832">832</a>
 <a href="#833" id="833">833</a>
 <a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a>
+<a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
+<a href="#843" id="843">843</a>
+<a href="#844" id="844">844</a>
+<a href="#845" id="845">845</a>
+<a href="#846" id="846">846</a>
+<a href="#847" id="847">847</a>
+<a href="#848" id="848">848</a>
+<a href="#849" id="849">849</a>
+<a href="#850" id="850">850</a>
+<a href="#851" id="851">851</a>
+<a href="#852" id="852">852</a>
+<a href="#853" id="853">853</a>
+<a href="#854" id="854">854</a>
+<a href="#855" id="855">855</a>
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a>
+<a href="#870" id="870">870</a>
+<a href="#871" id="871">871</a>
+<a href="#872" id="872">872</a>
+<a href="#873" id="873">873</a>
+<a href="#874" id="874">874</a>
+<a href="#875" id="875">875</a>
+<a href="#876" id="876">876</a>
+<a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
+<a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
+<a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -1388,10 +1450,7 @@
 
     <span class="kw">use </span>anyhow::Result;
     <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig;
-    <span class="kw">use </span>ethers::{
-        types::H160,
-        utils::{Anvil, AnvilInstance},
-    };
+    <span class="kw">use </span>ethers::utils::{Anvil, AnvilInstance};
     <span class="kw">use </span>hotshot_contract_adapter::light_client::{
         LightClientConstructorArgs, ParsedStakeTableState,
     };
@@ -1399,8 +1458,10 @@
     <span class="kw">use </span>hotshot_types::light_client::StateSignKey;
     <span class="kw">use </span>jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     <span class="kw">use </span>jf_utils::test_rng;
-    <span class="kw">use </span>sequencer_utils::{deployer, test_utils::setup_test};
-    <span class="kw">use </span>std::str::FromStr;
+    <span class="kw">use </span>sequencer_utils::{
+        deployer::{<span class="self">self</span>, test_helpers::deploy_light_client_contract_as_proxy_for_test},
+        test_utils::setup_test,
+    };
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::mock_ledger::{MockLedger, MockSystemParam};
@@ -1522,9 +1583,37 @@
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
 
-        <span class="kw">let </span>proxy = LightClient::new(address, l1_wallet.clone());
+        <span class="kw">let </span>light_client_contract = LightClient::new(address, l1_wallet.clone());
 
-        <span class="prelude-val">Ok</span>((l1_wallet, proxy))
+        <span class="prelude-val">Ok</span>((l1_wallet, light_client_contract))
+    }
+
+    <span class="kw">async fn </span>deploy_contract_as_proxy_for_test(
+        anvil: <span class="kw-2">&amp;</span>AnvilInstance,
+        genesis: ParsedLightClientState,
+        stake_genesis: ParsedStakeTableState,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;SignerWallet&gt;, LightClient&lt;SignerWallet&gt;)&gt; {
+        <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(anvil.endpoint())<span class="question-mark">?</span>;
+        <span class="kw">let </span>signer = Wallet::from(anvil.keys()[<span class="number">0</span>].clone())
+            .with_chain_id(provider.get_chainid().<span class="kw">await</span><span class="question-mark">?</span>.as_u64());
+        <span class="kw">let </span>l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
+        <span class="kw">let </span>genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
+            light_client_state: genesis,
+            stake_table_state: stake_genesis,
+            max_history_seconds: MAX_HISTORY_SECONDS,
+        };
+
+        <span class="kw">let </span><span class="kw-2">mut </span>contracts = deployer::Contracts::default();
+        <span class="kw">let </span>proxy_address = deploy_light_client_contract_as_proxy_for_test(
+            l1_wallet.clone(),
+            <span class="kw-2">&amp;mut </span>contracts,
+            <span class="prelude-val">Some</span>(genesis_constructor_args),
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="kw">let </span>light_client_contract = LightClient::new(proxy_address, l1_wallet.clone());
+
+        <span class="prelude-val">Ok</span>((l1_wallet, light_client_contract))
     }
 
     <span class="kw">impl </span>StateProverConfig {
@@ -1553,13 +1642,31 @@
     }
 
     <span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_validate_light_contract_is_proxy() {
-        <span class="comment">// set the light client address to an address known to be a proxy
-        </span><span class="kw">let </span>config = StateProverConfig {
-            light_client_address: H160::from_str(<span class="string">"0x5B17D2d923E27341FC2753251f11aC08fDC20E0d"</span>)
-                .expect(<span class="string">"Invalid Ethereum address"</span>),
-            provider: Url::from_str(<span class="string">"https://ethereum-sepolia.publicnode.com"</span>)
-                .expect(<span class="string">"Invalid URL"</span>),
+    </span><span class="kw">async fn </span>test_validate_light_contract_is_proxy() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        setup_test();
+
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>dummy_genesis = ParsedLightClientState::dummy_genesis();
+        <span class="kw">let </span>dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+        <span class="kw">let </span>(_wallet, contract) = deploy_contract_as_proxy_for_test(
+            <span class="kw-2">&amp;</span>anvil,
+            dummy_genesis.clone(),
+            dummy_stake_genesis.clone(),
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="comment">// now test if we can read from the contract
+        </span><span class="kw">let </span>genesis: ParsedLightClientState = contract.genesis_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        <span class="macro">assert_eq!</span>(genesis, dummy_genesis);
+
+        <span class="kw">let </span>stake_genesis: ParsedStakeTableState =
+            contract.genesis_stake_table_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        <span class="macro">assert_eq!</span>(stake_genesis, dummy_stake_genesis);
+
+        <span class="kw">let </span>config = StateProverConfig {
+            provider: Url::parse(anvil.endpoint().as_str())
+                .expect(<span class="string">"Cannot parse anvil endpoint to URL."</span>),
+            light_client_address: contract.clone().address(),
             ..Default::default()
         };
 
@@ -1570,21 +1677,36 @@
             result.is_ok(),
             <span class="string">"Expected Light Client contract to be a proxy, but it was not"
         </span>);
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_validate_light_contract_is_not_a_proxy() {
-        <span class="comment">// set the light client address to an address known not to be a proxy
-        </span><span class="kw">let </span>config = StateProverConfig {
-            light_client_address: H160::from_str(<span class="string">"0xa15bb66138824a1c7167f5e85b957d04dd34e468"</span>)
-                .expect(<span class="string">"Invalid Ethereum address"</span>),
-            provider: Url::from_str(<span class="string">"https://ethereum-sepolia.publicnode.com"</span>)
-                .expect(<span class="string">"Invalid URL"</span>),
+    </span><span class="kw">async fn </span>test_validate_light_contract_is_not_a_proxy() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        setup_test();
+
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>dummy_genesis = ParsedLightClientState::dummy_genesis();
+        <span class="kw">let </span>dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+        <span class="kw">let </span>(_wallet, contract) =
+            deploy_contract_for_test(<span class="kw-2">&amp;</span>anvil, dummy_genesis.clone(), dummy_stake_genesis.clone())
+                .<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="comment">// now test if we can read from the contract
+        </span><span class="kw">let </span>genesis: ParsedLightClientState = contract.genesis_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        <span class="macro">assert_eq!</span>(genesis, dummy_genesis);
+
+        <span class="kw">let </span>stake_genesis: ParsedStakeTableState =
+            contract.genesis_stake_table_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
+        <span class="macro">assert_eq!</span>(stake_genesis, dummy_stake_genesis);
+
+        <span class="kw">let </span>config = StateProverConfig {
+            provider: Url::parse(anvil.endpoint().as_str())
+                .expect(<span class="string">"Cannot parse anvil endpoint to URL."</span>),
+            light_client_address: contract.clone().address(),
             ..Default::default()
         };
 
         <span class="kw">let </span>result = config.validate_light_client_contract().<span class="kw">await</span>;
-
         <span class="comment">// check if the result is an error
         </span><span class="kw">if let </span><span class="prelude-val">Err</span>(e) = result {
             <span class="comment">// assert that the error message contains "Light Client contract's address is not a proxy"
@@ -1594,6 +1716,7 @@
         } <span class="kw">else </span>{
             <span class="macro">panic!</span>(<span class="string">"Expected the light contract to not be a proxy, but the validation succeeded"</span>);
         }
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attr">#[async_std::test]
@@ -1625,6 +1748,7 @@
 
         <span class="macro">assert_eq!</span>(state, genesis.into());
         <span class="macro">assert_eq!</span>(st_state, stake_genesis.into());
+
         <span class="prelude-val">Ok</span>(())
     }
 
