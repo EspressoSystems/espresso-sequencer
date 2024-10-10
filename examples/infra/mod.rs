@@ -760,7 +760,7 @@ where
             derive_libp2p_multiaddr(&bind_address).expect("failed to derive bind address");
 
         // Create the Libp2p network
-        let libp2p_network = Libp2pNetwork::from_config::<TYPES>(
+        let libp2p_network = Libp2pNetwork::from_config(
             config.clone(),
             GossipConfig::default(),
             bind_address,
