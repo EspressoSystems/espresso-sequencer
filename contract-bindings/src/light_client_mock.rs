@@ -713,6 +713,44 @@ pub mod light_client_mock {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("updateLCStateHistory"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("updateLCStateHistory",),
+                        inputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blockNumber"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("blockTimestamp"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("state"),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Tuple(::std::vec![
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                    ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
+                                ],),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned(
+                                        "struct LightClient.LightClientState",
+                                    ),
+                                ),
+                            },
+                        ],
+                        outputs: ::std::vec![],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("upgradeToAndCall"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("upgradeToAndCall"),
@@ -1293,6 +1331,17 @@ pub mod light_client_mock {
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([242, 253, 227, 139], new_owner)
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `updateLCStateHistory` (0x7dc792bf) function
+        pub fn update_lc_state_history(
+            &self,
+            block_number: u64,
+            block_timestamp: u64,
+            state: LightClientState,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([125, 199, 146, 191], (block_number, block_timestamp, state))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `upgradeToAndCall` (0x4f1ef286) function
@@ -2782,6 +2831,28 @@ pub mod light_client_mock {
     pub struct TransferOwnershipCall {
         pub new_owner: ::ethers::core::types::Address,
     }
+    ///Container type for all input parameters for the `updateLCStateHistory` function with signature `updateLCStateHistory(uint64,uint64,(uint64,uint64,uint256))` and selector `0x7dc792bf`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(
+        name = "updateLCStateHistory",
+        abi = "updateLCStateHistory(uint64,uint64,(uint64,uint64,uint256))"
+    )]
+    pub struct UpdateLCStateHistoryCall {
+        pub block_number: u64,
+        pub block_timestamp: u64,
+        pub state: LightClientState,
+    }
     ///Container type for all input parameters for the `upgradeToAndCall` function with signature `upgradeToAndCall(address,bytes)` and selector `0x4f1ef286`
     #[derive(
         Clone,
@@ -2829,6 +2900,7 @@ pub mod light_client_mock {
         StateHistoryFirstIndex(StateHistoryFirstIndexCall),
         StateHistoryRetentionPeriod(StateHistoryRetentionPeriodCall),
         TransferOwnership(TransferOwnershipCall),
+        UpdateLCStateHistory(UpdateLCStateHistoryCall),
         UpgradeToAndCall(UpgradeToAndCallCall),
     }
     impl ::ethers::core::abi::AbiDecode for LightClientMockCalls {
@@ -2958,6 +3030,11 @@ pub mod light_client_mock {
                 return Ok(Self::TransferOwnership(decoded));
             }
             if let Ok(decoded) =
+                <UpdateLCStateHistoryCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::UpdateLCStateHistory(decoded));
+            }
+            if let Ok(decoded) =
                 <UpgradeToAndCallCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::UpgradeToAndCall(decoded));
@@ -3022,6 +3099,9 @@ pub mod light_client_mock {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::TransferOwnership(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::UpdateLCStateHistory(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::UpgradeToAndCall(element) => ::ethers::core::abi::AbiEncode::encode(element),
             }
         }
@@ -3059,6 +3139,7 @@ pub mod light_client_mock {
                 Self::StateHistoryFirstIndex(element) => ::core::fmt::Display::fmt(element, f),
                 Self::StateHistoryRetentionPeriod(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferOwnership(element) => ::core::fmt::Display::fmt(element, f),
+                Self::UpdateLCStateHistory(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeToAndCall(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
@@ -3191,6 +3272,11 @@ pub mod light_client_mock {
     impl ::core::convert::From<TransferOwnershipCall> for LightClientMockCalls {
         fn from(value: TransferOwnershipCall) -> Self {
             Self::TransferOwnership(value)
+        }
+    }
+    impl ::core::convert::From<UpdateLCStateHistoryCall> for LightClientMockCalls {
+        fn from(value: UpdateLCStateHistoryCall) -> Self {
+            Self::UpdateLCStateHistory(value)
         }
     }
     impl ::core::convert::From<UpgradeToAndCallCall> for LightClientMockCalls {

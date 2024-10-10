@@ -59,6 +59,14 @@ contract LightClientMock is LC {
         }
     }
 
+    function updateLCStateHistory(
+        uint64 blockNumber,
+        uint64 blockTimestamp,
+        LightClientState memory state
+    ) external {
+        super.updateStateHistory(blockNumber, blockTimestamp, state);
+    }
+
     function setHotShotDownSince(uint256 l1Height) public {
         hotShotDown = true;
         frozenL1Height = l1Height;
