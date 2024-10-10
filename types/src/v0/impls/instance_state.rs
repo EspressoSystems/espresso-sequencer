@@ -194,6 +194,7 @@ pub mod mock {
     impl StateCatchup for MockStateCatchup {
         async fn try_fetch_accounts(
             &self,
+            _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
             fee_merkle_tree_root: FeeMerkleCommitment,

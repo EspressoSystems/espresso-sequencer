@@ -8,7 +8,7 @@ use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
     v0_3::ChainConfig,
     BackoffParams, BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment,
-    FeeMerkleTree,
+    FeeMerkleTree, NodeState,
 };
 use futures::future::FutureExt;
 use hotshot_orchestrator::config::NetworkConfig;
@@ -118,9 +118,10 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
 
 #[async_trait]
 impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, _instance))]
     async fn try_fetch_accounts(
         &self,
+        _instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
@@ -252,15 +253,18 @@ impl<T> StateCatchup for SqlStateCatchup<T>
 where
     T: CatchupDataSource + std::fmt::Debug + Send + Sync,
 {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, instance))]
     async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         block_height: u64,
         view: ViewNumber,
         _fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
-        self.db.get_accounts(block_height, view, accounts).await
+        self.db
+            .get_accounts(instance, block_height, view, accounts)
+            .await
     }
 
     #[tracing::instrument(skip(self))]
