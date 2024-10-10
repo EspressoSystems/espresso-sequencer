@@ -32,6 +32,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     /// Try to fetch the given accounts state, failing without retrying if unable.
     async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
@@ -41,6 +42,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     /// Fetch the given list of accounts, retrying on transient errors.
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
@@ -51,7 +53,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
             .retry(self, |provider| {
                 async {
                     let tree = provider
-                        .try_fetch_accounts(height, view, fee_merkle_tree_root, &accounts)
+                        .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, &accounts)
                         .await
                         .map_err(|err| {
                             err.context(format!(
@@ -120,25 +122,27 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
 impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
     ) -> anyhow::Result<Vec<FeeAccountProof>> {
         (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
@@ -182,25 +186,27 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
     async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
     ) -> anyhow::Result<Vec<FeeAccountProof>> {
         (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
@@ -243,9 +249,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 /// Catchup from multiple providers tries each provider in a round robin fashion until it succeeds.
 #[async_trait]
 impl<T: StateCatchup> StateCatchup for Vec<T> {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, instance))]
     async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
@@ -253,7 +260,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     ) -> anyhow::Result<FeeMerkleTree> {
         for provider in self {
             match provider
-                .try_fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+                .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
                 .await
             {
                 Ok(tree) => return Ok(tree),

@@ -6,7 +6,7 @@ use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
     v0_3::ChainConfig,
-    FeeAccount, FeeAccountProof, FeeMerkleTree, PubKey, Transaction,
+    FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
 };
 use futures::future::Future;
 use hotshot_orchestrator::config::{
@@ -108,6 +108,10 @@ pub(crate) trait StateSignatureDataSource<N: ConnectedNetwork<PubKey>> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 }
 
+pub(crate) trait NodeStateDataSource {
+    fn node_state(&self) -> impl Send + Future<Output = &NodeState>;
+}
+
 pub(crate) trait CatchupDataSource: Sync {
     /// Get the state of the requested `account`.
     ///
@@ -117,12 +121,15 @@ pub(crate) trait CatchupDataSource: Sync {
     /// decided view.
     fn get_account(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         account: FeeAccount,
     ) -> impl Send + Future<Output = anyhow::Result<AccountQueryData>> {
         async move {
-            let tree = self.get_accounts(height, view, &[account]).await?;
+            let tree = self
+                .get_accounts(instance, height, view, &[account])
+                .await?;
             let (proof, balance) = FeeAccountProof::prove(&tree, account.into()).context(
                 format!("account {account} not available for height {height}, view {view:?}"),
             )?;
@@ -138,6 +145,7 @@ pub(crate) trait CatchupDataSource: Sync {
     /// decided view.
     fn get_accounts(
         &self,
+        _instance: &NodeState,
         _height: u64,
         _view: ViewNumber,
         _accounts: &[FeeAccount],

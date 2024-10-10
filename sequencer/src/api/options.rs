@@ -24,8 +24,8 @@ use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource,
+        SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
     update::update_loop,
@@ -396,6 +396,7 @@ impl Options {
             + Sync
             + SubmitDataSource<N, P>
             + StateSignatureDataSource<N>
+            + NodeStateDataSource
             + CatchupDataSource
             + HotShotConfigDataSource,
         N: ConnectedNetwork<PubKey>,
