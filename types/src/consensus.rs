@@ -563,15 +563,22 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_validated_state_map(
         &mut self,
         view_number: TYPES::Time,
-        view: View<TYPES>,
+        new_view: View<TYPES>,
     ) -> Result<()> {
         if let Some(existing_view) = self.validated_state_map().get(&view_number) {
-            if let ViewInner::Leaf { .. } = existing_view.view_inner {
-                match view.view_inner {
-                    ViewInner::Leaf { ref delta, .. } => {
+            if let ViewInner::Leaf {
+                delta: ref existing_delta,
+                ..
+            } = existing_view.view_inner
+            {
+                match new_view.view_inner {
+                    ViewInner::Leaf {
+                        delta: ref new_delta,
+                        ..
+                    } => {
                         ensure!(
-                            delta.is_some(),
-                            "Skipping the state update to not override a `Leaf` view with `None` state delta."
+                            new_delta.is_some() || existing_delta.is_none(),
+                            "Skipping the state update to not override a `Leaf` view with `Some` state delta."
                         );
                     }
                     _ => {
@@ -580,7 +587,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
                 }
             }
         }
-        self.validated_state_map.insert(view_number, view);
+        self.validated_state_map.insert(view_number, new_view);
         Ok(())
     }
 
