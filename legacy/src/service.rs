@@ -84,6 +84,38 @@ pub struct BlockInfo<Types: NodeType> {
     pub truncated: bool,
 }
 
+
+pub fn broadcast_channels<TYPES: NodeType>(
+    capacity: usize,
+) -> (BroadcastSender<TYPES>, BroadcastReceivers<TYPES>) {
+    macro_rules! pair {
+        ($s:ident, $r:ident) => {
+            let ($s, $r) = broadcast(capacity);
+            let $r = $r.deactivate();
+        };
+    }
+
+    pair!(tx_sender, tx_receiver);
+    pair!(da_sender, da_receiver);
+    pair!(quorum_sender, quorum_proposal_receiver);
+    pair!(decide_sender, decide_receiver);
+
+    (
+        BroadcastSenders {
+            transactions: tx_sender,
+            da_proposal: da_sender,
+            quorum_proposal: quorum_sender,
+            decide: decide_sender,
+        },
+        BroadcastReceivers {
+            transactions: tx_receiver,
+            da_proposal: da_receiver,
+            quorum_proposal: quorum_proposal_receiver,
+            decide: decide_receiver,
+        },
+    )
+}
+
 /// [ReceivedTransaction] represents receipt information concerning a received
 /// [NodeType::Transaction].
 #[derive(Debug)]
