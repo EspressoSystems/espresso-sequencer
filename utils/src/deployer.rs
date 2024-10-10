@@ -490,7 +490,7 @@ pub mod test_helpers {
         fee_contract::{FeeContract, FEECONTRACT_ABI, FEECONTRACT_BYTECODE},
         light_client::{LightClient, LIGHTCLIENT_ABI},
         light_client_state_update_vk::LightClientStateUpdateVK,
-        plonk_verifier_2::PlonkVerifier2,
+        plonk_verifier::PlonkVerifier,
     };
     use ethers::{prelude::*, solc::artifacts::BytecodeObject};
     use hotshot_contract_adapter::light_client::LightClientConstructorArgs;
@@ -507,7 +507,7 @@ pub mod test_helpers {
         let plonk_verifier = contracts
             .deploy_tx(
                 Contract::PlonkVerifier,
-                PlonkVerifier2::deploy(l1.clone(), ())?,
+                PlonkVerifier::deploy(l1.clone(), ())?,
             )
             .await?;
         let vk = contracts

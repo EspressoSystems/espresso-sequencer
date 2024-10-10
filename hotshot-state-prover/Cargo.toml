@@ -43,6 +43,9 @@ tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
 
+[dev-dependencies]
+sequencer-utils = { path = "../utils", features = ["testing"] }
+
 [features]
 default = ["parallel"]
 std = ["ark-std/std", "ark-ff/std"]
