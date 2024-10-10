@@ -10,6 +10,11 @@ import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy
 contract DeployLightClientScript is Script {
     string public contractName = vm.envString("LIGHT_CLIENT_CONTRACT_ORIGINAL_NAME");
 
+    // Deployment Errors
+    error SetPermissionedProverFailed();
+    error OwnerTransferFailed();
+    error RetentionPeriodIsNotSetCorrectly();
+
     /// @dev Deploys both the proxy and the implementation contract.
     /// The proxy admin is set as the owner of the contract upon deployment.
     /// The `owner` parameter should be the address of the multisig wallet to ensure proper
@@ -18,6 +23,7 @@ contract DeployLightClientScript is Script {
     /// @param stateHistoryRetentionPeriod state history retention period in seconds
     /// @param owner The address that will be set as the owner of the proxy (typically a multisig
     /// wallet).
+
     function run(uint32 numInitValidators, uint32 stateHistoryRetentionPeriod, address owner)
         public
         returns (
@@ -65,17 +71,11 @@ contract DeployLightClientScript is Script {
         lightClientProxy.transferOwnership(owner);
 
         // verify post deployment details
-        require(
-            lightClientProxy.permissionedProver() == owner,
-            "Post Deployment Verification: Set permissioned prover failed"
-        );
-        require(
-            lightClientProxy.owner() == owner, "Post Deployment Verification: Owner transfer failed"
-        );
-        require(
-            lightClientProxy.stateHistoryRetentionPeriod() == stateHistoryRetentionPeriod,
-            "Post Deployment Verification: stateHistoryRetentionPeriod is not as expected"
-        );
+        if (lightClientProxy.permissionedProver() != owner) revert SetPermissionedProverFailed();
+        if (lightClientProxy.owner() != owner) revert OwnerTransferFailed();
+        if (lightClientProxy.stateHistoryRetentionPeriod() != stateHistoryRetentionPeriod) {
+            revert RetentionPeriodIsNotSetCorrectly();
+        }
 
         // Get the implementation address
         implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
