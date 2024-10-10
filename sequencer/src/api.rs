@@ -30,7 +30,9 @@ use hotshot_types::{
 };
 use jf_merkle_tree::MerkleTreeScheme;
 
-use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
+use self::data_source::{
+    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
+};
 use crate::{
     context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
     SequencerContext,
@@ -110,10 +112,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
 
     async fn consensus(&self) -> Arc<RwLock<Consensus<N, P, V>>> {
         Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
-    }
-
-    async fn node_state(&self) -> &NodeState {
-        &self.consensus.as_ref().get().await.get_ref().node_state
     }
 
     async fn network_config(&self) -> NetworkConfig<PubKey> {
@@ -196,6 +194,18 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> SubmitDa
     }
 }
 
+impl<N, P, D, V> NodeStateDataSource for StorageState<N, P, D, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+    D: Sync,
+{
+    async fn node_state(&self) -> &NodeState {
+        self.as_ref().node_state().await
+    }
+}
+
 impl<
         N: ConnectedNetwork<PubKey>,
         V: Versions,
@@ -203,15 +213,20 @@ impl<
         D: CatchupDataSource + Send + Sync,
     > CatchupDataSource for StorageState<N, P, D, V>
 {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, instance))]
     async fn get_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_accounts(height, view, accounts).await {
+        match self
+            .as_ref()
+            .get_accounts(instance, height, view, accounts)
+            .await
+        {
             Ok(accounts) => return Ok(accounts),
             Err(err) => {
                 tracing::info!("accounts not in memory, trying storage: {err:#}");
@@ -220,7 +235,7 @@ impl<
 
         // Try storage.
         self.inner()
-            .get_accounts(height, view, accounts)
+            .get_accounts(instance, height, view, accounts)
             .await
             .context("accounts not in memory, and could not fetch from storage")
     }
@@ -275,12 +290,24 @@ impl<
 //     }
 // }
 
+impl<N, V, P> NodeStateDataSource for ApiState<N, P, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+{
+    async fn node_state(&self) -> &NodeState {
+        &self.consensus.as_ref().get().await.get_ref().node_state
+    }
+}
+
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupDataSource
     for ApiState<N, P, V>
 {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, _instance))]
     async fn get_accounts(
         &self,
+        _instance: &NodeState,
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],

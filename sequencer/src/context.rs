@@ -329,6 +329,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
     }
 }
 
+#[tracing::instrument(skip_all, fields(node_id))]
 async fn handle_events<V: Versions>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<impl SequencerPersistence>,
