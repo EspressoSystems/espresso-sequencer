@@ -317,29 +317,31 @@ pub async fn submit_state_and_proof(
     let proof: ParsedPlonkProof = proof.into();
     let new_state: ParsedLightClientState = public_input.into();
 
-    // frugal gas price: set to SafeGasPrice based on live price oracle
-    // safe to be included with low priority position in a block
-    let gas_info = reqwest::get("https://api.etherscan.io/api?module=gastracker&action=gasoracle")
-        .await?
-        .json::<serde_json::Value>()
-        .await?;
-    let safe_gas: U256 = parse_units(
-        gas_info["result"]["SafeGasPrice"]
-            .as_str()
-            .expect("fail to parse SafeGasPrice"),
-        "gwei",
-    )
-    .unwrap() // safe unwrap, etherscan will return right value
-    .into();
-
     let mut tx = contract.new_finalized_state(new_state.into(), proof.into());
-    if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
-        inner.max_fee_per_gas = Some(safe_gas);
-        tracing::info!(
-            "Gas oracle info: {}, setting maxFeePerGas to: {}",
-            gas_info,
-            safe_gas,
-        );
+    // frugal gas price: set to SafeGasPrice based on live price oracle
+    // safe to be included with low priority position in a block.
+    // ignore this if etherscan fail to return
+    if let Ok(res) =
+        reqwest::get("https://api.etherscan.io/api?module=gastracker&action=gasoracle").await
+    {
+        let gas_info = res.json::<serde_json::Value>().await?;
+        let safe_gas: U256 = parse_units(
+            gas_info["result"]["SafeGasPrice"]
+                .as_str()
+                .expect("fail to parse SafeGasPrice"),
+            "gwei",
+        )
+        .unwrap() // safe unwrap, etherscan will return right value
+        .into();
+
+        if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
+            inner.max_fee_per_gas = Some(safe_gas);
+            tracing::info!(
+                "Gas oracle info: {}, setting maxFeePerGas to: {}",
+                gas_info,
+                safe_gas,
+            );
+        }
     }
 
     // send the tx
