@@ -31,7 +31,7 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::GeneralStaticCommittee,
+    traits::election::static_committee::StaticCommittee,
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
