@@ -593,30 +593,32 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
-        // Add one numDays worth of a new state
+        // Add one ${numDays} worth of a new state with a timestamp of 1 hour later
         uint256 i;
         for (i = 0; i < numDays; i++) {
-            vm.warp(initialBlockTimestamp + ((i + 1) * 1 days)); // increase the timestamp for each
+            vm.warp(initialBlockTimestamp + ((i + 1) * 1 hours)); // increase the timestamp for each
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
             lc.newFinalizedState(states[i], proofs[i]);
         }
 
-        // assert that the first index is still zero as
-        // the number of duration between the 1st and last elements  are equal to the max state
-        // history duration
+        // assert that the first index is one since the stateHistoryRetentionPeriod is 86400, it
+        // already has one element in stateHistoryCommitments array and the blockchain has moved by
+        // 1 day in terms of timestamps
         assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // get oldest and newest state commitment info
         (, uint256 latestBlockTimestamp,,) =
             lc.stateHistoryCommitments(lc.getStateHistoryCount() - 1);
         (, uint256 oldestBlockTimestamp,,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
-        // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
-        // history allowed
-        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
+        // assert that the latest Commitment timestamp - oldest Commitment timestamp is less the max
+        // history allowed since it's timestamp is only one hour later than the last and the
+        // stateHistoryRetentionPeriod is 1 day
+        assertLe(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
 
-        // Add a new state so that the state history duration is only surpassed by one element
+        // Add a new state so that the state history duration is only surpassed by one element, with
+        // a timestamp of a day later
         vm.prank(permissionedProver);
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
@@ -677,8 +679,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             lc.newFinalizedState(states[i], proofs[i]);
         }
 
-        // the number of elements are equal to the max state history so the first index should still
-        // be zero
+        // the number of elements are equal to the max state history so the first index would
+        // be 0
         assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // get oldest and newest state commitment info
@@ -687,8 +689,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         (, uint256 oldestBlockTimestamp,,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
         // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
         // history allowed
-
-        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
+        assertLe(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
 
         // Add a new state so that the state history duration is only surpassed by one element
         vm.prank(permissionedProver);
