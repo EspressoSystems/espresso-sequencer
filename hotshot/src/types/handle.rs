@@ -22,6 +22,7 @@ use hotshot_types::{
     consensus::Consensus,
     data::{Leaf, QuorumProposal},
     error::HotShotError,
+    message::Proposal,
     request_response::ProposalRequestPayload,
     traits::{
         consensus_api::ConsensusApi, election::Membership, network::ConnectedNetwork,
@@ -93,11 +94,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
     ///
     /// # Errors
     /// Errors if signing the request for proposal fails
-    pub async fn request_proposal(
+    pub fn request_proposal(
         &self,
         view: TYPES::Time,
         leaf_commitment: Commitment<Leaf<TYPES>>,
-    ) -> Result<QuorumProposal<TYPES>> {
+    ) -> Result<impl futures::Future<Output = Result<Proposal<TYPES, QuorumProposal<TYPES>>>>> {
         // We need to be able to sign this request before submitting it to the network. Compute the
         // payload first.
         let signed_proposal_request = ProposalRequestPayload {
@@ -111,47 +112,54 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
             signed_proposal_request.commit().as_ref(),
         )?;
 
-        // First, broadcast that we need a proposal
-        broadcast_event(
-            HotShotEvent::QuorumProposalRequestSend(signed_proposal_request, signature).into(),
-            &self.internal_event_stream.0,
-        )
-        .await;
-
-        let mem = &self.memberships.quorum_membership;
-        let upgrade_lock = &self.hotshot.upgrade_lock;
-        loop {
-            let hs_event = EventDependency::new(
-                self.internal_event_stream.1.activate_cloned(),
-                Box::new(move |event| {
-                    let event = event.as_ref();
-                    if let HotShotEvent::QuorumProposalResponseRecv(quorum_proposal) = event {
-                        quorum_proposal.data.view_number() == view
-                    } else {
-                        false
-                    }
-                }),
+        let mem = self.memberships.quorum_membership.clone();
+        let upgrade_lock = self.hotshot.upgrade_lock.clone();
+        let receiver = self.internal_event_stream.1.activate_cloned();
+        let sender = self.internal_event_stream.0.clone();
+        Ok(async move {
+            // First, broadcast that we need a proposal
+            broadcast_event(
+                HotShotEvent::QuorumProposalRequestSend(signed_proposal_request, signature).into(),
+                &sender,
             )
-            .completed()
-            .await
-            .ok_or(anyhow!("Event dependency failed to get event"))?;
+            .await;
+            loop {
+                let hs_event = EventDependency::new(
+                    receiver.clone(),
+                    Box::new(move |event| {
+                        let event = event.as_ref();
+                        if let HotShotEvent::QuorumProposalResponseRecv(quorum_proposal) = event {
+                            quorum_proposal.data.view_number() == view
+                        } else {
+                            false
+                        }
+                    }),
+                )
+                .completed()
+                .await
+                .ok_or(anyhow!("Event dependency failed to get event"))?;
 
-            // Then, if it's `Some`, make sure that the data is correct
+                // Then, if it's `Some`, make sure that the data is correct
 
-            if let HotShotEvent::QuorumProposalResponseRecv(quorum_proposal) = hs_event.as_ref() {
-                // Make sure that the quorum_proposal is valid
-                if let Err(err) = quorum_proposal.validate_signature(mem, upgrade_lock).await {
-                    tracing::warn!("Invalid Proposal Received after Request.  Err {:?}", err);
-                    continue;
+                if let HotShotEvent::QuorumProposalResponseRecv(quorum_proposal) = hs_event.as_ref()
+                {
+                    // Make sure that the quorum_proposal is valid
+                    if let Err(err) = quorum_proposal
+                        .validate_signature(&mem, &upgrade_lock)
+                        .await
+                    {
+                        tracing::warn!("Invalid Proposal Received after Request.  Err {:?}", err);
+                        continue;
+                    }
+                    let proposed_leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
+                    let commit = proposed_leaf.commit(&upgrade_lock).await;
+                    if commit == leaf_commitment {
+                        return Ok(quorum_proposal.clone());
+                    }
+                    tracing::warn!("Proposal receied from request has different commitment than expected.\nExpected = {:?}\nReceived{:?}", leaf_commitment, commit);
                 }
-                let proposed_leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
-                let commit = proposed_leaf.commit(upgrade_lock).await;
-                if commit == leaf_commitment {
-                    return Ok(quorum_proposal.data.clone());
-                }
-                tracing::warn!("Proposal receied from request has different commitment than expected.\nExpected = {:?}\nReceived{:?}", leaf_commitment, commit);
             }
-        }
+        })
     }
 
     /// HACK so we can know the types when running tests...
