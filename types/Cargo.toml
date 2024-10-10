@@ -28,7 +28,7 @@ ethereum-types = { workspace = true }
 futures = { workspace = true }
 cdn-proto = { workspace = true }
 reqwest = { workspace = true }
-
+serde-inline-default = "0.2"
 lazy_static = { workspace = true }
 memoize = { workspace = true }
 rand = { workspace = true }
@@ -52,9 +52,10 @@ dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.17" }
 url = { workspace = true }
 vec1 = { workspace = true }
 libp2p = { workspace = true }
-
-[dev-dependencies]
 serde_json = { workspace = true }
+surf-disco = { workspace = true }
+toml = { workspace = true }
+clap = { workspace = true }
 
 [features]
 gpu-vid = ["jf-vid/gpu-vid"]

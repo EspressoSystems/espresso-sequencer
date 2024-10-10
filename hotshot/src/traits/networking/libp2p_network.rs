@@ -37,7 +37,6 @@ use futures::{
     future::{join_all, Either},
     FutureExt,
 };
-use hotshot_orchestrator::config::NetworkConfig;
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{
     AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
@@ -46,6 +45,7 @@ use hotshot_types::{
     boxed_sync,
     constants::LOOK_AHEAD,
     data::ViewNumber,
+    network::NetworkConfig,
     request_response::Request,
     traits::{
         election::Membership,

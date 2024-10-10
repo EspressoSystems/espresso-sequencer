@@ -27,8 +27,8 @@ use hotshot_builder_api::v0_1::{
     data_source::BuilderDataSource,
 };
 use hotshot_example_types::block_types::TestTransaction;
-use hotshot_orchestrator::config::RandomBuilderConfig;
 use hotshot_types::{
+    network::RandomBuilderConfig,
     traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey},
     utils::BuilderCommitment,
     vid::VidCommitment,

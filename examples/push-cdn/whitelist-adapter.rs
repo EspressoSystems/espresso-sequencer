@@ -14,8 +14,11 @@ use anyhow::{Context, Result};
 use cdn_broker::reexports::discovery::{DiscoveryClient, Embedded, Redis};
 use clap::Parser;
 use hotshot_example_types::node_types::TestTypes;
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
+use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_types::{
+    network::NetworkConfig,
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
+};
 use surf_disco::Url;
 
 #[derive(Parser, Debug)]

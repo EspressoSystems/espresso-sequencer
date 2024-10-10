@@ -12,8 +12,7 @@ mod tests {
     use std::{env, fs::File, io::prelude::*};
 
     use hotshot::types::{BLSPubKey, SignatureKey};
-    use hotshot_orchestrator::config::ValidatorConfigFile;
-    use hotshot_types::ValidatorConfig;
+    use hotshot_types::{validator_config::ValidatorConfigFile, ValidatorConfig};
     #[test]
     fn gen_key_pair_gen_from_config_file() {
         let config_file = ValidatorConfigFile::from_file("config/ValidatorConfigFile.toml");

@@ -15,16 +15,18 @@ use hotshot_example_types::{
     block_types::{TestBlockPayload, TestMetadata, TestTransaction},
     node_types::{TestTypes, TestVersions},
 };
-use hotshot_orchestrator::config::RandomBuilderConfig;
 use hotshot_task_impls::builder::{BuilderClient, BuilderClientError};
 use hotshot_testing::block_builder::{
     BuilderTask, RandomBuilderImplementation, TestBuilderImplementation,
 };
-use hotshot_types::traits::{
-    block_contents::vid_commitment,
-    node_implementation::{NodeType, Versions},
-    signature_key::SignatureKey,
-    BlockPayload,
+use hotshot_types::{
+    network::RandomBuilderConfig,
+    traits::{
+        block_contents::vid_commitment,
+        node_implementation::{NodeType, Versions},
+        signature_key::SignatureKey,
+        BlockPayload,
+    },
 };
 use tide_disco::Url;
 

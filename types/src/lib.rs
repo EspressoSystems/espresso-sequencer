@@ -23,8 +23,13 @@ pub mod constants;
 pub mod data;
 pub mod error;
 pub mod event;
+/// Holds the configuration file specification for a HotShot node.
+pub mod hotshot_config_file;
 pub mod light_client;
 pub mod message;
+
+/// Holds the network configuration specification for HotShot nodes.
+pub mod network;
 pub mod qc;
 pub mod request_response;
 pub mod signature_key;
@@ -32,7 +37,12 @@ pub mod simple_certificate;
 pub mod simple_vote;
 pub mod stake_table;
 pub mod traits;
+
+/// Holds the upgrade configuration specification for HotShot nodes.
+pub mod upgrade_config;
 pub mod utils;
+/// Holds the validator configuration specification for HotShot nodes.
+pub mod validator_config;
 pub mod vid;
 pub mod vote;
 

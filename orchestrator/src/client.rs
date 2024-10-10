@@ -6,17 +6,22 @@
 
 use std::{net::SocketAddr, time::Duration};
 
+use crate::OrchestratorVersion;
 use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
-use hotshot_types::{traits::signature_key::SignatureKey, PeerConfig, ValidatorConfig};
+use hotshot_types::{
+    network::{NetworkConfig, NetworkConfigSource},
+    traits::signature_key::SignatureKey,
+    PeerConfig, ValidatorConfig,
+};
 use libp2p::{Multiaddr, PeerId};
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
+use tracing::info;
 use tracing::instrument;
 use vbs::BinarySerializer;
 
-use crate::{config::NetworkConfig, OrchestratorVersion};
 /// Holds the client connection to the orchestrator
 pub struct OrchestratorClient {
     /// the client
@@ -154,6 +159,33 @@ pub struct MultiValidatorArgs {
     /// Allows for rejoining the network on a complete state loss
     #[arg(short, long)]
     pub network_config_file: Option<String>,
+}
+
+/// Asynchronously retrieves a `NetworkConfig` from an orchestrator.
+/// The retrieved one includes correct `node_index` and peer's public config.
+///
+/// # Errors
+/// If we are unable to get the configuration from the orchestrator
+pub async fn get_complete_config<K: SignatureKey>(
+    client: &OrchestratorClient,
+    my_own_validator_config: ValidatorConfig<K>,
+    libp2p_advertise_address: Option<Multiaddr>,
+    libp2p_public_key: Option<PeerId>,
+) -> anyhow::Result<(NetworkConfig<K>, NetworkConfigSource)> {
+    // get the configuration from the orchestrator
+    let run_config: NetworkConfig<K> = client
+        .post_and_wait_all_public_keys::<K>(
+            my_own_validator_config,
+            libp2p_advertise_address,
+            libp2p_public_key,
+        )
+        .await;
+
+    info!(
+        "Retrieved config; our node index is {}. DA committee member: {}",
+        run_config.node_index, run_config.config.my_own_validator_config.is_da
+    );
+    Ok((run_config, NetworkConfigSource::Orchestrator))
 }
 
 impl ValidatorArgs {

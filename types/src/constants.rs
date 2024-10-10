@@ -69,3 +69,12 @@ pub const LEGACY_BUILDER_MODULE: &str = "block_info";
 
 /// The `tide` module name for the marketplace builder
 pub const MARKETPLACE_BUILDER_MODULE: &str = "bundle_info";
+
+/// default number of rounds to run
+pub const ORCHESTRATOR_DEFAULT_NUM_ROUNDS: usize = 100;
+/// default number of transactions per round
+pub const ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND: usize = 10;
+/// default size of transactions
+pub const ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE: usize = 100;
+/// default delay before beginning consensus
+pub const ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS: u64 = 60;

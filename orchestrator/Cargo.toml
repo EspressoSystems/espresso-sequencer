@@ -18,7 +18,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 thiserror = "1"
-serde-inline-default = "0.1"
 csv = "1"
 vbs = { workspace = true }
 vec1 = { workspace = true }
