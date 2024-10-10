@@ -34,6 +34,7 @@ jf-utils = { workspace = true }
 reqwest = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
+serde_json = { workspace = true }
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
@@ -41,6 +42,9 @@ toml = "0.8"
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
+
+[dev-dependencies]
+sequencer-utils = { path = "../utils", features = ["testing"] }
 
 [features]
 default = ["parallel"]

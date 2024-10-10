@@ -18,7 +18,8 @@ use ethers::{
     middleware::SignerMiddleware,
     providers::{Http, Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
-    types::{Address, U256},
+    types::{transaction::eip2718::TypedTransaction, Address, U256},
+    utils::parse_units,
 };
 use futures::FutureExt;
 use hotshot_contract_adapter::{
@@ -315,7 +316,31 @@ pub async fn submit_state_and_proof(
     // prepare the input the contract call and the tx itself
     let proof: ParsedPlonkProof = proof.into();
     let new_state: ParsedLightClientState = public_input.into();
-    let tx = contract.new_finalized_state(new_state.into(), proof.into());
+
+    // frugal gas price: set to SafeGasPrice based on live price oracle
+    // safe to be included with low priority position in a block
+    let gas_info = reqwest::get("https://api.etherscan.io/api?module=gastracker&action=gasoracle")
+        .await?
+        .json::<serde_json::Value>()
+        .await?;
+    let safe_gas: U256 = parse_units(
+        gas_info["result"]["SafeGasPrice"]
+            .as_str()
+            .expect("fail to parse SafeGasPrice"),
+        "gwei",
+    )
+    .unwrap() // safe unwrap, etherscan will return right value
+    .into();
+
+    let mut tx = contract.new_finalized_state(new_state.into(), proof.into());
+    if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
+        inner.max_fee_per_gas = Some(safe_gas);
+        tracing::info!(
+            "Gas oracle info: {}, setting maxFeePerGas to: {}",
+            gas_info,
+            safe_gas,
+        );
+    }
 
     // send the tx
     let (receipt, included_block) = sequencer_utils::contract_send::<_, _, LightClientErrors>(&tx)
@@ -521,6 +546,8 @@ pub enum ProverError {
     PlonkError(PlonkError),
     /// Internal error
     Internal(String),
+    /// General network issue: {0}
+    NetworkError(anyhow::Error),
 }
 
 impl From<ServerError> for ProverError {
@@ -544,6 +571,12 @@ impl From<StakeTableError> for ProverError {
 impl From<ProviderError> for ProverError {
     fn from(err: ProviderError) -> Self {
         Self::ContractError(anyhow!("{}", err))
+    }
+}
+
+impl From<reqwest::Error> for ProverError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::NetworkError(anyhow!("{}", err))
     }
 }
 
