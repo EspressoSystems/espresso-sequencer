@@ -286,13 +286,17 @@ mod test {
     use espresso_types::{
         mock::MockStateCatchup,
         v0_3::{RollupRegistration, RollupRegistrationBody},
-        FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, SequencerVersions,
+        Event, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, SequencerVersions,
         Transaction,
     };
     use ethers::{core::k256::elliptic_curve::rand_core::block, utils::Anvil};
+    use futures::Stream;
     use hooks::connect_to_solver;
-    use hotshot::rand;
-    use hotshot::types::{BLSPrivKey, Event, EventType};
+    use hotshot::types::{
+        BLSPrivKey,
+        EventType::{Decide, *},
+    };
+    use hotshot::{rand, types::EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -301,6 +305,7 @@ mod test {
     use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
+        event::LeafInfo,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
@@ -352,6 +357,11 @@ mod test {
         query: Url,
         event: Url,
         builder: Url,
+    }
+
+    enum Mempool {
+        Public,
+        Private,
     }
 
     /// Pick unused ports for URLs, then set up and start the network.
@@ -463,23 +473,94 @@ mod test {
         builder_client
     }
 
-    /// Submit transactions.
-    ///
-    /// Returns the subscribed events.
-    async fn submit_transactions(
+    /// Get the view number and commitment if given a `QuorumProposal` event.
+    async fn proposal_view_number_and_commitment(event: Event) -> Option<(u64, VidCommitment)> {
+        if let EventType::QuorumProposal { proposal, .. } = event.event {
+            let view_number = *proposal.data.view_number;
+            let commitment = Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+            return Some((view_number, commitment));
+        }
+        None
+    }
+
+    /// Wait for a quorum proposal event and get its view number and commitment.
+    async fn wait_for_proposal_view_number_and_commitment(
+        events: &mut (impl Stream<Item = Event> + Unpin),
+    ) -> (u64, VidCommitment) {
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Didn't get a quorum proposal in 5 seconds");
+            }
+            let event = events.next().await.unwrap();
+            if let Some((view_number, commitment)) =
+                proposal_view_number_and_commitment(event).await
+            {
+                return (view_number, commitment);
+            }
+        }
+    }
+
+    /// Wait for a transaction event.
+    async fn wait_for_transaction(
+        events: &mut (impl Stream<Item = Event> + Unpin),
+        transaction: Transaction,
+    ) {
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Didn't get the transaction in 5 seconds");
+            }
+            let event = events.next().await.unwrap();
+            if let EventType::Transactions { transactions: txns } = event.event {
+                if txns == vec![transaction.clone()] {
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Fetch the bundle associated with the provided parent information.
+    async fn get_bundle(
+        builder_client: Client<ServerError, MarketplaceVersion>,
+        parent_view_number: u64,
+        parent_commitment: VidCommitment,
+    ) -> Bundle<SeqTypes> {
+        builder_client
+            .get::<Bundle<SeqTypes>>(
+                format!(
+                    "bundle_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                    parent_view_number + 1
+                )
+                .as_str(),
+            )
+            .send()
+            .await
+            .unwrap()
+    }
+
+    /// Submit transactions via the private mempool and fetch the bundle.
+    async fn submit_and_get_bundle_with_private_mempool(
+        builder_client: Client<ServerError, MarketplaceVersion>,
         transactions: Vec<Transaction>,
         urls: Urls,
-    ) -> Connection<
-        Event<SeqTypes>,
-        Unsupported,
-        hotshot_events_service::events::Error,
-        SequencerApiVersion,
-    > {
+    ) -> Bundle<SeqTypes> {
+        // Subscribe to events.
+        let events_service_client = Client::<
+            hotshot_events_service::events::Error,
+            SequencerApiVersion,
+        >::new(urls.event.clone());
+        events_service_client.connect(None).await;
+        let mut events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<Event>()
+            .await
+            .unwrap();
+
+        // Submit transactions via the private mempool.
         let txn_submission_client: Client<ServerError, SequencerApiVersion> =
             Client::new(urls.builder.clone());
         txn_submission_client.connect(None).await;
-
-        // Test submitting transactions
         txn_submission_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
@@ -488,21 +569,29 @@ mod test {
             .await
             .unwrap();
 
-        let events_service_client = Client::<
-            hotshot_events_service::events::Error,
-            SequencerApiVersion,
-        >::new(urls.event.clone());
-        events_service_client.connect(None).await;
+        // Get the parent view number and commitment.
+        let parent_view_number;
+        let parent_commitment;
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Didn't get a quorum proposal in 5 seconds");
+            }
+            let event = events.next().await.unwrap().unwrap();
+            if let Some((view_number, commitment)) =
+                proposal_view_number_and_commitment(event).await
+            {
+                parent_view_number = view_number;
+                parent_commitment = commitment;
+                break;
+            }
+        }
 
-        events_service_client
-            .socket("hotshot-events/events")
-            .subscribe::<Event<SeqTypes>>()
-            .await
-            .unwrap()
+        // Fetch the bundle.
+        get_bundle(builder_client, parent_view_number, parent_commitment).await
     }
 
-    #[async_std::test]
-    async fn test_marketplace_reserve_builder() {
+    async fn test_marketplace_reserve_builder(mempool: Mempool) {
         setup_test();
 
         let (ports, urls) = pick_urls_and_start_network().await;
@@ -526,7 +615,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Register a rollup using the mock solver.
         // Use `_mock_solver` here to avoid it being dropped.
@@ -559,81 +648,81 @@ mod test {
         let _ = init.await.unwrap();
         let builder_client = connect_to_builder(urls.clone()).await;
 
-        // Submit transactions.
+        // Construct transactions.
         let registered_transaction =
             Transaction::new(REGISTERED_NAMESPACE.into(), vec![1, 1, 1, 1]);
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
-        let transactions = vec![registered_transaction.clone(), unregistered_transaction];
-        let mut subscribed_events = submit_transactions(transactions, urls).await;
-        task::sleep(std::time::Duration::from_millis(1000)).await;
 
-        // Verify the bundle.
-        let start = Instant::now();
-        loop {
-            if start.elapsed() > Duration::from_secs(10) {
-                panic!("Didn't get a quorum proposal in 10 seconds");
-            }
+        let bundle = match mempool {
+            Mempool::Public => {
+                let server = &network.server;
+                let mut events = server.event_stream().await;
 
-            let event = subscribed_events.next().await.unwrap().unwrap();
+                // Get the parent information before submitting transactions.
+                let (parent_view_number, parent_commitment) =
+                    wait_for_proposal_view_number_and_commitment(&mut events).await;
 
-            if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
-                let leaf = Leaf::from_quorum_proposal(&proposal.data);
-
-                let parent_commitment = leaf.payload_commitment();
-
-                let bundle = builder_client
-                    .get::<Bundle<SeqTypes>>(
-                        format!(
-                            "bundle_info/bundle/{parent_view_number}/{parent_commitment}/{}",
-                            parent_view_number + 1
-                        )
-                        .as_str(),
-                    )
-                    .send()
+                // Submit transactions and wait until they are received.
+                server
+                    .submit_transaction(registered_transaction.clone())
                     .await
                     .unwrap();
-                assert_eq!(bundle.transactions, vec![registered_transaction.clone()]);
+                wait_for_transaction(&mut events, registered_transaction.clone()).await;
+                server
+                    .submit_transaction(unregistered_transaction.clone())
+                    .await
+                    .unwrap();
+                wait_for_transaction(&mut events, unregistered_transaction).await;
 
-                let txn_commit = <[u8; 32]>::from(registered_transaction.commit()).to_vec();
-                let signature = bundle.signature;
-                assert!(signature.verify(txn_commit, address).is_ok());
-
-                let (payload, _) = Payload::from_transactions(
-                    vec![registered_transaction],
-                    &ValidatedState::default(),
-                    &NodeState::default(),
+                // Get the bundle.
+                get_bundle(builder_client, parent_view_number, parent_commitment).await
+            }
+            Mempool::Private => {
+                submit_and_get_bundle_with_private_mempool(
+                    builder_client,
+                    vec![registered_transaction.clone(), unregistered_transaction],
+                    urls,
                 )
                 .await
-                .expect("unable to create payload");
-
-                let encoded_txns = payload.encode().to_vec();
-                let block_size = encoded_txns.len() as u64;
-
-                let fees = base_fee * block_size;
-
-                let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
-                    &keypair,
-                    fees.as_u64().unwrap(),
-                )
-                .unwrap();
-
-                let sequencing_fee = BuilderFee {
-                    fee_amount: fees.as_u64().unwrap(),
-                    fee_account: FeeAccount::from(address),
-                    fee_signature,
-                };
-
-                assert_eq!(bundle.sequencing_fee, sequencing_fee);
-
-                break;
             }
-        }
+        };
+
+        assert_eq!(bundle.transactions, vec![registered_transaction.clone()]);
+
+        let txn_commit = <[u8; 32]>::from(registered_transaction.commit()).to_vec();
+        let signature = bundle.signature;
+        assert!(signature.verify(txn_commit, address).is_ok());
+
+        let (payload, _) = Payload::from_transactions(
+            vec![registered_transaction],
+            &ValidatedState::default(),
+            &NodeState::default(),
+        )
+        .await
+        .expect("unable to create payload");
+
+        let encoded_txns = payload.encode().to_vec();
+        let block_size = encoded_txns.len() as u64;
+
+        let fees = base_fee * block_size;
+
+        let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+            &keypair,
+            fees.as_u64().unwrap(),
+        )
+        .unwrap();
+
+        let sequencing_fee = BuilderFee {
+            fee_amount: fees.as_u64().unwrap(),
+            fee_account: FeeAccount::from(address),
+            fee_signature,
+        };
+
+        assert_eq!(bundle.sequencing_fee, sequencing_fee);
     }
 
-    #[async_std::test]
-    async fn test_marketplace_fallback_builder() {
+    async fn test_marketplace_fallback_builder(mempool: Mempool) {
         setup_test();
 
         let (ports, urls) = pick_urls_and_start_network().await;
@@ -657,7 +746,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Register a rollup using the mock solver.
         // Use `_mock_solver` here to avoid it being dropped.
@@ -688,74 +777,97 @@ mod test {
         let _ = init.await.unwrap();
         let builder_client = connect_to_builder(urls.clone()).await;
 
-        // Submit transactions.
+        // Construct transactions.
         let registered_transaction =
             Transaction::new(REGISTERED_NAMESPACE.into(), vec![1, 1, 1, 1]);
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
-        let transactions = vec![registered_transaction, unregistered_transaction.clone()];
-        let mut subscribed_events = submit_transactions(transactions, urls).await;
-        task::sleep(std::time::Duration::from_millis(2000)).await;
 
-        // Verify the bundle.
-        let start = Instant::now();
-        loop {
-            if start.elapsed() > Duration::from_secs(10) {
-                panic!("Didn't get a quorum proposal in 10 seconds");
-            }
+        let bundle = match mempool {
+            Mempool::Public => {
+                let server = &network.server;
+                let mut events = server.event_stream().await;
 
-            let event = subscribed_events.next().await.unwrap().unwrap();
-            if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
-                let parent_commitment =
-                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
-                let bundle = builder_client
-                    .get::<Bundle<SeqTypes>>(
-                        format!(
-                            "bundle_info/bundle/{parent_view_number}/{parent_commitment}/{}",
-                            parent_view_number + 1
-                        )
-                        .as_str(),
-                    )
-                    .send()
+                // Get the parent information before submitting transactions.
+                let (parent_view_number, parent_commitment) =
+                    wait_for_proposal_view_number_and_commitment(&mut events).await;
+
+                // Submit transactions and wait until they are received.
+                server
+                    .submit_transaction(registered_transaction.clone())
                     .await
                     .unwrap();
-                assert_eq!(bundle.transactions, vec![unregistered_transaction.clone()]);
+                wait_for_transaction(&mut events, registered_transaction).await;
+                server
+                    .submit_transaction(unregistered_transaction.clone())
+                    .await
+                    .unwrap();
+                wait_for_transaction(&mut events, unregistered_transaction.clone()).await;
 
-                let txn_commit =
-                    <[u8; 32]>::from(unregistered_transaction.clone().commit()).to_vec();
-                let signature = bundle.signature;
-                assert!(signature.verify(txn_commit, address).is_ok());
-
-                let (payload, _) = Payload::from_transactions(
-                    vec![unregistered_transaction],
-                    &ValidatedState::default(),
-                    &NodeState::default(),
+                // Get the bundle.
+                get_bundle(builder_client, parent_view_number, parent_commitment).await
+            }
+            Mempool::Private => {
+                submit_and_get_bundle_with_private_mempool(
+                    builder_client,
+                    vec![registered_transaction, unregistered_transaction.clone()],
+                    urls,
                 )
                 .await
-                .expect("unable to create payload");
+            }
+        };
 
-                let encoded_txns = payload.encode().to_vec();
-                let block_size = encoded_txns.len() as u64;
+        assert_eq!(bundle.transactions, vec![unregistered_transaction.clone()]);
 
-                let fees = base_fee * block_size;
+        let txn_commit = <[u8; 32]>::from(unregistered_transaction.clone().commit()).to_vec();
+        let signature = bundle.signature;
+        assert!(signature.verify(txn_commit, address).is_ok());
 
-                let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+        let (payload, _) = Payload::from_transactions(
+            vec![unregistered_transaction],
+            &ValidatedState::default(),
+            &NodeState::default(),
+        )
+        .await
+        .expect("unable to create payload");
+
+        let encoded_txns = payload.encode().to_vec();
+        let block_size = encoded_txns.len() as u64;
+
+        let fees = base_fee * block_size;
+
+        let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
                     &keypair,
                     fees.as_u64().unwrap(),
                 )
                 .unwrap();
 
-                let sequencing_fee = BuilderFee {
-                    fee_amount: fees.as_u64().unwrap(),
-                    fee_account: FeeAccount::from(address),
-                    fee_signature,
-                };
+        let sequencing_fee = BuilderFee {
+            fee_amount: fees.as_u64().unwrap(),
+            fee_account: FeeAccount::from(address),
+            fee_signature,
+        };
 
-                assert_eq!(bundle.sequencing_fee, sequencing_fee);
+        assert_eq!(bundle.sequencing_fee, sequencing_fee);
+    }
 
-                break;
-            }
-        }
+    #[async_std::test]
+    async fn test_marketplace_reserve_builder_with_public_mempool() {
+        test_marketplace_reserve_builder(Mempool::Public).await;
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_reserve_builder_with_private_mempool() {
+        test_marketplace_reserve_builder(Mempool::Private).await;
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_fallback_builder_with_public_mempool() {
+        test_marketplace_fallback_builder(Mempool::Public).await;
+    }
+
+    #[async_std::test]
+    async fn test_marketplace_fallback_builder_with_private_mempool() {
+        test_marketplace_fallback_builder(Mempool::Private).await;
     }
 }
