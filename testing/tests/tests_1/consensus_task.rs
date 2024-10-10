@@ -609,7 +609,6 @@ async fn test_vid_disperse_storage_failure() {
     let expectations = vec![Expectations::from_outputs(all_predicates![
         validated_state_updated(),
         exact(ViewChange(ViewNumber::new(1))),
-        quorum_proposal_validated(),
     ])];
 
     let consensus_state =

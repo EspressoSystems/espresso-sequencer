@@ -4,9 +4,6 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use core::time::Duration;
-use std::{marker::PhantomData, sync::Arc};
-
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -14,6 +11,7 @@ use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use chrono::Utc;
+use core::time::Duration;
 use futures::FutureExt;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus, View},
@@ -33,6 +31,7 @@ use hotshot_types::{
     utils::ViewInner,
     vote::{Certificate, HasViewNumber},
 };
+use std::{marker::PhantomData, sync::Arc};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
