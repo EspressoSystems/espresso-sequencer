@@ -109,6 +109,13 @@ contract LightClient_constructor_Test is LightClientCommonTest {
         lc = new LCMock(_genesis, _genesisStakeTableState, _stateHistoryRetentionPeriod);
     }
 
+    // test that initiazing the contract reverts when the stateHistoryRetentionPeriod is below the
+    // required threshold
+    function test_RevertWhen_InvalidStateHistoryRetentionPeriodOnSetUp() public {
+        uint32 invalidRetentionPeriod = 10;
+        initWithExpectRevert(genesis, genesisStakeTableState, invalidRetentionPeriod);
+    }
+
     function test_RevertWhen_InvalidGenesis() external {
         LC.LightClientState memory badGenesis = genesis;
         LC.StakeTableState memory badGenesisStakeTableState = genesisStakeTableState;
@@ -556,7 +563,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
     function testFuzz_setstateHistoryRetentionPeriod(uint32 stateHistoryRetentionPeriod) public {
         vm.prank(admin);
-        vm.assume(stateHistoryRetentionPeriod > 1 days);
+        vm.assume(stateHistoryRetentionPeriod > 1 days && stateHistoryRetentionPeriod <= 365 days);
         lc.setstateHistoryRetentionPeriod(stateHistoryRetentionPeriod);
         assertEq(stateHistoryRetentionPeriod, lc.stateHistoryRetentionPeriod());
     }
@@ -564,6 +571,12 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertNonAdminSetMaxStateHistoryAllowed() public {
         vm.expectRevert();
         lc.setstateHistoryRetentionPeriod(1 days);
+    }
+
+    function test_revertWhenTooLargeStateHistoryRetentionPeriod() public {
+        vm.prank(admin);
+        vm.expectRevert();
+        lc.setstateHistoryRetentionPeriod(366 days);
     }
 
     function test_revertSetMaxStateHistoryAllowedWhenInvalidValueSent() public {
