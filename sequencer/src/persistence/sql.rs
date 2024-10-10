@@ -2,6 +2,7 @@ use anyhow::Context;
 use async_std::{stream::StreamExt, sync::Arc};
 use async_trait::async_trait;
 use clap::Parser;
+use committable::Committable;
 use derivative::Derivative;
 use espresso_types::{
     parse_duration,
@@ -536,12 +537,17 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
+        let leaf_hash = Committable::commit(&Leaf::from_quorum_proposal(&proposal.data));
         let mut tx = self.db.write().await?;
         tx.upsert(
             "quorum_proposals",
-            ["view", "data"],
+            ["view", "leaf_hash", "data"],
             ["view"],
-            [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
+            [[
+                sql_param(&(view_number as i64)),
+                sql_param(&leaf_hash.to_string()),
+                sql_param(&proposal_bytes),
+            ]],
         )
         .await?;
         tx.commit().await

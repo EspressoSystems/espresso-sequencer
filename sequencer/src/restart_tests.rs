@@ -33,7 +33,11 @@ use hotshot_types::{
 use itertools::Itertools;
 use portpicker::pick_unused_port;
 use sequencer::{
-    api::{self, data_source::testing::TestableSequencerDataSource, options::Http},
+    api::{
+        self,
+        data_source::testing::TestableSequencerDataSource,
+        options::{Http, Query},
+    },
     genesis::{L1Finalized, StakeTableConfig},
     network::cdn::{TestingDef, WrappedSignatureKey},
     testing::wait_for_decide_on_handle,
@@ -196,6 +200,7 @@ struct NetworkParams<'a> {
     cdn_port: u16,
     l1_provider: &'a str,
     peer_ports: &'a [u16],
+    api_ports: &'a [u16],
 }
 
 #[derive(Clone, Debug)]
@@ -247,7 +252,13 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
             ..Default::default()
         };
         if node.is_da {
-            modules.query = Some(Default::default());
+            modules.query = Some(Query {
+                peers: network
+                    .api_ports
+                    .iter()
+                    .map(|port| format!("http://127.0.0.1:{port}").parse().unwrap())
+                    .collect(),
+            });
             modules.state = Some(Default::default());
         }
 
@@ -426,9 +437,9 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
     async fn check_builder(&self, port: u16) {
         tracing::info!("testing builder liveness");
 
-        // Configure the builder to shut down in 100 views, so we don't leak resources or ports.
+        // Configure the builder to shut down in 50 views, so we don't leak resources or ports.
         let ctx = self.context.as_ref().unwrap();
-        let down_view = ctx.consensus().read().await.cur_view().await + 100;
+        let down_view = ctx.consensus().read().await.cur_view().await + 50;
 
         // Start a builder.
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
@@ -551,6 +562,11 @@ impl TestNetwork {
         let anvil = Anvil::new().port(anvil_port).spawn();
         let anvil_endpoint = anvil.endpoint();
 
+        let api_ports = node_params
+            .iter()
+            .take(da_nodes)
+            .map(|node| node.api_port)
+            .collect::<Vec<_>>();
         let peer_ports = node_params
             .iter()
             .map(|node| node.api_port)
@@ -560,6 +576,7 @@ impl TestNetwork {
             orchestrator_port,
             cdn_port,
             l1_provider: &anvil_endpoint,
+            api_ports: &api_ports,
             peer_ports: &peer_ports,
         };
 
