@@ -1,5 +1,6 @@
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
+use async_std::sync::Arc;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
@@ -851,7 +852,7 @@ impl BlockHeader<SeqTypes> for Header {
     }
 
     async fn new_legacy(
-        parent_state: &ValidatedState,
+        parent_state: &mut Arc<ValidatedState>,
         instance_state: &NodeState,
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
@@ -864,7 +865,7 @@ impl BlockHeader<SeqTypes> for Header {
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
-        let mut validated_state = parent_state.clone();
+        let mut validated_state = (**parent_state).clone();
 
         let chain_config = if version > instance_state.current_version {
             match instance_state.upgrades.get(&version) {
@@ -930,10 +931,13 @@ impl BlockHeader<SeqTypes> for Header {
 
             // Insert missing fee state entries
             for account in missing_account_proofs.iter() {
+                let mut parent_clone = (**parent_state).clone();
                 account
                     .proof
-                    .remember(&mut validated_state.fee_merkle_tree)
+                    .remember(&mut parent_clone.fee_merkle_tree)
                     .context("remembering fee account")?;
+                *parent_state = Arc::new(parent_clone.clone());
+                validated_state.fee_merkle_tree = parent_clone.fee_merkle_tree;
             }
         }
 
@@ -1522,7 +1526,7 @@ mod test_headers {
             fee_signature,
         };
         let proposal = Header::new_legacy(
-            &forgotten_state,
+            &mut Arc::new(forgotten_state),
             &genesis_state,
             &parent_leaf,
             payload_commitment,
