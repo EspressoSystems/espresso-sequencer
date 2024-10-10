@@ -659,7 +659,6 @@ mod test {
     use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
     use espresso_types::{NodeState, ValidatedState};
     use futures::stream::TryStreamExt;
-    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::traits::signature_key::SignatureKey;
 
     #[async_std::test]
@@ -672,7 +671,7 @@ mod test {
             data: QuorumProposal::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                justify_qc: QuorumCertificate::genesis(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
