@@ -562,7 +562,10 @@ mod test {
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
-    use sequencer_utils::{deployer, test_utils::setup_test};
+    use sequencer_utils::{
+        deployer::{self, test_helpers::deploy_light_client_contract_as_proxy_for_test},
+        test_utils::setup_test,
+    };
 
     use super::*;
     use crate::mock_ledger::{MockLedger, MockSystemParam};
@@ -705,7 +708,7 @@ mod test {
         };
 
         let mut contracts = deployer::Contracts::default();
-        let proxy_address = deployer::deploy_light_client_contract_as_proxy_for_test(
+        let proxy_address = deploy_light_client_contract_as_proxy_for_test(
             l1_wallet.clone(),
             &mut contracts,
             Some(genesis_constructor_args),

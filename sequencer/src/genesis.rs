@@ -307,6 +307,9 @@ mod test {
     use ethers::prelude::*;
     use ethers::signers::Signer;
     use ethers::utils::{Anvil, AnvilInstance};
+    use sequencer_utils::deployer::test_helpers::{
+        deploy_fee_contract, deploy_fee_contract_as_proxy,
+    };
     use std::sync::Arc;
 
     use anyhow::Result;
@@ -334,7 +337,7 @@ mod test {
             .with_chain_id(provider.get_chainid().await?.as_u64());
         let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
-        let fee_contract_address = deployer::deploy_fee_contract(l1_wallet.clone()).await?;
+        let fee_contract_address = deploy_fee_contract(l1_wallet.clone()).await?;
 
         let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
 
@@ -351,7 +354,7 @@ mod test {
 
         let mut contracts = deployer::Contracts::default();
         let fee_contract_address =
-            deployer::deploy_fee_contract_as_proxy(l1_wallet.clone(), &mut contracts).await?;
+            deploy_fee_contract_as_proxy(l1_wallet.clone(), &mut contracts).await?;
 
         let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
 
