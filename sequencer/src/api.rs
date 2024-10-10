@@ -9,8 +9,8 @@ use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeMerkleTree, MockSequencerVersions, NodeState, PubKey,
-    Transaction,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
+    PubKey, Transaction,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -27,6 +27,7 @@ use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
+    utils::ViewInner,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 
@@ -234,10 +235,56 @@ impl<
         }
 
         // Try storage.
-        self.inner()
+        let tree = self
+            .inner()
             .get_accounts(instance, height, view, accounts)
             .await
-            .context("accounts not in memory, and could not fetch from storage")
+            .context("accounts not in memory, and could not fetch from storage")?;
+        // If we successfully fetched accounts from storage, try to add them back into the in-memory
+        // state.
+        let handle = self.as_ref().consensus().await;
+        let consensus = handle.read().await.consensus();
+        let mut consensus = consensus.write().await;
+        if let Some(v) = consensus.validated_state_map().get(&view) {
+            // Clone the view info so we can update it.
+            let mut v = v.clone();
+            if let ViewInner::Leaf { state, .. } = &mut v.view_inner {
+                // Clone the state so we can update it.
+                let mut updated_state = (**state).clone();
+                for account in accounts {
+                    if let Some((proof, _)) = FeeAccountProof::prove(&tree, (*account).into()) {
+                        if let Err(err) = proof.remember(&mut updated_state.fee_merkle_tree) {
+                            tracing::warn!(
+                                ?view,
+                                %account,
+                                "cannot update fetched account state: {err:#}"
+                            );
+                        }
+                    } else {
+                        tracing::warn!(?view, %account, "cannot update fetched account state because account is not in the merkle tree");
+                    };
+                }
+                // Update the state in the view.
+                *state = Arc::new(updated_state);
+                // Put the updated view back into the state map.
+                if let Err(err) = consensus.update_validated_state_map(view, v) {
+                    tracing::warn!(?view, "cannot update fetched account state: {err:#}");
+                }
+                tracing::info!(?view, "updated with fetched account state");
+            } else {
+                tracing::warn!(
+                    ?view,
+                    "cannot cache fetched account state because view has no state",
+                );
+            }
+        } else {
+            tracing::warn!(
+                ?view,
+                "cannot cache fetched account state because view is not available"
+            );
+        }
+
+        Ok(tree)
     }
 
     #[tracing::instrument(skip(self))]
