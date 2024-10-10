@@ -8,6 +8,8 @@ import { FeeContract as FC } from "../src/FeeContract.sol";
 contract DeployFeeContractScript is Script {
     string internal contractName = vm.envString("FEE_CONTRACT_ORIGINAL_NAME");
 
+    error OwnerNotAsExpected(address expectedOwner, address currentOwner);
+
     /// @dev Deploys both the proxy and the implementation contract.
     /// The proxy admin is set as the owner of the contract upon deployment.
     /// The `owner` parameter should be the address of the multisig wallet to ensure proper
@@ -37,10 +39,9 @@ contract DeployFeeContractScript is Script {
         FC feeContractProxy = FC(payable(proxyAddress));
 
         // verify post deployment details
-        require(
-            feeContractProxy.owner() == owner,
-            "Post Deployment Verification: The contract owner is the one you specified"
-        );
+        if (feeContractProxy.owner() != owner) {
+            revert OwnerNotAsExpected(owner, feeContractProxy.owner());
+        }
 
         // Get the implementation address
         implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
