@@ -348,6 +348,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
     }
 }
 
+#[tracing::instrument(skip_all, fields(node_id))]
 #[allow(clippy::too_many_arguments)]
 async fn handle_events<V: Versions>(
     node_id: u64,

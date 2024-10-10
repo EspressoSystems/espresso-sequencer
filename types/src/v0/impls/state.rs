@@ -31,6 +31,7 @@ use super::{
     BlockSize, FeeMerkleCommitment,
 };
 use crate::{
+    traits::StateCatchup,
     v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
     BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
@@ -430,6 +431,7 @@ impl ValidatedState {
     pub async fn apply_header(
         &self,
         instance: &NodeState,
+        peers: &impl StateCatchup,
         parent_leaf: &Leaf,
         proposed_header: &Header,
         version: Version,
@@ -441,7 +443,7 @@ impl ValidatedState {
         validated_state.apply_upgrade(instance, version);
 
         let chain_config = validated_state
-            .get_chain_config(instance, &proposed_header.chain_config())
+            .get_chain_config(instance, peers, &proposed_header.chain_config())
             .await?;
 
         if Some(chain_config) != validated_state.chain_config.resolve() {
@@ -476,9 +478,7 @@ impl ValidatedState {
                 ?parent_view,
                 "fetching block frontier from peers"
             );
-            instance
-                .peers
-                .as_ref()
+            peers
                 .remember_blocks_merkle_tree(
                     parent_height,
                     parent_view,
@@ -496,10 +496,9 @@ impl ValidatedState {
                 "fetching missing accounts from peers"
             );
 
-            let missing_account_proofs = instance
-                .peers
-                .as_ref()
+            let missing_account_proofs = peers
                 .fetch_accounts(
+                    instance,
                     parent_height,
                     parent_view,
                     validated_state.fee_merkle_tree.commitment(),
@@ -508,9 +507,8 @@ impl ValidatedState {
                 .await?;
 
             // Remember the fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
+            for proof in missing_account_proofs.iter() {
+                proof
                     .remember(&mut validated_state.fee_merkle_tree)
                     .expect("proof previously verified");
             }
@@ -560,6 +558,7 @@ impl ValidatedState {
     pub(crate) async fn get_chain_config(
         &self,
         instance: &NodeState,
+        peers: &impl StateCatchup,
         header_cf: &ResolvableChainConfig,
     ) -> anyhow::Result<ChainConfig> {
         let state_cf = self.chain_config;
@@ -571,13 +570,7 @@ impl ValidatedState {
         let cf = match (state_cf.resolve(), header_cf.resolve()) {
             (Some(cf), _) => cf,
             (_, Some(cf)) if cf.commit() == state_cf.commit() => cf,
-            (_, Some(_)) | (None, None) => {
-                instance
-                    .peers
-                    .as_ref()
-                    .fetch_chain_config(state_cf.commit())
-                    .await
-            }
+            (_, Some(_)) | (None, None) => peers.fetch_chain_config(state_cf.commit()).await,
         };
 
         Ok(cf)
@@ -694,7 +687,13 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
-            .apply_header(instance, parent_leaf, proposed_header, version)
+            .apply_header(
+                instance,
+                &instance.peers,
+                parent_leaf,
+                proposed_header,
+                version,
+            )
             .await
             .unwrap();
 
