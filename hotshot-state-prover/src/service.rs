@@ -327,6 +327,34 @@ struct EtherscanPriceOracleResult {
     fast_max_fee: String,
 }
 
+/// The actual gas info needed for tx submission, parsed from `EtherscanPriceOracleResult`
+#[derive(Debug, Clone, Copy)]
+struct GasInfo {
+    base_fee: U256,
+    safe_max_fee: U256,
+}
+impl TryFrom<EtherscanPriceOracleResult> for GasInfo {
+    type Error = anyhow::Error;
+    fn try_from(res: EtherscanPriceOracleResult) -> Result<Self, Self::Error> {
+        // cases when etherscan change denomination
+        let safe_max_fee: U256 = parse_units(res.safe_max_fee.clone(), "gwei")
+            .map_err(|e| anyhow!("{}", e))?
+            .into();
+        let base_fee: U256 = parse_units(res.base_fee.clone(), "gwei")
+            .map_err(|e| anyhow!("{}", e))?
+            .into();
+        if safe_max_fee < base_fee {
+            // cases when etherscan completely misconfigure price feed
+            Err(anyhow!("!! Etherscan Price Oracle: wrong price feed!"))
+        } else {
+            Ok(Self {
+                base_fee,
+                safe_max_fee,
+            })
+        }
+    }
+}
+
 /// submit the latest finalized state along with a proof to the L1 LightClient contract
 pub async fn submit_state_and_proof(
     proof: Proof,
@@ -353,21 +381,19 @@ pub async fn submit_state_and_proof(
         // parse etherscan response,
         // if etherscan API changes, we log the warning and fallback to default (by falling through)
         if let Ok(res) = res.json::<EtherscanPriceOracleResponse>().await {
-            if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
-                // both safe unwraps below assuming correct etherscan stream
-                let safe_max_fee: U256 = parse_units(res.result.safe_max_fee.clone(), "gwei")
-                    .unwrap()
-                    .into();
-                let base_fee: U256 = parse_units(res.result.base_fee.clone(), "gwei")
-                    .unwrap()
-                    .into();
-                inner.max_fee_per_gas = Some(safe_max_fee);
-                inner.max_priority_fee_per_gas = Some(safe_max_fee - base_fee);
-                tracing::info!(
-                    "Gas oracle info: {:?}, setting maxFeePerGas to: {}",
-                    res.result,
-                    safe_max_fee,
-                );
+            tracing::info!("Etherscan gas oracle: {:?}", res.result);
+            match TryInto::<GasInfo>::try_into(res.result) {
+                Err(e) => {
+                    tracing::warn!("{}", e)
+                }
+                Ok(gas_info) => {
+                    if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
+                        inner.max_fee_per_gas = Some(gas_info.safe_max_fee);
+                        inner.max_priority_fee_per_gas =
+                            Some(gas_info.safe_max_fee - gas_info.base_fee);
+                        tracing::info!("Setting maxFeePerGas to: {}", gas_info.safe_max_fee);
+                    }
+                }
             }
         } else {
             tracing::warn!("!! Etherscan Price Oracle API changed !!")
