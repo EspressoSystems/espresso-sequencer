@@ -92,6 +92,13 @@ rand_distr = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sqlx = { version = "0.8", features = [
+	"bit-vec",
+	"postgres",
+	"runtime-async-std",
+	"sqlite",
+	"tls-native-tls",
+] }
 sha2 = "0.10"                                                      # TODO temporary, used only for VID, should be set in hotshot
 snafu = "0.8"
 static_assertions = "1"
