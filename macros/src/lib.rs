@@ -19,6 +19,9 @@ use syn::{
 struct CrossTestData {
     /// imlementations
     impls: ExprArray,
+    /// builder impl
+    #[builder(default = "syn::parse_str(\"[SimpleBuilderImplementation]\").unwrap()")]
+    builder_impls: ExprArray,
     /// versions
     versions: ExprArray,
     /// types
@@ -51,6 +54,8 @@ struct TestData {
     ty: ExprPath,
     /// impl
     imply: ExprPath,
+    /// builder implementation
+    builder_impl: ExprPath,
     /// impl
     version: ExprPath,
     /// name of test
@@ -110,6 +115,7 @@ impl TestData {
             test_name,
             metadata,
             ignore,
+            builder_impl,
         } = self;
 
         let slow_attribute = if ignore.value() {
@@ -130,7 +136,7 @@ impl TestData {
             async fn #test_name() {
                 async_compatibility_layer::logging::setup_logging();
                 async_compatibility_layer::logging::setup_backtrace();
-                TestDescription::<#ty, #imply, #version>::gen_launcher((#metadata), 0).launch().run_test::<SimpleBuilderImplementation>().await;
+                hotshot_testing::test_builder::TestDescription::<#ty, #imply, #version>::gen_launcher((#metadata), 0).launch().run_test::<#builder_impl>().await;
             }
         }
     }
@@ -143,6 +149,7 @@ mod keywords {
     syn::custom_keyword!(TestName);
     syn::custom_keyword!(Types);
     syn::custom_keyword!(Impls);
+    syn::custom_keyword!(BuilderImpls);
     syn::custom_keyword!(Versions);
 }
 
@@ -163,6 +170,11 @@ impl Parse for CrossTestData {
                 input.parse::<Token![:]>()?;
                 let impls = input.parse::<ExprArray>()?;
                 description.impls(impls);
+            } else if input.peek(keywords::BuilderImpls) {
+                let _ = input.parse::<keywords::BuilderImpls>()?;
+                input.parse::<Token![:]>()?;
+                let impls = input.parse::<ExprArray>()?;
+                description.builder_impls(impls);
             } else if input.peek(keywords::Versions) {
                 let _ = input.parse::<keywords::Versions>()?;
                 input.parse::<Token![:]>()?;
@@ -185,7 +197,7 @@ impl Parse for CrossTestData {
                 description.ignore(ignore);
             } else {
                 panic!(
-                    "Unexpected token. Expected one of: Metadata, Ignore, Impls, Versions, Types, Testname"
+                    "Unexpected token. Expected one of: Metadata, Ignore, Impls, BuilderImpls, Versions, Types, Testname"
                 );
             }
             if input.peek(Token![,]) {
@@ -223,30 +235,40 @@ fn cross_tests_internal(test_spec: CrossTestData) -> TokenStream {
         p
     });
 
+    let builder_impls = test_spec.builder_impls.elems.iter().map(|t| {
+        let Expr::Path(p) = t else {
+            panic!("Expected Path for BuilderImpl! Got {t:?}");
+        };
+        p
+    });
+
     let mut result = quote! {};
     for ty in types.clone() {
         let mut type_mod = quote! {};
         for imp in impls.clone() {
-            for version in versions.clone() {
-                let test_data = TestDataBuilder::create_empty()
-                    .test_name(test_spec.test_name.clone())
-                    .metadata(test_spec.metadata.clone())
-                    .ignore(test_spec.ignore.clone())
-                    .version(version.clone())
-                    .imply(imp.clone())
-                    .ty(ty.clone())
-                    .build()
-                    .unwrap();
-                let test = test_data.generate_test();
+            for builder_impl in builder_impls.clone() {
+                for version in versions.clone() {
+                    let test_data = TestDataBuilder::create_empty()
+                        .test_name(test_spec.test_name.clone())
+                        .metadata(test_spec.metadata.clone())
+                        .ignore(test_spec.ignore.clone())
+                        .version(version.clone())
+                        .imply(imp.clone())
+                        .builder_impl(builder_impl.clone())
+                        .ty(ty.clone())
+                        .build()
+                        .unwrap();
+                    let test = test_data.generate_test();
 
-                let impl_str = format_ident!("{}", imp.to_lower_snake_str());
-                let impl_result = quote! {
-                    pub mod #impl_str {
-                        use super::*;
-                        #test
-                    }
-                };
-                type_mod.extend(impl_result);
+                    let impl_str = format_ident!("{}", imp.to_lower_snake_str());
+                    let impl_result = quote! {
+                        pub mod #impl_str {
+                            use super::*;
+                            #test
+                        }
+                    };
+                    type_mod.extend(impl_result);
+                }
             }
         }
         let ty_str = format_ident!("{}", ty.to_lower_snake_str());
