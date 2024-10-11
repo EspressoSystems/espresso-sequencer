@@ -486,6 +486,40 @@
 <a href="#486" id="486">486</a>
 <a href="#487" id="487">487</a>
 <a href="#488" id="488">488</a>
+<a href="#489" id="489">489</a>
+<a href="#490" id="490">490</a>
+<a href="#491" id="491">491</a>
+<a href="#492" id="492">492</a>
+<a href="#493" id="493">493</a>
+<a href="#494" id="494">494</a>
+<a href="#495" id="495">495</a>
+<a href="#496" id="496">496</a>
+<a href="#497" id="497">497</a>
+<a href="#498" id="498">498</a>
+<a href="#499" id="499">499</a>
+<a href="#500" id="500">500</a>
+<a href="#501" id="501">501</a>
+<a href="#502" id="502">502</a>
+<a href="#503" id="503">503</a>
+<a href="#504" id="504">504</a>
+<a href="#505" id="505">505</a>
+<a href="#506" id="506">506</a>
+<a href="#507" id="507">507</a>
+<a href="#508" id="508">508</a>
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     cmp::{min, Ordering},
     sync::Arc,
@@ -568,24 +602,54 @@
     }
 
     <span class="kw">pub async fn </span>wait_for_block(<span class="kw-2">&amp;</span><span class="self">self</span>, number: u64) -&gt; L1BlockInfo {
-        <span class="kw">let </span>interval = <span class="self">self</span>.provider.get_interval();
-        <span class="kw">loop </span>{
+        <span class="comment">// When we are polling the L1 waiting for new blocks, we use a long interval calibrated to
+        // the rate at which L1 blocks are produced.
+        </span><span class="kw">let </span>interval = <span class="self">self</span>.provider.get_interval();
+        <span class="comment">// When we are retrying after an error, or expecting a block to appear any second, we use a
+        // shorter polling interval.
+        </span><span class="kw">let </span>retry = <span class="self">self</span>.retry_delay;
+
+        <span class="comment">// Wait until we expect the block to be available.
+        </span><span class="kw">let </span>l1_head = <span class="kw">loop </span>{
+            <span class="kw">let </span>l1_head = <span class="self">self</span>.get_block_number().<span class="kw">await</span>;
+            <span class="kw">if </span>l1_head &gt;= number {
+                <span class="comment">// The block should be ready to retrieve.
+                </span><span class="kw">break </span>l1_head;
+            } <span class="kw">else if </span>l1_head + <span class="number">1 </span>== number {
+                <span class="comment">// The block we want is the next L1 block. It could be ready any second, so don't
+                // sleep for too long.
+                </span><span class="macro">tracing::info!</span>(number, l1_head, <span class="string">"waiting for next L1 block"</span>);
+                sleep(retry).<span class="kw">await</span>;
+            } <span class="kw">else </span>{
+                <span class="comment">// We are waiting at least a few more L1 blocks, so back off and don't spam the RPC.
+                </span><span class="macro">tracing::info!</span>(number, l1_head, <span class="string">"waiting for future L1 block"</span>);
+                sleep(interval).<span class="kw">await</span>;
+            }
+        };
+
+        <span class="comment">// The block should be ready now, but we may still get errors from the RPC, so we retry
+        // until we successfully pull the block.
+        </span><span class="kw">loop </span>{
             <span class="kw">let </span>block = <span class="kw">match </span><span class="self">self</span>.provider.get_block(number).<span class="kw">await </span>{
                 <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(block)) =&gt; block,
                 <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; {
-                    <span class="macro">tracing::info!</span>(number, <span class="string">"no such block"</span>);
-                    sleep(interval).<span class="kw">await</span>;
+                    <span class="macro">tracing::warn!</span>(
+                        number,
+                        l1_head,
+                        <span class="string">"expected L1 block to be available; possible L1 reorg"
+                    </span>);
+                    sleep(retry).<span class="kw">await</span>;
                     <span class="kw">continue</span>;
                 }
                 <span class="prelude-val">Err</span>(err) =&gt; {
-                    <span class="macro">tracing::error!</span>(%err, number, <span class="string">"failed to get L1 block"</span>);
-                    sleep(interval).<span class="kw">await</span>;
+                    <span class="macro">tracing::error!</span>(number, l1_head, <span class="string">"failed to get L1 block: {err:#}"</span>);
+                    sleep(retry).<span class="kw">await</span>;
                     <span class="kw">continue</span>;
                 }
             };
             <span class="kw">let </span><span class="prelude-val">Some</span>(hash) = block.hash <span class="kw">else </span>{
-                <span class="macro">tracing::error!</span>(number, <span class="question-mark">?</span>block, <span class="string">"L1 block has no hash"</span>);
-                sleep(interval).<span class="kw">await</span>;
+                <span class="macro">tracing::error!</span>(number, l1_head, <span class="question-mark">?</span>block, <span class="string">"L1 block has no hash"</span>);
+                sleep(retry).<span class="kw">await</span>;
                 <span class="kw">continue</span>;
             };
             <span class="kw">break </span>L1BlockInfo {
@@ -600,20 +664,24 @@
     /// If the desired block number is not finalized yet, this function will block until it becomes
     /// finalized.
     </span><span class="kw">pub async fn </span>wait_for_finalized_block(<span class="kw-2">&amp;</span><span class="self">self</span>, number: u64) -&gt; L1BlockInfo {
-        <span class="kw">let </span>interval = <span class="self">self</span>.provider.get_interval();
+        <span class="comment">// First just wait for the block to exist. This uses an efficient polling mechanism that
+        // polls more frequently as we get closer to expecting the block to be ready.
+        </span><span class="self">self</span>.wait_for_block(number).<span class="kw">await</span>;
 
-        <span class="comment">// Wait for the block to finalize.
+        <span class="comment">// Wait for the block to finalize. Since we know the block at least exists, we don't expect
+        // to have to wait _too_ long for it to finalize, so we poll relatively frequently, using
+        // the retry delay instead of the provider interval.
         </span><span class="kw">let </span>finalized = <span class="kw">loop </span>{
             <span class="kw">let </span><span class="prelude-val">Some</span>(block) = <span class="self">self</span>.get_finalized_block().<span class="kw">await else </span>{
                 <span class="macro">tracing::info!</span>(<span class="string">"waiting for finalized block"</span>);
-                sleep(interval).<span class="kw">await</span>;
+                sleep(<span class="self">self</span>.retry_delay).<span class="kw">await</span>;
                 <span class="kw">continue</span>;
             };
             <span class="kw">if </span>block.number &gt;= number {
                 <span class="kw">break </span>block;
             }
             <span class="macro">tracing::info!</span>(current_finalized = %block.number, <span class="string">"waiting for finalized block"</span>);
-            sleep(interval).<span class="kw">await</span>;
+            sleep(<span class="self">self</span>.retry_delay).<span class="kw">await</span>;
             <span class="kw">continue</span>;
         };
 
@@ -621,8 +689,8 @@
             <span class="kw">return </span>finalized;
         }
 
-        <span class="comment">// The finalized block may have skipped over the block of interest. In this case, our block
-        // is still finalized, since it is before the finalized block. We just need to fetch it.
+        <span class="comment">// Load the block again, since it may have changed between first being produced and becoming
+        // finalized.
         </span><span class="self">self</span>.wait_for_block(number).<span class="kw">await
     </span>}
 
