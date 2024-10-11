@@ -200,7 +200,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         let events = handle.event_stream();
 
         let node_id = node_state.node_id;
-        let mut ctx = Self {
+        let ctx = Self {
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
             tasks: Default::default(),
@@ -210,23 +210,21 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             node_state,
             config,
         };
-        ctx.spawn(
-            "proposal fetcher",
-            fetch_proposals(ctx.handle.clone(), persistence.clone()),
-        );
-        ctx.spawn(
-            "main event handler",
-            handle_events(
-                node_id,
-                events,
-                persistence,
-                ctx.state_signer.clone(),
-                external_event_handler,
-                Some(event_streamer.clone()),
-                event_consumer,
-                anchor_view,
-            ),
-        );
+
+        // Spawn event handling loops. These can run in the background (detached from `ctx.tasks`
+        // and thus not explicitly cancelled on `shut_down`) because they each exit on their own
+        // when the consensus event stream ends.
+        spawn(fetch_proposals(ctx.handle.clone(), persistence.clone()));
+        spawn(handle_events(
+            node_id,
+            events,
+            persistence,
+            ctx.state_signer.clone(),
+            external_event_handler,
+            Some(event_streamer.clone()),
+            event_consumer,
+            anchor_view,
+        ));
 
         ctx
     }
@@ -437,6 +435,7 @@ async fn fetch_proposals<N, P, V>(
             ),
         );
     }
+    tasks.shut_down().await;
 }
 
 #[tracing::instrument(skip(consensus, persistence))]
