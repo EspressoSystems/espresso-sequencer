@@ -383,6 +383,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
     ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>;
 
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>>;
+
     async fn load_vid_share(
         &self,
         view: ViewNumber,

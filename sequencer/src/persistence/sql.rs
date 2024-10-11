@@ -511,6 +511,24 @@ impl SequencerPersistence for Persistence {
         )))
     }
 
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+        let row = self
+            .db
+            .read()
+            .await?
+            .query_one(
+                "SELECT * FROM quorum_proposals WHERE view = $1 LIMIT 1",
+                [view.u64() as i64],
+            )
+            .await?;
+        let data: Vec<u8> = row.try_get("data")?;
+        let proposal = bincode::deserialize(&data)?;
+        Ok(proposal)
+    }
+
     async fn append_vid(
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
