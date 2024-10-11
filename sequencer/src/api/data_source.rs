@@ -1,6 +1,6 @@
 use std::{num::NonZeroUsize, time::Duration};
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
@@ -14,7 +14,7 @@ use hotshot_orchestrator::config::{
 };
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::{MetricsDataSource, VersionedDataSource},
+    data_source::VersionedDataSource,
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
@@ -145,19 +145,11 @@ pub(crate) trait CatchupDataSource: Sync {
     /// decided view.
     fn get_accounts(
         &self,
-        _instance: &NodeState,
-        _height: u64,
-        _view: ViewNumber,
-        _accounts: &[FeeAccount],
-    ) -> impl Send + Future<Output = anyhow::Result<FeeMerkleTree>> {
-        // Merklized state catchup is only supported by persistence backends that provide merklized
-        // state storage. This default implementation is overridden for those that do. Otherwise,
-        // catchup can still be provided by fetching undecided merklized state from consensus
-        // memory.
-        async {
-            bail!("merklized state catchup is not supported for this data source");
-        }
-    }
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+        accounts: &[FeeAccount],
+    ) -> impl Send + Future<Output = anyhow::Result<FeeMerkleTree>>;
 
     /// Get the blocks Merkle tree frontier.
     ///
@@ -167,29 +159,15 @@ pub(crate) trait CatchupDataSource: Sync {
     /// decided view.
     fn get_frontier(
         &self,
-        _height: u64,
-        _view: ViewNumber,
-    ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>> {
-        // Merklized state catchup is only supported by persistence backends that provide merklized
-        // state storage. This default implementation is overridden for those that do. Otherwise,
-        // catchup can still be provided by fetching undecided merklized state from consensus
-        // memory.
-        async {
-            bail!("merklized state catchup is not supported for this data source");
-        }
-    }
+        height: u64,
+        view: ViewNumber,
+    ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>>;
 
     fn get_chain_config(
         &self,
-        _commitment: Commitment<ChainConfig>,
-    ) -> impl Send + Future<Output = anyhow::Result<ChainConfig>> {
-        async {
-            bail!("chain config catchup is not supported for this data source");
-        }
-    }
+        commitment: Commitment<ChainConfig>,
+    ) -> impl Send + Future<Output = anyhow::Result<ChainConfig>>;
 }
-
-impl CatchupDataSource for MetricsDataSource {}
 
 /// This struct defines the public Hotshot validator configuration.
 /// Private key and state key pairs are excluded for security reasons.

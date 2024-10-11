@@ -7,7 +7,7 @@ use espresso_types::{
 };
 use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
-    availability::BlockId,
+    availability::LeafId,
     data_source::{
         sql::{postgres::types::ToSql, Config, SqlDataSource, Transaction},
         storage::{AvailabilityStorage, SqlStorage},
@@ -29,11 +29,11 @@ use jf_merkle_tree::{
 use std::collections::VecDeque;
 
 use super::{
-    data_source::{CatchupDataSource, Provider, SequencerDataSource},
+    data_source::{Provider, SequencerDataSource},
     BlocksFrontier,
 };
 use crate::{
-    catchup::SqlStateCatchup,
+    catchup::{CatchupStorage, SqlStateCatchup},
     persistence::{
         sql::{sql_param, Options},
         ChainConfigPersistence,
@@ -74,14 +74,14 @@ impl SequencerDataSource for DataSource {
     }
 }
 
-impl CatchupDataSource for SqlStorage {
+impl CatchupStorage for SqlStorage {
     async fn get_accounts(
         &self,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<FeeMerkleTree> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
         let tx = self.read().await.context(format!(
             "opening transaction to fetch account {accounts:?}; height {height}"
         ))?;
@@ -101,8 +101,9 @@ impl CatchupDataSource for SqlStorage {
         } else {
             // If we do not have the exact snapshot we need, we can try going back to the last
             // snapshot we _do_ have and replaying subsequent blocks to compute the desired state.
-            let state = reconstruct_state(instance, &tx, block_height - 1, view, accounts).await?;
-            Ok(state.fee_merkle_tree)
+            let (state, leaf) =
+                reconstruct_state(instance, &tx, block_height - 1, view, accounts).await?;
+            Ok((state.fee_merkle_tree, leaf))
         }
     }
 
@@ -124,14 +125,14 @@ impl CatchupDataSource for SqlStorage {
     }
 }
 
-impl<'a> CatchupDataSource for &Transaction<'a> {
+impl<'a> CatchupStorage for &Transaction<'a> {
     async fn get_accounts(
         &self,
         _instance: &NodeState,
         height: u64,
         _view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<FeeMerkleTree> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
         load_accounts(self, height, accounts).await
     }
 
@@ -161,14 +162,14 @@ impl<'a> CatchupDataSource for &Transaction<'a> {
     }
 }
 
-impl CatchupDataSource for DataSource {
+impl CatchupStorage for DataSource {
     async fn get_accounts(
         &self,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<FeeMerkleTree> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
         self.as_ref()
             .get_accounts(instance, height, view, accounts)
             .await
@@ -206,11 +207,12 @@ async fn load_accounts<'a>(
     tx: &Transaction<'a>,
     height: u64,
     accounts: &[FeeAccount],
-) -> anyhow::Result<FeeMerkleTree> {
-    let header = tx
-        .get_header(BlockId::<SeqTypes>::from(height as usize))
+) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+    let leaf = tx
+        .get_leaf(LeafId::<SeqTypes>::from(height as usize))
         .await
-        .context(format!("header {height} not available"))?;
+        .context(format!("leaf {height} not available"))?;
+    let header = leaf.header();
 
     let mut snapshot = FeeMerkleTree::from_commitment(header.fee_merkle_tree_root());
     for account in accounts {
@@ -242,7 +244,7 @@ async fn load_accounts<'a>(
         }
     }
 
-    Ok(snapshot)
+    Ok((snapshot, leaf.leaf().clone()))
 }
 
 #[tracing::instrument(skip(instance, tx))]
@@ -252,7 +254,7 @@ async fn reconstruct_state<'a>(
     from_height: u64,
     to_view: ViewNumber,
     accounts: &[FeeAccount],
-) -> anyhow::Result<ValidatedState> {
+) -> anyhow::Result<(ValidatedState, Leaf)> {
     tracing::info!("attempting to reconstruct fee state");
     let from_leaf = tx
         .get_leaf((from_height as usize).into())
@@ -267,14 +269,14 @@ async fn reconstruct_state<'a>(
 
     // Get the sequence of headers we will be applying to compute the latest state.
     let mut leaves = VecDeque::new();
-    let leaf = get_leaf_from_proposal(tx, "view = $1", &(to_view.u64() as i64))
+    let to_leaf = get_leaf_from_proposal(tx, "view = $1", &(to_view.u64() as i64))
         .await
         .context(format!(
             "unable to reconstruct state because leaf {to_view:?} is not available"
         ))?;
-    let mut parent = leaf.parent_commitment();
-    tracing::debug!(?leaf, ?parent, view = ?to_view, "have required leaf");
-    leaves.push_front(leaf);
+    let mut parent = to_leaf.parent_commitment();
+    tracing::debug!(?to_leaf, ?parent, view = ?to_view, "have required leaf");
+    leaves.push_front(to_leaf.clone());
     while parent != Committable::commit(from_leaf) {
         let leaf = get_leaf_from_proposal(tx, "leaf_hash = $1", &parent.to_string())
             .await
@@ -293,7 +295,8 @@ async fn reconstruct_state<'a>(
     // final state.
     state.fee_merkle_tree = load_accounts(tx, from_height, accounts)
         .await
-        .context("unable to reconstruct state because accounts are not available at origin")?;
+        .context("unable to reconstruct state because accounts are not available at origin")?
+        .0;
     ensure!(
         state.fee_merkle_tree.commitment() == parent.block_header().fee_merkle_tree_root(),
         "loaded fee state does not match parent header"
@@ -316,7 +319,7 @@ async fn reconstruct_state<'a>(
     }
 
     tracing::info!(from_height, ?to_view, "successfully reconstructed state");
-    Ok(state)
+    Ok((state, to_leaf))
 }
 
 async fn get_leaf_from_proposal<'a>(

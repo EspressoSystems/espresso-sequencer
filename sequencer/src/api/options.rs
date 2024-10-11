@@ -32,6 +32,7 @@ use super::{
     ApiState, StorageState,
 };
 use crate::{
+    catchup::CatchupStorage,
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
@@ -264,7 +265,7 @@ impl Options {
     where
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
-        D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
+        D: SequencerDataSource + CatchupStorage + Send + Sync + 'static,
         for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
     {
         let metrics = ds.populate_metrics();

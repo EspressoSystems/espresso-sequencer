@@ -4,13 +4,13 @@ use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use committable::Commitment;
+use committable::{Commitment, Committable};
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
     BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
-    PubKey, Transaction,
+    PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -26,8 +26,8 @@ use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
-    traits::{network::ConnectedNetwork, node_implementation::Versions},
-    utils::ViewInner,
+    traits::{network::ConnectedNetwork, node_implementation::Versions, ValidatedState as _},
+    utils::{View, ViewInner},
 };
 use jf_merkle_tree::MerkleTreeScheme;
 
@@ -35,8 +35,8 @@ use self::data_source::{
     HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
 };
 use crate::{
-    context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
-    SequencerContext,
+    catchup::CatchupStorage, context::Consensus, network, state_signature::StateSigner, SeqTypes,
+    SequencerApiVersion, SequencerContext,
 };
 
 pub mod data_source;
@@ -211,7 +211,7 @@ impl<
         N: ConnectedNetwork<PubKey>,
         V: Versions,
         P: SequencerPersistence,
-        D: CatchupDataSource + Send + Sync,
+        D: CatchupStorage + Send + Sync,
     > CatchupDataSource for StorageState<N, P, D, V>
 {
     #[tracing::instrument(skip(self, instance))]
@@ -235,7 +235,7 @@ impl<
         }
 
         // Try storage.
-        let tree = self
+        let (tree, leaf) = self
             .inner()
             .get_accounts(instance, height, view, accounts)
             .await
@@ -243,17 +243,19 @@ impl<
         // If we successfully fetched accounts from storage, try to add them back into the in-memory
         // state.
         let handle = self.as_ref().consensus().await;
-        let consensus = handle.read().await.consensus();
+        let handle = handle.read().await;
+        let consensus = handle.consensus();
         let mut consensus = consensus.write().await;
-        if let Some(v) = consensus.validated_state_map().get(&view) {
-            // Clone the view info so we can update it.
-            let mut v = v.clone();
-            if let ViewInner::Leaf { state, .. } = &mut v.view_inner {
-                // Clone the state so we can update it.
-                let mut updated_state = (**state).clone();
+        let (state, delta, leaf_commit) = match consensus.validated_state_map().get(&view) {
+            Some(View {
+                view_inner: ViewInner::Leaf { state, delta, leaf },
+            }) => {
+                let mut state = (**state).clone();
+
+                // Add the fetched accounts to the state.
                 for account in accounts {
                     if let Some((proof, _)) = FeeAccountProof::prove(&tree, (*account).into()) {
-                        if let Err(err) = proof.remember(&mut updated_state.fee_merkle_tree) {
+                        if let Err(err) = proof.remember(&mut state.fee_merkle_tree) {
                             tracing::warn!(
                                 ?view,
                                 %account,
@@ -264,25 +266,34 @@ impl<
                         tracing::warn!(?view, %account, "cannot update fetched account state because account is not in the merkle tree");
                     };
                 }
-                // Update the state in the view.
-                *state = Arc::new(updated_state);
-                // Put the updated view back into the state map.
-                if let Err(err) = consensus.update_validated_state_map(view, v) {
-                    tracing::warn!(?view, "cannot update fetched account state: {err:#}");
-                }
-                tracing::info!(?view, "updated with fetched account state");
-            } else {
-                tracing::warn!(
-                    ?view,
-                    "cannot cache fetched account state because view has no state",
-                );
+
+                (Arc::new(state), delta.clone(), *leaf)
             }
-        } else {
-            tracing::warn!(
-                ?view,
-                "cannot cache fetched account state because view is not available"
-            );
+            _ => {
+                // If we don't already have a leaf for this view, or if we don't have the view
+                // at all, we can create a new view based on the recovered leaf and add it to
+                // our state map. In this case, we must also add the leaf to the saved leaves
+                // map to ensure consistency.
+                let mut state = ValidatedState::from_header(leaf.block_header());
+                state.fee_merkle_tree = tree.clone();
+                let res = (Arc::new(state), None, Committable::commit(&leaf));
+                consensus.update_saved_leaves(leaf);
+                res
+            }
+        };
+        if let Err(err) = consensus.update_validated_state_map(
+            view,
+            View {
+                view_inner: ViewInner::Leaf {
+                    state,
+                    delta,
+                    leaf: leaf_commit,
+                },
+            },
+        ) {
+            tracing::warn!(?view, "cannot update fetched account state: {err:#}");
         }
+        tracing::info!(?view, "updated with fetched account state");
 
         Ok(tree)
     }
