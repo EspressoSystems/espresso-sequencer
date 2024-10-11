@@ -48,12 +48,9 @@ pub use db::Db;
 pub use include_dir::include_dir;
 pub use queries::QueryBuilder;
 pub use refinery::Migration;
-pub use transaction::{query, query_as, Executor, Query, QueryAs, Transaction};
+pub use transaction::*;
 
-use self::{
-    migrate::Migrator,
-    transaction::{Read, Write},
-};
+use self::migrate::Migrator;
 
 /// Embed migrations from the given directory into the current binary.
 ///
