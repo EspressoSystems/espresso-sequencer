@@ -4447,7 +4447,6 @@ dependencies = [
  "reqwest 0.12.8",
  "sequencer-utils",
  "serde",
- "serde_json",
  "surf-disco",
  "tide-disco",
  "time 0.3.36",

@@ -303,6 +303,30 @@ pub async fn read_contract_state(
     Ok((state.into(), st_state.into()))
 }
 
+/// Relevant fields in the etherscan price oracle feed,
+/// used for parsing their JSON responses.
+/// See <https://docs.etherscan.io/api-endpoints/gas-tracker#get-gas-oracle>
+#[allow(dead_code)]
+#[derive(Deserialize, Debug, Clone)]
+struct EtherscanPriceOracleResponse {
+    status: String,
+    message: String,
+    result: EtherscanPriceOracleResult,
+}
+/// The `result` field in `EtherscanPriceOracleResponse`
+#[allow(dead_code)]
+#[derive(Deserialize, Debug, Clone)]
+struct EtherscanPriceOracleResult {
+    #[serde(rename = "suggestBaseFee")]
+    base_fee: String,
+    #[serde(rename = "SafeGasPrice")]
+    safe_max_fee: String,
+    #[serde(rename = "ProposeGasPrice")]
+    propose_max_fee: String,
+    #[serde(rename = "FastGasPrice")]
+    fast_max_fee: String,
+}
+
 /// submit the latest finalized state along with a proof to the L1 LightClient contract
 pub async fn submit_state_and_proof(
     proof: Proof,
@@ -318,29 +342,35 @@ pub async fn submit_state_and_proof(
     let new_state: ParsedLightClientState = public_input.into();
 
     let mut tx = contract.new_finalized_state(new_state.into(), proof.into());
+
+    // TODO: (alex) centralize this to a dedicated ethtxmanager with gas control
     // frugal gas price: set to SafeGasPrice based on live price oracle
     // safe to be included with low priority position in a block.
     // ignore this if etherscan fail to return
     if let Ok(res) =
         reqwest::get("https://api.etherscan.io/api?module=gastracker&action=gasoracle").await
     {
-        let gas_info = res.json::<serde_json::Value>().await?;
-        let safe_gas: U256 = parse_units(
-            gas_info["result"]["SafeGasPrice"]
-                .as_str()
-                .expect("fail to parse SafeGasPrice"),
-            "gwei",
-        )
-        .unwrap() // safe unwrap, etherscan will return right value
-        .into();
-
-        if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
-            inner.max_fee_per_gas = Some(safe_gas);
-            tracing::info!(
-                "Gas oracle info: {}, setting maxFeePerGas to: {}",
-                gas_info,
-                safe_gas,
-            );
+        // parse etherscan response,
+        // if etherscan API changes, we log the warning and fallback to default (by falling through)
+        if let Ok(res) = res.json::<EtherscanPriceOracleResponse>().await {
+            if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
+                // both safe unwraps below assuming correct etherscan stream
+                let safe_max_fee: U256 = parse_units(res.result.safe_max_fee.clone(), "gwei")
+                    .unwrap()
+                    .into();
+                let base_fee: U256 = parse_units(res.result.base_fee.clone(), "gwei")
+                    .unwrap()
+                    .into();
+                inner.max_fee_per_gas = Some(safe_max_fee);
+                inner.max_priority_fee_per_gas = Some(safe_max_fee - base_fee);
+                tracing::info!(
+                    "Gas oracle info: {:?}, setting maxFeePerGas to: {}",
+                    res.result,
+                    safe_max_fee,
+                );
+            }
+        } else {
+            tracing::warn!("!! Etherscan Price Oracle API changed !!")
         }
     }
 

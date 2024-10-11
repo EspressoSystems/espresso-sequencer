@@ -34,7 +34,6 @@ jf-utils = { workspace = true }
 reqwest = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
-serde_json = { workspace = true }
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
