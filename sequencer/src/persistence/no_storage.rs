@@ -1,6 +1,7 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
+use anyhow::bail;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use espresso_types::{
@@ -112,6 +113,12 @@ impl SequencerPersistence for NoStorage {
         &self,
     ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
         Ok(Default::default())
+    }
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+        bail!("proposal {view:?} not available");
     }
     async fn load_upgrade_certificate(
         &self,
