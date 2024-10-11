@@ -280,7 +280,8 @@ impl<Mode: TransactionMode> Transaction<Mode> {
                 let (commit,) = query_as::<(String,)>(&format!(
                     "SELECT {header_state_commitment_field} AS root_commmitment
                        FROM header
-                      WHERE height = $1"
+                      WHERE height = $1
+                      LIMIT 1"
                 ))
                 .bind(created)
                 .fetch_one(self.as_mut())
