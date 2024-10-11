@@ -33,7 +33,7 @@ PATH = ["/:height/:view/accounts"]
 ":view" = "Integer"
 METHOD = "POST"
 DOC = """
-Bulk version of `/:height:view/account`. The request body should be a JSON array consisting of
+Bulk version of `/:height/:view/account`. The request body should be a JSON array consisting of
 TaggedBase64-encoded fee accounts.
 
 The response is a `FeeMerkleTree` containing sub-trees for each of the requested accounts, which is
