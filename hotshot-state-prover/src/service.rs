@@ -563,7 +563,7 @@ mod test {
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::{
-        deployer::{self, is_valid_admin_light_client_proxy},
+        deployer::{self, test_helpers::deploy_light_client_contract_as_proxy_for_test, is_valid_admin_light_client_proxy},
         test_utils::setup_test,
     };
 
@@ -708,7 +708,7 @@ mod test {
         };
 
         let mut contracts = deployer::Contracts::default();
-        let proxy_address = deployer::deploy_light_client_contract_as_proxy_for_test(
+        let proxy_address = deploy_light_client_contract_as_proxy_for_test(
             l1_wallet.clone(),
             &mut contracts,
             Some(genesis_constructor_args),
@@ -748,7 +748,6 @@ mod test {
     #[async_std::test]
     async fn test_validate_light_contract_proxy() -> Result<()> {
         // Checks that the implementation address was set and the admin is as expected
-
         setup_test();
 
         let anvil = Anvil::new().spawn();
@@ -783,7 +782,6 @@ mod test {
             result.is_ok(),
             "Expected Light Client contract to be a proxy, but it was not"
         );
-
         // validate that the admin is the deployer account
         let admin = wallet.clone().address();
         let admin_result =

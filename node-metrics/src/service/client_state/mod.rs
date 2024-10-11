@@ -406,14 +406,14 @@ where
         block_size: data_state_read_lock_guard
             .latest_blocks()
             .skip(1)
-            .map(|block| block.size)
+            .map(|block| Some(block.size))
             .collect(),
         block_time: data_state_read_lock_guard
             .latest_blocks()
             .skip(1)
             .zip(data_state_read_lock_guard.latest_blocks())
             .map(|(block_i, block_i_sub_1)| {
-                (block_i.time.0 - block_i_sub_1.time.0).whole_seconds() as u64
+                Some((block_i.time.0 - block_i_sub_1.time.0).whole_seconds() as u64)
             })
             .collect(),
         block_transactions: data_state_read_lock_guard

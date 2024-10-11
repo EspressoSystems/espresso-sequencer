@@ -309,7 +309,7 @@ pub mod light_client {
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("threshold"),
+                                name: ::std::borrow::ToOwned::to_owned("blockThreshold"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("uint256"),
@@ -1057,10 +1057,10 @@ pub mod light_client {
         pub fn lag_over_escape_hatch_threshold(
             &self,
             block_number: ::ethers::core::types::U256,
-            threshold: ::ethers::core::types::U256,
+            block_threshold: ::ethers::core::types::U256,
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
-                .method_hash([224, 48, 51, 1], (block_number, threshold))
+                .method_hash([224, 48, 51, 1], (block_number, block_threshold))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `newFinalizedState` (0x2063d4f7) function
@@ -2384,7 +2384,7 @@ pub mod light_client {
     )]
     pub struct LagOverEscapeHatchThresholdCall {
         pub block_number: ::ethers::core::types::U256,
-        pub threshold: ::ethers::core::types::U256,
+        pub block_threshold: ::ethers::core::types::U256,
     }
     ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x2063d4f7`
     #[derive(

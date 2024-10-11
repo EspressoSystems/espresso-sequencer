@@ -148,7 +148,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice This contract is called by the proxy when you deploy this contract
     /// @param _genesis The initial state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
-    /// history
+    /// history. the min retention period allowed is 1 hour and max 365 days
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
@@ -182,27 +182,30 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param _genesis The initial state of the light client
-    /// @param _genesisStakeTableState The initial stake state of the light client
+    /// @param _genesisStakeTableState The initial stake table state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
-    /// history
+    /// history. The min retention period allowed is 1 hour and the max is 365 days.
     function _initializeState(
         LightClientState memory _genesis,
         StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod
     ) internal {
-        // stake table commitments and threshold cannot be zero, otherwise it's impossible to
-        // generate valid proof to move finalized state forward.
-        // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
-        // feeLedgerComm can be zero, if we optionally support fee ledger yet.
+        // The viewNum and blockHeight in the genesis state must be zero to indicate that this is
+        // the initial state. Stake table commitments and threshold cannot be zero, otherwise it's
+        // impossible to generate valid proof to move finalized state forward. The
+        // stateHistoryRetentionPeriod must be at least 1 hour and no more than 365 days
+        // to ensure proper state retention.
         if (
             _genesis.viewNum != 0 || _genesis.blockHeight != 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.blsKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.schnorrKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.amountComm) == 0
-                || _genesisStakeTableState.threshold == 0
+                || _genesisStakeTableState.threshold == 0 || _stateHistoryRetentionPeriod < 1 hours
+                || _stateHistoryRetentionPeriod > 365 days
         ) {
             revert InvalidArgs();
         }
+
         genesisState = _genesis;
         genesisStakeTableState = _genesisStakeTableState;
         finalizedState = _genesis;
@@ -339,7 +342,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             stateHistoryFirstIndex++;
         }
 
-        // add the L1 Block & HotShot commitment to the genesis state
+        // add the L1 Block & HotShot commitment to the stateHistoryCommitments
         stateHistoryCommitments.push(
             StateHistoryCommitment(
                 blockNumber, blockTimestamp, state.blockHeight, state.blockCommRoot
@@ -347,12 +350,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         );
     }
 
-    /// @notice checks if the state updates lag behind the specified threshold based on the provided
+    /// @notice checks if the state updates lag behind the specified block threshold based on the
+    /// provided
     /// block number.
     /// @param blockNumber The block number to compare against the latest state updates
-    /// @param threshold The number of blocks updates to this contract is allowed to lag behind
-    /// @return bool returns true if the lag exceeds the threshold; otherwise, false
-    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 threshold)
+    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind
+    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false
+    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 blockThreshold)
         public
         view
         virtual
@@ -395,7 +399,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InsufficientSnapshotHistory();
         }
 
-        return blockNumber - prevBlock > threshold;
+        return blockNumber - prevBlock > blockThreshold;
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
@@ -439,11 +443,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice sets the maximum retention period for storing block state history.
     /// @param historySeconds The maximum number of seconds for which state history updates
     /// will be stored, based on the block timestamp. It must be greater than or equal to
-    /// the current state history retention period and must be at least 1 hour.
-    /// @dev Reverts with `InvalidMaxStateHistory` if the provided value is less than 1 hour
-    /// or less than or equal to the current state history retention period.
+    /// the current state history retention period and must be at least 1 hour and max 365 days.
+    /// @dev Reverts with `InvalidMaxStateHistory` if the provided value is less than 1 hour,
+    /// more than 365 days or less than or equal to the current state history retention period.
     function setstateHistoryRetentionPeriod(uint32 historySeconds) public onlyOwner {
-        if (historySeconds < 1 hours || historySeconds <= stateHistoryRetentionPeriod) {
+        if (
+            historySeconds < 1 hours || historySeconds > 365 days
+                || historySeconds <= stateHistoryRetentionPeriod
+        ) {
             revert InvalidMaxStateHistory();
         }
 

@@ -66,7 +66,7 @@ contract DeployLightClientScript is Script {
 
         // verify post deployment details
         require(
-            lightClientProxy.permissionedProver() == owner,
+            lightClientProxy.permissionedProver() == permissionedProver,
             "Post Deployment Verification: Set permissioned prover failed"
         );
         require(

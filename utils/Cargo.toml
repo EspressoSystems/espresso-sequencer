@@ -5,6 +5,9 @@ authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+testing = []
+
 [dependencies]
 anyhow = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }

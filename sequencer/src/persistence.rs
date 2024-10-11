@@ -66,13 +66,15 @@ mod persistence_tests {
         data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
         event::{EventType, HotShotAction, LeafInfo},
         message::Proposal,
-        simple_certificate::QuorumCertificate,
+        simple_certificate::{QuorumCertificate, UpgradeCertificate},
+        simple_vote::UpgradeProposalData,
         traits::{node_implementation::ConsensusTime, EncodeBytes},
         vid::vid_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
     use testing::TestablePersistence;
+    use vbs::version::Version;
 
     use super::*;
 
@@ -467,6 +469,55 @@ mod persistence_tests {
             storage.load_quorum_proposals().await.unwrap(),
             BTreeMap::new()
         );
+    }
+
+    #[async_std::test]
+    pub async fn test_upgrade_certificate<P: TestablePersistence>() {
+        setup_test();
+
+        let tmp = P::tmp_storage().await;
+        let storage = P::connect(&tmp).await;
+
+        // Test get upgrade certificate
+        assert_eq!(storage.load_upgrade_certificate().await.unwrap(), None);
+
+        let upgrade_data = UpgradeProposalData {
+            old_version: Version { major: 0, minor: 1 },
+            new_version: Version { major: 1, minor: 0 },
+            decide_by: ViewNumber::genesis(),
+            new_version_hash: Default::default(),
+            old_version_last_view: ViewNumber::genesis(),
+            new_version_first_view: ViewNumber::genesis(),
+        };
+
+        let decide_upgrade_certificate = UpgradeCertificate::<SeqTypes>::new(
+            upgrade_data.clone(),
+            upgrade_data.commit(),
+            ViewNumber::genesis(),
+            Default::default(),
+            Default::default(),
+        );
+        let res = storage
+            .store_upgrade_certificate(Some(decide_upgrade_certificate.clone()))
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_upgrade_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, ViewNumber::genesis());
+
+        let new_view_number_for_certificate = ViewNumber::new(50);
+        let mut new_upgrade_certificate = decide_upgrade_certificate.clone();
+        new_upgrade_certificate.view_number = new_view_number_for_certificate;
+
+        let res = storage
+            .store_upgrade_certificate(Some(new_upgrade_certificate.clone()))
+            .await;
+        assert!(res.is_ok());
+
+        let res = storage.load_upgrade_certificate().await.unwrap();
+        let view_number = res.unwrap().view_number;
+        assert_eq!(view_number, new_view_number_for_certificate);
     }
 
     #[async_std::test]

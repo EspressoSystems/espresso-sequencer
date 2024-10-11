@@ -307,6 +307,9 @@ mod test {
     use ethers::prelude::*;
     use ethers::signers::Signer;
     use ethers::utils::{Anvil, AnvilInstance};
+    use sequencer_utils::deployer::test_helpers::{
+        deploy_fee_contract, deploy_fee_contract_as_proxy,
+    };
     use std::sync::Arc;
 
     use anyhow::Result;
@@ -334,7 +337,7 @@ mod test {
             .with_chain_id(provider.get_chainid().await?.as_u64());
         let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
-        let fee_contract_address = deployer::deploy_fee_contract(l1_wallet.clone()).await?;
+        let fee_contract_address = deploy_fee_contract(l1_wallet.clone()).await?;
 
         let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
 
@@ -351,7 +354,7 @@ mod test {
 
         let mut contracts = deployer::Contracts::default();
         let fee_contract_address =
-            deployer::deploy_fee_contract_as_proxy(l1_wallet.clone(), &mut contracts).await?;
+            deploy_fee_contract_as_proxy(l1_wallet.clone(), &mut contracts).await?;
 
         let fee_contract = FeeContract::new(fee_contract_address, l1_wallet.clone());
 
@@ -511,7 +514,13 @@ mod test {
 
     #[async_std::test]
     async fn test_genesis_fee_contract_is_not_a_proxy() -> anyhow::Result<()> {
-        let toml = toml! {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
             base_version = "0.1"
             upgrade_version = "0.2"
 
@@ -523,24 +532,19 @@ mod test {
             max_block_size = 30000
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468"
+            fee_contract = "{:?}"
 
             [header]
             timestamp = 123456
 
             [l1_finalized]
             number = 42
-        }
+        "#,
+            contract.address()
+        )
         .to_string();
 
-        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-
-        setup_test();
-
-        let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
-
-        genesis.chain_config.fee_contract = Some(contract.address());
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // validate the the fee_contract address
         let result = genesis.validate_fee_contract(anvil.endpoint()).await;
@@ -559,7 +563,13 @@ mod test {
 
     #[async_std::test]
     async fn test_genesis_fee_contract_is_a_proxy() -> anyhow::Result<()> {
-        let toml = toml! {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
             base_version = "0.1"
             upgrade_version = "0.2"
 
@@ -571,24 +581,19 @@ mod test {
             max_block_size = 30000
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0x00AeE426f8558929102df1eBA983B5C439E37D18"
+            fee_contract = "{:?}"
 
             [header]
             timestamp = 123456
 
             [l1_finalized]
             number = 42
-        }
+        "#,
+            proxy_contract.address()
+        )
         .to_string();
 
-        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-
-        setup_test();
-
-        let anvil = Anvil::new().spawn();
-        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
-
-        genesis.chain_config.fee_contract = Some(proxy_contract.address());
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
         let result = genesis.validate_fee_contract(anvil.endpoint()).await;
@@ -602,7 +607,13 @@ mod test {
 
     #[async_std::test]
     async fn test_genesis_fee_contract_is_a_proxy_with_upgrades() -> anyhow::Result<()> {
-        let toml = toml! {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
             base_version = "0.1"
             upgrade_version = "0.2"
 
@@ -633,7 +644,7 @@ mod test {
             max_block_size = 30000
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0x00AeE426f8558929102df1eBA983B5C439E37D18" // a proxy
+            fee_contract = "{:?}"
 
             [[upgrade]]
             version = "0.3"
@@ -647,25 +658,14 @@ mod test {
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
             bid_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0x00AeE426f8558929102df1eBA983B5C439E37D18" // a proxy
-        }
+            fee_contract = "{:?}"
+        "#,
+            proxy_contract.clone().address(),
+            proxy_contract.clone().address()
+        )
         .to_string();
 
-        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-
-        setup_test();
-
-        let anvil = Anvil::new().spawn();
-        let (_wallet, proxy_contract) = deploy_fee_contract_as_proxy_for_test(&anvil).await?;
-
-        // now iterate over each upgrade type and set the fee_contract to the proxy contract
-        for upgrade in genesis.upgrades.values_mut() {
-            match &mut upgrade.upgrade_type {
-                UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
-                    chain_config.fee_contract = Some(proxy_contract.clone().address());
-                }
-            }
-        }
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
         let result = genesis.validate_fee_contract(anvil.endpoint()).await;
@@ -679,7 +679,13 @@ mod test {
 
     #[async_std::test]
     async fn test_genesis_fee_contract_is_not_a_proxy_with_upgrades() -> anyhow::Result<()> {
-        let toml = toml! {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
+
+        let toml = format!(
+            r#"
             base_version = "0.1"
             upgrade_version = "0.2"
 
@@ -710,7 +716,7 @@ mod test {
             max_block_size = 30000
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468" //not a proxy
+            fee_contract = "{:?}"
 
             [[upgrade]]
             version = "0.3"
@@ -724,25 +730,14 @@ mod test {
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
             bid_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0xa15bb66138824a1c7167f5e85b957d04dd34e468" //not a proxy
-        }
+            fee_contract = "{:?}"
+        "#,
+            contract.clone().address(),
+            contract.clone().address()
+        )
         .to_string();
 
-        let mut genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
-
-        setup_test();
-
-        let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_fee_contract_for_test(&anvil).await?;
-
-        // now iterate over each upgrade type and set the fee_contract to the proxy contract
-        for upgrade in genesis.upgrades.values_mut() {
-            match &mut upgrade.upgrade_type {
-                UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
-                    chain_config.fee_contract = Some(contract.clone().address());
-                }
-            }
-        }
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
 
         // Call the validation logic for the fee_contract address
         let result = genesis.validate_fee_contract(anvil.endpoint()).await;
