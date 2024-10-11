@@ -440,7 +440,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
 
                 self.num_timeouts_tracked += 1;
                 let leader = self.membership.leader(view_number);
-                error!(
+                warn!(
                     %leader,
                     leader_mnemonic = cdn_proto::util::mnemonic(&leader),
                     view_number = *view_number,
@@ -557,7 +557,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     let timeout = self.view_sync_timeout;
                     async move {
                         async_sleep(timeout).await;
-                        info!("Vote sending timed out in ViewSyncPreCommitCertificateRecv, Relay = {}", relay);
+                        warn!("Vote sending timed out in ViewSyncPreCommitCertificateRecv, Relay = {}", relay);
 
                         broadcast_event(
                             Arc::new(HotShotEvent::ViewSyncTimeout(
@@ -649,7 +649,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     let timeout = self.view_sync_timeout;
                     async move {
                         async_sleep(timeout).await;
-                        info!(
+                        warn!(
                             "Vote sending timed out in ViewSyncCommitCertificateRecv, relay = {}",
                             relay
                         );
@@ -745,7 +745,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     let timeout = self.view_sync_timeout;
                     async move {
                         async_sleep(timeout).await;
-                        info!("Vote sending timed out in ViewSyncTrigger");
+                        warn!("Vote sending timed out in ViewSyncTrigger");
                         broadcast_event(
                             Arc::new(HotShotEvent::ViewSyncTimeout(
                                 TYPES::Time::new(*next_view),
@@ -811,7 +811,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         let last_cert = last_seen_certificate.clone();
                         async move {
                             async_sleep(timeout).await;
-                            info!(
+                            warn!(
                                 "Vote sending timed out in ViewSyncTimeout relay = {}",
                                 relay
                             );

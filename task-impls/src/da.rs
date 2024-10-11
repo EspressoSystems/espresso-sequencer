@@ -35,7 +35,7 @@ use hotshot_types::{
 use sha2::{Digest, Sha256};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
@@ -284,7 +284,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 }
 
                 if *view - *self.cur_view > 1 {
-                    warn!("View changed by more than 1 going to view {:?}", view);
+                    info!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 

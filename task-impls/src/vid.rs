@@ -20,7 +20,7 @@ use hotshot_types::{
         BlockPayload,
     },
 };
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
@@ -139,7 +139,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                 }
 
                 if *view - *self.cur_view > 1 {
-                    warn!("View changed by more than 1 going to view {:?}", view);
+                    info!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
 

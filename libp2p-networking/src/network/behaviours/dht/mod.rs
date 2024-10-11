@@ -277,7 +277,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
                     }
                 },
                 Err(err) => {
-                    error!("GOT ERROR IN KAD QUERY {:?}", err);
+                    warn!("Error in Kademlia query: {:?}", err);
                     0
                 }
             },
@@ -342,7 +342,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
                     // Initiate new query that hits more replicas
                     if retry_count > 0 {
                         let new_retry_count = retry_count - 1;
-                        error!("Get DHT: Internal disagreement for get dht request {:?}! requerying with more nodes. {:?} retries left", progress, new_retry_count);
+                        warn!("Get DHT: Internal disagreement for get dht request {:?}! requerying with more nodes. {:?} retries left", progress, new_retry_count);
                         let new_factor = NonZeroUsize::max(
                             NonZeroUsize::new(num_replicas.get() + 1).unwrap_or(num_replicas),
                             *MAX_DHT_QUERY_SIZE,
@@ -357,7 +357,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
                             records: HashMap::default(),
                         });
                     }
-                    error!("Get DHT: Internal disagreement for get dht request {:?}! Giving up because out of retries. ", progress);
+                    warn!("Get DHT: Internal disagreement for get dht request {:?}! Giving up because out of retries. ", progress);
                 }
             }
         }
