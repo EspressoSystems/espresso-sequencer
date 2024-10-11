@@ -1,0 +1,4 @@
+[route.getfeebalance]
+PATH = ["/fee_balance/:address"]
+":address" = "Literal"
+DOC = "Get current balance in address account."
