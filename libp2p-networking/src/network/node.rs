@@ -25,9 +25,7 @@ use async_compatibility_layer::{
 };
 use futures::{channel::mpsc, select, FutureExt, SinkExt, StreamExt};
 use hotshot_types::{
-    constants::KAD_DEFAULT_REPUB_INTERVAL_SEC,
-    request_response::{Request, Response},
-    traits::signature_key::SignatureKey,
+    constants::KAD_DEFAULT_REPUB_INTERVAL_SEC, traits::signature_key::SignatureKey,
 };
 use libp2p::{
     autonat,
@@ -71,7 +69,6 @@ use crate::network::behaviours::{
     dht::{DHTBehaviour, DHTProgress, KadPutQuery, NUM_REPLICATED_TO_TRUST},
     direct_message::{DMBehaviour, DMRequest},
     exponential_backoff::ExponentialBackoff,
-    request_response::RequestResponseState,
 };
 
 /// Maximum size of a message
@@ -97,8 +94,6 @@ pub struct NetworkNode<K: SignatureKey + 'static> {
     config: NetworkNodeConfig<K>,
     /// the listener id we are listening on, if it exists
     listener_id: Option<ListenerId>,
-    /// Handler for requests and response behavior events.
-    request_response_state: RequestResponseState,
     /// Handler for direct messages
     direct_message_state: DMBehaviour,
     /// Handler for DHT Events
@@ -271,15 +266,6 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                     .into_iter(),
                     rrconfig.clone(),
                 );
-            let request_response: libp2p::request_response::cbor::Behaviour<Request, Response> =
-                RequestResponse::new(
-                    [(
-                        StreamProtocol::new("/HotShot/request_response/1.0"),
-                        ProtocolSupport::Full,
-                    )]
-                    .into_iter(),
-                    rrconfig.clone(),
-                );
 
             let autonat_config = autonat::Config {
                 only_global_ips: false,
@@ -291,7 +277,6 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                 kadem,
                 identify,
                 direct_message,
-                request_response,
                 autonat::Behaviour::new(peer_id, autonat_config),
             );
 
@@ -321,7 +306,6 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
             swarm,
             config: config.clone(),
             listener_id: None,
-            request_response_state: RequestResponseState::default(),
             direct_message_state: DMBehaviour::default(),
             dht_handler: DHTBehaviour::new(
                 peer_id,
@@ -479,23 +463,6 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                     }
                     ClientRequest::DirectResponse(chan, msg) => {
                         behaviour.add_direct_response(chan, msg);
-                    }
-                    ClientRequest::DataRequest {
-                        request,
-                        peer,
-                        chan,
-                    } => {
-                        let id = behaviour.request_response.send_request(&peer, request);
-                        self.request_response_state.add_request(id, chan);
-                    }
-                    ClientRequest::DataResponse { response, chan } => {
-                        if behaviour
-                            .request_response
-                            .send_response(chan, response)
-                            .is_err()
-                        {
-                            debug!("Data response dropped because client is no longer connected");
-                        }
                     }
                     ClientRequest::AddKnownPeers(peers) => {
                         self.add_known_peers(&peers);
@@ -655,9 +622,6 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                     NetworkEventInternal::DMEvent(e) => self
                         .direct_message_state
                         .handle_dm_event(e, self.resend_tx.clone()),
-                    NetworkEventInternal::RequestResponseEvent(e) => {
-                        self.request_response_state.handle_request_response(e)
-                    }
                     NetworkEventInternal::AutonatEvent(e) => {
                         match e {
                             autonat::Event::InboundProbe(_) => {}

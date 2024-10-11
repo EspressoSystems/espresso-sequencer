@@ -46,7 +46,6 @@ use hotshot_types::{
     constants::LOOK_AHEAD,
     data::ViewNumber,
     network::NetworkConfig,
-    request_response::Request,
     traits::{
         election::Membership,
         metrics::{Counter, Gauge, Metrics, NoMetrics},
@@ -738,9 +737,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
             NetworkEvent::IsBootstrapped => {
                 error!("handle_recvd_events received `NetworkEvent::IsBootstrapped`, which should be impossible.");
             }
-            NetworkEvent::ResponseRequested(..) => {
-                error!("received unexpected `NetworkEvent::ResponseRequested`");
-            }
             NetworkEvent::ConnectedPeersUpdate(_) => {}
         }
         Ok::<(), NetworkError>(())
@@ -773,10 +769,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                             NetworkEvent::IsBootstrapped => {
                                 is_bootstrapped.store(true, Ordering::Relaxed);
                             }
-                            GossipMsg(_)
-                            | DirectRequest(_, _, _)
-                            | DirectResponse(_, _)
-                            | NetworkEvent::ResponseRequested(Request(_), _) => {
+                            GossipMsg(_) | DirectRequest(_, _, _) | DirectResponse(_, _) => {
                                 let _ = handle.handle_recvd_events(message, &sender).await;
                             }
                             NetworkEvent::ConnectedPeersUpdate(num_peers) => {

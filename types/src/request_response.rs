@@ -12,18 +12,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 
-/// Request for Consenus data
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Request(#[serde(with = "serde_bytes")] pub Vec<u8>);
-
-/// Response for some VID data that we already collected
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Response(
-    /// Data
-    #[serde(with = "serde_bytes")]
-    pub Vec<u8>,
-);
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 /// A signed request for a proposal.
 pub struct ProposalRequestPayload<TYPES: NodeType> {

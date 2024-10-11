@@ -10,11 +10,7 @@ use async_compatibility_layer::{
     art::{async_sleep, async_timeout},
     channel::{Receiver, UnboundedReceiver, UnboundedSender},
 };
-use futures::channel::oneshot;
-use hotshot_types::{
-    request_response::{Request, Response},
-    traits::{network::NetworkError, signature_key::SignatureKey},
-};
+use hotshot_types::traits::{network::NetworkError, signature_key::SignatureKey};
 use libp2p::{request_response::ResponseChannel, Multiaddr};
 use libp2p_identity::PeerId;
 use tracing::{debug, info, instrument};
@@ -182,45 +178,6 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
         }
 
         Ok(())
-    }
-
-    /// Request another peer for some data we want.  Returns the id of the request
-    ///
-    /// # Errors
-    ///
-    /// Will return a networking error if the channel closes before the result
-    /// can be sent back
-    pub async fn request_data(
-        &self,
-        request: &[u8],
-        peer: PeerId,
-    ) -> Result<Option<Response>, NetworkError> {
-        let (tx, rx) = oneshot::channel();
-        let req = ClientRequest::DataRequest {
-            request: Request(request.to_vec()),
-            peer,
-            chan: tx,
-        };
-
-        self.send_request(req).await?;
-
-        rx.await
-            .map_err(|e| NetworkError::ChannelReceiveError(e.to_string()))
-    }
-
-    /// Send a response to a request with the response channel
-    /// # Errors
-    /// Will error if the client request channel is closed, or serialization fails.
-    pub async fn respond_data(
-        &self,
-        response: Vec<u8>,
-        chan: ResponseChannel<Response>,
-    ) -> Result<(), NetworkError> {
-        let req = ClientRequest::DataResponse {
-            response: Response(response),
-            chan,
-        };
-        self.send_request(req).await
     }
 
     /// Look up a peer's addresses in kademlia

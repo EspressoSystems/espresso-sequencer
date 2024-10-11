@@ -4,10 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use hotshot_types::{
-    request_response::{Request, Response},
-    traits::signature_key::SignatureKey,
-};
+use hotshot_types::traits::signature_key::SignatureKey;
 use libp2p::{
     autonat,
     gossipsub::{Behaviour as GossipBehaviour, Event as GossipEvent, IdentTopic},
@@ -50,10 +47,6 @@ pub struct NetworkDef<K: SignatureKey + 'static> {
     #[debug(skip)]
     pub direct_message: libp2p::request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
 
-    /// Behaviour for requesting and receiving data
-    #[debug(skip)]
-    pub request_response: libp2p::request_response::cbor::Behaviour<Request, Response>,
-
     /// Auto NAT behaviour to determine if we are publically reachable and
     /// by which address
     #[debug(skip)]
@@ -68,7 +61,6 @@ impl<K: SignatureKey + 'static> NetworkDef<K> {
         dht: libp2p::kad::Behaviour<ValidatedStore<MemoryStore, K>>,
         identify: IdentifyBehaviour,
         direct_message: cbor::Behaviour<Vec<u8>, Vec<u8>>,
-        request_response: cbor::Behaviour<Request, Response>,
         autonat: autonat::Behaviour,
     ) -> NetworkDef<K> {
         Self {
@@ -76,7 +68,6 @@ impl<K: SignatureKey + 'static> NetworkDef<K> {
             dht,
             identify,
             direct_message,
-            request_response,
             autonat,
         }
     }
@@ -152,12 +143,6 @@ impl From<IdentifyEvent> for NetworkEventInternal {
 impl From<libp2p::request_response::Event<Vec<u8>, Vec<u8>>> for NetworkEventInternal {
     fn from(value: libp2p::request_response::Event<Vec<u8>, Vec<u8>>) -> Self {
         Self::DMEvent(value)
-    }
-}
-
-impl From<libp2p::request_response::Event<Request, Response>> for NetworkEventInternal {
-    fn from(event: libp2p::request_response::Event<Request, Response>) -> Self {
-        Self::RequestResponseEvent(event)
     }
 }
 
