@@ -103,7 +103,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         // payload first.
         let signed_proposal_request = ProposalRequestPayload {
             view_number: view,
-            key: self.public_key(),
+            key: self.public_key().clone(),
         };
 
         // Finally, compute the signature for the payload.
