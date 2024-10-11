@@ -686,12 +686,12 @@ impl TestNetwork {
         let regular_nodes = regular_nodes.into_iter().collect::<Vec<_>>();
         tracing::info!(?da_nodes, ?regular_nodes, "shutting down nodes");
 
-        for i in &da_nodes {
-            self.da_nodes[*i].stop().await;
-        }
-        for i in &regular_nodes {
-            self.regular_nodes[*i].stop().await;
-        }
+        join_all(
+            select(&mut self.da_nodes, &da_nodes)
+                .map(TestNode::stop)
+                .chain(select(&mut self.regular_nodes, &regular_nodes).map(TestNode::stop)),
+        )
+        .await;
 
         // We use 3n/4 + 1 as the quorum threshold (fault tolerance f = n/4), even though the
         // theoretical fault tolerance of HotStuff consensus is n/3, because our implementation does
@@ -764,12 +764,12 @@ impl TestNetwork {
             sleep(Duration::from_secs(2)).await;
         }
 
-        for i in da_nodes {
-            self.da_nodes[i].start().await;
-        }
-        for i in regular_nodes {
-            self.regular_nodes[i].start().await;
-        }
+        join_all(
+            select(&mut self.da_nodes, &da_nodes)
+                .map(TestNode::start)
+                .chain(select(&mut self.regular_nodes, &regular_nodes).map(TestNode::start)),
+        )
+        .await;
     }
 
     async fn shut_down(mut self) {
@@ -920,4 +920,11 @@ fn builder_key_pair() -> EthKeyPair {
 
 fn builder_account() -> FeeAccount {
     builder_key_pair().fee_account()
+}
+
+fn select<'a, T>(nodes: &'a mut [T], is: &'a [usize]) -> impl Iterator<Item = &'a mut T> {
+    nodes
+        .iter_mut()
+        .enumerate()
+        .filter_map(|(i, elem)| if is.contains(&i) { Some(elem) } else { None })
 }
