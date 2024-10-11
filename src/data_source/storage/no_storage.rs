@@ -12,17 +12,17 @@
 
 #![cfg(feature = "no-storage")]
 
-use super::AvailabilityStorage;
+use super::{
+    pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
+    AvailabilityStorage, NodeStorage,
+};
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonQueryData,
     },
-    data_source::{
-        storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-        update, VersionedDataSource,
-    },
-    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    data_source::{update, VersionedDataSource},
+    node::{SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
@@ -98,28 +98,31 @@ impl<'a, Types: NodeType> AvailabilityStorage<Types> for Transaction<'a>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    async fn get_leaf(&self, _id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
+    async fn get_leaf(&mut self, _id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         Err(QueryError::Missing)
     }
 
-    async fn get_block(&self, _id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+    async fn get_block(&mut self, _id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
         Err(QueryError::Missing)
     }
 
-    async fn get_header(&self, _id: BlockId<Types>) -> QueryResult<Header<Types>> {
+    async fn get_header(&mut self, _id: BlockId<Types>) -> QueryResult<Header<Types>> {
         Err(QueryError::Missing)
     }
 
-    async fn get_payload(&self, _id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+    async fn get_payload(&mut self, _id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
         Err(QueryError::Missing)
     }
 
-    async fn get_vid_common(&self, _id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+    async fn get_vid_common(
+        &mut self,
+        _id: BlockId<Types>,
+    ) -> QueryResult<VidCommonQueryData<Types>> {
         Err(QueryError::Missing)
     }
 
     async fn get_leaf_range<R>(
-        &self,
+        &mut self,
         _range: R,
     ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
     where
@@ -129,7 +132,7 @@ where
     }
 
     async fn get_block_range<R>(
-        &self,
+        &mut self,
         _range: R,
     ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
     where
@@ -139,7 +142,7 @@ where
     }
 
     async fn get_payload_range<R>(
-        &self,
+        &mut self,
         _range: R,
     ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
     where
@@ -149,7 +152,7 @@ where
     }
 
     async fn get_vid_common_range<R>(
-        &self,
+        &mut self,
         _range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
     where
@@ -159,7 +162,7 @@ where
     }
 
     async fn get_transaction(
-        &self,
+        &mut self,
         _hash: TransactionHash<Types>,
     ) -> QueryResult<TransactionQueryData<Types>> {
         Err(QueryError::Missing)
@@ -192,35 +195,35 @@ where
 }
 
 #[async_trait]
-impl<'a, Types: NodeType> NodeDataSource<Types> for Transaction<'a>
+impl<'a, Types: NodeType> NodeStorage<Types> for Transaction<'a>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    async fn block_height(&self) -> QueryResult<usize> {
+    async fn block_height(&mut self) -> QueryResult<usize> {
         Ok(self.height as usize)
     }
 
-    async fn count_transactions(&self) -> QueryResult<usize> {
+    async fn count_transactions(&mut self) -> QueryResult<usize> {
         Err(QueryError::Missing)
     }
 
-    async fn payload_size(&self) -> QueryResult<usize> {
+    async fn payload_size(&mut self) -> QueryResult<usize> {
         Err(QueryError::Missing)
     }
 
-    async fn vid_share<ID>(&self, _id: ID) -> QueryResult<VidShare>
+    async fn vid_share<ID>(&mut self, _id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         Err(QueryError::Missing)
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn sync_status(&mut self) -> QueryResult<SyncStatus> {
         Err(QueryError::Missing)
     }
 
     async fn get_header_window(
-        &self,
+        &mut self,
         _start: impl Into<WindowStart<Types>> + Send + Sync,
         _end: u64,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
@@ -577,56 +580,56 @@ pub mod testing {
     }
 
     #[async_trait]
-    impl<'a, T> NodeDataSource<MockTypes> for Transaction<'a, T>
+    impl<'a, T> NodeStorage<MockTypes> for Transaction<'a, T>
     where
-        T: NodeDataSource<MockTypes> + Sync,
+        T: NodeStorage<MockTypes> + Send,
     {
-        async fn block_height(&self) -> QueryResult<usize> {
+        async fn block_height(&mut self) -> QueryResult<usize> {
             match self {
-                Self::Sql(tx) => NodeDataSource::block_height(tx).await,
-                Self::NoStorage(tx) => NodeDataSource::block_height(tx).await,
+                Transaction::Sql(tx) => tx.block_height().await,
+                Transaction::NoStorage(tx) => tx.block_height().await,
             }
         }
 
-        async fn count_transactions(&self) -> QueryResult<usize> {
+        async fn count_transactions(&mut self) -> QueryResult<usize> {
             match self {
-                Self::Sql(tx) => tx.count_transactions().await,
-                Self::NoStorage(tx) => tx.count_transactions().await,
+                Transaction::Sql(tx) => tx.count_transactions().await,
+                Transaction::NoStorage(tx) => tx.count_transactions().await,
             }
         }
 
-        async fn payload_size(&self) -> QueryResult<usize> {
+        async fn payload_size(&mut self) -> QueryResult<usize> {
             match self {
-                Self::Sql(tx) => tx.payload_size().await,
-                Self::NoStorage(tx) => tx.payload_size().await,
+                Transaction::Sql(tx) => tx.payload_size().await,
+                Transaction::NoStorage(tx) => tx.payload_size().await,
             }
         }
 
-        async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+        async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             match self {
-                Self::Sql(tx) => tx.vid_share(id).await,
-                Self::NoStorage(tx) => tx.vid_share(id).await,
+                Transaction::Sql(tx) => tx.vid_share(id).await,
+                Transaction::NoStorage(tx) => tx.vid_share(id).await,
             }
         }
 
-        async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        async fn sync_status(&mut self) -> QueryResult<SyncStatus> {
             match self {
-                Self::Sql(tx) => tx.sync_status().await,
-                Self::NoStorage(tx) => tx.sync_status().await,
+                Transaction::Sql(tx) => tx.sync_status().await,
+                Transaction::NoStorage(tx) => tx.sync_status().await,
             }
         }
 
         async fn get_header_window(
-            &self,
+            &mut self,
             start: impl Into<WindowStart<MockTypes>> + Send + Sync,
             end: u64,
         ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
             match self {
-                Self::Sql(tx) => tx.get_header_window(start, end).await,
-                Self::NoStorage(tx) => tx.get_header_window(start, end).await,
+                Transaction::Sql(tx) => tx.get_header_window(start, end).await,
+                Transaction::NoStorage(tx) => tx.get_header_window(start, end).await,
             }
         }
     }
@@ -652,22 +655,24 @@ pub mod testing {
     impl NodeDataSource<MockTypes> for DataSource {
         async fn block_height(&self) -> QueryResult<usize> {
             match self {
-                Self::Sql(data_source) => NodeDataSource::block_height(data_source).await,
-                Self::NoStorage(data_source) => NodeDataSource::block_height(data_source).await,
+                DataSource::Sql(data_source) => NodeDataSource::block_height(data_source).await,
+                DataSource::NoStorage(data_source) => {
+                    NodeDataSource::block_height(data_source).await
+                }
             }
         }
 
         async fn count_transactions(&self) -> QueryResult<usize> {
             match self {
-                Self::Sql(data_source) => data_source.count_transactions().await,
-                Self::NoStorage(data_source) => data_source.count_transactions().await,
+                DataSource::Sql(data_source) => data_source.count_transactions().await,
+                DataSource::NoStorage(data_source) => data_source.count_transactions().await,
             }
         }
 
         async fn payload_size(&self) -> QueryResult<usize> {
             match self {
-                Self::Sql(data_source) => data_source.payload_size().await,
-                Self::NoStorage(data_source) => data_source.payload_size().await,
+                DataSource::Sql(data_source) => data_source.payload_size().await,
+                DataSource::NoStorage(data_source) => data_source.payload_size().await,
             }
         }
 
@@ -676,15 +681,15 @@ pub mod testing {
             ID: Into<BlockId<MockTypes>> + Send + Sync,
         {
             match self {
-                Self::Sql(data_source) => data_source.vid_share(id).await,
-                Self::NoStorage(data_source) => data_source.vid_share(id).await,
+                DataSource::Sql(data_source) => data_source.vid_share(id).await,
+                DataSource::NoStorage(data_source) => data_source.vid_share(id).await,
             }
         }
 
         async fn sync_status(&self) -> QueryResult<SyncStatus> {
             match self {
-                Self::Sql(data_source) => data_source.sync_status().await,
-                Self::NoStorage(data_source) => data_source.sync_status().await,
+                DataSource::Sql(data_source) => data_source.sync_status().await,
+                DataSource::NoStorage(data_source) => data_source.sync_status().await,
             }
         }
 
@@ -694,8 +699,10 @@ pub mod testing {
             end: u64,
         ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
             match self {
-                Self::Sql(data_source) => data_source.get_header_window(start, end).await,
-                Self::NoStorage(data_source) => data_source.get_header_window(start, end).await,
+                DataSource::Sql(data_source) => data_source.get_header_window(start, end).await,
+                DataSource::NoStorage(data_source) => {
+                    data_source.get_header_window(start, end).await
+                }
             }
         }
     }

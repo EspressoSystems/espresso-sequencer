@@ -103,7 +103,7 @@ pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + NodeDataSource<Types>,
+    <State as ReadState>::State: NodeDataSource<Types> + Send + Sync,
 {
     let mut api = load_api::<State, Error, Ver>(
         options.api_path.as_ref(),

@@ -10,7 +10,6 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::data_source::ReadOnly;
 use anyhow::bail;
 use async_trait::async_trait;
 use std::{fmt::Debug, time::Duration};
@@ -39,19 +38,9 @@ pub trait PruneStorage: PrunerConfig {
 }
 
 #[async_trait]
-pub trait PrunedHeightStorage {
-    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+pub trait PrunedHeightStorage: Sized {
+    async fn load_pruned_height(&mut self) -> anyhow::Result<Option<u64>> {
         Ok(None)
-    }
-}
-
-#[async_trait]
-impl<T> PrunedHeightStorage for ReadOnly<T>
-where
-    T: PrunedHeightStorage + Sync,
-{
-    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
-        (**self).load_pruned_height().await
     }
 }
 

@@ -39,9 +39,8 @@ impl BackgroundTask {
     /// The caller should ensure that `future` yields back to the executor fairly frequently, to
     /// ensure timely cancellation in case the task is dropped. If an operation in `future` may run
     /// for a long time without blocking or yielding, consider using
-    /// [`yield_now`](async_std::task::yield_now) periodically, or using
-    /// [`spawn`](async_std::task::spawn) or [`spawn_blocking`](async_std::task::spawn_blocking) to
-    /// run long operations in a sub-task.
+    /// [`yield_now`](async_std::task::yield_now) periodically, or using [`spawn`] or
+    /// [`spawn_blocking`](async_std::task::spawn_blocking) to run long operations in a sub-task.
     pub fn spawn<F>(name: impl Display, future: F) -> Self
     where
         F: Future + Send + 'static,
@@ -80,8 +79,8 @@ impl<T: Send + 'static> Task<T> {
     /// ensure timely cancellation in case the task is dropped. If an operation in `future` may run
     /// for a long time without blocking or yielding, consider using
     /// [`yield_now`](async_std::task::yield_now) periodically, or using
-    /// [`spawn`](async_std::task::spawn) or [`spawn_blocking`](async_std::task::spawn_blocking) to
-    /// run long operations in a sub-task.
+    /// [`spawn`] or [`spawn_blocking`](async_std::task::spawn_blocking) to run long operations in a
+    /// sub-task.
     pub fn spawn<F>(name: impl Display, future: F) -> Self
     where
         F: Future<Output = T> + Send + 'static,

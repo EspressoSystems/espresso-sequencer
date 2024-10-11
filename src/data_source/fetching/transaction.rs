@@ -62,7 +62,7 @@ where
     }
 
     async fn active_fetch<S, P>(
-        _tx: &impl AvailabilityStorage<Types>,
+        _tx: &mut impl AvailabilityStorage<Types>,
         _fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
     ) where
@@ -76,7 +76,7 @@ where
         tracing::debug!("not fetching unknown transaction {req:?}");
     }
 
-    async fn load<S>(storage: &S, req: Self::Request) -> QueryResult<Self>
+    async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {

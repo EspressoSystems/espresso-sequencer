@@ -11,6 +11,7 @@
 // see <https://www.gnu.org/licenses/>.
 
 pub(crate) mod currency;
+pub(crate) mod data_source;
 pub(crate) mod errors;
 pub(crate) mod monetary_value;
 pub(crate) mod query_data;
@@ -18,10 +19,10 @@ pub(crate) mod traits;
 
 use self::errors::InvalidLimit;
 use crate::availability::{QueryableHeader, QueryablePayload};
-use crate::data_source::storage::ExplorerStorage;
 use crate::{api::load_api, Header, Payload, Transaction};
 
 pub use currency::*;
+pub use data_source::*;
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
 pub use monetary_value::*;
@@ -242,7 +243,7 @@ where
     Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
     Transaction<Types>: ExplorerTransaction,
     Payload<Types>: QueryablePayload<Types>,
-    <State as ReadState>::State: Send + Sync + ExplorerStorage<Types>,
+    <State as ReadState>::State: ExplorerDataSource<Types> + Send + Sync,
 {
     let mut api = load_api::<State, Error, Ver>(
         Option::<Box<Path>>::None,

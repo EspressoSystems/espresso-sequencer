@@ -20,16 +20,14 @@ use crate::{
         notifier::Notifier,
         storage::{
             pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg},
-            AvailabilityStorage, ExplorerStorage,
+            AvailabilityStorage, ExplorerStorage, MerklizedStateHeightStorage,
+            MerklizedStateStorage, NodeStorage,
         },
         update::{self, VersionedDataSource},
     },
     explorer,
-    merklized_state::{
-        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
-        UpdateStateData,
-    },
-    node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
+    merklized_state::{MerklizedState, Snapshot, UpdateStateData},
+    node::{SyncStatus, TimeWindowQueryData, WindowStart},
     Header, Payload, QueryResult, VidShare,
 };
 use anyhow::Context;
@@ -218,9 +216,9 @@ where
 impl<'a, Types, T> PrunedHeightStorage for Transaction<'a, Types, T>
 where
     Types: NodeType,
-    T: PrunedHeightStorage + Sync,
+    T: PrunedHeightStorage + Send,
 {
-    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
+    async fn load_pruned_height(&mut self) -> anyhow::Result<Option<u64>> {
         self.inner.load_pruned_height().await
     }
 }
@@ -228,9 +226,9 @@ where
 impl<'a, Types, T> Transaction<'a, Types, T>
 where
     Types: NodeType,
-    T: PrunedHeightStorage + NodeDataSource<Types> + Sync,
+    T: PrunedHeightStorage + NodeStorage<Types> + Send + Sync,
 {
-    pub(super) async fn heights(&self) -> anyhow::Result<Heights> {
+    pub(super) async fn heights(&mut self) -> anyhow::Result<Heights> {
         let height = self.block_height().await.context("loading block height")? as u64;
         let pruned_height = self
             .load_pruned_height()
@@ -244,32 +242,31 @@ where
 }
 
 #[async_trait]
-impl<'a, Types, T, State, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
+impl<'a, Types, T, State, const ARITY: usize> MerklizedStateStorage<Types, State, ARITY>
     for Transaction<'a, Types, T>
 where
     Types: NodeType,
-    T: MerklizedStateDataSource<Types, State, ARITY> + Send + Sync,
+    T: MerklizedStateStorage<Types, State, ARITY> + Send,
     State: MerklizedState<Types, ARITY> + 'static,
     <State as MerkleTreeScheme>::Commitment: Send,
 {
     async fn get_path(
-        &self,
+        &mut self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
-        self.as_ref().get_path(snapshot, key).await
+        self.as_mut().get_path(snapshot, key).await
     }
 }
 
 #[async_trait]
-impl<'a, Types, T> MerklizedStateHeightPersistence for Transaction<'a, Types, T>
+impl<'a, Types, T> MerklizedStateHeightStorage for Transaction<'a, Types, T>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    T: MerklizedStateHeightPersistence + Send + Sync,
+    T: MerklizedStateHeightStorage + Send,
 {
-    async fn get_last_state_height(&self) -> QueryResult<usize> {
-        self.as_ref().get_last_state_height().await
+    async fn get_last_state_height(&mut self) -> QueryResult<usize> {
+        self.as_mut().get_last_state_height().await
     }
 }
 
@@ -349,28 +346,31 @@ where
     Payload<Types>: QueryablePayload<Types>,
     T: AvailabilityStorage<Types>,
 {
-    async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
+    async fn get_leaf(&mut self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         self.inner.get_leaf(id).await
     }
 
-    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+    async fn get_block(&mut self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
         self.inner.get_block(id).await
     }
 
-    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+    async fn get_header(&mut self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
         self.inner.get_header(id).await
     }
 
-    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+    async fn get_payload(&mut self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
         self.inner.get_payload(id).await
     }
 
-    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
+    async fn get_vid_common(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonQueryData<Types>> {
         self.inner.get_vid_common(id).await
     }
 
     async fn get_leaf_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
     where
@@ -380,7 +380,7 @@ where
     }
 
     async fn get_block_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
     where
@@ -390,7 +390,7 @@ where
     }
 
     async fn get_payload_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
     where
@@ -400,7 +400,7 @@ where
     }
 
     async fn get_vid_common_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
     where
@@ -410,7 +410,7 @@ where
     }
 
     async fn get_transaction(
-        &self,
+        &mut self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<TransactionQueryData<Types>> {
         self.inner.get_transaction(hash).await
@@ -418,36 +418,36 @@ where
 }
 
 #[async_trait]
-impl<'a, Types, T> NodeDataSource<Types> for Transaction<'a, Types, T>
+impl<'a, Types, T> NodeStorage<Types> for Transaction<'a, Types, T>
 where
     Types: NodeType,
-    T: NodeDataSource<Types> + Sync,
+    T: NodeStorage<Types> + Send,
 {
-    async fn block_height(&self) -> QueryResult<usize> {
+    async fn block_height(&mut self) -> QueryResult<usize> {
         self.inner.block_height().await
     }
 
-    async fn count_transactions(&self) -> QueryResult<usize> {
+    async fn count_transactions(&mut self) -> QueryResult<usize> {
         self.inner.count_transactions().await
     }
 
-    async fn payload_size(&self) -> QueryResult<usize> {
+    async fn payload_size(&mut self) -> QueryResult<usize> {
         self.inner.payload_size().await
     }
 
-    async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
+    async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.inner.vid_share(id).await
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn sync_status(&mut self) -> QueryResult<SyncStatus> {
         self.inner.sync_status().await
     }
 
     async fn get_header_window(
-        &self,
+        &mut self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
@@ -462,63 +462,63 @@ where
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
     crate::Transaction<Types>: explorer::traits::ExplorerTransaction,
-    T: ExplorerStorage<Types> + Send + Sync,
+    T: ExplorerStorage<Types> + Send,
 {
     async fn get_block_summaries(
-        &self,
+        &mut self,
         request: explorer::query_data::GetBlockSummariesRequest<Types>,
     ) -> Result<
         Vec<explorer::query_data::BlockSummary<Types>>,
         explorer::query_data::GetBlockSummariesError,
     > {
-        self.as_ref().get_block_summaries(request).await
+        self.as_mut().get_block_summaries(request).await
     }
 
     async fn get_block_detail(
-        &self,
+        &mut self,
         request: explorer::query_data::BlockIdentifier<Types>,
     ) -> Result<explorer::query_data::BlockDetail<Types>, explorer::query_data::GetBlockDetailError>
     {
-        self.as_ref().get_block_detail(request).await
+        self.as_mut().get_block_detail(request).await
     }
 
     async fn get_transaction_summaries(
-        &self,
+        &mut self,
         request: explorer::query_data::GetTransactionSummariesRequest<Types>,
     ) -> Result<
         Vec<explorer::query_data::TransactionSummary<Types>>,
         explorer::query_data::GetTransactionSummariesError,
     > {
-        self.as_ref().get_transaction_summaries(request).await
+        self.as_mut().get_transaction_summaries(request).await
     }
 
     async fn get_transaction_detail(
-        &self,
+        &mut self,
         request: explorer::query_data::TransactionIdentifier<Types>,
     ) -> Result<
         explorer::query_data::TransactionDetailResponse<Types>,
         explorer::query_data::GetTransactionDetailError,
     > {
-        self.as_ref().get_transaction_detail(request).await
+        self.as_mut().get_transaction_detail(request).await
     }
 
     async fn get_explorer_summary(
-        &self,
+        &mut self,
     ) -> Result<
         explorer::query_data::ExplorerSummary<Types>,
         explorer::query_data::GetExplorerSummaryError,
     > {
-        self.as_ref().get_explorer_summary().await
+        self.as_mut().get_explorer_summary().await
     }
 
     async fn get_search_results(
-        &self,
+        &mut self,
         query: String,
     ) -> Result<
         explorer::query_data::SearchResult<Types>,
         explorer::query_data::GetSearchResultsError,
     > {
-        self.as_ref().get_search_results(query).await
+        self.as_mut().get_search_results(query).await
     }
 }
 

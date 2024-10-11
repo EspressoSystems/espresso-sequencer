@@ -1109,9 +1109,6 @@ name = "bit-vec"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "bitflags"
@@ -3236,7 +3233,6 @@ dependencies = [
  "atomic_store",
  "backtrace-on-stack-overflow",
  "bincode",
- "bit-vec",
  "chrono",
  "clap",
  "committable",
@@ -3255,24 +3251,22 @@ dependencies = [
  "itertools 0.12.1",
  "jf-merkle-tree",
  "jf-vid",
- "native-tls",
  "portpicker",
- "postgres-native-tls",
  "prometheus",
  "rand 0.8.5",
  "refinery",
+ "refinery-core",
  "reqwest",
  "serde",
  "serde_json",
  "snafu 0.8.4",
  "spin_sleep",
+ "sqlx",
  "surf-disco",
  "tagged-base64",
  "tempfile",
  "tide-disco",
  "time 0.3.36",
- "tokio",
- "tokio-postgres",
  "toml",
  "tracing",
  "trait-variant",
@@ -5608,19 +5602,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "postgres-native-tls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d442770e2b1e244bb5eb03b31c79b65bb2568f413b899eaba850fa945a65954"
-dependencies = [
- "futures",
- "native-tls",
- "tokio",
- "tokio-native-tls",
- "tokio-postgres",
-]
-
-[[package]]
 name = "postgres-protocol"
 version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5644,13 +5625,9 @@ version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02048d9e032fb3cc3413bbf7b83a15d84a5d419778e2628751896d856498eee9"
 dependencies = [
- "bit-vec",
  "bytes",
  "fallible-iterator",
  "postgres-protocol",
- "serde",
- "serde_json",
- "time 0.3.36",
 ]
 
 [[package]]
@@ -7084,7 +7061,10 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4d8060b456358185f7d50c55d9b5066ad956956fddec42ee2e8567134a8936e"
 dependencies = [
+ "async-io 1.13.0",
+ "async-std",
  "atoi",
+ "bit-vec",
  "byteorder",
  "bytes",
  "crc",
@@ -7102,6 +7082,7 @@ dependencies = [
  "indexmap 2.5.0",
  "log",
  "memchr",
+ "native-tls",
  "once_cell",
  "paste",
  "percent-encoding",
@@ -7137,6 +7118,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1804e8a7c7865599c9c79be146dc8a9fd8cc86935fa641d3ea58e5f0688abaa5"
 dependencies = [
+ "async-std",
  "dotenvy",
  "either",
  "heck 0.5.0",
@@ -7208,6 +7190,7 @@ checksum = "6fa91a732d854c5d7726349bb4bb879bb9478993ceb764247660aee25f67c2f8"
 dependencies = [
  "atoi",
  "base64 0.22.1",
+ "bit-vec",
  "bitflags 2.6.0",
  "byteorder",
  "crc",

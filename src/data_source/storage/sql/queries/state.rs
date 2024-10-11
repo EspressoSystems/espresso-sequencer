@@ -13,41 +13,37 @@
 //! Merklized state storage implementation for a database query engine.
 
 use super::{
-    postgres::{types::ToSql, Row},
-    sql_param, Transaction,
+    super::transaction::{query_as, Transaction, TransactionMode, Write},
+    DecodeError, QueryBuilder,
 };
 use crate::{
-    merklized_state::{
-        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
-    },
+    data_source::storage::{MerklizedStateHeightStorage, MerklizedStateStorage},
+    merklized_state::{MerklizedState, Snapshot},
     QueryError, QueryResult,
 };
-use ark_serialize::{CanonicalDeserialize, SerializationError};
+use ark_serialize::CanonicalDeserialize;
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use bit_vec::BitVec;
-use futures::stream::{StreamExt, TryStreamExt};
+use futures::stream::TryStreamExt;
 use hotshot_types::traits::node_implementation::NodeType;
-use itertools::Itertools;
 use jf_merkle_tree::{
     prelude::{MerkleNode, MerkleProof},
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    fmt::{self, Display, Formatter},
-};
+use sqlx::{types::BitVec, FromRow};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 #[async_trait]
-impl<'a, Types, State, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
-    for Transaction<'a>
+impl<Mode, Types, State, const ARITY: usize> MerklizedStateStorage<Types, State, ARITY>
+    for Transaction<Mode>
 where
+    Mode: TransactionMode,
     Types: NodeType,
     State: MerklizedState<Types, ARITY> + 'static,
 {
     /// Retreives a Merkle path from the database
     async fn get_path(
-        &self,
+        &mut self,
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
@@ -61,11 +57,11 @@ where
         // Get all the nodes in the path to the index.
         // Order by pos DESC is to return nodes from the leaf to the root
 
-        let (params, stmt) = build_get_path_query(state_type, traversal_path.clone(), created);
-
-        let nodes = self.query(&stmt, params).await?;
-
-        let nodes: Vec<_> = nodes.map(|res| Node::try_from(res?)).try_collect().await?;
+        let (query, sql) = build_get_path_query(state_type, traversal_path.clone(), created)?;
+        let nodes = query
+            .query_as::<Node>(&sql)
+            .fetch_all(self.as_mut())
+            .await?;
 
         // insert all the hash ids to a hashset which is used to query later
         // HashSet is used to avoid duplicates
@@ -79,16 +75,12 @@ where
 
         // Find all the hash values and create a hashmap
         // Hashmap will be used to get the hash value of the nodes children and the node itself.
-        let hashes_query = self
-            .query(
-                "SELECT * FROM hash WHERE id = ANY( $1)",
-                [sql_param(&hash_ids.into_iter().collect::<Vec<i32>>())],
-            )
-            .await?;
-        let hashes: HashMap<_, _> = hashes_query
-            .map(|row| HashTableRow::try_from(row?).map(|h| (h.id, h.value)))
-            .try_collect()
-            .await?;
+        let hashes: HashMap<i32, Vec<u8>> =
+            query_as("SELECT id, value FROM hash WHERE id = ANY( $1)")
+                .bind(hash_ids.into_iter().collect::<Vec<i32>>())
+                .fetch(self.as_mut())
+                .try_collect()
+                .await?;
 
         let mut proof_path = VecDeque::with_capacity(State::tree_height());
         for Node {
@@ -125,7 +117,7 @@ where
                                     })?;
                                     Ok(Arc::new(MerkleNode::ForgettenSubtree {
                                         value: State::T::deserialize_compressed(value.as_slice())
-                                            .map_err(ParseError::Deserialize)?,
+                                            .decode_error("malformed merkle node value")?,
                                     }))
                                 } else {
                                     Ok(Arc::new(MerkleNode::Empty))
@@ -135,7 +127,7 @@ where
                         // Use the Children merkle nodes to reconstruct the branch node
                         proof_path.push_back(MerkleNode::Branch {
                             value: State::T::deserialize_compressed(value.as_slice())
-                                .map_err(ParseError::Deserialize)?,
+                                .decode_error("malformed merkle node value")?,
                             children: child_nodes,
                         });
                     }
@@ -143,11 +135,11 @@ where
                     (None, None, Some(index), Some(entry)) => {
                         proof_path.push_back(MerkleNode::Leaf {
                             value: State::T::deserialize_compressed(value.as_slice())
-                                .map_err(ParseError::Deserialize)?,
+                                .decode_error("malformed merkle node value")?,
                             pos: serde_json::from_value(index.clone())
-                                .map_err(ParseError::Serde)?,
+                                .decode_error("malformed merkle node index")?,
                             elem: serde_json::from_value(entry.clone())
-                                .map_err(ParseError::Serde)?,
+                                .decode_error("malformed merkle element")?,
                         });
                     }
                     // Otherwise, it's empty.
@@ -236,26 +228,26 @@ where
 }
 
 #[async_trait]
-impl<'a> MerklizedStateHeightPersistence for Transaction<'a> {
-    async fn get_last_state_height(&self) -> QueryResult<usize> {
-        let row = self
-            .query_opt_static("SELECT * from last_merklized_state_height")
-            .await?;
-
-        let height = row.map(|r| r.get::<_, i64>("height") as usize);
-
-        Ok(height.unwrap_or(0))
+impl<Mode: TransactionMode> MerklizedStateHeightStorage for Transaction<Mode> {
+    async fn get_last_state_height(&mut self) -> QueryResult<usize> {
+        let Some((height,)) = query_as::<(i64,)>("SELECT height from last_merklized_state_height")
+            .fetch_optional(self.as_mut())
+            .await?
+        else {
+            return Ok(0);
+        };
+        Ok(height as usize)
     }
 }
 
-impl<'a> Transaction<'a> {
+impl<Mode: TransactionMode> Transaction<Mode> {
     /// Get information identifying a [`Snapshot`].
     ///
     /// If the given snapshot is known to the database, this function returns
     /// * The block height at which the snapshot was created
     /// * A digest of the Merkle commitment to the snapshotted state
     async fn snapshot_info<Types, State, const ARITY: usize>(
-        &self,
+        &mut self,
         snapshot: Snapshot<Types, State, ARITY>,
     ) -> QueryResult<(i64, State::Commit)>
     where
@@ -271,35 +263,31 @@ impl<'a> Transaction<'a> {
                 // height we get, since any query against equivalent states will yield equivalent
                 // results, regardless of which block the state is from. Thus, we can make this
                 // query fast with `LIMIT 1` and no `ORDER BY`.
-                let query = self
-                    .query_one(
-                        &format!(
-                            "SELECT height
-                           FROM header
-                          WHERE {header_state_commitment_field} = $1
-                          LIMIT 1"
-                        ),
-                        &[&commit.to_string()],
-                    )
-                    .await?;
+                let (height,) = query_as(&format!(
+                    "SELECT height
+                       FROM header
+                      WHERE {header_state_commitment_field} = $1
+                      LIMIT 1"
+                ))
+                .bind(commit.to_string())
+                .fetch_one(self.as_mut())
+                .await?;
 
-                (query.get(0), commit)
+                (height, commit)
             }
             Snapshot::Index(created) => {
                 let created = created as i64;
-                let row = self
-                    .query_one(
-                        &format!(
-                            "SELECT {header_state_commitment_field} AS root_commmitment
-                         FROM header
-                         WHERE height = $1
-                         LIMIT 1"
-                        ),
-                        [sql_param(&created)],
-                    )
-                    .await?;
-                let commit: String = row.get(0);
-                let commit = serde_json::from_value(commit.into()).map_err(ParseError::Serde)?;
+                let (commit,) = query_as::<(String,)>(&format!(
+                    "SELECT {header_state_commitment_field} AS root_commmitment
+                       FROM header
+                      WHERE height = $1
+                      LIMIT 1"
+                ))
+                .bind(created)
+                .fetch_one(self.as_mut())
+                .await?;
+                let commit = serde_json::from_value(commit.into())
+                    .decode_error("malformed state commitment")?;
                 (created, commit)
             }
         };
@@ -314,83 +302,24 @@ impl<'a> Transaction<'a> {
     }
 }
 
-/// Represents a Hash table row
-pub(crate) struct HashTableRow {
-    /// Hash id to be used by the state table to save space
-    id: i32,
-    /// hash value
-    value: Vec<u8>,
-}
-
-impl HashTableRow {
-    // TODO: create a generic upsert function with retries that returns the column
-    pub(crate) fn build_batch_insert(hashes: &[Vec<u8>]) -> (Vec<&(dyn ToSql + Sync)>, String) {
-        let len = hashes.len();
-        let params: Vec<_> = hashes
-            .iter()
-            .flat_map(|c| [c as &(dyn ToSql + Sync)])
-            .collect();
-        let stmt = format!(
-        "INSERT INTO hash(value) values {} ON CONFLICT (value) DO UPDATE SET value = EXCLUDED.value returning *",
-        (1..len+1)
-            .format_with(", ", |v, f| { f(&format_args!("(${v})")) }),
+// TODO: create a generic upsert function with retries that returns the column
+pub(crate) fn build_hash_batch_insert(
+    hashes: &[Vec<u8>],
+) -> QueryResult<(QueryBuilder<'_>, String)> {
+    let mut query = QueryBuilder::default();
+    let params = hashes
+        .iter()
+        .map(|hash| Ok(format!("({})", query.bind(hash)?)))
+        .collect::<QueryResult<Vec<String>>>()?;
+    let sql = format!(
+        "INSERT INTO hash(value) values {} ON CONFLICT (value) DO UPDATE SET value = EXCLUDED.value returning value, id",
+        params.join(",")
     );
-
-        (params, stmt)
-    }
-}
-
-// Parse a row to a HashTableRow
-impl TryFrom<Row> for HashTableRow {
-    type Error = QueryError;
-    fn try_from(row: Row) -> QueryResult<Self> {
-        Ok(Self {
-            id: row.try_get(0).map_err(|e| QueryError::Error {
-                message: format!("failed to get column id {e}"),
-            })?,
-            value: row.try_get(1).map_err(|e| QueryError::Error {
-                message: format!("failed to get column value {e}"),
-            })?,
-        })
-    }
-}
-
-// parsing errors
-#[derive(Debug)]
-pub(crate) enum ParseError {
-    Serde(serde_json::Error),
-    Deserialize(SerializationError),
-    Serialize(SerializationError),
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::Serde(err) => {
-                write!(f, "failed to parse value {err:?}")
-            }
-            Self::Deserialize(err) => {
-                write!(f, "failed to deserialize {err:?}")
-            }
-            Self::Serialize(err) => {
-                write!(f, "failed to serialize {err:?}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ParseError {}
-
-impl From<ParseError> for QueryError {
-    fn from(value: ParseError) -> Self {
-        Self::Error {
-            message: value.to_string(),
-        }
-    }
+    Ok((query, sql))
 }
 
 // Represents a row in a state table
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, FromRow)]
 pub(crate) struct Node {
     pub(crate) path: Vec<i32>,
     pub(crate) created: i64,
@@ -402,103 +331,69 @@ pub(crate) struct Node {
 }
 
 impl Node {
-    pub(crate) fn build_batch_insert<'a>(
-        name: &'a str,
-        nodes: &'a [Self],
-    ) -> (Vec<&'a (dyn ToSql + Sync)>, String) {
-        let params: Vec<&(dyn ToSql + Sync)> = nodes
-            .iter()
-            .flat_map(|n| {
-                [
-                    &n.path as &(dyn ToSql + Sync),
-                    &n.created,
-                    &n.hash_id,
-                    &n.children,
-                    &n.children_bitvec,
-                    &n.index,
-                    &n.entry,
-                ]
-            })
-            .collect();
-
-        let stmt = format!(
-                "INSERT INTO {name} (path, created, hash_id, children, children_bitvec, index, entry) values {} ON CONFLICT (path, created)
-                DO UPDATE SET hash_id = EXCLUDED.hash_id, children = EXCLUDED.children, children_bitvec = EXCLUDED.children_bitvec,
-                index = EXCLUDED.index, entry = EXCLUDED.entry RETURNING path",
-                (1..params.len()+1)
-                .tuples()
-                    .format_with(", ", |(path, created, id, children, bitmap, i, e), f|
-                    { f(&format_args!("(${path}, ${created}, ${id}, ${children}, ${bitmap}, ${i}, ${e})")) }),
-            );
-
-        (params, stmt)
+    pub(crate) async fn upsert(
+        name: &str,
+        nodes: impl IntoIterator<Item = Self>,
+        tx: &mut Transaction<Write>,
+    ) -> anyhow::Result<()> {
+        tx.upsert(
+            name,
+            [
+                "path",
+                "created",
+                "hash_id",
+                "children",
+                "children_bitvec",
+                "index",
+                "entry",
+            ],
+            ["path", "created"],
+            nodes.into_iter().map(|n| {
+                (
+                    n.path.clone(),
+                    n.created,
+                    n.hash_id,
+                    n.children.clone(),
+                    n.children_bitvec.clone(),
+                    n.index.clone(),
+                    n.entry.clone(),
+                )
+            }),
+        )
+        .await
     }
 }
 
-// Parse a Row to a Node
-impl TryFrom<Row> for Node {
-    type Error = QueryError;
-    fn try_from(row: Row) -> Result<Self, Self::Error> {
-        Ok(Self {
-            path: row.try_get(0).map_err(|e| QueryError::Error {
-                message: format!("failed to get column path: {e}"),
-            })?,
-            created: row.try_get(1).map_err(|e| QueryError::Error {
-                message: format!("failed to get column created: {e}"),
-            })?,
-            hash_id: row.try_get(2).map_err(|e| QueryError::Error {
-                message: format!("failed to get column hash_id: {e}"),
-            })?,
-            children: row.try_get(3).map_err(|e| QueryError::Error {
-                message: format!("failed to get column children: {e}"),
-            })?,
-            children_bitvec: row.try_get(4).map_err(|e| QueryError::Error {
-                message: format!("failed to get column children bitmap: {e}"),
-            })?,
-            index: row.try_get(5).map_err(|e| QueryError::Error {
-                message: format!("failed to get column index: {e}"),
-            })?,
-            entry: row.try_get(6).map_err(|e| QueryError::Error {
-                message: format!("failed to get column entry: {e}"),
-            })?,
-        })
-    }
-}
-
-fn build_get_path_query(
+fn build_get_path_query<'q>(
     table: &'static str,
     traversal_path: Vec<usize>,
     created: i64,
-) -> (Vec<Box<(dyn ToSql + Send + Sync)>>, String) {
+) -> QueryResult<(QueryBuilder<'q>, String)> {
+    let mut query = QueryBuilder::default();
     let mut traversal_path = traversal_path.into_iter().map(|x| x as i32);
+    let created = query.bind(created)?;
 
-    // Since the 'created' parameter is common to all queries,
-    // we place it at the first position in the 'params' vector.
     // We iterate through the path vector skipping the first element after each iteration
-    let mut params: Vec<Box<(dyn ToSql + Send + Sync)>> = vec![Box::new(created)];
     let len = traversal_path.len();
-    let mut queries = Vec::new();
-
-    for i in 0..=len {
-        let node_path = traversal_path.clone().rev().collect::<Vec<_>>();
-
-        let query = format!(
-            "(SELECT * FROM {table} WHERE path = ${} AND created <= $1 ORDER BY created DESC LIMIT 1)",
-            i + 2
+    let mut sub_queries = Vec::new();
+    for _ in 0..=len {
+        let node_path = query.bind(traversal_path.clone().rev().collect::<Vec<_>>())?;
+        let sub_query = format!(
+            "(SELECT * FROM {table} WHERE path = {node_path} AND created <= {created} ORDER BY created DESC LIMIT 1)",
         );
 
-        queries.push(query);
-        params.push(Box::new(node_path));
+        sub_queries.push(sub_query);
         traversal_path.next();
     }
 
-    let mut final_query: String = queries.join(" UNION ");
-    final_query.push_str("ORDER BY path DESC");
-    (params, final_query)
+    let mut sql: String = sub_queries.join(" UNION ");
+    sql.push_str("ORDER BY path DESC");
+    Ok((query, sql))
 }
 
 #[cfg(test)]
 mod test {
+    use futures::stream::StreamExt;
     use jf_merkle_tree::{
         universal_merkle_tree::UniversalMerkleTree, LookupResult, MerkleTreeScheme,
         UniversalMerkleTreeScheme,
@@ -508,7 +403,7 @@ mod test {
     use super::*;
     use crate::{
         data_source::{
-            storage::sql::{query::sql_param, testing::TmpDb, *},
+            storage::sql::{testing::TmpDb, *},
             VersionedDataSource,
         },
         merklized_state::UpdateStateData,
@@ -540,17 +435,20 @@ mod test {
 
             // data field of the header
             let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
-            tx
-                .query_opt(
-                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-                    [
-                        sql_param(&(block_height as i64)),
-                        sql_param(&format!("randomHash{i}")),
-                        sql_param(&test_data),
-                    ],
-                )
-                .await
-                .unwrap();
+            tx.upsert(
+                "header",
+                ["height", "hash", "payload_hash", "timestamp", "data"],
+                ["height"],
+                [(
+                    block_height as i64,
+                    format!("randomHash{i}"),
+                    "t",
+                    0,
+                    test_data,
+                )],
+            )
+            .await
+            .unwrap();
             // proof for the index from the tree
             let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
             // traversal path for the index.
@@ -575,7 +473,7 @@ mod test {
         //Get the path and check if it matches the lookup
         for i in 0..27 {
             // Query the path for the index
-            let tx = storage.read().await.unwrap();
+            let mut tx = storage.read().await.unwrap();
             let merkle_path = tx
                 .get_path(
                     Snapshot::<_, MockMerkleTree, 8>::Index(block_height as u64),
@@ -603,17 +501,14 @@ mod test {
         // data field of the header
         let mut tx = storage.write().await.unwrap();
         let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
-        tx
-            .query_opt(
-                "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-                [
-                    sql_param(&(2_i64)),
-                    sql_param(&"randomstring"),
-                    sql_param(&test_data),
-                ],
-            )
-            .await
-            .unwrap();
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "timestamp", "data"],
+            ["height"],
+            [(2i64, "randomstring", "t", 0, test_data)],
+        )
+        .await
+        .unwrap();
         let (_, proof_bh_2) = test_tree.lookup(0).expect_ok().unwrap();
         // traversal path for the index.
         let traversal_path =
@@ -641,19 +536,13 @@ mod test {
             .collect::<Vec<_>>();
 
         // Find all the nodes of Index 0 in table
-        let rows = storage
-            .read()
-            .await
-            .unwrap()
-            .query(
-                "SELECT * from test_tree where path = $1 ORDER BY created",
-                [sql_param(&node_path)],
-            )
-            .await
-            .unwrap();
+        let mut tx = storage.read().await.unwrap();
+        let rows = query("SELECT * from test_tree where path = $1 ORDER BY created")
+            .bind(node_path)
+            .fetch(tx.as_mut());
 
         let nodes: Vec<_> = rows
-            .map(|res| Node::try_from(res.unwrap()))
+            .map(|res| Node::from_row(&res.unwrap()))
             .try_collect()
             .await
             .unwrap();
@@ -707,17 +596,14 @@ mod test {
         let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(commitment).unwrap()});
         // insert the header with merkle commitment
         let mut tx = storage.write().await.unwrap();
-        tx
-                .query_opt(
-                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-                    [
-                        sql_param(&(block_height as i64)),
-                        sql_param(&"randomString"),
-                        sql_param(&test_data),
-                    ],
-                )
-                .await
-                .unwrap();
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "timestamp", "data"],
+            ["height"],
+            [(block_height as i64, "randomString", "t", 0, test_data)],
+        )
+        .await
+        .unwrap();
         // proof for the index from the tree
         let (_, proof_before_remove) = test_tree.lookup(0).expect_ok().unwrap();
         // traversal path for the index.
@@ -773,17 +659,20 @@ mod test {
         .await
         .expect("failed to insert nodes");
         // Insert the new header
-        tx
-        .query_opt(
-            "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-            [
-                sql_param(&2_i64),
-                sql_param(&"randomString2"),
-                sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})),
-            ],
-        )
-        .await
-        .unwrap();
+        tx.upsert(
+                "header",
+                ["height", "hash", "payload_hash", "timestamp", "data"],
+                ["height"],
+                [(
+                    2i64,
+                    "randomString2",
+                    "t",
+                    0,
+                    serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()}),
+                )],
+            )
+            .await
+            .unwrap();
         // update saved state height
         UpdateStateData::<_, MockMerkleTree, 8>::set_last_state_height(&mut tx, 2)
             .await
@@ -834,17 +723,20 @@ mod test {
             let mut tx = storage.write().await.unwrap();
 
             // Insert a dummy header
-            tx
-                .query_opt(
-                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3)",
-                    [
-                        sql_param(&(i as i64)),
-                        sql_param(&format!("hash{i}")),
-                        sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})),
-                    ],
-                )
-                .await
-                .unwrap();
+            tx.upsert(
+                "header",
+                ["height", "hash", "payload_hash", "timestamp", "data"],
+                ["height"],
+                [(
+                    i as i64,
+                    format!("hash{i}"),
+                    "t",
+                    0,
+                    serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})
+                )],
+            )
+            .await
+            .unwrap();
             // update saved state height
             UpdateStateData::<_, MockMerkleTree, 8>::set_last_state_height(&mut tx, i)
                 .await
@@ -900,17 +792,14 @@ mod test {
         let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(commitment).unwrap()});
         // insert the header with merkle commitment
         let mut tx = storage.write().await.unwrap();
-        tx
-                .query_opt(
-                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-                    [
-                        sql_param(&(block_height as i64)),
-                        sql_param(&"randomString"),
-                        sql_param(&test_data),
-                    ],
-                )
-                .await
-                .unwrap();
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "timestamp", "data"],
+            ["height"],
+            [(block_height as i64, "randomString", "t", 0, test_data)],
+        )
+        .await
+        .unwrap();
         // proof for the index from the tree
         let (_, proof) = test_tree.lookup(0).expect_ok().unwrap();
         // traversal path for the index.
@@ -966,17 +855,20 @@ mod test {
             test_tree.update(i, i).unwrap();
             let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
             // insert the header with merkle commitment
-            tx
-                    .query_opt(
-                        "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-                        [
-                            sql_param(&(block_height as i64)),
-                            sql_param(&format!("randomString{i}")),
-                            sql_param(&test_data),
-                        ],
-                    )
-                    .await
-                    .unwrap();
+            tx.upsert(
+                "header",
+                ["height", "hash", "payload_hash", "timestamp", "data"],
+                ["height"],
+                [(
+                    block_height as i64,
+                    format!("rarndomString{i}"),
+                    "t",
+                    0,
+                    test_data,
+                )],
+            )
+            .await
+            .unwrap();
             // proof for the index from the tree
             let (_, proof) = test_tree.lookup(i).expect_ok().unwrap();
             // traversal path for the index.
@@ -1027,18 +919,15 @@ mod test {
 
         let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
         // insert the header with merkle commitment
-        let tx = storage.write().await.unwrap();
-        tx
-                .query_opt(
-                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-                    [
-                        sql_param(&(block_height as i64)),
-                        sql_param(&"randomStringgg"),
-                        sql_param(&test_data),
-                    ],
-                )
-                .await
-                .unwrap();
+        let mut tx = storage.write().await.unwrap();
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "timestamp", "data"],
+            ["height"],
+            [(block_height as i64, "randomStringgg", "t", 0, test_data)],
+        )
+        .await
+        .unwrap();
         tx.commit().await.unwrap();
         // Querying the path again
         let merkle_proof = storage
@@ -1062,17 +951,14 @@ mod test {
 
         // insert the header with merkle commitment
         let mut tx = storage.write().await.unwrap();
-        tx
-                .query_opt(
-                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
-                    [
-                        sql_param(&(2_i64)),
-                        sql_param(&"randomHashString"),
-                        sql_param(&test_data),
-                    ],
-                )
-                .await
-                .unwrap();
+        tx.upsert(
+            "header",
+            ["height", "hash", "payload_hash", "timestamp", "data"],
+            ["height"],
+            [(2i64, "randomHashString", "t", 0, test_data)],
+        )
+        .await
+        .unwrap();
         UpdateStateData::<_, MockMerkleTree, 8>::insert_merkle_nodes(
             &mut tx,
             proof.clone(),
@@ -1090,11 +976,11 @@ mod test {
             .map(|n| *n as i32)
             .collect::<Vec<_>>();
         tx.execute_one(
-            &format!(
+            query(&format!(
                 "DELETE FROM {} WHERE created = 2 and path = $1",
                 MockMerkleTree::state_type()
-            ),
-            [sql_param(&node_path)],
+            ))
+            .bind(node_path),
         )
         .await
         .expect("failed to delete internal node");
@@ -1187,13 +1073,13 @@ mod test {
             // insert the header with merkle commitment
             tx
             .upsert("header", ["height", "hash", "payload_hash", "timestamp", "data"], ["height"],
-                [[
-                    sql_param(&(block_height as i64)),
-                    sql_param(&format!("hash{block_height}")),
-                    sql_param(&"hash"),
-                    sql_param(&0i64),
-                    sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(tree.commitment()).unwrap()})),
-                ]],
+                [(
+                    block_height as i64,
+                    format!("hash{block_height}"),
+                    "hash",
+                    0i64,
+                    serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(tree.commitment()).unwrap()}),
+                )],
             )
             .await
             .unwrap();
@@ -1307,15 +1193,20 @@ mod test {
             let mut tx = storage.write().await.unwrap();
 
             // Insert a header with the tree commitment.
-            tx
-                .query_opt(
-                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES (0, 'hash', 'hash', 0, $1)",
-                    [
-                        sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})),
-                    ],
-                )
-                .await
-                .unwrap();
+            tx.upsert(
+                "header",
+                ["height", "hash", "payload_hash", "timestamp", "data"],
+                ["height"],
+                [(
+                    0i64,
+                    "hash",
+                    "hash",
+                    0,
+                    serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()}),
+                )],
+            )
+            .await
+            .unwrap();
 
             // Insert Merkle nodes.
             for i in 0..tree_size {
@@ -1361,7 +1252,7 @@ mod test {
                     "DELETE FROM {} WHERE index = $1",
                     MockMerkleTree::state_type()
                 ),
-                [index],
+                (index,),
             )
             .await
             .unwrap();

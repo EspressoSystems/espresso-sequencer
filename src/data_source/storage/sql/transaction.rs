@@ -19,284 +19,228 @@
 //! transaction.
 
 use super::{
-    postgres::{types::BorrowToSql, Client, Row, ToStatement},
-    query::{
-        sql_param,
-        state::{HashTableRow, Node, ParseError},
+    queries::{
+        state::{build_hash_batch_insert, Node},
+        DecodeError,
     },
+    Database, Db,
 };
 use crate::{
     availability::{
         BlockQueryData, LeafQueryData, QueryableHeader, QueryablePayload, UpdateAvailabilityData,
         VidCommonQueryData,
     },
-    data_source::{
-        storage::pruning::PrunedHeightStorage,
-        update::{self, ReadOnly},
-    },
+    data_source::{storage::pruning::PrunedHeightStorage, update},
     merklized_state::{MerklizedState, UpdateStateData},
-    task::Task,
     types::HeightIndexed,
-    Header, Payload,
-    QueryError::{self, NotFound},
-    QueryResult, VidShare,
+    Header, Payload, QueryError, VidShare,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::CanonicalSerialize;
-use async_std::{
-    sync::{Arc, MutexGuard},
-    task::sleep,
-};
+use async_std::task::sleep;
 use async_trait::async_trait;
-use bit_vec::BitVec;
 use committable::Committable;
-use derivative::Derivative;
-use derive_more::{Deref, DerefMut, From};
-use futures::{
-    future::Future,
-    stream::{BoxStream, StreamExt, TryStreamExt},
-};
+use derive_more::{Deref, DerefMut};
+use futures::{future::Future, stream::TryStreamExt};
 use hotshot_types::traits::{
     block_contents::BlockHeader, node_implementation::NodeType, EncodeBytes,
 };
-use itertools::{izip, Itertools};
+use itertools::Itertools;
 use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};
+use sqlx::{pool::Pool, types::BitVec, Encode, Execute, FromRow, Type};
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    marker::PhantomData,
     time::Duration,
 };
 
-#[derive(Debug, Deref, DerefMut)]
-pub(super) struct Connection {
-    #[deref]
-    #[deref_mut]
-    client: Arc<Client>,
+pub use sqlx::Executor;
 
-    // When the connection is dropped in a synchronous context, we spawn a task to revert the
-    // in-progress transaction, so the revert can run asynchronously without blocking the dropping
-    // thread. If such a revert is in progress, a handle to the task will be stored here. The handle
-    // _must_ be awaited to allow the revert to finish before the connection can be used again.
-    revert: Option<Task<anyhow::Result<()>>>,
+pub type Query<'q> = sqlx::query::Query<'q, Db, <Db as Database>::Arguments<'q>>;
+pub type QueryAs<'q, T> = sqlx::query::QueryAs<'q, Db, T, <Db as Database>::Arguments<'q>>;
+
+pub fn query(sql: &str) -> Query<'_> {
+    sqlx::query(sql)
 }
 
-impl From<Client> for Connection {
-    fn from(client: Client) -> Self {
-        Self {
-            client: Arc::new(client),
-            revert: None,
-        }
-    }
+pub fn query_as<'q, T>(sql: &'q str) -> QueryAs<'q, T>
+where
+    T: for<'r> FromRow<'r, <Db as Database>::Row>,
+{
+    sqlx::query_as(sql)
 }
 
-impl Connection {
-    /// Prepare the connection for use.
-    ///
-    /// This will wait for any async operations to finish which were spawned when the connection was
-    /// dropped in a synchronous context. This _must_ be called the first time the connection is
-    /// invoked in an async context after being dropped in a sync context.
-    async fn acquire(&mut self) -> anyhow::Result<()> {
-        if let Some(revert) = self.revert.take() {
-            // If a revert was started when this connection was released in a synchronous context,
-            // we must wait for it to finish before reusing the connection.
-            revert.join().await?;
-        }
+/// Marker type indicating a transaction with read-write access to the database.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Write;
+
+/// Marker type indicating a transaction with read-only access to the database.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Read;
+
+/// Trait for marker types indicating what type of access a transaction has to the database.
+pub trait TransactionMode: Send + Sync {
+    fn begin(
+        conn: &mut <Db as Database>::Connection,
+    ) -> impl Future<Output = anyhow::Result<()>> + Send;
+}
+
+impl TransactionMode for Write {
+    async fn begin(conn: &mut <Db as Database>::Connection) -> anyhow::Result<()> {
+        conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            .await?;
         Ok(())
     }
+}
 
-    /// Spawn a revert to run asynchronously.
-    fn spawn_revert(&mut self) {
-        // Consistency check.
-        assert!(
-            self.revert.is_none(),
-            "attempting to queue revert while a queued revert is in progress; this should not be possible",
-        );
-
-        // Get a client that is not connected to the lifetime of this reference, so we can run the
-        // revert command in the background.
-        let client = self.client.clone();
-        self.revert = Some(Task::spawn("revert postgres transaction", async move {
-            client.batch_execute("ROLLBACK").await?;
-            Ok(())
-        }));
-    }
-
-    #[cfg(test)]
-    pub(super) async fn vacuum(&mut self) -> anyhow::Result<()> {
-        self.acquire().await?;
-        self.batch_execute("VACUUM").await?;
+impl TransactionMode for Read {
+    async fn begin(conn: &mut <Db as Database>::Connection) -> anyhow::Result<()> {
+        conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE")
+            .await?;
         Ok(())
     }
 }
 
 /// An atomic SQL transaction.
-#[derive(Derivative, From)]
-#[derivative(Debug)]
-pub struct Transaction<'a> {
-    inner: MutexGuard<'a, Connection>,
-    finalized: bool,
+#[derive(Debug, Deref, DerefMut)]
+pub struct Transaction<Mode> {
+    #[deref]
+    #[deref_mut]
+    inner: sqlx::Transaction<'static, Db>,
+    _mode: PhantomData<Mode>,
 }
 
-impl<'a> Transaction<'a> {
-    pub(super) async fn read(
-        mut inner: MutexGuard<'a, Connection>,
-    ) -> anyhow::Result<ReadOnly<Self>> {
-        inner.acquire().await?;
-        inner
-            .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY DEFERRABLE")
-            .await?;
+impl<Mode: TransactionMode> Transaction<Mode> {
+    pub(super) async fn new(pool: &Pool<Db>) -> anyhow::Result<Self> {
+        let mut tx = pool.begin().await?;
+        Mode::begin(tx.as_mut()).await?;
         Ok(Self {
-            inner,
-            finalized: false,
-        }
-        .into())
-    }
-
-    pub(super) async fn write(mut inner: MutexGuard<'a, Connection>) -> anyhow::Result<Self> {
-        inner.acquire().await?;
-        inner
-            .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
-            .await?;
-        Ok(Self {
-            inner,
-            finalized: false,
+            inner: tx,
+            _mode: Default::default(),
         })
     }
 }
 
-impl<'a> update::Transaction for Transaction<'a> {
-    async fn commit(mut self) -> anyhow::Result<()> {
-        self.inner.batch_execute("COMMIT").await?;
-        self.finalized = true;
+impl<Mode: TransactionMode> update::Transaction for Transaction<Mode> {
+    async fn commit(self) -> anyhow::Result<()> {
+        self.inner.commit().await?;
         Ok(())
     }
-    fn revert(mut self) -> impl Future + Send {
+    fn revert(self) -> impl Future + Send {
         async move {
-            self.inner.batch_execute("ROLLBACK").await.unwrap();
-            self.finalized = true;
+            self.inner.rollback().await.unwrap();
         }
     }
 }
 
-impl<'a> Drop for Transaction<'a> {
-    fn drop(&mut self) {
-        if !self.finalized {
-            // Since `drop` is synchronous, we can't execute the asynchronous revert process here,
-            // at least not without blocking the current thread (which may be an async executor
-            // thread, blocking other unrelated futures and causing deadlocks). Instead, we will
-            // revert the transaction asynchronously.
-            self.inner.spawn_revert();
+/// A collection of parameters which can be bound to a SQL query.
+///
+/// This trait allows us to carry around hetergenous lists of parameters (e.g. tuples) and bind them
+/// to a query at the last moment before executing. This means we can manipulate the parameters
+/// independently of the query before executing it. For example, by requiring a trait bound of
+/// `Params<'p> + Clone`, we get a list (or tuple) of parameters which can be cloned and then bound
+/// to a query, which allows us to keep a copy of the parameters around in order to retry the query
+/// if it fails.
+///
+/// # Lifetimes
+///
+/// A SQL [`Query`] with lifetime `'q` borrows from both it's SQL statement (`&'q str`) and its
+/// parameters (bound via `bind<'q>`). Sometimes, though, it is necessary for the statement and its
+/// parameters to have different (but overlapping) lifetimes. For example, the parameters might be
+/// passed in and owned by the caller, while the query string is constructed in the callee and its
+/// lifetime is limited to the callee scope. (See for example the [`upsert`](Transaction::upsert)
+/// function which does exactly this.)
+///
+/// We could rectify this situation with a trait bound like `P: for<'q> Params<'q>`, meaning `P`
+/// must be bindable to a query with a lifetime chosen by the callee. However, when `P` is an
+/// associated type, such as an element of an iterator, as in
+/// `<I as IntoIter>::Item: for<'q> Params<'q>`, [a current limitation](https://blog.rust-lang.org/2022/10/28/gats-stabilization.html#implied-static-requirement-from-higher-ranked-trait-bounds.)
+/// in the Rust compiler then requires `P: 'static`, which we don't necessarily want: the caller
+/// should be able to pass in a reference to avoid expensive cloning.
+///
+/// So, instead, we work around this by making it explicit in the [`Params`] trait that the lifetime
+/// of the query we're binding to (`'q`) may be different than the lifetime of the parameters (`'p`)
+/// as long as the parameters outlive the duration of the query (the `'p: 'q`) bound on the
+/// [`bind`](Self::bind) function.
+pub trait Params<'p> {
+    fn bind<'q>(self, q: Query<'q>) -> Query<'q>
+    where
+        'p: 'q;
+}
+
+/// A collection of parameters with a statically known length.
+///
+/// This is a simple trick for enforcing at compile time that a list of parameters has a certain
+/// length, such as matching the length of a list of column names. This can prevent easy mistakes
+/// like leaving out a parameter. It is implemented for tuples up to length 8.
+pub trait FixedLengthParams<'p, const N: usize>: Params<'p> {}
+
+macro_rules! impl_tuple_params {
+    ($n:literal, ($($t:ident,)+)) => {
+        impl<'p, $($t),+> Params<'p> for ($($t,)+)
+        where $(
+            $t: 'p + for<'q> Encode<'q, Db> + Type<Db>
+        ),+ {
+            fn bind<'q>(self, q: Query<'q>) -> Query<'q>
+            where
+                'p: 'q
+            {
+                #[allow(non_snake_case)]
+                let ($($t,)+) = self;
+                q $(
+                    .bind($t)
+                )+
+            }
         }
+
+        impl<'p, $($t),+> FixedLengthParams<'p, $n> for ($($t,)+)
+        where $(
+            $t: 'p + for<'q> Encode<'q, Db> + Type<Db>
+        ),+ {
+        }
+    };
+}
+
+impl_tuple_params!(1, (T,));
+impl_tuple_params!(2, (T1, T2,));
+impl_tuple_params!(3, (T1, T2, T3,));
+impl_tuple_params!(4, (T1, T2, T3, T4,));
+impl_tuple_params!(5, (T1, T2, T3, T4, T5,));
+impl_tuple_params!(6, (T1, T2, T3, T4, T5, T6,));
+impl_tuple_params!(7, (T1, T2, T3, T4, T5, T6, T7,));
+impl_tuple_params!(8, (T1, T2, T3, T4, T5, T6, T7, T8,));
+
+impl<'p, T> Params<'p> for Vec<T>
+where
+    T: Params<'p>,
+{
+    fn bind<'q>(self, mut q: Query<'q>) -> Query<'q>
+    where
+        'p: 'q,
+    {
+        for params in self {
+            q = params.bind(q);
+        }
+        q
     }
 }
 
 /// Low-level, general database queries and mutation.
-impl<'a> Transaction<'a> {
-    pub async fn query<T, P>(
-        &self,
-        query: &T,
-        params: P,
-    ) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
-    where
-        T: ?Sized + ToStatement + Sync,
-        P: IntoIterator + Send,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        Ok(self
-            .inner
-            .query_raw(query, params)
-            .await
-            .map_err(postgres_err)?
-            .map_err(postgres_err)
-            .boxed())
-    }
-
-    /// Query the underlying SQL database with no parameters.
-    pub async fn query_static<T>(
-        &self,
-        query: &T,
-    ) -> QueryResult<BoxStream<'static, QueryResult<Row>>>
-    where
-        T: ?Sized + ToStatement + Sync,
-    {
-        self.query::<T, [i64; 0]>(query, []).await
-    }
-
-    /// Query the underlying SQL database, returning exactly one result or failing.
-    pub async fn query_one<T, P>(&self, query: &T, params: P) -> QueryResult<Row>
-    where
-        T: ?Sized + ToStatement + Sync,
-        P: IntoIterator + Send,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        self.query_opt(query, params).await?.ok_or(NotFound)
-    }
-
-    /// Query the underlying SQL database with no parameters, returning exactly one result or
-    /// failing.
-    pub async fn query_one_static<T>(&self, query: &T) -> QueryResult<Row>
-    where
-        T: ?Sized + ToStatement + Sync,
-    {
-        self.query_one::<T, [i64; 0]>(query, []).await
-    }
-
-    /// Query the underlying SQL database, returning zero or one results.
-    pub async fn query_opt<T, P>(&self, query: &T, params: P) -> QueryResult<Option<Row>>
-    where
-        T: ?Sized + ToStatement + Sync,
-        P: IntoIterator + Send,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        self.query(query, params).await?.try_next().await
-    }
-
-    /// Query the underlying SQL database with no parameters, returning zero or one results.
-    pub async fn query_opt_static<T>(&self, query: &T) -> QueryResult<Option<Row>>
-    where
-        T: ?Sized + ToStatement + Sync,
-    {
-        self.query_opt::<T, [i64; 0]>(query, []).await
-    }
-
-    /// Execute a statement against the underlying database.
-    ///
-    /// The results of the statement will be reflected immediately in future statements made within
-    /// this transaction, but will not be reflected in the underlying database until the transaction
-    /// is committed with [`commit`](update::Transaction::commit).
-    pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> anyhow::Result<u64>
-    where
-        T: ?Sized + ToStatement,
-        P: IntoIterator,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
-        Ok(self.inner.execute_raw(statement, params).await?)
-    }
-
+impl Transaction<Write> {
     /// Execute a statement that is expected to modify exactly one row.
     ///
     /// Returns an error if the database is not modified.
-    pub async fn execute_one<T, P>(&mut self, statement: &T, params: P) -> anyhow::Result<()>
+    pub async fn execute_one<'q, E>(&mut self, statement: E) -> anyhow::Result<()>
     where
-        T: ?Sized + ToStatement + Display,
-        P: IntoIterator,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
+        E: 'q + Execute<'q, Db>,
     {
-        let nrows = self.execute_many(statement, params).await?;
+        let nrows = self.execute_many(statement).await?;
         if nrows > 1 {
             // If more than one row is affected, we don't return an error, because clearly
             // _something_ happened and modified the database. So we don't necessarily want the
             // caller to retry. But we do log an error, because it seems the query did something
             // different than the caller intended.
-            tracing::error!(
-                %statement,
-                "statement modified more rows ({nrows}) than expected (1)"
-            );
+            tracing::error!("statement modified more rows ({nrows}) than expected (1)");
         }
         Ok(())
     }
@@ -304,21 +248,18 @@ impl<'a> Transaction<'a> {
     /// Execute a statement that is expected to modify exactly one row.
     ///
     /// Returns an error if the database is not modified. Retries several times before failing.
-    pub async fn execute_one_with_retries<T, P>(
+    pub async fn execute_one_with_retries<'q>(
         &mut self,
-        statement: &T,
-        params: P,
-    ) -> anyhow::Result<()>
-    where
-        T: ?Sized + ToStatement + Display,
-        P: IntoIterator + Clone,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
-    {
+        statement: &'q str,
+        params: impl Params<'q> + Clone,
+    ) -> anyhow::Result<()> {
         let interval = Duration::from_secs(1);
         let mut retries = 5;
 
-        while let Err(err) = self.execute_one(statement, params.clone()).await {
+        while let Err(err) = self
+            .execute_one(params.clone().bind(query(statement)))
+            .await
+        {
             tracing::error!(
                 %statement,
                 "error in statement execution ({retries} tries remaining): {err}"
@@ -336,40 +277,34 @@ impl<'a> Transaction<'a> {
     /// Execute a statement that is expected to modify at least one row.
     ///
     /// Returns an error if the database is not modified.
-    pub async fn execute_many<T, P>(&mut self, statement: &T, params: P) -> anyhow::Result<u64>
+    pub async fn execute_many<'q, E>(&mut self, statement: E) -> anyhow::Result<u64>
     where
-        T: ?Sized + ToStatement + Display,
-        P: IntoIterator,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
+        E: 'q + Execute<'q, Db>,
     {
-        let nrows = self.execute(statement, params).await?;
-        ensure!(
-            nrows > 0,
-            "statement failed: 0 rows affected. Statement: {statement}"
-        );
+        let nrows = self.execute(statement).await?.rows_affected();
+        ensure!(nrows > 0, "statement failed: 0 rows affected");
         Ok(nrows)
     }
 
     /// Execute a statement that is expected to modify at least one row.
     ///
     /// Returns an error if the database is not modified. Retries several times before failing.
-    pub async fn execute_many_with_retries<T, P>(
+    pub async fn execute_many_with_retries<'q, 'p>(
         &mut self,
-        statement: &T,
-        params: P,
+        statement: &'q str,
+        params: impl Params<'p> + Clone,
     ) -> anyhow::Result<u64>
     where
-        T: ?Sized + ToStatement + Display,
-        P: IntoIterator + Clone,
-        P::IntoIter: ExactSizeIterator,
-        P::Item: BorrowToSql,
+        'p: 'q,
     {
         let interval = Duration::from_secs(1);
         let mut retries = 5;
 
         loop {
-            match self.execute_many(statement, params.clone()).await {
+            match self
+                .execute_many(params.clone().bind(query(statement)))
+                .await
+            {
                 Ok(nrows) => return Ok(nrows),
                 Err(err) => {
                     tracing::error!(
@@ -386,15 +321,16 @@ impl<'a> Transaction<'a> {
         }
     }
 
-    pub async fn upsert<const N: usize, P>(
+    pub async fn upsert<'p, const N: usize, R>(
         &mut self,
         table: &str,
         columns: [&str; N],
         pk: impl IntoIterator<Item = &str>,
-        rows: impl IntoIterator<Item = [P; N]>,
+        rows: R,
     ) -> anyhow::Result<()>
     where
-        P: BorrowToSql + Clone,
+        R: IntoIterator,
+        R::Item: 'p + FixedLengthParams<'p, N> + Clone,
     {
         let set_columns = columns
             .iter()
@@ -412,7 +348,7 @@ impl<'a> Transaction<'a> {
             let row_params = (start..end).map(|i| format!("${}", i + 1)).join(",");
 
             values.push(format!("({row_params})"));
-            params.extend(entries);
+            params.push(entries);
             num_rows += 1;
         }
 
@@ -440,10 +376,10 @@ impl<'a> Transaction<'a> {
 }
 
 /// Query service specific mutations.
-impl<'a> Transaction<'a> {
+impl Transaction<Write> {
     /// Delete a batch of data for pruning.
     pub(super) async fn delete_batch(&mut self, height: u64) -> anyhow::Result<()> {
-        self.execute("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
+        self.execute(query("DELETE FROM header WHERE height <= $1").bind(height as i64))
             .await?;
         self.save_pruned_height(height).await?;
         Ok(())
@@ -457,14 +393,14 @@ impl<'a> Transaction<'a> {
             "pruned_height",
             ["id", "last_height"],
             ["id"],
-            [[sql_param(&(1_i32)), sql_param(&(height as i64))]],
+            [(1i32, height as i64)],
         )
         .await
     }
 }
 
 #[async_trait]
-impl<'a, Types> UpdateAvailabilityData<Types> for Transaction<'a>
+impl<Types> UpdateAvailabilityData<Types> for Transaction<Write>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -479,20 +415,20 @@ where
             "header",
             ["height", "hash", "payload_hash", "data", "timestamp"],
             ["height"],
-            [[
-                sql_param(&(leaf.height() as i64)),
-                sql_param(&leaf.block_hash().to_string()),
-                sql_param(&leaf.leaf().block_header().payload_commitment().to_string()),
-                sql_param(&header_json),
-                sql_param(&(leaf.leaf().block_header().timestamp() as i64)),
-            ]],
+            [(
+                leaf.height() as i64,
+                leaf.block_hash().to_string(),
+                leaf.leaf().block_header().payload_commitment().to_string(),
+                header_json,
+                leaf.leaf().block_header().timestamp() as i64,
+            )],
         )
         .await?;
 
         // Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
-        self.upsert("payload", ["height"], ["height"], [[leaf.height() as i64]])
+        self.upsert("payload", ["height"], ["height"], [(leaf.height() as i64,)])
             .await?;
 
         // Finally, we insert the leaf itself, which references the header row we created.
@@ -503,13 +439,13 @@ where
             "leaf",
             ["height", "hash", "block_hash", "leaf", "qc"],
             ["height"],
-            [[
-                sql_param(&(leaf.height() as i64)),
-                sql_param(&leaf.hash().to_string()),
-                sql_param(&leaf.block_hash().to_string()),
-                sql_param(&leaf_json),
-                sql_param(&qc_json),
-            ]],
+            [(
+                leaf.height() as i64,
+                leaf.hash().to_string(),
+                leaf.block_hash().to_string(),
+                leaf_json,
+                qc_json,
+            )],
         )
         .await?;
 
@@ -524,43 +460,23 @@ where
             "payload",
             ["height", "data", "size"],
             ["height"],
-            [[
-                sql_param(&(block.height() as i64)),
-                sql_param(&payload.as_ref()),
-                sql_param(&(block.size() as i32)),
-            ]],
+            [(block.height() as i64, payload.as_ref(), block.size() as i32)],
         )
         .await?;
 
-        // Index the transactions in the block. For each transaction, collect, separately, its hash,
-        // height, and index. These items all have different types, so we collect them into
-        // different vecs.
-        let mut tx_hashes = vec![];
-        let mut tx_block_heights = vec![];
-        let mut tx_indexes = vec![];
+        // Index the transactions in the block.
+        let mut rows = vec![];
         for (txn_ix, txn) in block.enumerate() {
             let txn_ix =
                 serde_json::to_value(&txn_ix).context("failed to serialize transaction index")?;
-            tx_hashes.push(txn.commit().to_string());
-            tx_block_heights.push(block.height() as i64);
-            tx_indexes.push(txn_ix);
+            rows.push((txn.commit().to_string(), block.height() as i64, txn_ix));
         }
-        if !tx_hashes.is_empty() {
+        if !rows.is_empty() {
             self.upsert(
                 "transaction",
                 ["hash", "block_height", "index"],
                 ["block_height", "index"],
-                // Now that we have the transaction hashes, block heights, and indexes collected in
-                // memory, we can combine them all into a single vec using type erasure: all the
-                // values get converted to `&dyn ToSql`. The references all borrow from one of
-                // `tx_hashes`, `tx_block_heights`, or `tx_indexes`, which all outlive this function
-                // call, so the lifetimes work out.
-                izip!(
-                    tx_hashes.iter().map(sql_param),
-                    tx_block_heights.iter().map(sql_param),
-                    tx_indexes.iter().map(sql_param),
-                )
-                .map(|(hash, height, index)| [hash, height, index]),
+                rows,
             )
             .await?;
         }
@@ -581,11 +497,7 @@ where
                 "vid",
                 ["height", "common", "share"],
                 ["height"],
-                [[
-                    sql_param(&(common.height() as i64)),
-                    sql_param(&common_data),
-                    sql_param(&share_data),
-                ]],
+                [(common.height() as i64, common_data, share_data)],
             )
             .await
         } else {
@@ -596,10 +508,7 @@ where
                 "vid",
                 ["height", "common"],
                 ["height"],
-                [[
-                    sql_param(&(common.height() as i64)),
-                    sql_param(&common_data),
-                ]],
+                [(common.height() as i64, common_data)],
             )
             .await
         }
@@ -607,15 +516,15 @@ where
 }
 
 #[async_trait]
-impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
-    UpdateStateData<Types, State, ARITY> for Transaction<'a>
+impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
+    UpdateStateData<Types, State, ARITY> for Transaction<Write>
 {
     async fn set_last_state_height(&mut self, height: usize) -> anyhow::Result<()> {
         self.upsert(
             "last_merklized_state_height",
             ["id", "height"],
             ["id"],
-            [[sql_param(&(1_i32)), sql_param(&(height as i64))]],
+            [(1i32, height as i64)],
         )
         .await?;
 
@@ -644,7 +553,8 @@ impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usiz
         for node in path.iter() {
             match node {
                 MerkleNode::Empty => {
-                    let index = serde_json::to_value(pos.clone()).map_err(ParseError::Serde)?;
+                    let index = serde_json::to_value(pos.clone())
+                        .decode_error("malformed merkle position")?;
                     // The node path represents the sequence of nodes from the root down to a specific node.
                     // Therefore, the traversal path needs to be reversed
                     // The root node path is an empty array.
@@ -668,12 +578,14 @@ impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usiz
                     // Serialize the leaf node hash value into a vector
                     value
                         .serialize_compressed(&mut leaf_commit)
-                        .map_err(ParseError::Serialize)?;
+                        .decode_error("malformed merkle leaf commitment")?;
 
                     let path = traversal_path.clone().rev().collect();
 
-                    let index = serde_json::to_value(pos.clone()).map_err(ParseError::Serde)?;
-                    let entry = serde_json::to_value(elem).map_err(ParseError::Serde)?;
+                    let index = serde_json::to_value(pos.clone())
+                        .decode_error("malformed merkle position")?;
+                    let entry =
+                        serde_json::to_value(elem).decode_error("malformed merkle element")?;
 
                     nodes.push((
                         Node {
@@ -693,7 +605,7 @@ impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usiz
                     let mut branch_hash = Vec::new();
                     value
                         .serialize_compressed(&mut branch_hash)
-                        .map_err(ParseError::Serialize)?;
+                        .decode_error("malformed merkle branch hash")?;
 
                     // We only insert the non-empty children in the children field of the table
                     // BitVec is used to separate out Empty children positions
@@ -711,7 +623,7 @@ impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usiz
                                 let mut hash = Vec::new();
                                 value
                                     .serialize_compressed(&mut hash)
-                                    .map_err(ParseError::Serialize)?;
+                                    .decode_error("malformed merkle node hash")?;
 
                                 children_values.push(hash);
                                 // Mark the entry as 1 in bitvec to indiciate a non-empty child
@@ -747,14 +659,10 @@ impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usiz
         // insert all the hashes into database
         // It returns all the ids inserted in the order they were inserted
         // We use the hash ids to insert all the nodes
-        let (params, batch_hash_insert_stmt) = HashTableRow::build_batch_insert(&hashes);
-
-        // Batch insert all the hashes
-        let nodes_hash_ids: HashMap<Vec<u8>, i32> = self
-            .inner
-            .query_raw(&batch_hash_insert_stmt, params)
-            .await?
-            .map_ok(|r| (r.get(1), r.get(0)))
+        let (query, sql) = build_hash_batch_insert(&hashes)?;
+        let nodes_hash_ids: HashMap<Vec<u8>, i32> = query
+            .query_as(&sql)
+            .fetch(self.as_mut())
             .try_collect()
             .await?;
 
@@ -777,33 +685,21 @@ impl<'a, Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usiz
                 node.children = Some(children_hashes);
             }
         }
-        let nodes = nodes.into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
-        let (params, batch_stmt) = Node::build_batch_insert(name, &nodes);
-
-        // Batch insert all the child hashes
-        let rows_inserted = self.inner.query_raw(&batch_stmt, params).await?;
-
-        if rows_inserted.count().await != path.len() {
-            bail!("failed to insert all merkle nodes");
-        }
-
+        Node::upsert(name, nodes.into_iter().map(|(n, _, _)| n), self).await?;
         Ok(())
     }
 }
 
 #[async_trait]
-impl<'a> PrunedHeightStorage for Transaction<'a> {
-    async fn load_pruned_height(&self) -> anyhow::Result<Option<u64>> {
-        let row = self
-            .query_opt_static("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
-            .await?;
-        let height = row.map(|row| row.get::<_, i64>(0) as u64);
-        Ok(height)
-    }
-}
-
-fn postgres_err(err: tokio_postgres::Error) -> QueryError {
-    QueryError::Error {
-        message: format!("postgres error: {err:#}"),
+impl<Mode: TransactionMode> PrunedHeightStorage for Transaction<Mode> {
+    async fn load_pruned_height(&mut self) -> anyhow::Result<Option<u64>> {
+        let Some((height,)) =
+            query_as::<(i64,)>("SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1")
+                .fetch_optional(self.as_mut())
+                .await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(height as u64))
     }
 }

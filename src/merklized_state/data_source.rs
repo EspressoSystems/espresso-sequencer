@@ -33,7 +33,7 @@ use tagged_base64::TaggedBase64;
 
 use std::cmp::Ordering;
 
-use crate::{data_source::ReadOnly, QueryResult};
+use crate::QueryResult;
 
 /// This trait defines methods that a data source should implement
 /// It enables retrieval of the membership path for a leaf node, which can be used to reconstruct the Merkle tree state.
@@ -48,23 +48,6 @@ where
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>>;
-}
-
-#[async_trait]
-impl<Types, State, T, const ARITY: usize> MerklizedStateDataSource<Types, State, ARITY>
-    for ReadOnly<T>
-where
-    Types: NodeType,
-    State: MerklizedState<Types, ARITY>,
-    T: MerklizedStateDataSource<Types, State, ARITY> + Sync,
-{
-    async fn get_path(
-        &self,
-        snapshot: Snapshot<Types, State, ARITY>,
-        key: State::Key,
-    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
-        (**self).get_path(snapshot, key).await
-    }
 }
 
 /// This trait defines methods for updating the storage with the merkle tree state.
@@ -84,16 +67,6 @@ pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types, ARITY>, 
 #[async_trait]
 pub trait MerklizedStateHeightPersistence {
     async fn get_last_state_height(&self) -> QueryResult<usize>;
-}
-
-#[async_trait]
-impl<T> MerklizedStateHeightPersistence for ReadOnly<T>
-where
-    T: MerklizedStateHeightPersistence + Sync,
-{
-    async fn get_last_state_height(&self) -> QueryResult<usize> {
-        (**self).get_last_state_height().await
-    }
 }
 
 type StateCommitment<Types, T, const ARITY: usize> = <T as MerklizedState<Types, ARITY>>::Commit;

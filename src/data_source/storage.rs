@@ -23,13 +23,45 @@
 //! * [`FileSystemStorage`]
 //! * [`NoStorage`]
 //!
+//! # Storage Traits vs Data Source Traits
+//!
+//! Many of the traits defined in this module (e.g. [`NodeStorage`], [`ExplorerStorage`], and
+//! others) are nearly identical to the corresponding data source traits (e.g.
+//! [`NodeDataSource`](crate::node::NodeDataSource),
+//! [`ExplorerDataSource`](crate::explorer::ExplorerDataSource), etc). They typically differ in
+//! mutability: the storage traits are intended to be implemented on storage
+//! [transactions](super::Transaction), and because even reading may update the internal
+//! state of a transaction, such as a buffer or database cursor, these traits typically take `&mut
+//! self`. This is not a barrier for concurrency since there may be many transactions open
+//! simultaneously from a single data source. The data source traits, meanwhile, are implemented on
+//! the data source itself. Internally, they usually open a fresh transaction and do all their work
+//! on the transaction, not modifying the data source itself, so they take `&self`.
+//!
+//! For traits that differ _only_ in the mutability of the `self` parameter, it is almost possible
+//! to combine them into a single trait whose methods take `self` by value, and implementing said
+//! traits for the reference types `&SomeDataSource` and `&mut SomeDataSourceTransaction`. There are
+//! two problems with this approach, which lead us to prefer the slight redundance of having
+//! separate versions of the traits with mutable and immutable methods:
+//! * The trait bounds quickly get out of hand, since we now have trait bounds not only on the type
+//!   itself, but also on references to that type, and the reference also requires the introduction
+//!   of an additional lifetime parameter.
+//! * We run into a longstanding [`rustc` bug](https://github.com/rust-lang/rust/issues/85063) in
+//!   which type inference diverges when given trait bounds on reference types, even when
+//!   theoretically the types are uniquely inferrable. This issue can be worked around by [explicitly
+//!   specifying type paramters at every call site](https://users.rust-lang.org/t/type-recursion-when-trait-bound-is-added-on-reference-type/74525/2),
+//!   but this further exacerbates the ergonomic issues with this approach, past the point of
+//!   viability.
+//!
+//! Occasionally, there may be further differences between the data source traits and corresponding
+//! storage traits. For example, [`AvailabilityStorage`] also differs from
+//! [`AvailabilityDataSource`](crate::availability::AvailabilityDataSource) in fallibility.
+//!
 
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
         QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::ReadOnly,
     explorer::{
         query_data::{
             BlockDetail, BlockIdentifier, BlockSummary, ExplorerSummary, GetBlockDetailError,
@@ -40,10 +72,13 @@ use crate::{
         },
         traits::{ExplorerHeader, ExplorerTransaction},
     },
-    Header, Payload, QueryResult, Transaction,
+    merklized_state::{MerklizedState, Snapshot},
+    node::{SyncStatus, TimeWindowQueryData, WindowStart},
+    Header, Payload, QueryResult, Transaction, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
+use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 
 pub mod fs;
@@ -79,116 +114,62 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
 {
-    async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>>;
-    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
-    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>>;
-    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>>;
-    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>>;
+    async fn get_leaf(&mut self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>>;
+    async fn get_block(&mut self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
+    async fn get_header(&mut self, id: BlockId<Types>) -> QueryResult<Header<Types>>;
+    async fn get_payload(&mut self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>>;
+    async fn get_vid_common(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonQueryData<Types>>;
 
     async fn get_leaf_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
     async fn get_block_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
     async fn get_payload_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
     async fn get_vid_common_range<R>(
-        &self,
+        &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
     async fn get_transaction(
-        &self,
+        &mut self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<TransactionQueryData<Types>>;
 }
 
 #[async_trait]
-impl<Types, T> AvailabilityStorage<Types> for ReadOnly<T>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    T: AvailabilityStorage<Types>,
-{
-    async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
-        (**self).get_leaf(id).await
-    }
-
-    async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
-        (**self).get_block(id).await
-    }
-
-    async fn get_header(&self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
-        (**self).get_header(id).await
-    }
-
-    async fn get_payload(&self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
-        (**self).get_payload(id).await
-    }
-
-    async fn get_vid_common(&self, id: BlockId<Types>) -> QueryResult<VidCommonQueryData<Types>> {
-        (**self).get_vid_common(id).await
-    }
-
-    async fn get_leaf_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
+pub trait NodeStorage<Types: NodeType> {
+    async fn block_height(&mut self) -> QueryResult<usize>;
+    async fn count_transactions(&mut self) -> QueryResult<usize>;
+    async fn payload_size(&mut self) -> QueryResult<usize>;
+    async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
     where
-        R: RangeBounds<usize> + Send + 'static,
-    {
-        (**self).get_leaf_range(range).await
-    }
+        ID: Into<BlockId<Types>> + Send + Sync;
+    async fn get_header_window(
+        &mut self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>>;
 
-    async fn get_block_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
-    where
-        R: RangeBounds<usize> + Send + 'static,
-    {
-        (**self).get_block_range(range).await
-    }
-
-    async fn get_payload_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
-    where
-        R: RangeBounds<usize> + Send + 'static,
-    {
-        (**self).get_payload_range(range).await
-    }
-
-    async fn get_vid_common_range<R>(
-        &self,
-        range: R,
-    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
-    where
-        R: RangeBounds<usize> + Send + 'static,
-    {
-        (**self).get_vid_common_range(range).await
-    }
-
-    async fn get_transaction(
-        &self,
-        hash: TransactionHash<Types>,
-    ) -> QueryResult<TransactionQueryData<Types>> {
-        (**self).get_transaction(hash).await
-    }
+    /// Search the database for missing objects and generate a report.
+    async fn sync_status(&mut self) -> QueryResult<SyncStatus>;
 }
 
 /// An interface for querying Data and Statistics from the HotShot Blockchain.
@@ -212,7 +193,7 @@ where
     /// block from the blockchain.  The block is identified by the given
     /// [BlockIdentifier].
     async fn get_block_detail(
-        &self,
+        &mut self,
         request: BlockIdentifier<Types>,
     ) -> Result<BlockDetail<Types>, GetBlockDetailError>;
 
@@ -220,7 +201,7 @@ where
     /// summaries from the blockchain.  The list is generated from the given
     /// [GetBlockSummariesRequest].
     async fn get_block_summaries(
-        &self,
+        &mut self,
         request: GetBlockSummariesRequest<Types>,
     ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError>;
 
@@ -228,7 +209,7 @@ where
     /// specific transaction from the blockchain.  The transaction is identified
     /// by the given [TransactionIdentifier].
     async fn get_transaction_detail(
-        &self,
+        &mut self,
         request: TransactionIdentifier<Types>,
     ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError>;
 
@@ -236,72 +217,42 @@ where
     /// transaction summaries from the blockchain.  The list is generated from
     /// the given [GetTransactionSummariesRequest].
     async fn get_transaction_summaries(
-        &self,
+        &mut self,
         request: GetTransactionSummariesRequest<Types>,
     ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError>;
 
     /// `get_explorer_summary` is a method that retrieves a summary overview of
     /// the blockchain.  This is useful for displaying information that
     /// indicates the overall status of the block chain.
-    async fn get_explorer_summary(&self)
-        -> Result<ExplorerSummary<Types>, GetExplorerSummaryError>;
+    async fn get_explorer_summary(
+        &mut self,
+    ) -> Result<ExplorerSummary<Types>, GetExplorerSummaryError>;
 
     /// `get_search_results` is a method that retrieves the results of a search
     /// query against the blockchain.  The results are generated from the given
     /// query string.
     async fn get_search_results(
-        &self,
+        &mut self,
         query: String,
     ) -> Result<SearchResult<Types>, GetSearchResultsError>;
 }
 
+/// This trait defines methods that a data source should implement
+/// It enables retrieval of the membership path for a leaf node, which can be used to reconstruct the Merkle tree state.
 #[async_trait]
-impl<Types, T> ExplorerStorage<Types> for ReadOnly<T>
+pub trait MerklizedStateStorage<Types, State, const ARITY: usize>
 where
     Types: NodeType,
-    Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
-    Transaction<Types>: ExplorerTransaction,
-    Payload<Types>: QueryablePayload<Types>,
-    T: ExplorerStorage<Types> + Sync,
+    State: MerklizedState<Types, ARITY>,
 {
-    async fn get_block_detail(
-        &self,
-        request: BlockIdentifier<Types>,
-    ) -> Result<BlockDetail<Types>, GetBlockDetailError> {
-        (**self).get_block_detail(request).await
-    }
+    async fn get_path(
+        &mut self,
+        snapshot: Snapshot<Types, State, ARITY>,
+        key: State::Key,
+    ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>>;
+}
 
-    async fn get_block_summaries(
-        &self,
-        request: GetBlockSummariesRequest<Types>,
-    ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError> {
-        (**self).get_block_summaries(request).await
-    }
-
-    async fn get_transaction_detail(
-        &self,
-        request: TransactionIdentifier<Types>,
-    ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError> {
-        (**self).get_transaction_detail(request).await
-    }
-
-    async fn get_transaction_summaries(
-        &self,
-        request: GetTransactionSummariesRequest<Types>,
-    ) -> Result<Vec<TransactionSummary<Types>>, GetTransactionSummariesError> {
-        (**self).get_transaction_summaries(request).await
-    }
-
-    async fn get_explorer_summary(
-        &self,
-    ) -> Result<ExplorerSummary<Types>, GetExplorerSummaryError> {
-        (**self).get_explorer_summary().await
-    }
-
-    async fn get_search_results(
-        &self,
-        query: String,
-    ) -> Result<SearchResult<Types>, GetSearchResultsError> {
-        (**self).get_search_results(query).await
-    }
+#[async_trait]
+pub trait MerklizedStateHeightStorage {
+    async fn get_last_state_height(&mut self) -> QueryResult<usize>;
 }

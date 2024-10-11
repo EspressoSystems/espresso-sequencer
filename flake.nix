@@ -42,6 +42,9 @@
         rustToolchain = pkgs.rust-bin.stable.latest.minimal.override {
           extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
         };
+        nightlyToolchain = pkgs.rust-bin.nightly.latest.minimal.override {
+          extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
+        };
         rustDeps = with pkgs;
           [
             pkg-config
@@ -184,6 +187,15 @@
           inherit RUST_SRC_PATH RUST_BACKTRACE RUST_LOG RUSTFLAGS CARGO_TARGET_DIR;
         };
         devShells = {
+          nightlyShell = pkgs.mkShell {
+            shellHook = shellHook;
+            buildInputs = with pkgs;
+              [
+                nixWithFlakes
+                git
+                nightlyToolchain
+              ] ++ myPython ++ rustDeps;
+          };
           perfShell = pkgs.mkShell {
             shellHook = shellHook;
             buildInputs = with pkgs;
