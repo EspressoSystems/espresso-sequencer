@@ -22,7 +22,7 @@ use client::{BenchResults, BenchResultsDownloadConfig};
 use csv::Writer;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_types::{
-    network::BuilderType,
+    network::{BuilderType, NetworkConfig, PublicKeysFile},
     traits::signature_key::{SignatureKey, StakeTableEntryType},
     PeerConfig,
 };
@@ -44,8 +44,6 @@ use vbs::{
     version::{StaticVersion, StaticVersionType},
     BinarySerializer,
 };
-
-use hotshot_types::network::{NetworkConfig, PublicKeysFile};
 
 /// Orchestrator is not, strictly speaking, bound to the network; it can have its own versioning.
 /// Orchestrator Version (major)

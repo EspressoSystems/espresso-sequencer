@@ -660,12 +660,6 @@ pub async fn validate_proposal_view_and_certs<TYPES: NodeType, V: Versions>(
     Ok(())
 }
 
-/// Constant which tells [`update_view`] to send a view change event when called.
-pub(crate) const SEND_VIEW_CHANGE_EVENT: bool = true;
-
-/// Constant which tells `update_view` to not send a view change event when called.
-pub const DONT_SEND_VIEW_CHANGE_EVENT: bool = false;
-
 /// Update the view if it actually changed, takes a mutable reference to the `cur_view` and the
 /// `timeout_task` which are updated during the operation of the function.
 ///
@@ -682,7 +676,6 @@ pub(crate) async fn update_view<TYPES: NodeType>(
     cur_view_time: &mut i64,
     timeout_task: &mut JoinHandle<()>,
     output_event_stream: &Sender<Event<TYPES>>,
-    send_view_change_event: bool,
     is_old_view_leader: bool,
 ) -> Result<()> {
     ensure!(
@@ -703,20 +696,18 @@ pub(crate) async fn update_view<TYPES: NodeType>(
     // The next view is just the current view + 1
     let next_view = *cur_view + 1;
 
-    if send_view_change_event {
-        futures::join! {
-            broadcast_event(Arc::new(HotShotEvent::ViewChange(new_view)), event_stream),
-            broadcast_event(
-                Event {
+    futures::join! {
+        broadcast_event(Arc::new(HotShotEvent::ViewChange(new_view)), event_stream),
+        broadcast_event(
+            Event {
+                view_number: old_view,
+                event: EventType::ViewFinished {
                     view_number: old_view,
-                    event: EventType::ViewFinished {
-                        view_number: old_view,
-                    },
                 },
-                output_event_stream,
-            )
-        };
-    }
+            },
+            output_event_stream,
+        )
+    };
 
     // Spawn a timeout task if we did actually update view
     let new_timeout_task = async_spawn({

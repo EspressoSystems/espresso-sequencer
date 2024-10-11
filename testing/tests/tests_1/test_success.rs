@@ -10,7 +10,6 @@ use hotshot_example_types::node_types::{
     Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestTypes,
     TestTypesRandomizedLeader, TestVersions,
 };
-#[cfg(feature = "dependency-tasks")]
 use hotshot_example_types::testable_delay::{
     DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay,
 };
@@ -41,7 +40,6 @@ cross_tests!(
     },
 );
 
-#[cfg(feature = "dependency-tasks")]
 cross_tests!(
     TestName: test_success_with_async_delay,
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
@@ -74,7 +72,6 @@ cross_tests!(
     },
 );
 
-#[cfg(feature = "dependency-tasks")]
 cross_tests!(
     TestName: test_success_with_async_delay_2,
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],

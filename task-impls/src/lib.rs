@@ -7,9 +7,6 @@
 //! The consensus layer for hotshot. This currently implements sequencing
 //! consensus in an event driven way
 
-/// the task which implements the main parts of consensus
-pub mod consensus;
-
 /// The task which implements the core state logic of consensus.
 pub mod consensus2;
 

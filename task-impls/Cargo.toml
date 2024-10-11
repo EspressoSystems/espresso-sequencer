@@ -8,7 +8,6 @@ version = { workspace = true }
 [features]
 example-upgrade = []
 gpu-vid = ["hotshot-types/gpu-vid"]
-dependency-tasks = []
 rewind = []
 test-srs = ["jf-vid/test-srs"]
 

@@ -6,9 +6,10 @@
 
 use std::{env, fs, path::PathBuf};
 
-use crate::{traits::signature_key::SignatureKey, ValidatorConfig};
 use toml;
 use tracing::error;
+
+use crate::{traits::signature_key::SignatureKey, ValidatorConfig};
 
 /// Holds configuration for a validator node
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]

@@ -1,5 +1,3 @@
-#![cfg(feature = "dependency-tasks")]
-
 use std::time::Duration;
 
 use async_broadcast::broadcast;

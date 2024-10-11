@@ -13,11 +13,11 @@ use async_compatibility_layer::art::async_spawn;
 use async_trait::async_trait;
 use chrono::Utc;
 use hotshot_task_impls::{
-    builder::BuilderClient, consensus::ConsensusTaskState, consensus2::Consensus2TaskState,
-    da::DaTaskState, quorum_proposal::QuorumProposalTaskState,
-    quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
-    request::NetworkRequestState, rewind::RewindTaskState, transactions::TransactionTaskState,
-    upgrade::UpgradeTaskState, vid::VidTaskState, view_sync::ViewSyncTaskState,
+    builder::BuilderClient, consensus2::Consensus2TaskState, da::DaTaskState,
+    quorum_proposal::QuorumProposalTaskState, quorum_proposal_recv::QuorumProposalRecvTaskState,
+    quorum_vote::QuorumVoteTaskState, request::NetworkRequestState, rewind::RewindTaskState,
+    transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VidTaskState,
+    view_sync::ViewSyncTaskState,
 };
 use hotshot_types::{
     consensus::OuterConsensus,
@@ -210,42 +210,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
                 .marketplace_config
                 .fallback_builder_url
                 .clone(),
-        }
-    }
-}
-
-#[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState<TYPES, I, V>
-    for ConsensusTaskState<TYPES, I, V>
-{
-    async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
-        let consensus = handle.hotshot.consensus();
-
-        Self {
-            consensus: OuterConsensus::new(consensus),
-            instance_state: handle.hotshot.instance_state(),
-            timeout: handle.hotshot.config.next_view_timeout,
-            round_start_delay: handle.hotshot.config.round_start_delay,
-            cur_view: handle.cur_view().await,
-            cur_view_time: Utc::now().timestamp(),
-            payload_commitment_and_metadata: None,
-            vote_collectors: BTreeMap::default(),
-            timeout_vote_collectors: BTreeMap::default(),
-            timeout_task: async_spawn(async {}),
-            spawned_tasks: BTreeMap::new(),
-            formed_upgrade_certificate: None,
-            proposal_cert: None,
-            output_event_stream: handle.hotshot.external_event_stream.0.clone(),
-            current_proposal: None,
-            id: handle.hotshot.id,
-            public_key: handle.public_key().clone(),
-            private_key: handle.private_key().clone(),
-            network: Arc::clone(&handle.hotshot.network),
-            timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
-            quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
-            da_membership: handle.hotshot.memberships.da_membership.clone().into(),
-            storage: Arc::clone(&handle.storage),
-            upgrade_lock: handle.hotshot.upgrade_lock.clone(),
         }
     }
 }

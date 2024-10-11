@@ -5,7 +5,6 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 #![allow(clippy::panic)]
-#![cfg(feature = "dependency-tasks")]
 
 use std::time::Duration;
 

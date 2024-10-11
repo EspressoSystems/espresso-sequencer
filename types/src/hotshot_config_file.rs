@@ -6,14 +6,13 @@
 
 use std::{num::NonZeroUsize, time::Duration, vec};
 
-use crate::{
-    constants::REQUEST_DATA_DELAY, traits::signature_key::SignatureKey, ExecutionType,
-    HotShotConfig, PeerConfig, ValidatorConfig,
-};
 use surf_disco::Url;
 use vec1::Vec1;
 
-use crate::upgrade_config::UpgradeConfig;
+use crate::{
+    constants::REQUEST_DATA_DELAY, traits::signature_key::SignatureKey,
+    upgrade_config::UpgradeConfig, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+};
 
 /// Default builder URL, used as placeholder
 fn default_builder_urls() -> Vec1<Url> {

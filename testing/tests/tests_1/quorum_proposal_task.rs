@@ -4,8 +4,6 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-#![cfg(feature = "dependency-tasks")]
-
 use std::time::Duration;
 
 use futures::StreamExt;

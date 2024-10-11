@@ -4,8 +4,6 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-#![cfg(feature = "dependency-tasks")]
-// TODO: Remove after integration of dependency-tasks
 #![allow(unused_imports)]
 
 use std::time::Duration;
@@ -40,7 +38,6 @@ use vbs::version::Version;
 
 const TIMEOUT: Duration = Duration::from_millis(65);
 
-#[cfg(feature = "dependency-tasks")]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Tests that we correctly update our internal quorum vote state when reaching a decided upgrade

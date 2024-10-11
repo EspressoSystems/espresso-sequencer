@@ -350,7 +350,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// Panics if sending genesis fails
     #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
     pub async fn start_consensus(&self) {
-        #[cfg(feature = "dependency-tasks")]
         tracing::error!("HotShot is running with the dependency tasks feature enabled!!");
 
         #[cfg(all(feature = "rewind", not(debug_assertions)))]
@@ -388,7 +387,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
                 .await;
             }
         });
-        #[cfg(feature = "dependency-tasks")]
         {
             if let Some(validated_state) = consensus.validated_state_map().get(&self.start_view) {
                 #[allow(clippy::panic)]

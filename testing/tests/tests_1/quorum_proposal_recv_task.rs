@@ -6,7 +6,6 @@
 
 // TODO: Remove after integration
 #![allow(unused_imports)]
-#![cfg(feature = "dependency-tasks")]
 
 use committable::Committable;
 use futures::StreamExt;
@@ -38,7 +37,6 @@ use hotshot_types::{
 };
 
 #[cfg(test)]
-#[cfg(feature = "dependency-tasks")]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_recv_task() {
@@ -131,7 +129,6 @@ async fn test_quorum_proposal_recv_task() {
 }
 
 #[cfg(test)]
-#[cfg(feature = "dependency-tasks")]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_recv_task_liveness_check() {

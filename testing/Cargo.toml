@@ -10,7 +10,6 @@ default = []
 # NOTE this is used to activate the slow tests we don't wish to run in CI
 slow-tests = []
 gpu-vid = ["hotshot-types/gpu-vid"]
-dependency-tasks = ["hotshot/dependency-tasks"]
 rewind = ["hotshot/rewind"]
 test-srs = ["jf-vid/test-srs"]
 

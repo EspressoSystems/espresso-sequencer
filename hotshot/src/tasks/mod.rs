@@ -216,13 +216,6 @@ pub async fn add_consensus_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, 
     }
 
     {
-        #![cfg(not(feature = "dependency-tasks"))]
-        use hotshot_task_impls::consensus::ConsensusTaskState;
-
-        handle.add_task(ConsensusTaskState::<TYPES, I, V>::create_from(handle).await);
-    }
-    {
-        #![cfg(feature = "dependency-tasks")]
         use hotshot_task_impls::{
             consensus2::Consensus2TaskState, quorum_proposal::QuorumProposalTaskState,
             quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,

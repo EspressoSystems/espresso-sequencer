@@ -33,7 +33,7 @@ use crate::{
     events::HotShotEvent,
     helpers::{
         broadcast_event, fetch_proposal, update_view, validate_proposal_safety_and_liveness,
-        validate_proposal_view_and_certs, SEND_VIEW_CHANGE_EVENT,
+        validate_proposal_view_and_certs,
     },
     quorum_proposal_recv::{UpgradeLock, Versions},
 };
@@ -103,7 +103,6 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
         &mut task_state.cur_view_time,
         &mut task_state.timeout_task,
         &task_state.output_event_stream,
-        SEND_VIEW_CHANGE_EVENT,
         task_state.quorum_membership.leader(cur_view) == task_state.public_key,
     )
     .await
@@ -273,7 +272,6 @@ pub(crate) async fn handle_quorum_proposal_recv<
         &mut task_state.cur_view_time,
         &mut task_state.timeout_task,
         &task_state.output_event_stream,
-        SEND_VIEW_CHANGE_EVENT,
         task_state.quorum_membership.leader(cur_view) == task_state.public_key,
     )
     .await

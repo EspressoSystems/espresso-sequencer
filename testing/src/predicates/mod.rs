@@ -5,11 +5,7 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 pub mod event;
-#[cfg(not(feature = "dependency-tasks"))]
-pub mod upgrade_with_consensus;
-#[cfg(feature = "dependency-tasks")]
 pub mod upgrade_with_proposal;
-#[cfg(feature = "dependency-tasks")]
 pub mod upgrade_with_vote;
 
 use async_trait::async_trait;

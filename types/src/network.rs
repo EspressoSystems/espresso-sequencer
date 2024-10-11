@@ -6,22 +6,23 @@
 
 use std::{fs, ops::Range, path::Path, time::Duration, vec};
 
-use crate::hotshot_config_file::HotShotConfigFile;
+use clap::ValueEnum;
+use libp2p::{Multiaddr, PeerId};
+use serde_inline_default::serde_inline_default;
+use thiserror::Error;
+use tracing::error;
+
 use crate::{
     constants::{
         ORCHESTRATOR_DEFAULT_NUM_ROUNDS, ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS,
         ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND, ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE,
         REQUEST_DATA_DELAY,
     },
+    hotshot_config_file::HotShotConfigFile,
     light_client::StateVerKey,
     traits::signature_key::SignatureKey,
     HotShotConfig, ValidatorConfig,
 };
-use clap::ValueEnum;
-use libp2p::{Multiaddr, PeerId};
-use serde_inline_default::serde_inline_default;
-use thiserror::Error;
-use tracing::error;
 
 /// Configuration describing a libp2p node
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]

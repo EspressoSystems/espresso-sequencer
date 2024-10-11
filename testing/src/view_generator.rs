@@ -63,7 +63,7 @@ pub struct TestView {
     pub da_certificate: DaCertificate<TestTypes>,
     pub transactions: Vec<TestTransaction>,
     upgrade_data: Option<UpgradeProposalData<TestTypes>>,
-    formed_upgrade_certificate: Option<UpgradeCertificate<TestTypes>>,
+    pub formed_upgrade_certificate: Option<UpgradeCertificate<TestTypes>>,
     view_sync_finalize_data: Option<ViewSyncFinalizeData<TestTypes>>,
     timeout_cert_data: Option<TimeoutData<TestTypes>>,
     upgrade_lock: UpgradeLock<TestTypes, TestVersions>,
