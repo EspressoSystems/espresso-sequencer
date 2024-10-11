@@ -8,9 +8,9 @@ use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
     v0_3::ChainConfig,
     BackoffParams, BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment,
-    FeeMerkleTree, NodeState,
+    FeeMerkleTree, Leaf, NodeState,
 };
-use futures::future::FutureExt;
+use futures::future::{Future, FutureExt};
 use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_types::{
     data::ViewNumber, traits::node_implementation::ConsensusTime as _, ValidatorConfig,
@@ -23,10 +23,7 @@ use url::Url;
 use vbs::version::StaticVersionType;
 
 use crate::{
-    api::{
-        data_source::{CatchupDataSource, PublicNetworkConfig},
-        BlocksFrontier,
-    },
+    api::{data_source::PublicNetworkConfig, BlocksFrontier},
     PubKey,
 };
 
@@ -236,6 +233,94 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
     }
 }
 
+pub(crate) trait CatchupStorage: Sync {
+    /// Get the state of the requested `accounts`.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    ///
+    /// If successful, this function also returns the leaf from `view`, if it is available. This can
+    /// be used to add the recovered state to HotShot's state map, so that future requests can get
+    /// the state from memory rather than storage.
+    fn get_accounts(
+        &self,
+        _instance: &NodeState,
+        _height: u64,
+        _view: ViewNumber,
+        _accounts: &[FeeAccount],
+    ) -> impl Send + Future<Output = anyhow::Result<(FeeMerkleTree, Leaf)>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
+
+    /// Get the blocks Merkle tree frontier.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    fn get_frontier(
+        &self,
+        _height: u64,
+        _view: ViewNumber,
+    ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
+
+    fn get_chain_config(
+        &self,
+        _commitment: Commitment<ChainConfig>,
+    ) -> impl Send + Future<Output = anyhow::Result<ChainConfig>> {
+        async {
+            bail!("chain config catchup is not supported for this data source");
+        }
+    }
+}
+
+impl CatchupStorage for hotshot_query_service::data_source::MetricsDataSource {}
+
+impl<T, S> CatchupStorage for hotshot_query_service::data_source::ExtensibleDataSource<T, S>
+where
+    T: CatchupStorage,
+    S: Sync,
+{
+    async fn get_accounts(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+        self.inner()
+            .get_accounts(instance, height, view, accounts)
+            .await
+    }
+
+    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+        self.inner().get_frontier(height, view).await
+    }
+
+    async fn get_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.inner().get_chain_config(commitment).await
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct SqlStateCatchup<T> {
     db: Arc<T>,
@@ -251,7 +336,7 @@ impl<T> SqlStateCatchup<T> {
 #[async_trait]
 impl<T> StateCatchup for SqlStateCatchup<T>
 where
-    T: CatchupDataSource + std::fmt::Debug + Send + Sync,
+    T: CatchupStorage + std::fmt::Debug + Send + Sync,
 {
     // TODO: add a test for the account proof validation
     // issue # 2102 (https://github.com/EspressoSystems/espresso-sequencer/issues/2102)
@@ -264,9 +349,11 @@ where
         _fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
-        self.db
+        Ok(self
+            .db
             .get_accounts(instance, block_height, view, accounts)
-            .await
+            .await?
+            .0)
     }
 
     #[tracing::instrument(skip(self))]

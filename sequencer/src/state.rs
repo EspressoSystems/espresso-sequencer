@@ -19,8 +19,9 @@ use hotshot_query_service::{
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
 
 use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    persistence::ChainConfigPersistence, NodeState, SeqTypes,
+    catchup::{CatchupStorage, SqlStateCatchup},
+    persistence::ChainConfigPersistence,
+    NodeState, SeqTypes,
 };
 
 pub(crate) async fn compute_state_update(
@@ -304,7 +305,7 @@ pub(crate) trait SequencerStateDataSource:
     + AvailabilityDataSource<SeqTypes>
     + StatusDataSource
     + VersionedDataSource
-    + CatchupDataSource
+    + CatchupStorage
     + MerklizedStateHeightPersistence
 {
 }
@@ -315,7 +316,7 @@ impl<T> SequencerStateDataSource for T where
         + AvailabilityDataSource<SeqTypes>
         + StatusDataSource
         + VersionedDataSource
-        + CatchupDataSource
+        + CatchupStorage
         + MerklizedStateHeightPersistence
 {
 }
