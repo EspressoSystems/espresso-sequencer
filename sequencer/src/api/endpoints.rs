@@ -1,14 +1,10 @@
 //! Sequencer-specific API endpoint handlers.
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    env,
-};
-
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
+use hotshot_query_service::merklized_state::Snapshot;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
     data_source::storage::ExplorerStorage,
@@ -27,6 +23,10 @@ use hotshot_types::{
 };
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
+use std::{
+    collections::{BTreeSet, HashMap},
+    env,
+};
 use tagged_base64::TaggedBase64;
 use tide_disco::{method::ReadState, Api, Error as _, StatusCode};
 use vbs::version::StaticVersionType;
@@ -44,6 +44,42 @@ use crate::{SeqTypes, SequencerApiVersion, SequencerPersistence};
 pub struct NamespaceProofQueryData {
     pub proof: Option<NsProof>,
     pub transactions: Vec<Transaction>,
+}
+
+pub(super) fn get_balance<State, Ver>() -> Result<Api<State, merklized_state::Error, Ver>>
+where
+    State: 'static + Send + Sync + ReadState,
+    Ver: 'static + StaticVersionType,
+    <State as ReadState>::State: Send
+        + Sync
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, 256>
+        + MerklizedStateHeightPersistence,
+    //for<'a> <<UniversalMerkleTree<FeeAmount,Sha3Digest,FeeAccount,256,Sha3Node> as hotshot_query_service::merklized_state::MerklizedState<Types, ARITY>>::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
+{
+    let mut options = merklized_state::Options::default();
+    let extension = toml::from_str(include_str!("../../api/merklized_state.toml"))?;
+    options.extensions.push(extension);
+
+    let mut api =
+        merklized_state::define_api::<State, SeqTypes, FeeMerkleTree, Ver, 256>(&options)?;
+
+    api.get("getfeebalance", move |req, state| {
+        async move {
+            let address = req.string_param("address")?;
+            let height = state.get_last_state_height().await?;
+            let snapshot = Snapshot::Index(height as u64);
+            let key = address
+                .parse()
+                .map_err(|_| merklized_state::Error::Custom {
+                    message: "failed to parse Key param".to_string(),
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                })?;
+            let path = state.get_path(snapshot, key).await?;
+            Ok(path.elem().copied())
+        }
+        .boxed()
+    })?;
+    Ok(api)
 }
 
 pub(super) type AvailState<N, P, D, ApiVer> = ApiState<StorageState<N, P, D, ApiVer>>;
