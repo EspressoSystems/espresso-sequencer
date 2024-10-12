@@ -105,23 +105,23 @@ pub struct BuilderState<TYPES: NodeType> {
     /// Keeps a history of the last 3 proposals.
     pub included_txns: RotatingSet<Commitment<TYPES::Transaction>>,
 
-    /// txn commits currently in the tx_queue.  This is used as a quick
-    /// check for whether a transaction is already in the tx_queue or
+    /// txn commits currently in the `tx_queue`.  This is used as a quick
+    /// check for whether a transaction is already in the `tx_queue` or
     /// not.
     ///
-    /// This should be kept up-to-date with the tx_queue as it acts as an
-    /// accessory to the tx_queue.
+    /// This should be kept up-to-date with the `tx_queue` as it acts as an
+    /// accessory to the `tx_queue`.
     pub txn_commits_in_queue: HashSet<Commitment<TYPES::Transaction>>,
 
-    /// filtered queue of available transactions, taken from tx_receiver
+    /// filtered queue of available transactions, taken from `tx_receiver`
     pub tx_queue: Vec<Arc<ReceivedTransaction<TYPES>>>,
 
-    /// da_proposal_payload_commit to (da_proposal, node_count)
+    /// `da_proposal_payload_commit` to (`da_proposal`, `node_count`)
     #[allow(clippy::type_complexity)]
     pub da_proposal_payload_commit_to_da_proposal:
         HashMap<(BuilderCommitment, TYPES::Time), Arc<DaProposalMessage<TYPES>>>,
 
-    /// quorum_proposal_payload_commit to quorum_proposal
+    /// `quorum_proposal_payload_commit` to `quorum_proposal`
     #[allow(clippy::type_complexity)]
     pub quorum_proposal_payload_commit_to_quorum_proposal:
         HashMap<(BuilderCommitment, TYPES::Time), Arc<Proposal<TYPES, QuorumProposal<TYPES>>>>,
@@ -161,59 +161,61 @@ pub struct BuilderState<TYPES: NodeType> {
     /// purposes of building a valid block payload within the sequencer.
     pub validated_state: Arc<TYPES::ValidatedState>,
 
-    /// instance state to enfoce max_block_size
+    /// instance state to enfoce `max_block_size`
     pub instance_state: Arc<TYPES::InstanceState>,
 }
 
-/// [best_builder_states_to_extend] is a utility function that is used to
-/// in order to determine which [BuilderState]s are the best fit to extend
+/// [`best_builder_states_to_extend`] is a utility function that is used to
+/// in order to determine which [`BuilderState`]s are the best fit to extend
 /// from.
 ///
 /// This function is designed to inspect the current state of the global state
-/// in order to determine which [BuilderState]s are the best fit to extend
-/// from. We only want to use information from [GlobalState] as otherwise
-/// we would have some insider knowledge unique to our specific [BuilderState]
-/// rather than knowledge that is available to all [BuilderState]s. In fact,
-/// in order to ensure this, this function lives outside of the [BuilderState]
+/// in order to determine which [`BuilderState`]s are the best fit to extend
+/// from. We only want to use information from [`GlobalState`] as otherwise
+/// we would have some insider knowledge unique to our specific [`BuilderState`]
+/// rather than knowledge that is available to all [`BuilderState`]s. In fact,
+/// in order to ensure this, this function lives outside of the [`BuilderState`]
 /// itself.
 ///
-/// In an ideal circumstance the best [BuilderState] to extend from is going to
-/// be the one that is immediately preceding the [QuorumProposal] that we are
-/// attempting to extend from. However, if all we know is the [ViewNumber] of
-/// the [QuorumProposal] that we are attempting to extend from, then we may end
-/// up in a scenario where we have multiple [BuilderState]s that are all equally
+/// In an ideal circumstance the best [`BuilderState`] to extend from is going to
+/// be the one that is immediately preceding the [`QuorumProposal`] that we are
+/// attempting to extend from. However, if all we know is the view number of
+/// the [`QuorumProposal`] that we are attempting to extend from, then we may end
+/// up in a scenario where we have multiple [`BuilderState`]s that are all equally
 /// valid to extend from.  When this happens, we have the potential for a data
 /// race.
 ///
 /// The primary cause of this has to due with the interface of the
-/// [ProxyGlobalState]'s API.  In general, we want to be able to retrieve a
-/// [BuilderState] via the [BuilderStateId].  The [BuilderStateId] only
-/// references a [ViewNumber] and a [VidCommitment]. While this information is
-/// available in the [QuorumProposal], it only helps us to rule out
-/// [BuilderState]s that already exist.  It does **NOT** help us to pick a
-/// [BuilderState] that is the best fit to extend from.
+/// [`ProxyGlobalState`](crate::service::ProxyGlobalState)'s API.
+/// In general, we want to be able to retrieve a
+/// [`BuilderState`] via the [`BuilderStateId`].  The [`BuilderStateId`] only
+/// references a [`ViewNumber`](hotshot_types::data::ViewNumber) and a
+/// [`VidCommitment`](hotshot_types::vid::VidCommitment). While this information
+/// is available in the [`QuorumProposal`], it only helps us to rule out
+/// [`BuilderState`]s that already exist.  It does **NOT** help us to pick a
+/// [`BuilderState`] that is the best fit to extend from.
 ///
 /// This is where the `justify_qc` comes in to consideration.  The `justify_qc`
-/// contains the previous [ViewNumber] that is being extended from, and in
-/// addition it also contains the previous [Commitment<Leaf<TYPES>>] that is
-/// being built on top of.  Since our [BuilderState]s store identifying
+/// contains the previous [`ViewNumber`](hotshot_types::data::ViewNumber) that is being
+/// extended from, and in addition it also contains the previous [`Commitment<Leaf<TYPES>>`]
+/// that is being built on top of.  Since our [`BuilderState`]s store identifying
 /// information that contains this same `leaf_commit` we can compare these
-/// directly to ensure that we are extending from the correct [BuilderState].
+/// directly to ensure that we are extending from the correct [`BuilderState`].
 ///
-/// This function determines the best [BuilderState] in the following steps:
+/// This function determines the best [`BuilderState`] in the following steps:
 ///
-/// 1. If we have a [BuilderState] that is already spawned for the current
-///    [QuorumProposal], then we should should return no states, as one already
+/// 1. If we have a [`BuilderState`] that is already spawned for the current
+///    [`QuorumProposal`], then we should should return no states, as one already
 ///    exists.  This will prevent us from attempting to spawn duplicate
-///    [BuilderState]s.
-/// 2. Attempt to find all [BuilderState]s that are recorded within
-///    [GlobalState] that have matching view number and leaf commitments. There
+///    [`BuilderState`]s.
+/// 2. Attempt to find all [`BuilderState`]s that are recorded within
+///    [`GlobalState`] that have matching view number and leaf commitments. There
 ///    *should* only be one of these.  But all would be valid extension points.
-/// 3. If we can't find any [BuilderState]s that match the view number
+/// 3. If we can't find any [`BuilderState`]s that match the view number
 ///    and leaf commitment, then we should return for the maximum stored view
-///    number that is smaller than the current [QuorumProposal].
-/// 4. If there is is only one [BuilderState] stored in the [GlobalState], then
-///    we should return that [BuilderState] as the best fit.
+///    number that is smaller than the current [`QuorumProposal`].
+/// 4. If there is is only one [`BuilderState`] stored in the [`GlobalState`], then
+///    we should return that [`BuilderState`] as the best fit.
 /// 5. If none of the other criteria match, we return an empty result as it is
 ///    unclear what to do in this case.
 ///
@@ -329,9 +331,8 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
 }
 
 impl<TYPES: NodeType> BuilderState<TYPES> {
-    /// [am_i_the_best_builder_state_to_extend] is a utility method that
-    /// attempts to determine whether we are among the best [BuilderState]s to
-    /// extend from.
+    /// Utility method that attempts to determine whether we are among
+    /// the best [`BuilderState`]s to extend from.
     async fn am_i_the_best_builder_state_to_extend(
         &self,
         quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
@@ -363,9 +364,9 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         })
     }
 
-    /// [process_da_proposal] is a method that is used to handle incoming DA
-    /// proposal messages from an incoming HotShot [Event]. A DA Proposals is
-    /// a proposals that is meant to be voted on by consensus nodes in order to
+    /// This method is used to handle incoming DA proposal messages
+    /// from an incoming HotShot [Event](hotshot_types::event::Event). A DA Proposal is
+    /// a proposal that is meant to be voted on by consensus nodes in order to
     /// determine which transactions should be included for this view.
     ///
     /// A DA Proposal in conjunction with a Quorum Proposal is an indicator
@@ -429,8 +430,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             .await;
     }
 
-    /// [process_quorum_proposal] is a method that is used to handle incoming
-    /// Quorum Proposal messages from an incoming HotShot [Event]. A Quorum
+    /// This method is used to handle incoming Quorum Proposal messages
+    /// from an incoming HotShot [Event](hotshot_types::event::Event). A Quorum
     /// Proposal is a proposal that indicates the next potential Block of the
     /// chain is being proposed for the HotShot network.  This proposal is
     /// voted on by the consensus nodes in order to determine if whether this
@@ -512,13 +513,13 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             .await;
     }
 
-    /// [spawn_a_clone_that_extends_self] is a helper function that is used by
-    /// both [process_da_proposal] and [process_quorum_proposal] to spawn a
-    /// new [BuilderState] that extends from the current [BuilderState].
+    /// A helper function that is used by both [`process_da_proposal`](Self::process_da_proposal)
+    /// and [`process_quorum_proposal`](Self::process_quorum_proposal) to spawn a new [`BuilderState`]
+    /// that extends from the current [`BuilderState`].
     ///
     /// This helper function also adds additional checks in order to ensure
-    /// that the [BuilderState] that is being spawned is the best fit for the
-    /// [QuorumProposal] that is being extended from.
+    /// that the [`BuilderState`] that is being spawned is the best fit for the
+    /// [`QuorumProposal`] that is being extended from.
     async fn spawn_clone_that_extends_self(
         &mut self,
         da_proposal_info: Arc<DaProposalMessage<TYPES>>,
@@ -656,7 +657,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.event_loop();
     }
 
-    /// [build_block] is a method that will return a [BuildBlockInfo] if it is
+    /// A method that will return a [BuildBlockInfo] if it is
     /// able to build a block.  If it encounters an error building a block, then
     /// it will return None.
     ///
@@ -734,18 +735,18 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         })
     }
 
-    /// [process_block_request] is a method that is used to handle incoming
-    /// [RequestMessage]s.  These [RequestMessage]s are looking for a bundle
+    /// A method that is used to handle incoming
+    /// [`RequestMessage`]s.  These [`RequestMessage`]s are looking for a bundle
     /// of transactions to be included in the next block. Instead of returning
-    /// a value, this method's response will be provided to the [Sender] that
-    /// is included in the [RequestMessage].
+    /// a value, this method's response will be provided to the [`UnboundedSender`] that
+    /// is included in the [`RequestMessage`].
     ///
-    /// At this point this particular [BuilderState] has already been deemed
-    /// as the [BuilderState] that should handle this request, and it is up
-    /// to this [BuilderState] to provide the response, if it is able to do
+    /// At this point this particular [`BuilderState`] has already been deemed
+    /// as the [`BuilderState`] that should handle this request, and it is up
+    /// to this [`BuilderState`] to provide the response, if it is able to do
     /// so.
     ///
-    /// The response will be a [ResponseMessage] that contains the transactions
+    /// The response will be a [`ResponseMessage`] that contains the transactions
     /// the `Builder` wants to include in the next block in addition to the
     /// expected block size, offered fee, and the
     /// Builder's commit block of the data being returned.
@@ -822,9 +823,9 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
     // MARK: event loop processing for [BuilderState]
 
-    /// [event_loop_helper_handle_request] is a helper function that is used
-    /// to handle incoming [MessageType]s, specifically [RequestMessage]s, that
-    /// are received by the [BuilderState::req_receiver] channel.
+    /// Helper function used to handle incoming [`MessageType`]s,
+    /// specifically [`RequestMessage`]s, that are received by the
+    /// [`BuilderState::req_receiver`] channel.
     ///
     /// This method is used to process block requests.
     async fn event_loop_helper_handle_request(&mut self, req: Option<MessageType<TYPES>>) {
@@ -853,9 +854,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.process_block_request(req).await;
     }
 
-    /// [event_loop_helper_handle_da_proposal] is a helper function that is used
-    /// to handle incoming [MessageType]s, specifically [DaProposalMessage]s,
-    /// that are received by the [BuilderState::da_proposal_receiver] channel.
+    /// Helper function that is used to handle incoming [`MessageType`]s,
+    /// specifically [`DaProposalMessage`]s,that are received by the [`BuilderState::da_proposal_receiver`] channel.
     async fn event_loop_helper_handle_da_proposal(&mut self, da: Option<MessageType<TYPES>>) {
         let Some(da) = da else {
             tracing::warn!("No more da proposal messages to consume");
@@ -876,9 +876,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.process_da_proposal(rda_msg).await;
     }
 
-    /// [event_loop_helper_handle_quorum_proposal] is a helper function that is used
-    /// to handle incoming [MessageType]s, specifically [QuorumProposalMessage]s,
-    /// that are received by the [BuilderState::quorum_proposal_receiver] channel.
+    /// Helper function that is used to handle incoming [`MessageType`]s,
+    /// specifically [`QuorumProposalMessage`]s, that are received by the [`BuilderState::quorum_proposal_receiver`] channel.
     async fn event_loop_helper_handle_quorum_proposal(
         &mut self,
         quorum: Option<MessageType<TYPES>>,
@@ -905,14 +904,13 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.process_quorum_proposal(quorum_proposal_message).await;
     }
 
-    /// [event_loop_helper_handle_decide] is a helper function that is used to
-    /// handle incoming [MessageType]s, specifically [DecideMessage]s, that are
-    /// received by the [BuilderState::decide_receiver] channel.
+    /// Helper function that is used to handle incoming [`MessageType`]s,
+    /// specifically [`DecideMessage`]s, that are received by the [`BuilderState::decide_receiver`] channel.
     ///
-    /// This method can trigger the exit of the [BuilderState::event_loop] async
-    /// task via the returned [std::ops::ControlFlow] type.  If the returned
-    /// value is a [std::ops::ControlFlow::Break], then the
-    /// [BuilderState::event_loop]
+    /// This method can trigger the exit of the [`BuilderState::event_loop`] async
+    /// task via the returned [`std::ops::ControlFlow`] type.  If the returned
+    /// value is a [`std::ops::ControlFlow::Break`], then the
+    /// [`BuilderState::event_loop`]
     /// async task should exit.
     async fn event_loop_helper_handle_decide(
         &mut self,
@@ -960,9 +958,8 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         }
     }
 
-    /// [event_loop] is a method that spawns an async task that attempts to
-    /// handle messages being received across the [BuilderState]s various
-    /// channels.
+    /// spawns an async task that attempts to handle messages being received
+    /// across the [BuilderState]s various channels.
     ///
     /// This async task will continue to run until it receives a message that
     /// indicates that it should exit.  This exit message is sent via the
@@ -1124,7 +1121,7 @@ mod test {
     use super::ParentBlockReferences;
     use crate::testing::{calc_proposal_msg, start_builder_state_without_event_loop, TestTypes};
 
-    /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
+    /// check whether the `da_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing da proposal messages
     /// used for testing only
     fn check_equal_da_proposal_hashmap<TYPES: NodeType>(
         da_proposal_payload_commit_to_da_proposal: HashMap<
@@ -1150,7 +1147,7 @@ mod test {
         }
     }
 
-    /// check whether the quorum_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing quorum proposal messages
+    /// check whether the `quorum_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing quorum proposal messages
     /// used for testing only
     type QuorumProposalMap<TYPES> = HashMap<
         (BuilderCommitment, <TYPES as NodeType>::Time),

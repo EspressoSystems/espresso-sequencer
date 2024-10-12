@@ -317,7 +317,7 @@ where
         }
     }
 
-    /// Consumes `self` and returns a tide_disco [`App`] with builder and private mempool APIs registered
+    /// Consumes `self` and returns a `tide_disco` [`App`] with builder and private mempool APIs registered
     pub fn into_app(self) -> Result<App<Self, BuilderApiError>, AppError> {
         let builder_api = define_api::<Self, TYPES>(&Default::default())?;
 

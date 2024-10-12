@@ -43,21 +43,21 @@ type TestSetup = (
     async_broadcast::Sender<Arc<ReceivedTransaction<TestTypes>>>,
 );
 
-/// [TEST_NUM_NODES_IN_VID_COMPUTATION] controls the number of nodes that are
+/// [`TEST_NUM_NODES_IN_VID_COMPUTATION`] controls the number of nodes that are
 /// used in the VID computation for the test.
 const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
 
-/// [TEST_NUM_CONSENSUS_RETRIES] controls the number of attempts that the
+/// [`TEST_NUM_CONSENSUS_RETRIES`] controls the number of attempts that the
 /// simulated consensus will perform when an error is returned from the
 /// Builder when asking for available blocks.
 const TEST_NUM_CONSENSUS_RETRIES: usize = 4;
 
-/// [TEST_CHANNEL_BUFFER_SIZE] governs the buffer size used for the test
+/// [`TEST_CHANNEL_BUFFER_SIZE`] governs the buffer size used for the test
 /// channels. All of the channels created need a capacity.  The specific
 /// capacity isn't specifically bounded, so it is set to an arbitrary value.
 const TEST_CHANNEL_BUFFER_SIZE: usize = 32;
 
-/// [setup_builder_for_test] sets up a test environment for the builder state.
+/// [`setup_builder_for_test`] sets up a test environment for the builder state.
 /// It returns a tuple containing the proxy global state, the sender for decide
 /// messages, the sender for data availability proposals,
 fn setup_builder_for_test() -> TestSetup {
@@ -122,7 +122,7 @@ fn setup_builder_for_test() -> TestSetup {
     )
 }
 
-/// [process_available_blocks_round] processes available rounds for a given
+/// [`process_available_blocks_round`] processes available rounds for a given
 /// round. It returns the number of attempts made to get the available blocks
 /// and the result of the available blocks.
 ///
@@ -169,10 +169,10 @@ async fn process_available_blocks_round(
     }
 }
 
-/// [progress_round_with_available_block_info] is a helper function that
+/// [`progress_round_with_available_block_info`] is a helper function that
 /// progresses the round with the information returned from a call to
-/// [process_available_blocks_round]. This function simulates decide events
-/// if the next call to [ProxyGlobalState::available_blocks] returns something
+/// [`process_available_blocks_round`]. This function simulates decide events
+/// if the next call to [`ProxyGlobalState::available_blocks`] returns something
 /// successfully rather than an error.
 ///
 /// This is the workflow that happens if the builder has a block to propose,
@@ -221,7 +221,7 @@ async fn progress_round_with_available_block_info(
     .await
 }
 
-/// [progress_round_without_available_block_info] is a helper function that
+/// [`progress_round_without_available_block_info`] is a helper function that
 /// progresses the round without any available block information.
 ///
 /// This is the workflow that happens if the builder does not have a block to
@@ -243,11 +243,11 @@ async fn progress_round_without_available_block_info(
     .await
 }
 
-/// [progress_round_with_transactions] is a helper function that progress
+/// [`progress_round_with_transactions`] is a helper function that progress
 /// consensus with the given list of transactions.
 ///
-/// This function is used by [progress_round_without_available_block_info] and
-/// by [progress_round_with_available_block_info] to progress the round with
+/// This function is used by [`progress_round_without_available_block_info`] and
+/// by [`progress_round_with_available_block_info`] to progress the round with
 /// the given transactions.
 async fn progress_round_with_transactions(
     builder_state_id: BuilderStateId<TestTypes>,
