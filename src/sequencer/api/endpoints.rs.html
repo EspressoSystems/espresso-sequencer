@@ -352,7 +352,6 @@
 <a href="#352" id="352">352</a>
 <a href="#353" id="353">353</a>
 <a href="#354" id="354">354</a>
-<a href="#355" id="355">355</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API endpoint handlers.
 
 </span><span class="kw">use </span>std::{
@@ -366,8 +365,7 @@
 <span class="kw">use </span>futures::{try_join, FutureExt};
 <span class="kw">use </span>hotshot_query_service::{
     availability::{<span class="self">self</span>, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
-    data_source::storage::ExplorerStorage,
-    explorer::{<span class="self">self</span>},
+    explorer::{<span class="self">self</span>, ExplorerDataSource},
     merklized_state::{
         <span class="self">self</span>, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
     },
@@ -484,7 +482,7 @@
 ) -&gt; <span class="prelude-ty">Result</span>&lt;ExplorerApi&lt;N, P, D, V, SequencerApiVersion&gt;&gt;
 <span class="kw">where
     </span>N: ConnectedNetwork&lt;PubKey&gt;,
-    D: ExplorerStorage&lt;SeqTypes&gt; + Send + Sync + <span class="lifetime">'static</span>,
+    D: ExplorerDataSource&lt;SeqTypes&gt; + Send + Sync + <span class="lifetime">'static</span>,
     P: SequencerPersistence,
 {
     <span class="kw">let </span>api = explorer::define_api::&lt;AvailState&lt;N, P, D, V&gt;, SeqTypes, <span class="kw">_</span>&gt;(

@@ -204,23 +204,20 @@
 <a href="#204" id="204">204</a>
 <a href="#205" id="205">205</a>
 <a href="#206" id="206">206</a>
-<a href="#207" id="207">207</a>
-<a href="#208" id="208">208</a>
-<a href="#209" id="209">209</a>
-<a href="#210" id="210">210</a>
-<a href="#211" id="211">211</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
+
 <span class="kw">use </span>espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccountProof, FeeMerkleTree};
 <span class="kw">use </span>ethers::prelude::Address;
+<span class="kw">use </span>hotshot_query_service::data_source::storage::sql::Write;
 <span class="kw">use </span>hotshot_query_service::{
     data_source::{
         sql::{Config, SqlDataSource, Transaction},
-        storage::SqlStorage,
+        storage::{sql::query_as, MerklizedStateStorage, SqlStorage},
         VersionedDataSource,
     },
-    merklized_state::{MerklizedStateDataSource, Snapshot},
+    merklized_state::Snapshot,
     Resolvable,
 };
 <span class="kw">use </span>hotshot_types::data::ViewNumber;
@@ -231,10 +228,7 @@
     AccountQueryData, BlocksFrontier,
 };
 <span class="kw">use crate</span>::{
-    persistence::{
-        sql::{sql_param, Options},
-        ChainConfigPersistence,
-    },
+    persistence::{sql::Options, ChainConfigPersistence},
     SeqTypes,
 };
 
@@ -326,19 +320,15 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         commitment: Commitment&lt;ChainConfig&gt;,
     ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
-        <span class="kw">let </span>query = <span class="self">self
-            </span>.read()
-            .<span class="kw">await
-            </span>.context(<span class="macro">format!</span>(
-                <span class="string">"opening transaction to fetch chain config {commitment}"
-            </span>))<span class="question-mark">?
-            </span>.query_one(
-                <span class="string">"SELECT * from chain_config where commitment = $1"</span>,
-                [<span class="kw-2">&amp;</span>commitment.to_string()],
-            )
-            .<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.read().<span class="kw">await</span>.context(<span class="macro">format!</span>(
+            <span class="string">"opening transaction to fetch chain config {commitment}"
+        </span>))<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>data: Vec&lt;u8&gt; = query.try_get(<span class="string">"data"</span>)<span class="question-mark">?</span>;
+        <span class="kw">let </span>(data,) = query_as::&lt;(Vec&lt;u8&gt;,)&gt;(<span class="string">"SELECT * from chain_config where commitment = $1"</span>)
+            .bind(commitment.to_string())
+            .fetch_one(tx.as_mut())
+            .<span class="kw">await
+            </span>.unwrap();
 
         bincode::deserialize(<span class="kw-2">&amp;</span>data[..]).context(<span class="string">"failed to deserialize"</span>)
     }
@@ -360,7 +350,7 @@
 }
 
 <span class="attr">#[async_trait]
-</span><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; ChainConfigPersistence <span class="kw">for </span>Transaction&lt;<span class="lifetime">'a</span>&gt; {
+</span><span class="kw">impl </span>ChainConfigPersistence <span class="kw">for </span>Transaction&lt;Write&gt; {
     <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt; {
         <span class="kw">let </span>commitment = chain_config.commitment();
         <span class="kw">let </span>data = bincode::serialize(<span class="kw-2">&amp;</span>chain_config)<span class="question-mark">?</span>;
@@ -368,7 +358,7 @@
             <span class="string">"chain_config"</span>,
             [<span class="string">"commitment"</span>, <span class="string">"data"</span>],
             [<span class="string">"commitment"</span>],
-            [[sql_param(<span class="kw-2">&amp;</span>(commitment.to_string())), sql_param(<span class="kw-2">&amp;</span>data)]],
+            [(commitment.to_string(), data)],
         )
         .<span class="kw">await
         </span>.map_err(Into::into)

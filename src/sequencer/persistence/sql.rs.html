@@ -794,23 +794,8 @@
 <a href="#794" id="794">794</a>
 <a href="#795" id="795">795</a>
 <a href="#796" id="796">796</a>
-<a href="#797" id="797">797</a>
-<a href="#798" id="798">798</a>
-<a href="#799" id="799">799</a>
-<a href="#800" id="800">800</a>
-<a href="#801" id="801">801</a>
-<a href="#802" id="802">802</a>
-<a href="#803" id="803">803</a>
-<a href="#804" id="804">804</a>
-<a href="#805" id="805">805</a>
-<a href="#806" id="806">806</a>
-<a href="#807" id="807">807</a>
-<a href="#808" id="808">808</a>
-<a href="#809" id="809">809</a>
-<a href="#810" id="810">810</a>
-<a href="#811" id="811">811</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
-<span class="kw">use </span>async_std::{stream::StreamExt, sync::Arc};
+<span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>derivative::Derivative;
@@ -819,10 +804,11 @@
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
+<span class="kw">use </span>hotshot_query_service::data_source::storage::sql::Write;
 <span class="kw">use </span>hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, postgres::types::ToSql, Config, SqlStorage, Transaction},
+        sql::{include_migrations, Config, SqlStorage, Transaction},
     },
     Transaction <span class="kw">as _</span>, VersionedDataSource,
 };
@@ -836,6 +822,9 @@
     utils::View,
     vote::HasViewNumber,
 };
+<span class="kw">use </span>sqlx::Postgres;
+<span class="kw">use </span>sqlx::Row;
+<span class="kw">use </span>sqlx::{query, Executor};
 <span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
 
 <span class="kw">use crate</span>::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
@@ -924,7 +913,7 @@
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) archive: bool,
 }
 
-<span class="kw">impl </span>TryFrom&lt;Options&gt; <span class="kw">for </span>Config {
+<span class="kw">impl </span>TryFrom&lt;Options&gt; <span class="kw">for </span>Config&lt;Postgres&gt; {
     <span class="kw">type </span>Error = anyhow::Error;
 
     <span class="kw">fn </span>try_from(opt: Options) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
@@ -1078,7 +1067,7 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt_static(<span class="string">"SELECT config FROM network_config ORDER BY id DESC LIMIT 1"</span>)
+            </span>.fetch_optional(<span class="string">"SELECT config FROM network_config ORDER BY id DESC LIMIT 1"</span>)
             .<span class="kw">await</span><span class="question-mark">?
         </span><span class="kw">else </span>{
             <span class="macro">tracing::info!</span>(<span class="string">"config not found"</span>);
@@ -1093,7 +1082,7 @@
         <span class="kw">let </span>json = serde_json::to_value(cfg)<span class="question-mark">?</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
-        tx.execute_one_with_retries(<span class="string">"INSERT INTO network_config (config) VALUES ($1)"</span>, [<span class="kw-2">&amp;</span>json])
+        tx.execute_one_with_retries(<span class="string">"INSERT INTO network_config (config) VALUES ($1)"</span>, (json,))
             .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await
     </span>}
@@ -1117,11 +1106,8 @@
         <span class="comment">// First, append the new leaves. We do this in its own transaction because even if GC or the
         // event consumer later fails, there is no need to abort the storage of the leaves.
         </span><span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">let </span>rows = values
-            .iter()
-            .map(|(view, leaf, qc)| [sql_param(view), sql_param(leaf), sql_param(qc)]);
 
-        tx.upsert(<span class="string">"anchor_leaf"</span>, [<span class="string">"view"</span>, <span class="string">"leaf"</span>, <span class="string">"qc"</span>], [<span class="string">"view"</span>], rows)
+        tx.upsert(<span class="string">"anchor_leaf"</span>, [<span class="string">"view"</span>, <span class="string">"leaf"</span>, <span class="string">"qc"</span>], [<span class="string">"view"</span>], values)
             .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await</span><span class="question-mark">?</span>;
 
@@ -1144,7 +1130,7 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt_static(<span class="string">"SELECT view FROM highest_voted_view WHERE id = 0"</span>)
+            </span>.fetch_optional(query(<span class="string">"SELECT view FROM highest_voted_view WHERE id = 0"</span>))
             .<span class="kw">await</span><span class="question-mark">?
             </span>.map(|row| {
                 <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
@@ -1159,7 +1145,7 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt_static(<span class="string">"SELECT leaf, qc FROM anchor_leaf ORDER BY view DESC LIMIT 1"</span>)
+            </span>.fetch_optional(<span class="string">"SELECT leaf, qc FROM anchor_leaf ORDER BY view DESC LIMIT 1"</span>)
             .<span class="kw">await</span><span class="question-mark">?
         </span><span class="kw">else </span>{
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
@@ -1181,7 +1167,7 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt_static(<span class="string">"SELECT leaves, state FROM undecided_state WHERE id = 0"</span>)
+            </span>.fetch_optional(<span class="string">"SELECT leaves, state FROM undecided_state WHERE id = 0"</span>)
             .<span class="kw">await</span><span class="question-mark">?
         </span><span class="kw">else </span>{
             <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
@@ -1204,9 +1190,8 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt(
-                <span class="string">"SELECT data FROM da_proposal where view = $1"</span>,
-                [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+            </span>.fetch_optional(
+                query(<span class="string">"SELECT data FROM da_proposal where view = $1"</span>).bind(view.u64() <span class="kw">as </span>i64),
             )
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
@@ -1226,9 +1211,8 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt(
-                <span class="string">"SELECT data FROM vid_share where view = $1"</span>,
-                [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+            </span>.fetch_optional(
+                query(<span class="string">"SELECT data FROM vid_share where view = $1"</span>).bind(view.u64() <span class="kw">as </span>i64),
             )
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
@@ -1247,21 +1231,20 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_static(<span class="string">"SELECT * FROM quorum_proposals"</span>)
+            </span>.fetch_all(<span class="string">"SELECT * FROM quorum_proposals"</span>)
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(BTreeMap::from_iter(
-            rows.map(|row| {
-                <span class="kw">let </span>row = row<span class="question-mark">?</span>;
-                <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
-                <span class="kw">let </span>view_number: ViewNumber = ViewNumber::new(view.try_into()<span class="question-mark">?</span>);
-                <span class="kw">let </span>bytes: Vec&lt;u8&gt; = row.get(<span class="string">"data"</span>);
-                <span class="kw">let </span>proposal: Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt; =
-                    bincode::deserialize(<span class="kw-2">&amp;</span>bytes)<span class="question-mark">?</span>;
-                <span class="prelude-val">Ok</span>((view_number, proposal))
-            })
-            .collect::&lt;anyhow::Result&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()
-            .<span class="kw">await</span><span class="question-mark">?</span>,
+            rows.into_iter()
+                .map(|row| {
+                    <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
+                    <span class="kw">let </span>view_number: ViewNumber = ViewNumber::new(view.try_into()<span class="question-mark">?</span>);
+                    <span class="kw">let </span>bytes: Vec&lt;u8&gt; = row.get(<span class="string">"data"</span>);
+                    <span class="kw">let </span>proposal: Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt; =
+                        bincode::deserialize(<span class="kw-2">&amp;</span>bytes)<span class="question-mark">?</span>;
+                    <span class="prelude-val">Ok</span>((view_number, proposal))
+                })
+                .collect::&lt;anyhow::Result&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>,
         ))
     }
 
@@ -1278,7 +1261,7 @@
             <span class="string">"vid_share"</span>,
             [<span class="string">"view"</span>, <span class="string">"data"</span>],
             [<span class="string">"view"</span>],
-            [[sql_param(<span class="kw-2">&amp;</span>(view <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>data_bytes)]],
+            [(view <span class="kw">as </span>i64, data_bytes)],
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await
@@ -1296,7 +1279,7 @@
             <span class="string">"da_proposal"</span>,
             [<span class="string">"view"</span>, <span class="string">"data"</span>],
             [<span class="string">"view"</span>],
-            [[sql_param(<span class="kw-2">&amp;</span>(view <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>data_bytes)]],
+            [(view <span class="kw">as </span>i64, data_bytes)],
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await
@@ -1311,7 +1294,7 @@
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)"</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>tx = <span class="self">self</span>.db.write().<span class="kw">await</span><span class="question-mark">?</span>;
-        tx.execute_one_with_retries(stmt, [view.u64() <span class="kw">as </span>i64])
+        tx.execute_one_with_retries(stmt, (view.u64() <span class="kw">as </span>i64,))
             .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await
     </span>}
@@ -1332,11 +1315,7 @@
             <span class="string">"undecided_state"</span>,
             [<span class="string">"id"</span>, <span class="string">"leaves"</span>, <span class="string">"state"</span>],
             [<span class="string">"id"</span>],
-            [[
-                sql_param(<span class="kw-2">&amp;</span><span class="number">0i32</span>),
-                sql_param(<span class="kw-2">&amp;</span>leaves_bytes),
-                sql_param(<span class="kw-2">&amp;</span>state_bytes),
-            ]],
+            [(<span class="number">0_i32</span>, leaves_bytes, state_bytes)],
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await
@@ -1352,7 +1331,7 @@
             <span class="string">"quorum_proposals"</span>,
             [<span class="string">"view"</span>, <span class="string">"data"</span>],
             [<span class="string">"view"</span>],
-            [[sql_param(<span class="kw-2">&amp;</span>(view_number <span class="kw">as </span>i64)), sql_param(<span class="kw-2">&amp;</span>proposal_bytes)]],
+            [(view_number <span class="kw">as </span>i64, proposal_bytes)],
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await
@@ -1365,7 +1344,7 @@
             </span>.db
             .read()
             .<span class="kw">await</span><span class="question-mark">?
-            </span>.query_opt_static(<span class="string">"SELECT * FROM upgrade_certificate where id = true"</span>)
+            </span>.fetch_optional(<span class="string">"SELECT * FROM upgrade_certificate where id = true"</span>)
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         result
@@ -1391,7 +1370,7 @@
             <span class="string">"upgrade_certificate"</span>,
             [<span class="string">"id"</span>, <span class="string">"data"</span>],
             [<span class="string">"id"</span>],
-            [[sql_param(<span class="kw-2">&amp;</span><span class="bool-val">true</span>), sql_param(<span class="kw-2">&amp;</span>upgrade_certificate_bytes)]],
+            [(<span class="bool-val">true</span>, upgrade_certificate_bytes)],
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
         tx.commit().<span class="kw">await
@@ -1399,58 +1378,57 @@
 }
 
 <span class="kw">async fn </span>collect_garbage(
-    <span class="kw-2">mut </span>tx: Transaction&lt;<span class="lifetime">'_</span>&gt;,
+    <span class="kw-2">mut </span>tx: Transaction&lt;Write&gt;,
     view: ViewNumber,
     consumer: <span class="kw">impl </span>EventConsumer,
 ) -&gt; anyhow::Result&lt;()&gt; {
     <span class="comment">// Clean up and collect VID shares.
+
     </span><span class="kw">let </span><span class="kw-2">mut </span>vid_shares = tx
-        .query(
-            <span class="string">"DELETE FROM vid_share where view &lt;= $1 RETURNING view, data"</span>,
-            [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+        .fetch_all(
+            query(<span class="string">"DELETE FROM vid_share where view &lt;= $1 RETURNING view, data"</span>)
+                .bind(view.u64() <span class="kw">as </span>i64),
         )
         .<span class="kw">await</span><span class="question-mark">?
-        </span>.map(|row| {
-            <span class="kw">let </span>row = row<span class="question-mark">?</span>;
+        </span>.into_iter()
+        .map(|row| {
             <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
             <span class="kw">let </span>data: Vec&lt;u8&gt; = row.get(<span class="string">"data"</span>);
             <span class="kw">let </span>vid_proposal =
                 bincode::deserialize::&lt;Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;&gt;(<span class="kw-2">&amp;</span>data)<span class="question-mark">?</span>;
             <span class="prelude-val">Ok</span>((view <span class="kw">as </span>u64, vid_proposal.data))
         })
-        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()
-        .<span class="kw">await</span><span class="question-mark">?</span>;
+        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
 
     <span class="comment">// Clean up and collect DA proposals.
     </span><span class="kw">let </span><span class="kw-2">mut </span>da_proposals = tx
-        .query(
-            <span class="string">"DELETE FROM da_proposal where view &lt;= $1 RETURNING view, data"</span>,
-            [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+        .fetch_all(
+            query(<span class="string">"DELETE FROM da_proposal where view &lt;= $1 RETURNING view, data"</span>)
+                .bind(view.u64() <span class="kw">as </span>i64),
         )
         .<span class="kw">await</span><span class="question-mark">?
-        </span>.map(|row| {
-            <span class="kw">let </span>row = row<span class="question-mark">?</span>;
+        </span>.into_iter()
+        .map(|row| {
             <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
             <span class="kw">let </span>data: Vec&lt;u8&gt; = row.get(<span class="string">"data"</span>);
             <span class="kw">let </span>da_proposal =
                 bincode::deserialize::&lt;Proposal&lt;SeqTypes, DaProposal&lt;SeqTypes&gt;&gt;&gt;(<span class="kw-2">&amp;</span>data)<span class="question-mark">?</span>;
             <span class="prelude-val">Ok</span>((view <span class="kw">as </span>u64, da_proposal.data))
         })
-        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()
-        .<span class="kw">await</span><span class="question-mark">?</span>;
+        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
 
     <span class="comment">// Clean up and collect leaves, except do not delete the most recent leaf: we need to remember
     // this so that in case we restart, we can pick up from the last decided leaf. We still do
     // include this leaf in the query results (the `UNION` clause) so we can include it in the
     // decide event we send to the consumer.
     </span><span class="kw">let </span><span class="kw-2">mut </span>leaves = tx
-        .query(
-            <span class="string">"SELECT view, leaf, qc FROM anchor_leaf WHERE view &lt;= $1"</span>,
-            [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
+        .fetch_all(
+            query(<span class="string">"SELECT view, leaf, qc FROM anchor_leaf WHERE view &lt;= $1"</span>)
+                .bind(view.u64() <span class="kw">as </span>i64),
         )
         .<span class="kw">await</span><span class="question-mark">?
-        </span>.map(|row| {
-            <span class="kw">let </span>row = row<span class="question-mark">?</span>;
+        </span>.into_iter()
+        .map(|row| {
             <span class="kw">let </span>view: i64 = row.get(<span class="string">"view"</span>);
             <span class="kw">let </span>leaf_data: Vec&lt;u8&gt; = row.get(<span class="string">"leaf"</span>);
             <span class="kw">let </span>leaf = bincode::deserialize::&lt;Leaf&gt;(<span class="kw-2">&amp;</span>leaf_data)<span class="question-mark">?</span>;
@@ -1458,21 +1436,15 @@
             <span class="kw">let </span>qc = bincode::deserialize::&lt;QuorumCertificate&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>qc_data)<span class="question-mark">?</span>;
             <span class="prelude-val">Ok</span>((view <span class="kw">as </span>u64, (leaf, qc)))
         })
-        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()
+        .collect::&lt;anyhow::Result&lt;BTreeMap&lt;<span class="kw">_</span>, <span class="kw">_</span>&gt;&gt;&gt;()<span class="question-mark">?</span>;
+
+    tx.execute(query(<span class="string">"DELETE FROM anchor_leaf WHERE view &lt; $1"</span>).bind(view.u64() <span class="kw">as </span>i64))
         .<span class="kw">await</span><span class="question-mark">?</span>;
-    tx.execute(
-        <span class="string">"DELETE FROM anchor_leaf WHERE view &lt; $1"</span>,
-        [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
-    )
-    .<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="comment">// Clean up old proposals. These are not part of the decide event we generate for the consumer,
     // so we don't need to return them.
-    </span>tx.execute(
-        <span class="string">"DELETE FROM quorum_proposals where view &lt;= $1"</span>,
-        [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)],
-    )
-    .<span class="kw">await</span><span class="question-mark">?</span>;
+    </span>tx.execute(query(<span class="string">"DELETE FROM quorum_proposals where view &lt;= $1"</span>).bind(view.u64() <span class="kw">as </span>i64))
+        .<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="comment">// Exclude from the decide event any leaves which have definitely already been processed. We may
     // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in
@@ -1489,7 +1461,9 @@
     // persistent value in the database to remember how far we have successfully processed the event
     // stream.
     </span><span class="kw">let </span>last_processed_view: <span class="prelude-ty">Option</span>&lt;i64&gt; = tx
-        .query_opt_static(<span class="string">"SELECT last_processed_view FROM event_stream WHERE id = 1 LIMIT 1"</span>)
+        .fetch_optional(query(
+            <span class="string">"SELECT last_processed_view FROM event_stream WHERE id = 1 LIMIT 1"</span>,
+        ))
         .<span class="kw">await</span><span class="question-mark">?
         </span>.map(|row| row.get(<span class="string">"last_processed_view"</span>));
     <span class="kw">let </span>leaves = <span class="kw">if let </span><span class="prelude-val">Some</span>(v) = last_processed_view {
@@ -1571,16 +1545,12 @@
         <span class="string">"event_stream"</span>,
         [<span class="string">"id"</span>, <span class="string">"last_processed_view"</span>],
         [<span class="string">"id"</span>],
-        [[sql_param(<span class="kw-2">&amp;</span><span class="number">1i32</span>), sql_param(<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64))]],
+        [(<span class="number">1i32</span>, view.u64() <span class="kw">as </span>i64)],
     )
     .<span class="kw">await</span><span class="question-mark">?</span>;
 
     tx.commit().<span class="kw">await
 </span>}
-
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>sql_param&lt;T: ToSql + Sync&gt;(param: <span class="kw-2">&amp;</span>T) -&gt; <span class="kw-2">&amp;</span>(<span class="kw">dyn </span>ToSql + Sync) {
-    param
-}
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>testing {
