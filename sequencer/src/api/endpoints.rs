@@ -11,8 +11,7 @@ use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
-    data_source::storage::ExplorerStorage,
-    explorer::{self},
+    explorer::{self, ExplorerDataSource},
     merklized_state::{
         self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
     },
@@ -129,7 +128,7 @@ pub(super) fn explorer<N, P, D, V: Versions>(
 ) -> Result<ExplorerApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
-    D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
+    D: ExplorerDataSource<SeqTypes> + Send + Sync + 'static,
     P: SequencerPersistence,
 {
     let api = explorer::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(

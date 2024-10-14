@@ -82,7 +82,7 @@ impl TestConfig {
             .unwrap();
 
         // Varies between v0 and v3.
-        let load_generator_url = if sequencer_version >= 03 {
+        let load_generator_url = if sequencer_version >= 3 {
             url_from_port(dotenvy::var(
                 "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_RESERVE_PORT",
             )?)?
@@ -91,7 +91,7 @@ impl TestConfig {
         };
 
         // TODO test both builders (probably requires some refactoring).
-        let builder_url = if sequencer_version >= 03 {
+        let builder_url = if sequencer_version >= 3 {
             let url = url_from_port(dotenvy::var("ESPRESSO_RESERVE_BUILDER_SERVER_PORT")?)?;
 
             Url::from_str(&url)?
@@ -108,7 +108,7 @@ impl TestConfig {
 
         let l1_provider_url = url_from_port(dotenvy::var("ESPRESSO_SEQUENCER_L1_PORT")?)?;
         let sequencer_api_url = url_from_port(dotenvy::var("ESPRESSO_SEQUENCER1_API_PORT")?)?;
-        let sequencer_clients = vec![
+        let sequencer_clients = [
             dotenvy::var("ESPRESSO_SEQUENCER_API_PORT")?,
             dotenvy::var("ESPRESSO_SEQUENCER1_API_PORT")?,
             dotenvy::var("ESPRESSO_SEQUENCER2_API_PORT")?,
