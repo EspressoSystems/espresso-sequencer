@@ -6,9 +6,10 @@ use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
     v0_3::ChainConfig,
-    AccountQueryData, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+    BackoffParams, BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment,
+    FeeMerkleTree, Leaf, NodeState,
 };
-use futures::future::FutureExt;
+use futures::future::{Future, FutureExt};
 use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_types::{
     data::ViewNumber, traits::node_implementation::ConsensusTime as _, ValidatorConfig,
@@ -21,10 +22,7 @@ use url::Url;
 use vbs::version::StaticVersionType;
 
 use crate::{
-    api::{
-        data_source::{CatchupDataSource, PublicNetworkConfig},
-        BlocksFrontier,
-    },
+    api::{data_source::PublicNetworkConfig, BlocksFrontier},
     PubKey,
 };
 
@@ -116,32 +114,49 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
 
 #[async_trait]
 impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
-    #[tracing::instrument(skip(self))]
-    async fn try_fetch_account(
+    #[tracing::instrument(skip(self, _instance))]
+    async fn try_fetch_accounts(
         &self,
+        _instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         for client in self.clients.iter() {
-            tracing::info!("Fetching account {account:?} from {}", client.url);
-            match client
-                .get::<AccountQueryData>(&format!(
-                    "catchup/{height}/{}/account/{account}",
-                    view.u64(),
-                ))
-                .send()
-                .await
+            tracing::info!("Fetching accounts from {}", client.url);
+            let req = match client
+                .inner
+                .post::<FeeMerkleTree>(&format!("catchup/{height}/{}/accounts", view.u64(),))
+                .body_binary(&accounts.to_vec())
             {
-                Ok(res) => match res.proof.verify(&fee_merkle_tree_root) {
-                    Ok(_) => return Ok(res),
-                    Err(err) => tracing::warn!("Error verifying account proof: {}", err),
-                },
+                Ok(req) => req,
                 Err(err) => {
-                    tracing::warn!("Error fetching account from peer: {}", err);
+                    tracing::warn!("failed to construct accounts catchup request: {err:#}");
+                    continue;
+                }
+            };
+            let snapshot = match req.send().await {
+                Ok(res) => res,
+                Err(err) => {
+                    tracing::warn!("Error fetching accounts from peer: {err:#}");
+                    continue;
+                }
+            };
+
+            // Verify proofs.
+            for account in accounts {
+                let Some((proof, _)) = FeeAccountProof::prove(&snapshot, (*account).into()) else {
+                    tracing::warn!("response from peer missing account {account}");
+                    continue;
+                };
+                if let Err(err) = proof.verify(&fee_merkle_tree_root) {
+                    tracing::warn!("peer gave invalid proof for account {account}: {err:#}");
+                    continue;
                 }
             }
+
+            return Ok(snapshot);
         }
         bail!("Could not fetch account from any peer");
     }
@@ -208,6 +223,94 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
     }
 }
 
+pub(crate) trait CatchupStorage: Sync {
+    /// Get the state of the requested `accounts`.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    ///
+    /// If successful, this function also returns the leaf from `view`, if it is available. This can
+    /// be used to add the recovered state to HotShot's state map, so that future requests can get
+    /// the state from memory rather than storage.
+    fn get_accounts(
+        &self,
+        _instance: &NodeState,
+        _height: u64,
+        _view: ViewNumber,
+        _accounts: &[FeeAccount],
+    ) -> impl Send + Future<Output = anyhow::Result<(FeeMerkleTree, Leaf)>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
+
+    /// Get the blocks Merkle tree frontier.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    fn get_frontier(
+        &self,
+        _height: u64,
+        _view: ViewNumber,
+    ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
+
+    fn get_chain_config(
+        &self,
+        _commitment: Commitment<ChainConfig>,
+    ) -> impl Send + Future<Output = anyhow::Result<ChainConfig>> {
+        async {
+            bail!("chain config catchup is not supported for this data source");
+        }
+    }
+}
+
+impl CatchupStorage for hotshot_query_service::data_source::MetricsDataSource {}
+
+impl<T, S> CatchupStorage for hotshot_query_service::data_source::ExtensibleDataSource<T, S>
+where
+    T: CatchupStorage,
+    S: Sync,
+{
+    async fn get_accounts(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+        self.inner()
+            .get_accounts(instance, height, view, accounts)
+            .await
+    }
+
+    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+        self.inner().get_frontier(height, view).await
+    }
+
+    async fn get_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.inner().get_chain_config(commitment).await
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct SqlStateCatchup<T> {
     db: Arc<T>,
@@ -223,19 +326,22 @@ impl<T> SqlStateCatchup<T> {
 #[async_trait]
 impl<T> StateCatchup for SqlStateCatchup<T>
 where
-    T: CatchupDataSource + std::fmt::Debug + Send + Sync,
+    T: CatchupStorage + std::fmt::Debug + Send + Sync,
 {
-    #[tracing::instrument(skip(self))]
-    async fn try_fetch_account(
+    #[tracing::instrument(skip(self, instance))]
+    async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         block_height: u64,
         view: ViewNumber,
         _fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
-        self.db
-            .get_account(block_height, view, account.into())
-            .await
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
+        Ok(self
+            .db
+            .get_accounts(instance, block_height, view, accounts)
+            .await?
+            .0)
     }
 
     #[tracing::instrument(skip(self))]

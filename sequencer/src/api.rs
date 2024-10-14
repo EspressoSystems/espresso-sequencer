@@ -4,14 +4,14 @@ use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use committable::Commitment;
+use committable::{Commitment, Committable};
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, MockSequencerVersions, NodeState, PubKey, Transaction,
+    retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
+    PubKey, Transaction, ValidatedState,
 };
-use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
@@ -26,14 +26,17 @@ use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
-    traits::{network::ConnectedNetwork, node_implementation::Versions},
+    traits::{network::ConnectedNetwork, node_implementation::Versions, ValidatedState as _},
+    utils::{View, ViewInner},
 };
 use jf_merkle_tree::MerkleTreeScheme;
 
-use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
+use self::data_source::{
+    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
+};
 use crate::{
-    context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
-    SequencerContext,
+    catchup::CatchupStorage, context::Consensus, network, state_signature::StateSigner, SeqTypes,
+    SequencerApiVersion, SequencerContext,
 };
 
 pub mod data_source;
@@ -110,10 +113,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
 
     async fn consensus(&self) -> Arc<RwLock<Consensus<N, P, V>>> {
         Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
-    }
-
-    async fn node_state(&self) -> &NodeState {
-        &self.consensus.as_ref().get().await.get_ref().node_state
     }
 
     async fn network_config(&self) -> NetworkConfig<PubKey> {
@@ -196,30 +195,107 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> SubmitDa
     }
 }
 
+impl<N, P, D, V> NodeStateDataSource for StorageState<N, P, D, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+    D: Sync,
+{
+    async fn node_state(&self) -> &NodeState {
+        self.as_ref().node_state().await
+    }
+}
+
 impl<
         N: ConnectedNetwork<PubKey>,
         V: Versions,
         P: SequencerPersistence,
-        D: CatchupDataSource + Send + Sync,
+        D: CatchupStorage + Send + Sync,
     > CatchupDataSource for StorageState<N, P, D, V>
 {
-    #[tracing::instrument(skip(self))]
-    async fn get_account(
+    #[tracing::instrument(skip(self, instance))]
+    async fn get_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_account(height, view, account).await {
-            Ok(account) => return Ok(account),
+        match self
+            .as_ref()
+            .get_accounts(instance, height, view, accounts)
+            .await
+        {
+            Ok(accounts) => return Ok(accounts),
             Err(err) => {
-                tracing::info!("account is not in memory, trying storage: {err:#}");
+                tracing::info!("accounts not in memory, trying storage: {err:#}");
             }
         }
 
         // Try storage.
-        self.inner().get_account(height, view, account).await
+        let (tree, leaf) = self
+            .inner()
+            .get_accounts(instance, height, view, accounts)
+            .await
+            .context("accounts not in memory, and could not fetch from storage")?;
+        // If we successfully fetched accounts from storage, try to add them back into the in-memory
+        // state.
+        let handle = self.as_ref().consensus().await;
+        let handle = handle.read().await;
+        let consensus = handle.consensus();
+        let mut consensus = consensus.write().await;
+        let (state, delta, leaf_commit) = match consensus.validated_state_map().get(&view) {
+            Some(View {
+                view_inner: ViewInner::Leaf { state, delta, leaf },
+            }) => {
+                let mut state = (**state).clone();
+
+                // Add the fetched accounts to the state.
+                for account in accounts {
+                    if let Some((proof, _)) = FeeAccountProof::prove(&tree, (*account).into()) {
+                        if let Err(err) = proof.remember(&mut state.fee_merkle_tree) {
+                            tracing::warn!(
+                                ?view,
+                                %account,
+                                "cannot update fetched account state: {err:#}"
+                            );
+                        }
+                    } else {
+                        tracing::warn!(?view, %account, "cannot update fetched account state because account is not in the merkle tree");
+                    };
+                }
+
+                (Arc::new(state), delta.clone(), *leaf)
+            }
+            _ => {
+                // If we don't already have a leaf for this view, or if we don't have the view
+                // at all, we can create a new view based on the recovered leaf and add it to
+                // our state map. In this case, we must also add the leaf to the saved leaves
+                // map to ensure consistency.
+                let mut state = ValidatedState::from_header(leaf.block_header());
+                state.fee_merkle_tree = tree.clone();
+                let res = (Arc::new(state), None, Committable::commit(&leaf));
+                consensus.update_saved_leaves(leaf);
+                res
+            }
+        };
+        if let Err(err) = consensus.update_validated_state_map(
+            view,
+            View {
+                view_inner: ViewInner::Leaf {
+                    state,
+                    delta,
+                    leaf: leaf_commit,
+                },
+            },
+        ) {
+            tracing::warn!(?view, "cannot update fetched account state: {err:#}");
+        }
+        tracing::info!(?view, "updated with fetched account state");
+
+        Ok(tree)
     }
 
     #[tracing::instrument(skip(self))]
@@ -272,16 +348,28 @@ impl<
 //     }
 // }
 
+impl<N, V, P> NodeStateDataSource for ApiState<N, P, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+{
+    async fn node_state(&self) -> &NodeState {
+        &self.consensus.as_ref().get().await.get_ref().node_state
+    }
+}
+
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupDataSource
     for ApiState<N, P, V>
 {
-    #[tracing::instrument(skip(self))]
-    async fn get_account(
+    #[tracing::instrument(skip(self, _instance))]
+    async fn get_accounts(
         &self,
+        _instance: &NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         let state = self
             .consensus()
             .await
@@ -292,10 +380,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
             .context(format!(
                 "state not available for height {height}, view {view:?}"
             ))?;
-        let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
-            format!("account {account} not available for height {height}, view {view:?}"),
-        )?;
-        Ok(AccountQueryData { balance, proof })
+        retain_accounts(&state.fee_merkle_tree, accounts.iter().copied())
     }
 
     #[tracing::instrument(skip(self))]

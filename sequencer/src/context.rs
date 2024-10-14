@@ -1,10 +1,12 @@
 use std::fmt::Display;
 
 use anyhow::Context;
+use async_compatibility_layer::art::async_timeout;
 use async_std::{
     sync::{Arc, RwLock},
-    task::{spawn, JoinHandle},
+    task::{sleep, spawn, JoinHandle},
 };
+use committable::{Commitment, Committable};
 use derivative::Derivative;
 use espresso_types::{
     v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
@@ -29,10 +31,13 @@ use hotshot_types::{
         election::Membership,
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::Versions,
+        node_implementation::{ConsensusTime, Versions},
+        ValidatedState as _,
     },
+    utils::{View, ViewInner},
     PeerConfig,
 };
+use std::time::Duration;
 use url::Url;
 
 use crate::{
@@ -198,6 +203,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             config,
         };
         ctx.spawn(
+            "proposal fetcher",
+            fetch_proposals(ctx.handle.clone(), persistence.clone()),
+        );
+        ctx.spawn(
             "main event handler",
             handle_events(
                 events,
@@ -329,6 +338,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
     }
 }
 
+#[tracing::instrument(skip_all, fields(node_id))]
 async fn handle_events<V: Versions>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<impl SequencerPersistence>,
@@ -359,6 +369,136 @@ async fn handle_events<V: Versions>(
         if let Some(events_streamer) = events_streamer.as_ref() {
             events_streamer.write().await.handle_event(event).await;
         }
+    }
+}
+
+#[tracing::instrument(skip_all)]
+async fn fetch_proposals<N, P, V>(
+    consensus: Arc<RwLock<Consensus<N, P, V>>>,
+    persistence: Arc<impl SequencerPersistence>,
+) where
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    V: Versions,
+{
+    let mut tasks = TaskList::default();
+    let mut events = consensus.read().await.event_stream();
+    while let Some(event) = events.next().await {
+        let EventType::QuorumProposal { proposal, .. } = event.event else {
+            continue;
+        };
+        // Whenever we see a quorum proposal, ensure we have the chain of proposals stretching back
+        // to the anchor. This allows state replay from the decided state.
+        let parent_view = proposal.data.justify_qc.view_number;
+        let parent_leaf = proposal.data.justify_qc.data.leaf_commit;
+        tasks.spawn(
+            format!("fetch proposal {parent_view:?},{parent_leaf}"),
+            fetch_proposal_chain(
+                consensus.clone(),
+                persistence.clone(),
+                parent_view,
+                parent_leaf,
+            ),
+        );
+    }
+}
+
+#[tracing::instrument(skip(consensus, persistence))]
+async fn fetch_proposal_chain<N, P, V>(
+    consensus: Arc<RwLock<Consensus<N, P, V>>>,
+    persistence: Arc<impl SequencerPersistence>,
+    mut view: ViewNumber,
+    mut leaf: Commitment<Leaf<SeqTypes>>,
+) where
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    V: Versions,
+{
+    let anchor_view = loop {
+        match persistence.load_anchor_leaf().await {
+            Ok(Some((leaf, _))) => break leaf.view_number(),
+            Ok(None) => break ViewNumber::genesis(),
+            Err(err) => {
+                tracing::warn!("error loading anchor view: {err:#}");
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+    };
+    while view > anchor_view {
+        match persistence.load_quorum_proposal(view).await {
+            Ok(proposal) => {
+                // If we already have the proposal in storage, keep traversing the chain to its
+                // parent.
+                view = proposal.data.justify_qc.view_number;
+                leaf = proposal.data.justify_qc.data.leaf_commit;
+                continue;
+            }
+            Err(err) => {
+                tracing::info!(?view, %leaf, "proposal missing from storage; fetching from network: {err:#}");
+            }
+        }
+
+        let proposal = loop {
+            let future = match consensus.read().await.request_proposal(view, leaf) {
+                Ok(future) => future,
+                Err(err) => {
+                    tracing::warn!(?view, %leaf, "failed to request proposal: {err:#}");
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+            match async_timeout(Duration::from_secs(30), future).await {
+                Ok(Ok(proposal)) => break proposal,
+                Ok(Err(err)) => {
+                    tracing::warn!("error fetching proposal: {err:#}");
+                }
+                Err(_) => {
+                    tracing::warn!("timed out fetching proposal");
+                }
+            }
+
+            // Sleep before retrying to avoid hot loop.
+            sleep(Duration::from_secs(1)).await;
+        };
+
+        while let Err(err) = persistence.append_quorum_proposal(&proposal).await {
+            tracing::warn!("error saving fetched proposal: {err:#}");
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // Add the fetched leaf to HotShot state, so consensus can make use of it.
+        {
+            let leaf = Leaf::from_quorum_proposal(&proposal.data);
+            let handle = consensus.read().await;
+            let consensus = handle.consensus();
+            let mut consensus = consensus.write().await;
+            if matches!(
+                consensus.validated_state_map().get(&view),
+                None | Some(View {
+                    // Replace a Da-only view with a Leaf view, which has strictly more information.
+                    view_inner: ViewInner::Da { .. }
+                })
+            ) {
+                let v = View {
+                    view_inner: ViewInner::Leaf {
+                        leaf: Committable::commit(&leaf),
+                        state: Arc::new(ValidatedState::from_header(leaf.block_header())),
+                        delta: None,
+                    },
+                };
+                if let Err(err) = consensus.update_validated_state_map(view, v) {
+                    tracing::warn!(?view, "unable to update validated state map: {err:#}");
+                }
+                consensus.update_saved_leaves(leaf);
+                tracing::info!(
+                    ?view,
+                    "added view to validated state map view proposal fetcher"
+                );
+            }
+        }
+
+        view = proposal.data.justify_qc.view_number;
+        leaf = proposal.data.justify_qc.data.leaf_commit;
     }
 }
 

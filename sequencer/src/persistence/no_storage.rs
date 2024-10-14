@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 
+use anyhow::bail;
 use async_trait::async_trait;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
@@ -95,6 +96,13 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
     {
         Ok(None)
+    }
+
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+        bail!("proposal {view:?} not available");
     }
 
     async fn append_vid(

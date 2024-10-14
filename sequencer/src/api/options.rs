@@ -24,14 +24,15 @@ use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource,
+        SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
     update::update_loop,
     ApiState, StorageState,
 };
 use crate::{
+    catchup::CatchupStorage,
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
@@ -264,7 +265,7 @@ impl Options {
     where
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
-        D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
+        D: SequencerDataSource + CatchupStorage + Send + Sync + 'static,
         for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
     {
         let metrics = ds.populate_metrics();
@@ -396,6 +397,7 @@ impl Options {
             + Sync
             + SubmitDataSource<N, P>
             + StateSignatureDataSource<N>
+            + NodeStateDataSource
             + CatchupDataSource
             + HotShotConfigDataSource,
         N: ConnectedNetwork<PubKey>,
