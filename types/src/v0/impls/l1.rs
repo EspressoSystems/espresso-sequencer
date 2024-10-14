@@ -12,6 +12,7 @@ use futures::{
     join,
     stream::{self, StreamExt},
 };
+use time::OffsetDateTime;
 use url::Url;
 
 use super::L1BlockInfo;
@@ -170,6 +171,40 @@ impl L1Client {
         // Load the block again, since it may have changed between first being produced and becoming
         // finalized.
         self.wait_for_block(number).await
+    }
+
+    /// Get information about the first finalized block with timestamp greater than or equal
+    /// `timestamp`.
+    pub async fn wait_for_finalized_block_with_timestamp(&self, timestamp: U256) -> L1BlockInfo {
+        let interval = self.provider.get_interval();
+
+        // Sleep until approximately the right time for the desired block to appear.
+        let now = U256::from(OffsetDateTime::now_utc().unix_timestamp() as u64);
+        if timestamp > now {
+            sleep(Duration::from_secs((timestamp - now).as_u64())).await;
+        }
+
+        // Wait until the finalized block has timestamp greater or equal to `timestamp`.
+        let mut block = loop {
+            let Some(block) = self.get_finalized_block().await else {
+                sleep(interval).await;
+                continue;
+            };
+            if block.timestamp >= timestamp {
+                break block;
+            }
+            sleep(interval).await;
+        };
+
+        // The finalized block jumps by more than 1 at a time, so we might not have found the
+        // earliest block with the desired timestamp. Work backwards until we find it.
+        loop {
+            let prev = self.wait_for_block(block.number - 1).await;
+            if prev.timestamp < timestamp {
+                return block;
+            }
+            block = prev;
+        }
     }
 
     /// Proxy to `Provider.get_block_number`.
