@@ -3,4 +3,19 @@
         "CARGO_TARGET_DIR": "target/vscode_rust_analyzer",
         "RUSTFLAGS": " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
     },
+    "wake.compiler.solc.remappings": [
+        "@openzeppelin/contracts-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/contracts/",
+        "@openzeppelin/contracts/=contracts/lib/openzeppelin-contracts/contracts/",
+        "bn254/=contracts/lib/bn254/src/",
+        "ds-test/=contracts/lib/solmate/lib/ds-test/src/",
+        "erc4626-tests/=contracts/lib/openzeppelin-contracts-upgradeable/lib/erc4626-tests/",
+        "forge-std/=contracts/lib/forge-std/src/",
+        "foundry-devops/=contracts/lib/foundry-devops/",
+        "openzeppelin-contracts-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/",
+        "openzeppelin-contracts/=contracts/lib/openzeppelin-contracts/",
+        "openzeppelin-foundry-upgrades/=contracts/lib/openzeppelin-foundry-upgrades/src/",
+        "solidity-bytes-utils/=contracts/lib/solidity-bytes-utils/contracts/",
+        "solidity-stringutils/=contracts/lib/openzeppelin-foundry-upgrades/lib/solidity-stringutils/",
+        "solmate/=contracts/lib/solmate/src/"
+    ],
 }
