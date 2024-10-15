@@ -94,6 +94,13 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"                                                      # TODO temporary, used only for VID, should be set in hotshot
 snafu = "0.8"
+sqlx = { workspace = true, features = [
+	"bit-vec",
+	"postgres",
+	"runtime-async-std",
+	"sqlite",
+	"tls-native-tls",
+] }
 static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
