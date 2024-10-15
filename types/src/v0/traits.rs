@@ -13,7 +13,7 @@ use hotshot_types::{
     data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
     event::{HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{
         node_implementation::{ConsensusTime, Versions},
         storage::Storage,
@@ -365,6 +365,9 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>>;
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>>;
 
     /// Load the latest known consensus state.
     ///
@@ -445,6 +448,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             .await
             .context("loading saved proposals")?;
 
+        let upgrade_certificate = self
+            .load_upgrade_certificate()
+            .await
+            .context("loading upgrade certificate")?;
+
         tracing::info!(
             ?leaf,
             ?view,
@@ -453,6 +461,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             ?undecided_leaves,
             ?undecided_state,
             ?saved_proposals,
+            ?upgrade_certificate,
             "loaded consensus state"
         );
 
@@ -465,6 +474,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 highest_voted_view,
                 saved_proposals,
                 high_qc,
+                upgrade_certificate,
                 undecided_leaves.into_values().collect(),
                 undecided_state,
             ),
@@ -553,6 +563,10 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
+    async fn store_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -618,6 +632,15 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         (**self).append_quorum_proposal(proposal).await
+    }
+
+    async fn update_decided_upgrade_certificate(
+        &self,
+        decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        (**self)
+            .store_upgrade_certificate(decided_upgrade_certificate)
+            .await
     }
 }
 

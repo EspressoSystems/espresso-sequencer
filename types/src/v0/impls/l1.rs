@@ -80,24 +80,54 @@ impl L1Client {
     }
 
     pub async fn wait_for_block(&self, number: u64) -> L1BlockInfo {
+        // When we are polling the L1 waiting for new blocks, we use a long interval calibrated to
+        // the rate at which L1 blocks are produced.
         let interval = self.provider.get_interval();
+        // When we are retrying after an error, or expecting a block to appear any second, we use a
+        // shorter polling interval.
+        let retry = self.retry_delay;
+
+        // Wait until we expect the block to be available.
+        let l1_head = loop {
+            let l1_head = self.get_block_number().await;
+            if l1_head >= number {
+                // The block should be ready to retrieve.
+                break l1_head;
+            } else if l1_head + 1 == number {
+                // The block we want is the next L1 block. It could be ready any second, so don't
+                // sleep for too long.
+                tracing::info!(number, l1_head, "waiting for next L1 block");
+                sleep(retry).await;
+            } else {
+                // We are waiting at least a few more L1 blocks, so back off and don't spam the RPC.
+                tracing::info!(number, l1_head, "waiting for future L1 block");
+                sleep(interval).await;
+            }
+        };
+
+        // The block should be ready now, but we may still get errors from the RPC, so we retry
+        // until we successfully pull the block.
         loop {
             let block = match self.provider.get_block(number).await {
                 Ok(Some(block)) => block,
                 Ok(None) => {
-                    tracing::info!(number, "no such block");
-                    sleep(interval).await;
+                    tracing::warn!(
+                        number,
+                        l1_head,
+                        "expected L1 block to be available; possible L1 reorg"
+                    );
+                    sleep(retry).await;
                     continue;
                 }
                 Err(err) => {
-                    tracing::error!(%err, number, "failed to get L1 block");
-                    sleep(interval).await;
+                    tracing::error!(number, l1_head, "failed to get L1 block: {err:#}");
+                    sleep(retry).await;
                     continue;
                 }
             };
             let Some(hash) = block.hash else {
-                tracing::error!(number, ?block, "L1 block has no hash");
-                sleep(interval).await;
+                tracing::error!(number, l1_head, ?block, "L1 block has no hash");
+                sleep(retry).await;
                 continue;
             };
             break L1BlockInfo {
@@ -112,20 +142,24 @@ impl L1Client {
     /// If the desired block number is not finalized yet, this function will block until it becomes
     /// finalized.
     pub async fn wait_for_finalized_block(&self, number: u64) -> L1BlockInfo {
-        let interval = self.provider.get_interval();
+        // First just wait for the block to exist. This uses an efficient polling mechanism that
+        // polls more frequently as we get closer to expecting the block to be ready.
+        self.wait_for_block(number).await;
 
-        // Wait for the block to finalize.
+        // Wait for the block to finalize. Since we know the block at least exists, we don't expect
+        // to have to wait _too_ long for it to finalize, so we poll relatively frequently, using
+        // the retry delay instead of the provider interval.
         let finalized = loop {
             let Some(block) = self.get_finalized_block().await else {
                 tracing::info!("waiting for finalized block");
-                sleep(interval).await;
+                sleep(self.retry_delay).await;
                 continue;
             };
             if block.number >= number {
                 break block;
             }
             tracing::info!(current_finalized = %block.number, "waiting for finalized block");
-            sleep(interval).await;
+            sleep(self.retry_delay).await;
             continue;
         };
 
@@ -133,8 +167,8 @@ impl L1Client {
             return finalized;
         }
 
-        // The finalized block may have skipped over the block of interest. In this case, our block
-        // is still finalized, since it is before the finalized block. We just need to fetch it.
+        // Load the block again, since it may have changed between first being produced and becoming
+        // finalized.
         self.wait_for_block(number).await
     }
 

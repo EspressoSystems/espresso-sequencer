@@ -47,7 +47,7 @@ use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersio
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 use crate::run_builder_api_service;
 

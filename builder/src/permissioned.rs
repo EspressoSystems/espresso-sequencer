@@ -41,10 +41,11 @@ use futures::{
 };
 use hotshot::{
     traits::{
-        election::static_committee::GeneralStaticCommittee,
+        election::static_committee::StaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, GossipConfig,
-            KeyPair, Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
+            derive_libp2p_multiaddr, derive_libp2p_peer_id, CdnMetricsValue, CdnTopic,
+            CombinedNetworks, GossipConfig, KeyPair, Libp2pNetwork, PushCdnNetwork,
+            WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -105,6 +106,7 @@ use sequencer::{
 };
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
+use tracing::info;
 use vbs::version::StaticVersionType;
 
 use crate::run_builder_api_service;
@@ -148,13 +150,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     maximize_txns_count_timeout_duration: Duration,
 ) -> anyhow::Result<BuilderContext<network::Production, P, V>> {
     // Orchestrator client
-    let validator_args = ValidatorArgs {
-        url: network_params.orchestrator_url,
-        advertise_address: Some(network_params.libp2p_advertise_address),
-        builder_address: None,
-        network_config_file: None,
-    };
-    let orchestrator_client = OrchestratorClient::new(validator_args);
+    let orchestrator_client = OrchestratorClient::new(network_params.orchestrator_url);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
         public_key: BLSPubKey::from_private(&network_params.private_staking_key),
@@ -163,6 +159,25 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         state_key_pair,
         is_da,
     };
+
+    // Parse the Libp2p bind and advertise addresses to multiaddresses
+    let libp2p_bind_address = derive_libp2p_multiaddr(&network_params.libp2p_bind_address)
+        .with_context(|| {
+            format!(
+                "Failed to derive Libp2p bind address of {}",
+                &network_params.libp2p_bind_address
+            )
+        })?;
+    let libp2p_advertise_address =
+        derive_libp2p_multiaddr(&network_params.libp2p_advertise_address).with_context(|| {
+            format!(
+                "Failed to derive Libp2p advertise address of {}",
+                &network_params.libp2p_advertise_address
+            )
+        })?;
+
+    info!("Libp2p bind address: {}", libp2p_bind_address);
+    info!("Libp2p advertise address: {}", libp2p_advertise_address);
 
     // Derive our Libp2p public key from our private key
     let libp2p_public_key =
@@ -174,7 +189,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         my_config.clone(),
         // Register in our Libp2p advertise address and public key so other nodes
         // can contact us on startup
-        Some(network_params.libp2p_advertise_address),
+        Some(libp2p_advertise_address),
         Some(libp2p_public_key),
     )
     .await?
@@ -224,7 +239,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
         config.clone(),
         GossipConfig::default(),
-        network_params.libp2p_bind_address,
+        libp2p_bind_address,
         &my_config.public_key,
         // We need the private key so we can derive our Libp2p keypair
         // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
@@ -342,12 +357,12 @@ pub async fn init_hotshot<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, 
         None => config.known_nodes_with_stake.clone(),
     };
 
-    let quorum_membership = GeneralStaticCommittee::new(
+    let quorum_membership = StaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake.clone(),
         Topic::Global,
     );
-    let da_membership = GeneralStaticCommittee::new(
+    let da_membership = StaticCommittee::new(
         combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
         Topic::Da,
