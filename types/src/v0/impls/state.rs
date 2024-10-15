@@ -878,7 +878,6 @@ impl HotShotState<SeqTypes> for ValidatedState {
             Proposal {
                 block_size: VidSchemeType::get_payload_byte_len(&vid_common),
                 header: proposed_header.clone(),
-                vid_common: vid_common.clone(),
             },
         )
         .execute()
@@ -1049,12 +1048,8 @@ mod test {
             let instance = NodeState::mock();
             let parent_leaf = Leaf::genesis(&instance.genesis_state, &instance).await;
             let header = parent_leaf.block_header().clone();
-            let block_size = BLOCK_SIZE as u64;
-            Self {
-                header,
-                vid_common,
-                block_size,
-            }
+            let block_size = BLOCK_SIZE as u32;
+            Self { header, block_size }
         }
     }
 
@@ -1147,19 +1142,16 @@ mod test {
 
         const MAX_BLOCK_SIZE: usize = 10;
 
-        let payload = [0; 2 * MAX_BLOCK_SIZE];
-        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
-
         let state = ValidatedState::default();
         let expected_chain_config = ChainConfig {
             max_block_size: BlockSize::from_integer(MAX_BLOCK_SIZE as u64).unwrap(),
             base_fee: 0.into(),
             ..state.chain_config.resolve().unwrap()
         };
-
         let instance = NodeState::mock().with_chain_config(expected_chain_config);
 
         let proposal = Proposal::mock::<20>().await;
+        let block_size = proposal.block_size;
 
         // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
         // b/c version in `Leaf::genesis` is set to 1
@@ -1173,7 +1165,7 @@ mod test {
         assert_eq!(
             ProposalValidationError::MaxBlockSizeExceeded {
                 max_block_size: instance.chain_config.max_block_size,
-                block_size: BlockSize::from_integer(payload.len() as u64).unwrap()
+                block_size: BlockSize::from_integer(block_size as u64).unwrap()
             },
             err
         );
@@ -1185,8 +1177,6 @@ mod test {
         setup_backtrace();
 
         let max_block_size = 10;
-        let payload = [0; 1];
-        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
 
         let state = ValidatedState::default();
         let instance = NodeState::mock().with_chain_config(ChainConfig {
