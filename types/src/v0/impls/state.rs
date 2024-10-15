@@ -334,7 +334,7 @@ impl ValidatedTransition {
             proposal,
         }
     }
-    /// Validate that proposal l1_finalized is `Some` and is incrementing.
+    /// Validate that proposal l1_finalized is `Some` and is incrementing relative to parent.
     fn validate_proposed_finalized(&self) -> Result<(), ProposalValidationError> {
         // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
         let proposed_finalized = self.proposal.header.l1_finalized();
@@ -407,7 +407,8 @@ impl ValidatedTransition {
         }
         Ok(())
     }
-    /// Validate Builder Fee. Currently proxies to standalone `fn`.
+    /// Validate builder accounts by verifying signatures. All fees
+    /// are verified against signature by index.
     fn validate_builder_fee(&self) -> Result<(), ProposalValidationError> {
         if let Err(err) = validate_builder_fee(&self.proposal.header) {
             tracing::error!("invalid builder fee: {err:#}");
@@ -426,7 +427,8 @@ impl ValidatedTransition {
         }
         Ok(())
     }
-    /// Validate block size and fee.
+    /// Validate that proposal block size does not exceed configured
+    /// [`ChainConfig.max_block_size`].
     fn validate_block_size(&self) -> Result<(), ProposalValidationError> {
         if self.proposal.block_size > *self.expected_chain_config.max_block_size {
             return Err(ProposalValidationError::MaxBlockSizeExceeded {
@@ -453,7 +455,7 @@ impl ValidatedTransition {
         }
         Ok(())
     }
-    /// Validate proposal height
+    /// Validate that proposal height is parent height + 1.
     fn validate_height(&self) -> Result<(), ProposalValidationError> {
         let parent_header = self.parent_leaf.block_header();
         if self.proposal.header.height() != parent_header.height() + 1 {
@@ -464,7 +466,10 @@ impl ValidatedTransition {
         }
         Ok(())
     }
-    /// Validate timestamp increasing and timestamp hasn't drifted too much from system time.
+    /// Validate timestamp is not decreasing relative to parent and is
+    /// within a given tolerance of system time. Tolerance is
+    /// currently 12 seconds. This value may be moved to configuration
+    /// in the future.
     fn validate_timestamp(&self) -> Result<(), ProposalValidationError> {
         let parent_header = self.parent_leaf.block_header();
         // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
@@ -491,6 +496,7 @@ impl ValidatedTransition {
 
         Ok(())
     }
+    /// Validate Block Merkle Tree by comparing proposed commitment against expectation.
     fn validate_block_merkle_tree(&self) -> Result<(), ProposalValidationError> {
         let block_merkle_tree_root = self.state.block_merkle_tree.commitment();
         if self.proposal.header.block_merkle_tree_root() != block_merkle_tree_root {
@@ -502,6 +508,7 @@ impl ValidatedTransition {
 
         Ok(())
     }
+    /// Validate Fee Merkle Tree by comparing proposed commitment against expectation.
     fn validate_fee_merkle_tree(&self) -> Result<(), ProposalValidationError> {
         let fee_merkle_tree_root = self.state.fee_merkle_tree.commitment();
         if self.proposal.header.fee_merkle_tree_root() != fee_merkle_tree_root {
@@ -513,7 +520,7 @@ impl ValidatedTransition {
 
         Ok(())
     }
-
+    /// Proxy to [`super::NsTable::validate()`].
     fn validate_namespace_table(&self) -> Result<(), ProposalValidationError> {
         self.proposal
             .header
