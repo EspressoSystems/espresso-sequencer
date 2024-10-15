@@ -206,11 +206,11 @@ impl L1Client {
         // The finalized block jumps by more than 1 at a time, so we might not have found the
         // earliest block with the desired timestamp. Work backwards until we find it.
         loop {
-            let prev = self.wait_for_block(block.number - 1).await;
-            if prev.timestamp < timestamp {
+            let parent = self.wait_for_block(block.number - 1).await;
+            if parent.timestamp < timestamp {
                 return block;
             }
-            block = prev;
+            block = parent;
         }
     }
 
