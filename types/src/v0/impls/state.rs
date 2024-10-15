@@ -100,10 +100,11 @@ pub enum ProposalValidationError {
         proposal_timestamp: u64,
         parent_timestamp: u64,
     },
-    #[error("Invalid timestamp: local:={local_timestamp}, proposal={proposal_timestamp}")]
+    #[error("Timestamp drift too high: proposed:={proposal}, system={proposal}, diff={diff}")]
     InvalidTimestampDrift {
-        proposal_timestamp: u64,
-        local_timestamp: u64,
+        proposal: u64,
+        system: u64,
+        diff: u64,
     },
     #[error("l1_finalized has `None` value")]
     L1FinalizedNotFound,
@@ -315,7 +316,6 @@ struct ValidatedTransition {
 }
 
 impl ValidatedTransition {
-    // TODO probably don't need `new`, this can just be execute
     fn new(
         state: ValidatedState,
         parent_leaf: Leaf,
@@ -475,21 +475,18 @@ impl ValidatedTransition {
             });
         }
 
-
         // Validate timestamp hasn't drifted too much from system time.
         // Do this check first so we don't add unnecessary drift.
         let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
         // TODO 12 seconds of tolerance should be enough for reasonably
         // configured nodes, but we should make this configurable.
-        let diff = proposed_header.timestamp().abs_diff(system_time);
+        let diff = self.proposal.header.timestamp().abs_diff(system_time);
         if diff > 12 {
-            tracing::warn!(
-                "Timestamp drift too high proposed={} system={} diff={}",
-                proposed_header.timestamp(),
-                system_time,
-                diff
-            );
-            return Err(BlockError::InvalidBlockHeader);
+            return Err(ProposalValidationError::InvalidTimestampDrift {
+                proposal: self.proposal.header.timestamp(),
+                system: system_time,
+                diff,
+            });
         }
 
         Ok(())
