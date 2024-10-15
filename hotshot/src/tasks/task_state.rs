@@ -13,7 +13,7 @@ use async_compatibility_layer::art::async_spawn;
 use async_trait::async_trait;
 use chrono::Utc;
 use hotshot_task_impls::{
-    builder::BuilderClient, consensus2::Consensus2TaskState, da::DaTaskState,
+    builder::BuilderClient, consensus::ConsensusTaskState, da::DaTaskState,
     quorum_proposal::QuorumProposalTaskState, quorum_proposal_recv::QuorumProposalRecvTaskState,
     quorum_vote::QuorumVoteTaskState, request::NetworkRequestState, rewind::RewindTaskState,
     transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VidTaskState,
@@ -299,7 +299,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState<TYPES, I, V>
-    for Consensus2TaskState<TYPES, I, V>
+    for ConsensusTaskState<TYPES, I, V>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
         let consensus = handle.hotshot.consensus();

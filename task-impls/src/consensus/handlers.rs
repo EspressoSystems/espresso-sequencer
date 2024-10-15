@@ -21,9 +21,9 @@ use hotshot_types::{
 };
 use tracing::{debug, error, instrument};
 
-use super::Consensus2TaskState;
+use super::ConsensusTaskState;
 use crate::{
-    consensus2::Versions,
+    consensus::Versions,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
     vote_collection::handle_vote,
@@ -38,7 +38,7 @@ pub(crate) async fn handle_quorum_vote_recv<
     vote: &QuorumVote<TYPES>,
     event: Arc<HotShotEvent<TYPES>>,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-    task_state: &mut Consensus2TaskState<TYPES, I, V>,
+    task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
     // Are we the leader for this view?
     ensure!(
@@ -73,7 +73,7 @@ pub(crate) async fn handle_timeout_vote_recv<
     vote: &TimeoutVote<TYPES>,
     event: Arc<HotShotEvent<TYPES>>,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-    task_state: &mut Consensus2TaskState<TYPES, I, V>,
+    task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
     // Are we the leader for this view?
     ensure!(
@@ -108,7 +108,7 @@ pub(crate) async fn handle_view_change<
 >(
     new_view_number: TYPES::Time,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-    task_state: &mut Consensus2TaskState<TYPES, I, V>,
+    task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
     ensure!(
         new_view_number > task_state.cur_view,
@@ -205,7 +205,7 @@ pub(crate) async fn handle_view_change<
 pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     view_number: TYPES::Time,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-    task_state: &mut Consensus2TaskState<TYPES, I, V>,
+    task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
     ensure!(
         task_state.cur_view < view_number,

@@ -8,7 +8,7 @@
 //! consensus in an event driven way
 
 /// The task which implements the core state logic of consensus.
-pub mod consensus2;
+pub mod consensus;
 
 /// The task which handles the logic for the quorum vote.
 pub mod quorum_vote;

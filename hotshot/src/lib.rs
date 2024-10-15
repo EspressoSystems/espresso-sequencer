@@ -350,8 +350,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// Panics if sending genesis fails
     #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
     pub async fn start_consensus(&self) {
-        tracing::error!("HotShot is running with the dependency tasks feature enabled!!");
-
         #[cfg(all(feature = "rewind", not(debug_assertions)))]
         compile_error!("Cannot run rewind in production builds!");
 

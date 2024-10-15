@@ -37,7 +37,7 @@ use crate::{events::HotShotEvent, vote_collection::VoteCollectorsMap};
 mod handlers;
 
 /// Task state for the Consensus task.
-pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
+pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Our public key
     pub public_key: TYPES::SignatureKey,
 
@@ -96,9 +96,9 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Consensus2TaskState<TYPES, I, V> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskState<TYPES, I, V> {
     /// Handles a consensus event received on the event stream
-    #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, last_decided_view = *self.last_decided_view), name = "Consensus replica task", level = "error", target = "Consensus2TaskState")]
+    #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, last_decided_view = *self.last_decided_view), name = "Consensus replica task", level = "error", target = "ConsensusTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
@@ -151,7 +151,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Consensus2TaskS
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
-    for Consensus2TaskState<TYPES, I, V>
+    for ConsensusTaskState<TYPES, I, V>
 {
     type Event = HotShotEvent<TYPES>;
 

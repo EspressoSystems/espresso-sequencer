@@ -217,14 +217,14 @@ pub async fn add_consensus_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, 
 
     {
         use hotshot_task_impls::{
-            consensus2::Consensus2TaskState, quorum_proposal::QuorumProposalTaskState,
+            consensus::ConsensusTaskState, quorum_proposal::QuorumProposalTaskState,
             quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
         };
 
         handle.add_task(QuorumProposalTaskState::<TYPES, I, V>::create_from(handle).await);
         handle.add_task(QuorumVoteTaskState::<TYPES, I, V>::create_from(handle).await);
         handle.add_task(QuorumProposalRecvTaskState::<TYPES, I, V>::create_from(handle).await);
-        handle.add_task(Consensus2TaskState::<TYPES, I, V>::create_from(handle).await);
+        handle.add_task(ConsensusTaskState::<TYPES, I, V>::create_from(handle).await);
     }
 
     #[cfg(feature = "rewind")]

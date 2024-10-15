@@ -17,7 +17,7 @@ use hotshot_example_types::{
 };
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{
-    consensus2::Consensus2TaskState, events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState,
+    consensus::ConsensusTaskState, events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState,
     upgrade::UpgradeTaskState,
 };
 use hotshot_testing::{
