@@ -1106,6 +1106,11 @@
 <a href="#1106" id="1106">1106</a>
 <a href="#1107" id="1107">1107</a>
 <a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1504,6 +1509,11 @@
     <span class="kw">let </span>l1_genesis = <span class="kw">match </span>genesis.l1_finalized {
         L1Finalized::Block(b) =&gt; b,
         L1Finalized::Number { number } =&gt; l1_client.wait_for_finalized_block(number).<span class="kw">await</span>,
+        L1Finalized::Timestamp { timestamp } =&gt; {
+            l1_client
+                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .<span class="kw">await
+        </span>}
     };
     <span class="kw">let </span>instance_state = NodeState {
         chain_config: genesis.chain_config,

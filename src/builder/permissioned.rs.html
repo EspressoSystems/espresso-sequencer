@@ -672,6 +672,11 @@
 <a href="#672" id="672">672</a>
 <a href="#673" id="673">673</a>
 <a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     alloc::System,
     any,
@@ -948,6 +953,11 @@
     <span class="kw">let </span>l1_genesis = <span class="kw">match </span>genesis.l1_finalized {
         L1Finalized::Block(b) =&gt; b,
         L1Finalized::Number { number } =&gt; l1_client.wait_for_finalized_block(number).<span class="kw">await</span>,
+        L1Finalized::Timestamp { timestamp } =&gt; {
+            l1_client
+                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .<span class="kw">await
+        </span>}
     };
 
     <span class="kw">let </span>instance_state = NodeState {
