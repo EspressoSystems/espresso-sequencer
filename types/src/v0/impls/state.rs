@@ -1211,6 +1211,52 @@ mod test {
             err
         );
     }
+    #[async_std::test]
+    async fn test_validation_height() {
+        setup_logging();
+        setup_backtrace();
+
+        let max_block_size = 10;
+
+        let state = ValidatedState::default();
+        let instance = NodeState::mock().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High base fee
+            max_block_size: max_block_size.into(),
+            ..state.chain_config.resolve().unwrap()
+        });
+        // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
+        // b/c version in `Leaf::genesis` is set to 1
+        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
+        let header = parent.block_header();
+
+        let proposal = Proposal::mock::<10>().await;
+        let proposed_height = proposal.header.height();
+
+        let err = ValidatedTransition::mock(instance.clone(), proposal)
+            .await
+            .validate_height()
+            .unwrap_err();
+
+        // Validation fails because the proposal is using same default block height.
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidHeight {
+                parent_height: header.height(),
+                proposal_height: proposed_height
+            },
+            err
+        );
+
+        // Success case
+        let mut proposal = Proposal::mock::<10>().await;
+        *proposal.header.height_mut() += 1;
+        let proposed_height = proposal.header.height();
+
+        ValidatedTransition::mock(instance.clone(), proposal)
+            .await
+            .validate_height()
+            .unwrap();
+    }
 
     #[test]
     fn test_charge_fee() {
