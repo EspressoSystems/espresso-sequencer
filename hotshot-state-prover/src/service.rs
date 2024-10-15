@@ -563,7 +563,10 @@ mod test {
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::{
-        deployer::{self, test_helpers::deploy_light_client_contract_as_proxy_for_test, is_valid_admin_light_client_proxy},
+        deployer::{
+            self, is_valid_admin_light_client_proxy,
+            test_helpers::deploy_light_client_contract_as_proxy_for_test,
+        },
         test_utils::setup_test,
     };
 
