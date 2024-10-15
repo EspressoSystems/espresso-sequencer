@@ -12,7 +12,7 @@ use hotshot_types::{
     data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     utils::View,
 };
 use std::collections::BTreeMap;
@@ -113,6 +113,11 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
         Ok(Default::default())
     }
+    async fn load_upgrade_certificate(
+        &self,
+    ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {
+        Ok(None)
+    }
 
     async fn append_vid(
         &self,
@@ -139,6 +144,12 @@ impl SequencerPersistence for NoStorage {
     async fn append_quorum_proposal(
         &self,
         _proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn store_upgrade_certificate(
+        &self,
+        _decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

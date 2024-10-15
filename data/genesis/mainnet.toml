@@ -9,11 +9,11 @@ chain_id = 1
 base_fee = '1 wei'
 max_block_size = '1mb'
 fee_recipient = '0x0000000000000000000000000000000000000000'
-# TODO update this after contract is deployed
-fee_contract = '0x0000000000000000000000000000000000000000'
+# Deployed
+fee_contract = '0x7f15ff3f783acd4d09c6a79d098ed5069a2bd39a'
 
 [header]
 timestamp = "1970-01-01T00:00:00Z"
 
 [l1_finalized]
-number = 20879898 # Estimated on Ethereum: 2 Oct 2024 18:00 UTC
+number = 20889629

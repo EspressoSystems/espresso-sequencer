@@ -71,7 +71,7 @@ jobs:
           nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c cargo build --locked --release
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ env.TARGET_TRIPLET }}-services
           path: |
@@ -106,13 +106,13 @@ jobs:
           submodules: recursive
 
       - name: Download executables AMD
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: x86_64-unknown-linux-musl-services
           path: target/amd64/release
 
       - name: Download executables ARM
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: aarch64-unknown-linux-musl-services
           path: target/arm64/release
