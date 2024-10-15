@@ -407,7 +407,7 @@ impl ValidatedTransition {
         }
         Ok(())
     }
-    /// Validate Builder Fee.
+    /// Validate Builder Fee. Currently proxies to standalone `fn`.
     fn validate_builder_fee(&self) -> Result<(), ProposalValidationError> {
         if let Err(err) = validate_builder_fee(&self.proposal.header) {
             tracing::error!("invalid builder fee: {err:#}");
@@ -415,7 +415,7 @@ impl ValidatedTransition {
         }
         Ok(())
     }
-    /// Validate `ChainConfig`.
+    /// Validates proposals `ChainConfig` against expectation by comparing commitments.
     fn validate_chain_config(&self) -> Result<(), ProposalValidationError> {
         let proposed_chain_config = self.proposal.header.chain_config();
         if proposed_chain_config.commit() != self.expected_chain_config.commit() {
@@ -426,7 +426,7 @@ impl ValidatedTransition {
         }
         Ok(())
     }
-    /// validate block size and fee
+    /// Validate block size and fee.
     fn validate_block_size(&self) -> Result<(), ProposalValidationError> {
         if self.proposal.block_size > *self.expected_chain_config.max_block_size {
             return Err(ProposalValidationError::MaxBlockSizeExceeded {
