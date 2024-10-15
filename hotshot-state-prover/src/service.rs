@@ -748,14 +748,18 @@ mod test {
         }
     }
 
+    // Test light client proxy validation by checking
+    // if it's a proxy by checking if the implementation address is found on the proxy
+    // if the admin was set as expected
     #[async_std::test]
     async fn test_validate_light_contract_proxy() -> Result<()> {
-        // Checks that the implementation address was set and the admin is as expected
         setup_test();
 
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+
+        // deploy contract as a proxy
         let (wallet, contract) = deploy_contract_as_proxy_for_test(
             &anvil,
             dummy_genesis.clone(),
@@ -778,6 +782,7 @@ mod test {
             ..Default::default()
         };
 
+        // validate whether the light client contract is a proxy
         let result = config.validate_light_client_contract().await;
 
         // check if the result was ok
@@ -785,6 +790,7 @@ mod test {
             result.is_ok(),
             "Expected Light Client contract to be a proxy, but it was not"
         );
+
         // validate that the admin is the deployer account
         let admin = wallet.clone().address();
         let admin_result =
@@ -798,16 +804,17 @@ mod test {
         Ok(())
     }
 
+    // Test the unhappy path for light client proxy validation by checking
+    // if it's a proxy, which should fail
+    // if the admin was set as expected, which should fail
     #[async_std::test]
-
     async fn test_fail_validate_light_contract_proxy() -> Result<()> {
-        // Checks that the implementation address was not set as we expect when we deploy as a regular contract without a proxy
-
         setup_test();
 
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+
         //deploy as a regular contract and not a proxy so that the validation fails as we expect
         let (wallet, contract) =
             deploy_contract_for_test(&anvil, dummy_genesis.clone(), dummy_stake_genesis.clone())
@@ -828,6 +835,7 @@ mod test {
             ..Default::default()
         };
 
+        // validate whether the light client contract is a proxy
         let result = config.validate_light_client_contract().await;
 
         // we expect the result to be an error because the contract is not a proxy
