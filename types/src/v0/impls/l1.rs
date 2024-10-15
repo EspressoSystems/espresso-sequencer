@@ -181,7 +181,9 @@ impl L1Client {
         // Sleep until approximately the right time for the desired block to appear.
         let now = U256::from(OffsetDateTime::now_utc().unix_timestamp() as u64);
         if timestamp > now {
-            sleep(Duration::from_secs((timestamp - now).as_u64())).await;
+            let dur = (timestamp - now).as_u64();
+            tracing::warn!("sleeping for {dur:?}, until {timestamp}");
+            sleep(Duration::from_secs(dur)).await;
         }
 
         // Wait until the finalized block has timestamp greater or equal to `timestamp`.
@@ -193,6 +195,11 @@ impl L1Client {
             if block.timestamp >= timestamp {
                 break block;
             }
+            tracing::info!(
+                %timestamp,
+                ?block,
+                "waiting for finalized block with sufficient timestamp"
+            );
             sleep(interval).await;
         };
 
