@@ -302,8 +302,7 @@ impl ValidatedState {
 /// Block Proposal to be verified and applied.
 struct Proposal {
     header: Header,
-    vid_common: VidCommon,
-    block_size: u64,
+    block_size: u32,
 }
 
 /// Type to hold cloned validated state and provide validation methods.
@@ -430,10 +429,11 @@ impl ValidatedTransition {
     /// Validate that proposal block size does not exceed configured
     /// [`ChainConfig.max_block_size`].
     fn validate_block_size(&self) -> Result<(), ProposalValidationError> {
-        if self.proposal.block_size > *self.expected_chain_config.max_block_size {
+        let block_size = self.proposal.block_size as u64;
+        if block_size > *self.expected_chain_config.max_block_size {
             return Err(ProposalValidationError::MaxBlockSizeExceeded {
                 max_block_size: self.expected_chain_config.max_block_size,
-                block_size: self.proposal.block_size.into(),
+                block_size: block_size.into(),
             });
         }
         Ok(())
@@ -525,7 +525,8 @@ impl ValidatedTransition {
         self.proposal
             .header
             .ns_table()
-            .validate(&PayloadByteLen::from_vid_common(&self.proposal.vid_common))
+            // Should be safe since `u32` will always fit in a `usize`.
+            .validate(&PayloadByteLen(self.proposal.block_size as usize))
             .map_err(ProposalValidationError::from)
     }
 }
@@ -875,7 +876,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             parent_leaf.clone(),
             instance.l1_client.clone(),
             Proposal {
-                block_size: VidSchemeType::get_payload_byte_len(&vid_common) as u64,
+                block_size: VidSchemeType::get_payload_byte_len(&vid_common),
                 header: proposed_header.clone(),
                 vid_common: vid_common.clone(),
             },
