@@ -108,10 +108,10 @@ pub enum ProposalValidationError {
     },
     #[error("l1_finalized has `None` value")]
     L1FinalizedNotFound,
-    #[error("l1_finalized height is decreasing: parent={parent_finalized:?} proposed={proposed_finalized:?}")]
+    #[error("l1_finalized height is decreasing: parent={parent:?} proposed={proposed:?}")]
     L1FinalizedDecrementing {
-        parent_finalized: Option<L1BlockInfo>,
-        proposed_finalized: Option<L1BlockInfo>,
+        parent: Option<(u64, u64)>,
+        proposed: Option<(u64, u64)>,
     },
     #[error("Invalid proposal: l1_head decreasinc")]
     NonIncrementingL1Head,
@@ -340,9 +340,13 @@ impl ValidatedTransition {
         let parent_finalized = self.parent_leaf.block_header().l1_finalized();
 
         if proposed_finalized < parent_finalized {
+            // We are keeping the `Option` in the error b/c its the
+            // cleanest way to represent all the different error
+            // cases. The hash seems less useful and explodes the size
+            // of the error, so we strip it out.
             return Err(ProposalValidationError::L1FinalizedDecrementing {
-                parent_finalized,
-                proposed_finalized,
+                parent: parent_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+                proposed: proposed_finalized.map(|block| (block.number, block.timestamp.as_u64())),
             });
         }
         Ok(())
