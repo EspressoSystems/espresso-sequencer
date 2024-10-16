@@ -2,12 +2,13 @@ use std::{collections::VecDeque, hash::Hash, marker::PhantomData, num::NonZeroUs
 
 use crate::{
     builder_state::{
-        BuilderState, DAProposalInfo, DaProposalMessage, MessageType, QuorumProposalMessage, RequestMessage, ResponseMessage
-    }, service::ReceivedTransaction, BuilderStateId, LegacyCommit
+        BuilderState, DAProposalInfo, DaProposalMessage, MessageType, QuorumProposalMessage,
+    },
+    service::ReceivedTransaction,
+    BuilderStateId, LegacyCommit,
 };
-use async_broadcast::{Sender as BroadcastSender};
 use async_broadcast::broadcast;
-use async_compatibility_layer::channel::{unbounded, Sender, UnboundedReceiver};
+use async_broadcast::Sender as BroadcastSender;
 use hotshot::{
     traits::{election::static_committee::StaticCommittee, BlockPayload},
     types::{BLSPubKey, SignatureKey},
@@ -34,13 +35,12 @@ use hotshot_example_types::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::service::{GlobalState};
+use crate::service::GlobalState;
 use crate::ParentBlockReferences;
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use std::sync::Arc;
 use std::time::Duration;
-
 
 #[derive(
     Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
@@ -70,25 +70,16 @@ pub async fn start_builder_state_without_event_loop(
     // set up the broadcast channels
     let (bootstrap_sender, bootstrap_receiver) =
         broadcast::<MessageType<TestTypes>>(channel_capacity);
-    let (decide_sender, decide_receiver) =
+    let (_decide_sender, decide_receiver) = broadcast::<MessageType<TestTypes>>(channel_capacity);
+    let (_da_sender, da_receiver) = broadcast::<MessageType<TestTypes>>(channel_capacity);
+    let (_quorum_sender, quorum_proposal_receiver) =
         broadcast::<MessageType<TestTypes>>(channel_capacity);
-    let (da_sender, da_receiver) =
-        broadcast::<MessageType<TestTypes>>(channel_capacity);
-    let (quorum_sender, quorum_proposal_receiver) =
-        broadcast::<MessageType<TestTypes>>(channel_capacity);
-    let (senders, receivers) = broadcast::<MessageType<TestTypes>>(channel_capacity);
-    let (tx_sender, tx_receiver) = broadcast::<Arc<ReceivedTransaction<TestTypes>>>(
-        channel_capacity,
-    );
+    let (senders, _receivers) = broadcast::<MessageType<TestTypes>>(channel_capacity);
+    let (tx_sender, tx_receiver) =
+        broadcast::<Arc<ReceivedTransaction<TestTypes>>>(channel_capacity);
 
     let genesis_vid_commitment = vid_commitment(&[], num_storage_nodes);
     let genesis_builder_commitment = BuilderCommitment::from_bytes([]);
-    let parent_block_references = ParentBlockReferences {
-        view_number: ViewNumber::genesis(),
-        vid_commitment: genesis_vid_commitment,
-        leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
-        builder_commitment: genesis_builder_commitment,
-    };
 
     // instantiate the global state
     let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
@@ -104,9 +95,9 @@ pub async fn start_builder_state_without_event_loop(
     let builder_state = BuilderState::new(
         ParentBlockReferences {
             view_number: ViewNumber::new(0),
-            vid_commitment: vid_commitment(&[], 8),
+            vid_commitment: genesis_vid_commitment,
             leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
-            builder_commitment: BuilderCommitment::from_bytes([]),
+            builder_commitment: genesis_builder_commitment,
         },
         decide_receiver.clone(),
         da_receiver.clone(),
@@ -156,7 +147,6 @@ pub async fn calc_proposal_msg(
     let seed = [round as u8; 32];
     let (pub_key, private_key) = BLSPubKey::generated_from_seed_indexed(seed, round as u64);
 
-
     // Prepare the DA proposal message
     let da_proposal_message: DaProposalMessage<TestTypes> = {
         let da_proposal = DaProposal {
@@ -168,8 +158,7 @@ pub async fn calc_proposal_msg(
         };
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let seed = [round as u8; 32];
-        let (pub_key, private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, round as u64);
+        let (pub_key, private_key) = BLSPubKey::generated_from_seed_indexed(seed, round as u64);
         let da_signature =
     <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
         &private_key,
@@ -277,7 +266,8 @@ pub async fn calc_builder_commitment(
     let block_payload =
         <TestBlockPayload as BlockPayload<TestTypes>>::from_bytes(encoded_txns, metadata);
     // get the builder commitment from the block payload
-    let payload_builder_commitment = <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(&block_payload, metadata);
+    let payload_builder_commitment =
+        <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(&block_payload, metadata);
     // form the DA proposal info
     let da_proposal_info = DAProposalInfo {
         view_number,

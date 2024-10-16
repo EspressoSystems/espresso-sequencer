@@ -464,7 +464,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // remove this entry from quorum_proposal_payload_commit_to_quorum_proposal
         self.quorum_proposal_payload_commit_to_quorum_proposal
             .remove(&(payload_builder_commitment.clone(), view_number));
-
         self.spawn_clone_that_extends_self(da_proposal_info, quorum_proposal.clone())
             .await;
     }
@@ -565,7 +564,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             quorum_proposal.data.block_header.payload_commitment(),
             quorum_proposal.data.view_number.u64()
         );
-
         // We literally fork ourselves
         self.clone_with_receiver(req_receiver)
             .spawn_clone(da_proposal_info, quorum_proposal.clone(), req_sender)
@@ -1114,7 +1112,6 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
@@ -1132,7 +1129,10 @@ mod test {
     use super::DAProposalInfo;
     use super::MessageType;
     use super::ParentBlockReferences;
-    use crate::legacy_testing::{calc_proposal_msg, calc_builder_commitment, start_builder_state_without_event_loop, TestTypes,};
+    use crate::legacy_testing::{
+        calc_builder_commitment, calc_proposal_msg, start_builder_state_without_event_loop,
+        TestTypes,
+    };
 
     /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
     /// used for testing only
@@ -1188,7 +1188,7 @@ mod test {
     /// when receiving a da proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
     #[async_std::test]
-    async fn test_process_da_proposal() {
+    async fn test_legacy_process_da_proposal() {
         async_compatibility_layer::logging::setup_logging();
         async_compatibility_layer::logging::setup_backtrace();
         tracing::info!("Testing the function `process_da_proposal` in `builder_state.rs`");
@@ -1208,7 +1208,7 @@ mod test {
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
         let (_quorum_proposal, _quorum_proposal_msg, da_proposal_msg, builder_state_id) =
             calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
-        
+
         // sub-test one
         // call process_da_proposal without matching quorum proposal message
         // da_proposal_payload_commit_to_da_proposal should insert the message
@@ -1217,7 +1217,8 @@ mod test {
             DAProposalInfo<TestTypes>,
         > = HashMap::new();
         if let MessageType::DaProposalMessage(practice_da_msg) = da_proposal_msg.clone() {
-            let (payload_builder_commitment, da_proposal_info) = calc_builder_commitment(practice_da_msg.clone()).await;
+            let (payload_builder_commitment, da_proposal_info) =
+                calc_builder_commitment(practice_da_msg.clone()).await;
 
             builder_state
                 .process_da_proposal(practice_da_msg.clone())
@@ -1318,7 +1319,7 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            panic!("global_state should have cooresponding builder_state_id as now we have matching quorum proposal.");
         }
     }
 
@@ -1327,7 +1328,7 @@ mod test {
     /// when receiving a quorum proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
     #[async_std::test]
-    async fn test_process_quorum_proposal() {
+    async fn test_legacy_process_quorum_proposal() {
         async_compatibility_layer::logging::setup_logging();
         async_compatibility_layer::logging::setup_backtrace();
         tracing::info!("Testing the function `process_quorum_proposal` in `builder_state.rs`");
@@ -1430,7 +1431,7 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            panic!("global_state should have cooresponding builder_state_id as now we have matching da proposal.");
         }
     }
 
@@ -1438,7 +1439,7 @@ mod test {
     /// It checkes whether we exit out correct builder states when there's a decide event coming in.
     /// This test also checks whether corresponding BuilderStateId is removed in global_state.
     #[async_std::test]
-    async fn test_process_decide_event() {
+    async fn test_legacy_process_decide_event() {
         async_compatibility_layer::logging::setup_logging();
         async_compatibility_layer::logging::setup_backtrace();
         tracing::info!("Testing the builder core with multiple messages from the channels");

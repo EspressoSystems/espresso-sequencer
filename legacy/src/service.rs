@@ -84,7 +84,6 @@ pub struct BlockInfo<Types: NodeType> {
     pub truncated: bool,
 }
 
-
 /// [ReceivedTransaction] represents receipt information concerning a received
 /// [NodeType::Transaction].
 #[derive(Debug)]

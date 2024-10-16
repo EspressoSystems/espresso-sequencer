@@ -1307,7 +1307,7 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            panic!("global_state should have cooresponding builder_state_id as now we have matching quorum proposal.");
         }
     }
 
@@ -1419,7 +1419,7 @@ mod test {
         {
             tracing::debug!("global_state updated successfully");
         } else {
-            panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
+            panic!("global_state should have cooresponding builder_state_id as now we have matching da proposal.");
         }
     }
 
