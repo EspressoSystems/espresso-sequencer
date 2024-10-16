@@ -38,6 +38,7 @@ mod tests {
         block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use marketplace_builder_shared::block::ParentBlockReferences;
 
     use crate::builder_state::{
         DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
@@ -45,7 +46,7 @@ mod tests {
     use crate::service::{
         handle_received_txns, GlobalState, ProxyGlobalState, ReceivedTransaction,
     };
-    use crate::{LegacyCommit, ParentBlockReferences};
+    use crate::LegacyCommit;
     use async_lock::RwLock;
     use committable::{Commitment, CommitmentBoundsArkless, Committable};
     use sha2::{Digest, Sha256};

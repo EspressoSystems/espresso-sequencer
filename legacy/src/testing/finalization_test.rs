@@ -3,7 +3,6 @@ use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 use crate::{
     builder_state::{DaProposalMessage, QuorumProposalMessage, ALLOW_EMPTY_BLOCK_PERIOD},
     service::{GlobalState, ProxyGlobalState, ReceivedTransaction},
-    BuilderStateId, ParentBlockReferences,
 };
 use async_broadcast::{broadcast, Sender};
 use async_lock::RwLock;
@@ -31,6 +30,8 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
+use marketplace_builder_shared::block::BuilderStateId;
+use marketplace_builder_shared::block::ParentBlockReferences;
 use sha2::{Digest, Sha256};
 
 use super::basic_test::{BuilderState, MessageType};
@@ -66,15 +67,15 @@ fn setup_builder_for_test() -> TestSetup {
 
     let bootstrap_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
-        view: ViewNumber::genesis(),
+        parent_view: ViewNumber::genesis(),
     };
 
     let global_state = Arc::new(RwLock::new(GlobalState::new(
         req_sender,
         tx_sender.clone(),
         bootstrap_builder_state_id.parent_commitment,
-        bootstrap_builder_state_id.view,
-        bootstrap_builder_state_id.view,
+        bootstrap_builder_state_id.parent_view,
+        bootstrap_builder_state_id.parent_view,
         0,
     )));
 
@@ -153,7 +154,7 @@ async fn process_available_blocks_round(
         let available_blocks_result = proxy_global_state
             .available_blocks(
                 &builder_state_id.parent_commitment,
-                builder_state_id.view.u64(),
+                builder_state_id.parent_view.u64(),
                 leader_pub,
                 &current_commit_signature,
             )
@@ -194,7 +195,7 @@ async fn progress_round_with_available_block_info(
     let claim_block_result = proxy_global_state
         .claim_block(
             &available_block_info.block_hash,
-            builder_state_id.view.u64(),
+            builder_state_id.parent_view.u64(),
             leader_pub,
             &signed_parent_commitment,
         )
@@ -204,7 +205,7 @@ async fn progress_round_with_available_block_info(
     let _claim_block_header_result = proxy_global_state
         .claim_block_header_input(
             &available_block_info.block_hash,
-            builder_state_id.view.u64(),
+            builder_state_id.parent_view.u64(),
             leader_pub,
             &signed_parent_commitment,
         )
@@ -258,7 +259,7 @@ async fn progress_round_with_transactions(
 ) -> BuilderStateId<TestTypes> {
     let (leader_pub, leader_priv) = BLSPubKey::generated_from_seed_indexed([0; 32], round);
     let encoded_transactions = TestTransaction::encode(&transactions);
-    let next_view = builder_state_id.view + 1;
+    let next_view = builder_state_id.parent_view + 1;
 
     // Create and send the DA Proposals and Quorum Proposals
     {
@@ -353,7 +354,7 @@ async fn progress_round_with_transactions(
 
         BuilderStateId {
             parent_commitment: payload_vid_commitment,
-            view: next_view,
+            parent_view: next_view,
         }
     }
 }
@@ -375,7 +376,7 @@ async fn test_empty_block_rate() {
 
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
-        view: ViewNumber::genesis(),
+        parent_view: ViewNumber::genesis(),
     };
 
     for round in 0..10 {
@@ -426,7 +427,7 @@ async fn test_eager_block_rate() {
 
     let mut current_builder_state_id = BuilderStateId::<TestTypes> {
         parent_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
-        view: ViewNumber::genesis(),
+        parent_view: ViewNumber::genesis(),
     };
 
     // Round 0

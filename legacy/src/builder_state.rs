@@ -10,12 +10,13 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::{VidCommitment, VidPrecomputeData},
 };
+use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
 use committable::Commitment;
 
 use crate::{
     service::{GlobalState, ReceivedTransaction},
-    BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences,
+    LegacyCommit,
 };
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
@@ -267,7 +268,7 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
     let current_commitment = quorum_proposal.data.block_header.payload_commitment();
     let current_builder_state_id = BuilderStateId::<TYPES> {
         parent_commitment: current_commitment,
-        view: current_view_number,
+        parent_view: current_view_number,
     };
 
     let global_state_read_lock = global_state.read_arc().await;
@@ -319,7 +320,7 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
     let maximum_stored_view_number_smaller_than_quorum_proposal = global_state_read_lock
         .spawned_builder_states
         .keys()
-        .map(|builder_state_id| *builder_state_id.view)
+        .map(|builder_state_id| *builder_state_id.parent_view)
         .filter(|view_number| view_number < &current_view_number)
         .max();
 
@@ -337,7 +338,7 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
                 .spawned_builder_states
                 .keys()
                 .filter(|builder_state_id| {
-                    builder_state_id.view.u64()
+                    builder_state_id.parent_view.u64()
                         == maximum_stored_view_number_smaller_than_quorum_proposal
                 })
         {
@@ -385,7 +386,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                 .map(|builder_state_id| format!(
                     "{}@{}",
                     builder_state_id.parent_commitment,
-                    builder_state_id.view.u64()
+                    builder_state_id.parent_view.u64()
                 ))
                 .collect::<Vec<String>>(),
             quorum_proposal.data.block_header.payload_commitment(),
@@ -396,7 +397,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // best [BuilderState]s to extend from.
         best_builder_states_to_extend.contains(&BuilderStateId {
             parent_commitment: self.parent_block_references.vid_commitment,
-            view: self.parent_block_references.view_number,
+            parent_view: self.parent_block_references.view_number,
         })
     }
 
@@ -643,7 +644,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         let builder_state_id = BuilderStateId {
             parent_commitment: self.parent_block_references.vid_commitment,
-            view: self.parent_block_references.view_number,
+            parent_view: self.parent_block_references.view_number,
         };
 
         {
@@ -688,7 +689,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.global_state.write_arc().await.register_builder_state(
             BuilderStateId {
                 parent_commitment: self.parent_block_references.vid_commitment,
-                view: self.parent_block_references.view_number,
+                parent_view: self.parent_block_references.view_number,
             },
             self.parent_block_references.clone(),
             req_sender,
@@ -724,7 +725,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         let should_prioritize_finalization = self
             .allow_empty_block_until
-            .map(|until| state_id.view < until)
+            .map(|until| state_id.parent_view < until)
             .unwrap_or(false);
 
         if self.tx_queue.is_empty() && !should_prioritize_finalization {
@@ -840,7 +841,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     async fn process_block_request(&mut self, req: RequestMessage<TYPES>) {
         // If a spawned clone is active then it will handle the request, otherwise the highest view num builder will handle
         if req.state_id.parent_commitment != self.parent_block_references.vid_commitment
-            || req.state_id.view != self.parent_block_references.view_number
+            || req.state_id.parent_view != self.parent_block_references.view_number
         {
             tracing::debug!(
                 "Builder {:?} Requested Builder commitment does not match the built_from_view, so ignoring it",
@@ -856,7 +857,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             .highest_view_num_builder_id
             .clone();
 
-        if highest_view_num_builder_id.view != self.parent_block_references.view_number {
+        if highest_view_num_builder_id.parent_view != self.parent_block_references.view_number {
             tracing::debug!(
                 "Builder {:?} Requested Builder commitment does not match the highest_view_num_builder_id, so ignoring it",
                 self.parent_block_references.view_number

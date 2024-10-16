@@ -22,11 +22,8 @@ pub mod service;
 pub mod testing;
 
 use async_compatibility_layer::channel::UnboundedReceiver;
-use committable::Commitment;
 use hotshot_builder_api::v0_1::builder::BuildError;
-use hotshot_types::{
-    data::Leaf, traits::node_implementation::NodeType, utils::BuilderCommitment, vid::VidCommitment,
-};
+use hotshot_types::traits::node_implementation::NodeType;
 
 /// `WaitAndKeep` is a helper enum that allows for the lazy polling of a single
 /// value from an unbound receiver.
@@ -75,50 +72,6 @@ impl<T: Clone> WaitAndKeep<T> {
                 got
             }
         }
-    }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct BlockId<Types: NodeType> {
-    hash: BuilderCommitment,
-    view: Types::Time,
-}
-
-impl<Types: NodeType> std::fmt::Display for BlockId<Types> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Block({}@{})",
-            hex::encode(self.hash.as_ref()),
-            *self.view
-        )
-    }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct BuilderStateId<Types: NodeType> {
-    parent_commitment: VidCommitment,
-    view: Types::Time,
-}
-
-impl<Types: NodeType> std::fmt::Display for BuilderStateId<Types> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BuilderState({}@{})", self.parent_commitment, *self.view)
-    }
-}
-
-/// References to the parent block that is extended to spawn the new builder state.
-#[derive(Debug, Clone)]
-pub struct ParentBlockReferences<TYPES: NodeType> {
-    pub view_number: TYPES::Time,
-    pub vid_commitment: VidCommitment,
-    pub leaf_commit: Commitment<Leaf<TYPES>>,
-    pub builder_commitment: BuilderCommitment,
-}
-// implement display for the referenced info
-impl<TYPES: NodeType> std::fmt::Display for ParentBlockReferences<TYPES> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "View Number: {:?}", self.view_number)
     }
 }
 

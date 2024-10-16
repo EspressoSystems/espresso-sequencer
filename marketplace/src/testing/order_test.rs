@@ -4,11 +4,9 @@ use hotshot_types::{
     data::QuorumProposal,
     traits::node_implementation::{ConsensusTime, NodeType},
 };
+use marketplace_builder_shared::block::BuilderStateId;
 
-use crate::{
-    service::{BuilderHooks, ProxyGlobalState},
-    utils::BuilderStateId,
-};
+use crate::service::{BuilderHooks, ProxyGlobalState};
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -31,14 +29,14 @@ struct NoOpHooks;
 impl BuilderHooks<TestTypes> for NoOpHooks {
     #[inline(always)]
     async fn process_transactions(
-        self: &Arc<Self>,
+        &self,
         transactions: Vec<<TestTypes as NodeType>::Transaction>,
     ) -> Vec<<TestTypes as NodeType>::Transaction> {
         transactions
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(self: &Arc<Self>, _event: &Event<TestTypes>) {}
+    async fn handle_hotshot_event(&self, _event: &Event<TestTypes>) {}
 }
 
 /// [`RoundTransactionBehavior`] is an enum that is used to represent different

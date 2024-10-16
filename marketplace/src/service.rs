@@ -1,4 +1,23 @@
+use std::{fmt::Debug, marker::PhantomData, time::Duration};
+
+use crate::{
+    builder_state::{
+        BuildBlockInfo, DaProposalMessage, DecideMessage, MessageType, QuorumProposalMessage,
+        RequestMessage, ResponseMessage, TransactionSource,
+    },
+    utils::LegacyCommit as _,
+};
+use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
+
 use anyhow::bail;
+pub use async_broadcast::{broadcast, RecvError, TryRecvError};
+use async_broadcast::{InactiveReceiver, Sender as BroadcastSender, TrySendError};
+use async_lock::RwLock;
+use async_trait::async_trait;
+use committable::{Commitment, Committable};
+use derivative::Derivative;
+use futures::stream::StreamExt;
+use futures::{future::BoxFuture, Stream};
 use hotshot::types::Event;
 use hotshot_builder_api::v0_3::{
     builder::{define_api, submit_api, BuildError, Error as BuilderApiError},
@@ -18,26 +37,6 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::VidCommitment,
 };
-use tracing::{error, instrument};
-use vbs::version::StaticVersion;
-
-use std::{fmt::Debug, marker::PhantomData, time::Duration};
-
-use crate::{
-    builder_state::{
-        BuildBlockInfo, DaProposalMessage, DecideMessage, MessageType, QuorumProposalMessage,
-        RequestMessage, ResponseMessage, TransactionSource,
-    },
-    utils::{BlockId, BuilderStateId, LegacyCommit as _, ParentBlockReferences},
-};
-pub use async_broadcast::{broadcast, RecvError, TryRecvError};
-use async_broadcast::{InactiveReceiver, Sender as BroadcastSender, TrySendError};
-use async_lock::RwLock;
-use async_trait::async_trait;
-use committable::{Commitment, Committable};
-use derivative::Derivative;
-use futures::stream::StreamExt;
-use futures::{future::BoxFuture, Stream};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -45,6 +44,10 @@ use std::sync::Arc;
 use std::{fmt::Display, time::Instant};
 use tagged_base64::TaggedBase64;
 use tide_disco::{app::AppError, method::ReadState, App};
+use tracing::{error, instrument};
+use vbs::version::StaticVersion;
+
+pub use marketplace_builder_shared::utils::EventServiceStream;
 
 // It holds all the necessary information for a block
 #[derive(Debug)]
@@ -608,14 +611,34 @@ pub struct BroadcastSenders<TYPES: NodeType> {
 pub trait BuilderHooks<TYPES: NodeType>: Sync + Send + 'static {
     #[inline(always)]
     async fn process_transactions(
-        self: &Arc<Self>,
+        &self,
         transactions: Vec<TYPES::Transaction>,
     ) -> Vec<TYPES::Transaction> {
         transactions
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(self: &Arc<Self>, _event: &Event<TYPES>) {}
+    async fn handle_hotshot_event(&self, _event: &Event<TYPES>) {}
+}
+
+#[async_trait]
+impl<T: ?Sized, Types> BuilderHooks<Types> for Box<T>
+where
+    Types: NodeType,
+    T: BuilderHooks<Types>,
+{
+    #[inline(always)]
+    async fn process_transactions(
+        &self,
+        transactions: Vec<Types::Transaction>,
+    ) -> Vec<Types::Transaction> {
+        (**self).process_transactions(transactions).await
+    }
+
+    #[inline(always)]
+    async fn handle_hotshot_event(&self, event: &Event<Types>) {
+        (**self).handle_hotshot_event(event).await
+    }
 }
 
 pub struct NoHooks<TYPES: NodeType>(pub PhantomData<TYPES>);
@@ -624,10 +647,13 @@ impl<TYPES: NodeType> BuilderHooks<TYPES> for NoHooks<TYPES> {}
 
 /// Run builder service,
 /// Refer to documentation for [`ProxyGlobalState`] for more details
-pub async fn run_builder_service<TYPES: NodeType<Time = ViewNumber>>(
+pub async fn run_builder_service<
+    TYPES: NodeType<Time = ViewNumber>,
+    S: Stream<Item = Event<TYPES>> + Unpin,
+>(
     hooks: Arc<impl BuilderHooks<TYPES>>,
     senders: BroadcastSenders<TYPES>,
-    hotshot_event_stream: impl Stream<Item = Event<TYPES>>,
+    hotshot_event_stream: S,
 ) -> Result<(), anyhow::Error> {
     let mut hotshot_event_stream = std::pin::pin!(hotshot_event_stream);
     loop {

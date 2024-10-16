@@ -8,12 +8,14 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
+use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
+use marketplace_builder_shared::utils::RotatingSet;
 
 use committable::Commitment;
 
 use crate::{
     service::{BroadcastReceivers, GlobalState, ReceivedTransaction},
-    utils::{BlockId, BuilderStateId, LegacyCommit as _, ParentBlockReferences, RotatingSet},
+    utils::LegacyCommit as _,
 };
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
