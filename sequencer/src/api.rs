@@ -1229,6 +1229,17 @@ mod test {
             assert_eq!(*path.index(), account);
             assert!(*path.elem().unwrap() > 0.into(), "{:?}", path.elem());
         }
+
+        // testing fee_balance api
+        let account = TestConfig::<5>::builder_key().fee_account();
+        let amount = client
+            .get::<Option<FeeAmount>>(&format!("fee-state/fee_balance/{}", account))
+            .send()
+            .await
+            .unwrap()
+            .unwrap();
+        let expected = ethers::types::U256::max_value();
+        assert_eq!(expected, amount.0);
     }
 
     #[async_std::test]
