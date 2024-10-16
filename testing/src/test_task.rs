@@ -9,11 +9,15 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
+use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::{spawn, JoinHandle};
 use async_trait::async_trait;
 use futures::future::select_all;
-use hotshot::types::{Event, Message};
+use hotshot::{
+    traits::TestableNodeImplementation,
+    types::{Event, Message},
+};
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkMessageTaskState};
 use hotshot_types::{
     message::UpgradeLock,
@@ -25,6 +29,8 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::{spawn, JoinHandle};
 use tracing::error;
+
+use crate::test_runner::Node;
 
 /// enum describing how the tasks completed
 pub enum TestResult {
@@ -45,6 +51,37 @@ pub trait TestTaskState: Send {
 
     /// Check the result of the test.
     async fn check(&self) -> TestResult;
+}
+
+/// Type alias for type-erased [`TestTaskState`] to be used for
+/// dynamic dispatch
+pub type AnyTestTaskState<TYPES> =
+    Box<dyn TestTaskState<Event = hotshot_types::event::Event<TYPES>> + Send + Sync>;
+
+#[async_trait]
+impl<TYPES: NodeType> TestTaskState for AnyTestTaskState<TYPES> {
+    type Event = Event<TYPES>;
+
+    async fn handle_event(&mut self, event: (Self::Event, usize)) -> Result<()> {
+        (**self).handle_event(event).await
+    }
+
+    async fn check(&self) -> TestResult {
+        (**self).check().await
+    }
+}
+
+#[async_trait]
+pub trait TestTaskStateSeed<TYPES, I, V>: Send
+where
+    TYPES: NodeType,
+    I: TestableNodeImplementation<TYPES>,
+    V: Versions,
+{
+    async fn into_state(
+        self: Box<Self>,
+        handles: Arc<RwLock<Vec<Node<TYPES, I, V>>>>,
+    ) -> AnyTestTaskState<TYPES>;
 }
 
 /// A basic task which loops waiting for events to come from `event_receiver`

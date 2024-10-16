@@ -133,7 +133,7 @@ where
         }
 
         let TestRunner {
-            ref launcher,
+            launcher,
             nodes,
             solver_server,
             late_start,
@@ -193,9 +193,9 @@ where
                 &TestInstanceState::default(),
             )
             .await,
-            async_delay_config: self.launcher.metadata.async_delay_config,
+            async_delay_config: launcher.metadata.async_delay_config,
             restart_contexts: HashMap::new(),
-            channel_generator: self.launcher.resource_generator.channel_generator,
+            channel_generator: launcher.resource_generator.channel_generator,
         };
         let spinning_task = TestTask::<SpinningTask<TYPES, N, I, V>>::new(
             spinning_task_state,
@@ -206,16 +206,16 @@ where
         let overall_safety_task_state = OverallSafetyTask {
             handles: Arc::clone(&handles),
             ctx: RoundCtx::default(),
-            properties: self.launcher.metadata.overall_safety_properties.clone(),
+            properties: launcher.metadata.overall_safety_properties.clone(),
             error: None,
             test_sender,
         };
 
         let consistency_task_state = ConsistencyTask {
             consensus_leaves: BTreeMap::new(),
-            safety_properties: self.launcher.metadata.overall_safety_properties,
-            ensure_upgrade: self.launcher.metadata.upgrade_view.is_some(),
-            validate_transactions: self.launcher.metadata.validate_transactions,
+            safety_properties: launcher.metadata.overall_safety_properties,
+            ensure_upgrade: launcher.metadata.upgrade_view.is_some(),
+            validate_transactions: launcher.metadata.validate_transactions,
             _pd: PhantomData,
         };
 
@@ -234,7 +234,7 @@ where
         // add view sync task
         let view_sync_task_state = ViewSyncTask {
             hit_view_sync: HashSet::new(),
-            description: self.launcher.metadata.view_sync_properties,
+            description: launcher.metadata.view_sync_properties,
             _pd: PhantomData,
         };
 
@@ -259,6 +259,15 @@ where
         }
 
         drop(nodes);
+
+        for seed in launcher.additional_test_tasks {
+            let task = TestTask::new(
+                seed.into_state(Arc::clone(&handles)).await,
+                event_rxs.clone(),
+                test_receiver.clone(),
+            );
+            task_futs.push(task.run());
+        }
 
         task_futs.push(overall_safety_task.run());
         task_futs.push(consistency_task.run());

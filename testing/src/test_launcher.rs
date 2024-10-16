@@ -20,6 +20,7 @@ use hotshot_types::{
 };
 
 use super::{test_builder::TestDescription, test_runner::TestRunner};
+use crate::test_task::TestTaskStateSeed;
 
 /// A type alias to help readability
 pub type Network<TYPES, I> = Arc<<I as NodeImplementation<TYPES>>::Network>;
@@ -45,6 +46,8 @@ pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V
     pub resource_generator: ResourceGenerators<TYPES, I>,
     /// metadata used for tasks
     pub metadata: TestDescription<TYPES, I, V>,
+    /// any additional test tasks to run
+    pub additional_test_tasks: Vec<Box<dyn TestTaskStateSeed<TYPES, I, V>>>,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestLauncher<TYPES, I, V> {

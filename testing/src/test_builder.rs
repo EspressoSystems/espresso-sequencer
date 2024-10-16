@@ -33,6 +33,7 @@ use super::{
 use crate::{
     spinning_task::SpinningTaskDescription,
     test_launcher::{Network, ResourceGenerators, TestLauncher},
+    test_task::TestTaskStateSeed,
     view_sync_task::ViewSyncTaskDescription,
 };
 
@@ -444,8 +445,21 @@ where
     /// a [`TestLauncher`] that can be used to launch the test.
     /// # Panics
     /// if some of the the configuration values are zero
-    #[must_use]
     pub fn gen_launcher(self, node_id: u64) -> TestLauncher<TYPES, I, V> {
+        self.gen_launcher_with_tasks(node_id, vec![])
+    }
+
+    /// turn a description of a test (e.g. a [`TestDescription`]) into
+    /// a [`TestLauncher`] that can be used to launch the test, with
+    /// additional testing tasks to run in test harness
+    /// # Panics
+    /// if some of the the configuration values are zero
+    #[must_use]
+    pub fn gen_launcher_with_tasks(
+        self,
+        node_id: u64,
+        additional_test_tasks: Vec<Box<dyn TestTaskStateSeed<TYPES, I, V>>>,
+    ) -> TestLauncher<TYPES, I, V> {
         let TestDescription {
             num_nodes_with_stake,
             num_bootstrap_nodes,
@@ -561,6 +575,7 @@ where
                 }),
             },
             metadata: self,
+            additional_test_tasks,
         }
         .modify_default_config(mod_config)
     }
