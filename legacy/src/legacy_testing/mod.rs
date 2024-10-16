@@ -36,9 +36,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::service::GlobalState;
-use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
+use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
 use std::sync::Arc;
 use std::time::Duration;
 
