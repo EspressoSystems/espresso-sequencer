@@ -15,7 +15,7 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::GeneralStaticCommittee,
+    traits::election::static_committee::StaticCommittee,
     types::{Event, EventType, SystemContextHandle},
     MarketplaceConfig, Memberships, SystemContext,
 };
@@ -103,13 +103,13 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             .load_consensus_state::<V>(instance_state.clone())
             .await?;
 
-        let committee_membership = GeneralStaticCommittee::new(
+        let committee_membership = StaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_nodes_with_stake.clone(),
             Topic::Global,
         );
 
-        let da_membership = GeneralStaticCommittee::new(
+        let da_membership = StaticCommittee::new(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
             Topic::Da,

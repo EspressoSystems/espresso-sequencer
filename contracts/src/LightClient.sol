@@ -33,10 +33,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
 
-    /// @notice a permissioned prover is needed to interact `newFinalizedState`
+    /// @notice when a permissioned prover is set, this event is emitted.
     event PermissionedProverRequired(address permissionedProver);
 
-    /// @notice a permissioned prover is no longer needed to interact `newFinalizedState`
+    /// @notice when the permissioned prover is unset, this event is emitted.
     event PermissionedProverNotRequired();
 
     // === System Parameters ===
@@ -53,9 +53,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     LightClientState public finalizedState;
 
     /// @notice the address of the prover that can call the newFinalizedState function when the
-    /// contract is
-    /// in permissioned prover mode. This address is address(0) when the contract is not in the
-    /// permissioned prover mode
+    /// contract is in permissioned prover mode. This address is address(0) when the contract is
+    /// not in permissioned prover mode
     address public permissionedProver;
 
     /// @notice Max number of seconds worth of state commitments to record based on this block
@@ -148,7 +147,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice This contract is called by the proxy when you deploy this contract
     /// @param _genesis The initial state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
-    /// history
+    /// history. the min retention period allowed is 1 hour and max 365 days
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory _genesis,
@@ -182,27 +181,30 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Initialization of contract variables happens in this method because the LightClient
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param _genesis The initial state of the light client
-    /// @param _genesisStakeTableState The initial stake state of the light client
+    /// @param _genesisStakeTableState The initial stake table state of the light client
     /// @param _stateHistoryRetentionPeriod The maximum retention period (in seconds) for the state
-    /// history
+    /// history. The min retention period allowed is 1 hour and the max is 365 days.
     function _initializeState(
         LightClientState memory _genesis,
         StakeTableState memory _genesisStakeTableState,
         uint32 _stateHistoryRetentionPeriod
     ) internal {
-        // stake table commitments and threshold cannot be zero, otherwise it's impossible to
-        // generate valid proof to move finalized state forward.
-        // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
-        // feeLedgerComm can be zero, if we optionally support fee ledger yet.
+        // The viewNum and blockHeight in the genesis state must be zero to indicate that this is
+        // the initial state. Stake table commitments and threshold cannot be zero, otherwise it's
+        // impossible to generate valid proof to move finalized state forward. The
+        // stateHistoryRetentionPeriod must be at least 1 hour and no more than 365 days
+        // to ensure proper state retention.
         if (
             _genesis.viewNum != 0 || _genesis.blockHeight != 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.blsKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.schnorrKeyComm) == 0
                 || BN254.ScalarField.unwrap(_genesisStakeTableState.amountComm) == 0
-                || _genesisStakeTableState.threshold == 0
+                || _genesisStakeTableState.threshold == 0 || _stateHistoryRetentionPeriod < 1 hours
+                || _stateHistoryRetentionPeriod > 365 days
         ) {
             revert InvalidArgs();
         }
+
         genesisState = _genesis;
         genesisStakeTableState = _genesisStakeTableState;
         finalizedState = _genesis;
@@ -219,8 +221,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// period has to be submitted
     /// before any newer state can be accepted since the stake table commitments of that block
     /// become the snapshots used for vote verifications later on.
-    /// @dev in this version, only a permissioned prover doing the computations
-    /// can call this function
+    /// @dev if the permissionedProver is set, only the permissionedProver can call this function
     /// @dev the state history for `stateHistoryRetentionPeriod` L1 blocks are also recorded in the
     /// `stateHistoryCommitments` array
     /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
@@ -279,10 +280,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice set the permissionedProverMode to true and set the permissionedProver to the
-    /// non-zero address provided
+    /// @notice set the permissionedProver to the non-zero address provided
     /// @dev this function can also be used to update the permissioned prover once it's a different
-    /// address
+    /// address to the current permissioned prover
     function setPermissionedProver(address prover) public virtual onlyOwner {
         if (prover == address(0)) {
             revert InvalidAddress();
@@ -294,8 +294,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit PermissionedProverRequired(permissionedProver);
     }
 
-    /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
-    /// @dev if it was already disabled (permissioneProverMode == false), then revert with
+    /// @notice set the permissionedProver to address(0)
+    /// @dev if it was already disabled, then revert with the error, NoChangeRequired
     function disablePermissionedProverMode() public virtual onlyOwner {
         if (isPermissionedProverEnabled()) {
             permissionedProver = address(0);
@@ -348,11 +348,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice checks if the state updates lag behind the specified block threshold based on the
-    /// provided
-    /// block number.
-    /// @param blockNumber The block number to compare against the latest state updates
-    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind
-    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false
+    /// provided block number.
+    /// @param blockNumber The block number to compare against the latest state updates.
+    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind.
+    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false.
     function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 blockThreshold)
         public
         view
@@ -362,8 +361,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 updatesCount = stateHistoryCommitments.length;
 
         // Handling Edge Cases
-        // Edgecase 1: The block is in the future or
-        // before HotShot was live, allow for at least two updates before considering HotShot live
+        // Edgecase 1: blockNumber is greater than current block.number or
+        // less than 3 updates exist which means the history is insufficient to determine a lag.
         if (blockNumber > block.number || updatesCount < 3) {
             revert InsufficientSnapshotHistory();
         }
@@ -371,38 +370,46 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 prevBlock;
         bool prevUpdateFound;
 
+        // Start searching from the latest update
         uint256 i = updatesCount - 1;
         while (!prevUpdateFound) {
+            // Skip the first two updates as per logic mentioned above.
+            if (i < 2) {
+                break;
+            }
+
+            // Stop if we've already assessed the first recorded state in the history.
+            if (i < stateHistoryFirstIndex) {
+                break;
+            }
+
+            // Find the first update where the block height is less than or equal to the given
+            // blockNumber.
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
                 prevUpdateFound = true;
                 prevBlock = stateHistoryCommitments[i].l1BlockHeight;
             }
 
-            // We don't consider the lag time for the first two updates
-            if (i < 2) {
-                break;
-            }
-
-            // We've reached the first recorded block
-            if (i == stateHistoryFirstIndex) {
-                break;
-            }
             i--;
         }
 
-        // If no snapshot is found, we don't have enough history stored
-        // to tell whether HotShot was down.
+        // If no snapshot is found, there is insufficient history to determine the lag.
         if (!prevUpdateFound) {
             revert InsufficientSnapshotHistory();
         }
 
+        // If the lag exceeds the user specified, blockThreshold, return true.
         return blockNumber - prevBlock > blockThreshold;
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
-    /// the provided HotShot height
+    /// the provided hotShotBlockHeight where the block height in the array is greater than
+    // or equal to the provided hotShotBlockHeight.
+    /// @dev if the provided hotShotBlockHeight is greater than the latest commitment in the array,
+    /// the function reverts.
     /// @param hotShotBlockHeight the HotShot block height
     /// @return hotShotBlockCommRoot the HotShot commitment root
+    /// @return hotshotBlockHeight the HotShot block height for the corresponding commitment root
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
@@ -410,25 +417,20 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         returns (BN254.ScalarField hotShotBlockCommRoot, uint64 hotshotBlockHeight)
     {
         uint256 commitmentsHeight = stateHistoryCommitments.length;
-        if (hotShotBlockHeight >= stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
+        if (hotShotBlockHeight > stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight)
         {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
-            if (stateHistoryCommitments[i].hotShotBlockHeight > hotShotBlockHeight) {
+            if (stateHistoryCommitments[i].hotShotBlockHeight >= hotShotBlockHeight) {
                 return (
                     stateHistoryCommitments[i].hotShotBlockCommRoot,
                     stateHistoryCommitments[i].hotShotBlockHeight
                 );
             }
         }
-
-        return (
-            stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockCommRoot,
-            stateHistoryCommitments[commitmentsHeight - 1].hotShotBlockHeight
-        );
     }
 
     /// @notice get the number of state history commitments
@@ -440,11 +442,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice sets the maximum retention period for storing block state history.
     /// @param historySeconds The maximum number of seconds for which state history updates
     /// will be stored, based on the block timestamp. It must be greater than or equal to
-    /// the current state history retention period and must be at least 1 hour.
-    /// @dev Reverts with `InvalidMaxStateHistory` if the provided value is less than 1 hour
-    /// or less than or equal to the current state history retention period.
+    /// the current state history retention period and must be at least 1 hour and max 365 days.
+    /// @dev Reverts with `InvalidMaxStateHistory` if the provided value is less than 1 hour,
+    /// more than 365 days or less than or equal to the current state history retention period.
     function setstateHistoryRetentionPeriod(uint32 historySeconds) public onlyOwner {
-        if (historySeconds < 1 hours || historySeconds <= stateHistoryRetentionPeriod) {
+        if (
+            historySeconds < 1 hours || historySeconds > 365 days
+                || historySeconds <= stateHistoryRetentionPeriod
+        ) {
             revert InvalidMaxStateHistory();
         }
 
