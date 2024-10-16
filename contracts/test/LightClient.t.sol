@@ -563,7 +563,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
     function testFuzz_setstateHistoryRetentionPeriod(uint32 stateHistoryRetentionPeriod) public {
         vm.prank(admin);
-        vm.assume(stateHistoryRetentionPeriod > 1 days);
+        vm.assume(stateHistoryRetentionPeriod > 1 days && stateHistoryRetentionPeriod <= 365 days);
         lc.setstateHistoryRetentionPeriod(stateHistoryRetentionPeriod);
         assertEq(stateHistoryRetentionPeriod, lc.stateHistoryRetentionPeriod());
     }
@@ -571,6 +571,12 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertNonAdminSetMaxStateHistoryAllowed() public {
         vm.expectRevert();
         lc.setstateHistoryRetentionPeriod(1 days);
+    }
+
+    function test_revertWhenTooLargeStateHistoryRetentionPeriod() public {
+        vm.prank(admin);
+        vm.expectRevert();
+        lc.setstateHistoryRetentionPeriod(366 days);
     }
 
     function test_revertSetMaxStateHistoryAllowedWhenInvalidValueSent() public {
@@ -1156,13 +1162,28 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         lc.newFinalizedState(newState, newProof);
 
         // Test for a smaller hotShotBlockHeight
-        (BN254.ScalarField blockComm, uint64 blockHeight) =
+        (BN254.ScalarField hotShotBlockComm, uint64 hotShotBlockHeight) =
             lc.getHotShotCommitment(newState.blockHeight - 1);
-        assertEqBN254(blockComm, newState.blockCommRoot);
-        assertEq(blockHeight, newState.blockHeight);
+        assertEqBN254(hotShotBlockComm, newState.blockCommRoot);
+        assertEq(hotShotBlockHeight, newState.blockHeight);
+
+        // Test for max hotShotBlockHeight stored on contract
+        // Get the highest HotShot blockheight recorded
+        uint256 numCommitments = lc.getStateHistoryCount();
+        (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(numCommitments - 1);
+        (BN254.ScalarField blockComm, uint64 blockHeight) =
+            lc.getHotShotCommitment(hotShotBlockHeight);
+        assertEqBN254(hotShotBlockComm, blockComm);
+        assertEq(hotShotBlockHeight, blockHeight);
+
+        // Get the smallest HotShot blockheight recorded
+        (,, hotShotBlockHeight, hotShotBlockComm) = lc.stateHistoryCommitments(0);
+        (blockComm, blockHeight) = lc.getHotShotCommitment(hotShotBlockHeight);
+        assertEqBN254(hotShotBlockComm, blockComm);
+        assertEq(hotShotBlockHeight, blockHeight);
     }
 
-    function test_revertWhenGetHotShotCommitmentInvalidHigh() public {
+    function test_revertWhenGetHotShotCommitmentInvalidHeight() public {
         // Get the highest HotShot blockheight recorded
         uint256 numCommitments = lc.getStateHistoryCount();
         (,, uint64 blockHeight,) = lc.stateHistoryCommitments(numCommitments - 1);

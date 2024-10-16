@@ -6,8 +6,8 @@ edition = { workspace = true }
 publish = false
 
 [[test]]
-name = "test_demo_native"
-path = "demo_native.rs"
+name = "integration"
+path = "main.rs"
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -19,3 +19,4 @@ ethers = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true, features = ["json", "blocking"] }
 surf-disco = { workspace = true }
+vbs = { workspace = true }
