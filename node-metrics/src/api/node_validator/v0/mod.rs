@@ -5,7 +5,7 @@ use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
 use async_std::task::JoinHandle;
-use espresso_types::SeqTypes;
+use espresso_types::{BackoffParams, SeqTypes};
 use futures::channel::mpsc::SendError;
 use futures::future::Either;
 use futures::{
@@ -25,6 +25,7 @@ use std::future::Future;
 use std::io::BufRead;
 use std::pin::Pin;
 use std::str::FromStr;
+use std::time::Duration;
 use tide_disco::socket::Connection;
 use tide_disco::{api::ApiError, Api};
 use url::Url;
@@ -510,6 +511,17 @@ impl LeafStreamRetriever for HotshotQueryServiceLeafStreamRetriever {
     }
 }
 
+/// [RetrieveLeafStreamError] indicates the various failure conditions that can
+/// occur when attempting to retrieve a stream of [Leaf]s using the
+/// [ProcessProduceLeafStreamTask::retrieve_leaf_stream] function.
+enum RetrieveLeafStreamError {
+    /// [MaxAttemptsExceeded] indicates that the maximum number of attempts to
+    /// attempt to retrieve the [Stream] of [Leaf]s has been exceeded.
+    /// In this case, it doesn't make sense to continue to re-attempt to
+    /// reconnect to the service, as it does not seem to be available.
+    MaxAttemptsExceeded,
+}
+
 /// [ProcessProduceLeafStreamTask] is a task that produce a stream of [Leaf]s
 /// from the Hotshot Query Service.  It will attempt to retrieve the [Leaf]s
 /// from the Hotshot Query Service and then send them to the [Sink] provided.
@@ -526,11 +538,11 @@ impl ProcessProduceLeafStreamTask {
     /// returned state.
     pub fn new<R, K>(leaf_stream_retriever: R, leaf_sender: K) -> Self
     where
-        R: LeafStreamRetriever<Item = Leaf<SeqTypes>> + 'static,
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>> + Send + Sync + 'static,
         K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
         // let future = Self::process_consume_leaf_stream(leaf_stream_retriever, leaf_sender);
-        let task_handle = async_std::task::spawn(Self::process_consume_leaf_stream(
+        let task_handle = async_std::task::spawn(Self::connect_and_process_leaves(
             leaf_stream_retriever,
             leaf_sender,
         ));
@@ -540,28 +552,94 @@ impl ProcessProduceLeafStreamTask {
         }
     }
 
+    async fn connect_and_process_leaves<R, K>(leaf_stream_retriever: R, leaf_sender: K)
+    where
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
+        K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        // We want to try and ensure that we are connected to the HotShot Query
+        // Service, and are consuming leaves.
+        // - If we are able to connect, then we can start relaying Leaves into
+        //   the leaf sender.
+        // - If we are not able to connect, then we should sleep, and retry
+        //   until we are able to reconnect.  Each failure **should** make some
+        //   noise so that if we are never able to reconnect, we are at least
+        //   telling someone about it.
+        // - If the task for consuming the leaves completes, then we should
+        //   also attempt to reestablish the connection to start consuming
+        //   the leave again.
+
+        loop {
+            // Retrieve a stream
+            let Ok(stream) = Self::retrieve_leaf_stream(&leaf_stream_retriever).await else {
+                panic!("failed to retrieve leaf stream");
+            };
+
+            // Consume the leaves of a stream
+            Self::process_consume_leaf_stream::<R, K>(stream, leaf_sender.clone()).await;
+            tracing::warn!("leaf stream ended, will attempt to re-acquire leaf stream");
+        }
+    }
+
+    /// [retrieve_leaf_stream] attempts to retrieve the Stream of Leaves from
+    /// the given [LeafStreamRetriever].
+    ///
+    /// This function will loop on failure until it is able to retrieve the
+    /// [Stream].  This does mean that it could potentially get in a state
+    /// where it can loop indefinitely.
+    ///
+    /// This function also implements exponential backoff with a maximum
+    /// delay of 5 seconds.
+    async fn retrieve_leaf_stream<R>(
+        leaf_stream_receiver: &R,
+    ) -> Result<R::Stream, RetrieveLeafStreamError>
+    where
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
+    {
+        let backoff_params = BackoffParams::default();
+        let mut delay = Duration::ZERO;
+
+        for attempt in 1..=100 {
+            let leaves_stream_result = leaf_stream_receiver.retrieve_stream(None).await;
+
+            let leaves_stream = match leaves_stream_result {
+                Err(error) => {
+                    // We failed to retrieve the stream. We will try again, but we
+                    // should sleep for a bit before so as not to overwhelm the
+                    // service.
+                    tracing::warn!(
+                        "attempt {attempt} to connect to leaf stream failed with error {error}"
+                    );
+
+                    // Our retry penalty will be a minimum of 100ms, and a maximum
+                    // of 5 seconds.
+                    // For every failed iteration, we will double our delay, up
+                    // to the maximum of 5 seconds.
+
+                    delay = backoff_params.backoff(delay);
+                    async_std::task::sleep(delay).await;
+                    continue;
+                }
+
+                Ok(leaves_stream) => leaves_stream,
+            };
+
+            return Ok(leaves_stream);
+        }
+
+        Err(RetrieveLeafStreamError::MaxAttemptsExceeded)
+    }
+
     /// [process_consume_leaf_stream] produces a stream of [Leaf]s from the
     /// Hotshot Query Service.  It will attempt to retrieve the [Leaf]s from the
     /// Hotshot Query Service and then send them to the [Sink] provided.  If the
     /// [Sink] is closed, or if the Stream ends prematurely, then the function
     /// will return.
-    async fn process_consume_leaf_stream<R, K>(leaf_stream_retriever: R, leaf_sender: K)
+    async fn process_consume_leaf_stream<R, K>(leaves_stream: R::Stream, leaf_sender: K)
     where
         R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
         K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        // Alright, let's start processing leaves
-        // TODO: implement retry logic with backoff and ultimately fail if
-        //       unable to retrieve the stream within a time frame.
-        let leaves_stream_result = leaf_stream_retriever.retrieve_stream(None).await;
-        let leaves_stream = match leaves_stream_result {
-            Ok(leaves_stream) => leaves_stream,
-            Err(err) => {
-                tracing::info!("retrieve leaves stream failed: {}", err);
-                return;
-            }
-        };
-
         let mut leaf_sender = leaf_sender;
         let mut leaves_stream = leaves_stream;
 

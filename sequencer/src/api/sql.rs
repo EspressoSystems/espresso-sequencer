@@ -1,15 +1,17 @@
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
+
 use espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccountProof, FeeMerkleTree};
 use ethers::prelude::Address;
+use hotshot_query_service::data_source::storage::sql::Write;
 use hotshot_query_service::{
     data_source::{
         sql::{Config, SqlDataSource, Transaction},
-        storage::SqlStorage,
+        storage::{sql::query_as, MerklizedStateStorage, SqlStorage},
         VersionedDataSource,
     },
-    merklized_state::{MerklizedStateDataSource, Snapshot},
+    merklized_state::Snapshot,
     Resolvable,
 };
 use hotshot_types::data::ViewNumber;
@@ -20,10 +22,7 @@ use super::{
     AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    persistence::{
-        sql::{sql_param, Options},
-        ChainConfigPersistence,
-    },
+    persistence::{sql::Options, ChainConfigPersistence},
     SeqTypes,
 };
 
@@ -115,19 +114,15 @@ impl CatchupDataSource for SqlStorage {
         &self,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        let query = self
-            .read()
-            .await
-            .context(format!(
-                "opening transaction to fetch chain config {commitment}"
-            ))?
-            .query_one(
-                "SELECT * from chain_config where commitment = $1",
-                [&commitment.to_string()],
-            )
-            .await?;
+        let mut tx = self.read().await.context(format!(
+            "opening transaction to fetch chain config {commitment}"
+        ))?;
 
-        let data: Vec<u8> = query.try_get("data")?;
+        let (data,) = query_as::<(Vec<u8>,)>("SELECT * from chain_config where commitment = $1")
+            .bind(commitment.to_string())
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
 
         bincode::deserialize(&data[..]).context("failed to deserialize")
     }
@@ -149,7 +144,7 @@ impl CatchupDataSource for DataSource {
 }
 
 #[async_trait]
-impl<'a> ChainConfigPersistence for Transaction<'a> {
+impl ChainConfigPersistence for Transaction<Write> {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
         let commitment = chain_config.commitment();
         let data = bincode::serialize(&chain_config)?;
@@ -157,7 +152,7 @@ impl<'a> ChainConfigPersistence for Transaction<'a> {
             "chain_config",
             ["commitment", "data"],
             ["commitment"],
-            [[sql_param(&(commitment.to_string())), sql_param(&data)]],
+            [(commitment.to_string(), data)],
         )
         .await
         .map_err(Into::into)

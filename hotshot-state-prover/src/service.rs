@@ -554,10 +554,7 @@ mod test {
 
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
-    use ethers::{
-        types::H160,
-        utils::{Anvil, AnvilInstance},
-    };
+    use ethers::utils::{Anvil, AnvilInstance};
     use hotshot_contract_adapter::light_client::{
         LightClientConstructorArgs, ParsedStakeTableState,
     };
@@ -565,8 +562,10 @@ mod test {
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
-    use sequencer_utils::{deployer, test_utils::setup_test};
-    use std::str::FromStr;
+    use sequencer_utils::{
+        deployer::{self, test_helpers::deploy_light_client_contract_as_proxy_for_test},
+        test_utils::setup_test,
+    };
 
     use super::*;
     use crate::mock_ledger::{MockLedger, MockSystemParam};
@@ -688,9 +687,37 @@ mod test {
         )
         .await?;
 
-        let proxy = LightClient::new(address, l1_wallet.clone());
+        let light_client_contract = LightClient::new(address, l1_wallet.clone());
 
-        Ok((l1_wallet, proxy))
+        Ok((l1_wallet, light_client_contract))
+    }
+
+    async fn deploy_contract_as_proxy_for_test(
+        anvil: &AnvilInstance,
+        genesis: ParsedLightClientState,
+        stake_genesis: ParsedStakeTableState,
+    ) -> Result<(Arc<SignerWallet>, LightClient<SignerWallet>)> {
+        let provider = Provider::<Http>::try_from(anvil.endpoint())?;
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
+        let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
+        let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
+            light_client_state: genesis,
+            stake_table_state: stake_genesis,
+            max_history_seconds: MAX_HISTORY_SECONDS,
+        };
+
+        let mut contracts = deployer::Contracts::default();
+        let proxy_address = deploy_light_client_contract_as_proxy_for_test(
+            l1_wallet.clone(),
+            &mut contracts,
+            Some(genesis_constructor_args),
+        )
+        .await?;
+
+        let light_client_contract = LightClient::new(proxy_address, l1_wallet.clone());
+
+        Ok((l1_wallet, light_client_contract))
     }
 
     impl StateProverConfig {
@@ -719,13 +746,31 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_validate_light_contract_is_proxy() {
-        // set the light client address to an address known to be a proxy
+    async fn test_validate_light_contract_is_proxy() -> Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let dummy_genesis = ParsedLightClientState::dummy_genesis();
+        let dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+        let (_wallet, contract) = deploy_contract_as_proxy_for_test(
+            &anvil,
+            dummy_genesis.clone(),
+            dummy_stake_genesis.clone(),
+        )
+        .await?;
+
+        // now test if we can read from the contract
+        let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
+        assert_eq!(genesis, dummy_genesis);
+
+        let stake_genesis: ParsedStakeTableState =
+            contract.genesis_stake_table_state().await?.into();
+        assert_eq!(stake_genesis, dummy_stake_genesis);
+
         let config = StateProverConfig {
-            light_client_address: H160::from_str("0x5B17D2d923E27341FC2753251f11aC08fDC20E0d")
-                .expect("Invalid Ethereum address"),
-            provider: Url::from_str("https://ethereum-sepolia.publicnode.com")
-                .expect("Invalid URL"),
+            provider: Url::parse(anvil.endpoint().as_str())
+                .expect("Cannot parse anvil endpoint to URL."),
+            light_client_address: contract.clone().address(),
             ..Default::default()
         };
 
@@ -736,21 +781,36 @@ mod test {
             result.is_ok(),
             "Expected Light Client contract to be a proxy, but it was not"
         );
+        Ok(())
     }
 
     #[async_std::test]
-    async fn test_validate_light_contract_is_not_a_proxy() {
-        // set the light client address to an address known not to be a proxy
+    async fn test_validate_light_contract_is_not_a_proxy() -> Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let dummy_genesis = ParsedLightClientState::dummy_genesis();
+        let dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+        let (_wallet, contract) =
+            deploy_contract_for_test(&anvil, dummy_genesis.clone(), dummy_stake_genesis.clone())
+                .await?;
+
+        // now test if we can read from the contract
+        let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
+        assert_eq!(genesis, dummy_genesis);
+
+        let stake_genesis: ParsedStakeTableState =
+            contract.genesis_stake_table_state().await?.into();
+        assert_eq!(stake_genesis, dummy_stake_genesis);
+
         let config = StateProverConfig {
-            light_client_address: H160::from_str("0xa15bb66138824a1c7167f5e85b957d04dd34e468")
-                .expect("Invalid Ethereum address"),
-            provider: Url::from_str("https://ethereum-sepolia.publicnode.com")
-                .expect("Invalid URL"),
+            provider: Url::parse(anvil.endpoint().as_str())
+                .expect("Cannot parse anvil endpoint to URL."),
+            light_client_address: contract.clone().address(),
             ..Default::default()
         };
 
         let result = config.validate_light_client_contract().await;
-
         // check if the result is an error
         if let Err(e) = result {
             // assert that the error message contains "Light Client contract's address is not a proxy"
@@ -760,6 +820,7 @@ mod test {
         } else {
             panic!("Expected the light contract to not be a proxy, but the validation succeeded");
         }
+        Ok(())
     }
 
     #[async_std::test]
@@ -791,6 +852,7 @@ mod test {
 
         assert_eq!(state, genesis.into());
         assert_eq!(st_state, stake_genesis.into());
+
         Ok(())
     }
 
