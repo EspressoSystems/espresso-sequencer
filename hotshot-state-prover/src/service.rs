@@ -19,7 +19,7 @@ use ethers::middleware::{
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    middleware::{gas_oracle::GasOracleError, SignerMiddleware},
+    middleware::SignerMiddleware,
     providers::{Http, Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
     types::{transaction::eip2718::TypedTransaction, Address, U256},
@@ -319,15 +319,21 @@ pub async fn submit_state_and_proof(
     // only use gas oracle for mainnet
     if contract.client_ref().get_chainid().await?.as_u64() == 1 {
         let gas_oracle = BlockNative::new(None).category(GasCategory::SafeLow);
-        let (max_fee, priority_fee) = gas_oracle.estimate_eip1559_fees().await?;
-        if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
-            inner.max_fee_per_gas = Some(max_fee);
-            inner.max_priority_fee_per_gas = Some(priority_fee);
-            tracing::info!(
-                "Setting maxFeePerGas: {}; maxPriorityFeePerGas to: {}",
-                max_fee,
-                priority_fee
-            );
+        match gas_oracle.estimate_eip1559_fees().await {
+            Ok((max_fee, priority_fee)) => {
+                if let TypedTransaction::Eip1559(inner) = &mut tx.tx {
+                    inner.max_fee_per_gas = Some(max_fee);
+                    inner.max_priority_fee_per_gas = Some(priority_fee);
+                    tracing::info!(
+                        "Setting maxFeePerGas: {}; maxPriorityFeePerGas to: {}",
+                        max_fee,
+                        priority_fee
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!("!! BlockNative Price Oracle failed: {}", e);
+            }
         }
     }
 
@@ -565,12 +571,6 @@ impl From<ProviderError> for ProverError {
 impl From<SignerMiddlewareError<Provider<Http>, LocalWallet>> for ProverError {
     fn from(err: SignerMiddlewareError<Provider<Http>, LocalWallet>) -> Self {
         Self::ContractError(anyhow!("{}", err))
-    }
-}
-
-impl From<GasOracleError> for ProverError {
-    fn from(err: GasOracleError) -> Self {
-        Self::NetworkError(anyhow!("GasOracle Error: {}", err))
     }
 }
 
