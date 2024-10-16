@@ -96,7 +96,7 @@ pub enum ProposalValidationError {
     #[error("Some fee amount or their sum total out of range")]
     SomeFeeAmountOutOfRange,
     #[error("Invalid timestamp: proposal={proposal_timestamp}, parent={parent_timestamp}")]
-    InvalidTimestampNonIncrementing {
+    DecrementingTimestamp {
         proposal_timestamp: u64,
         parent_timestamp: u64,
     },
@@ -305,6 +305,40 @@ struct Proposal {
     block_size: u32,
 }
 
+impl Proposal {
+    /// Validate timestamp is not decreasing relative to parent.
+    fn validate_timestamp_non_dec(
+        &self,
+        parent_timestamp: u64,
+    ) -> Result<(), ProposalValidationError> {
+        if self.header.timestamp() < parent_timestamp {
+            return Err(ProposalValidationError::DecrementingTimestamp {
+                proposal_timestamp: self.header.timestamp(),
+                parent_timestamp,
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Validate timestamp is within a given tolerance of system
+    /// time. Tolerance is currently 12 seconds. This value may be
+    /// moved to configuration in the future.
+    fn validate_timestamp_drift(&self, system_time: u64) -> Result<(), ProposalValidationError> {
+        // TODO 12 seconds of tolerance should be enough for reasonably
+        // configured nodes, but we should make this configurable.
+        let diff = self.header.timestamp().abs_diff(system_time);
+        if diff > 12 {
+            return Err(ProposalValidationError::InvalidTimestampDrift {
+                proposal: self.header.timestamp(),
+                system: system_time,
+                diff,
+            });
+        }
+
+        Ok(())
+    }
+}
 /// Type to hold cloned validated state and provide validation methods.
 struct ValidatedTransition {
     state: ValidatedState,
@@ -476,27 +510,14 @@ impl ValidatedTransition {
     /// in the future.
     fn validate_timestamp(&self) -> Result<(), ProposalValidationError> {
         let parent_header = self.parent_leaf.block_header();
-        // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
-        if self.proposal.header.timestamp() < parent_header.timestamp() {
-            return Err(ProposalValidationError::InvalidTimestampNonIncrementing {
-                proposal_timestamp: self.proposal.header.timestamp(),
-                parent_timestamp: parent_header.timestamp(),
-            });
-        }
+
+        self.proposal
+            .validate_timestamp_non_dec(parent_header.timestamp())?;
 
         // Validate timestamp hasn't drifted too much from system time.
         // Do this check first so we don't add unnecessary drift.
         let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        // TODO 12 seconds of tolerance should be enough for reasonably
-        // configured nodes, but we should make this configurable.
-        let diff = self.proposal.header.timestamp().abs_diff(system_time);
-        if diff > 12 {
-            return Err(ProposalValidationError::InvalidTimestampDrift {
-                proposal: self.proposal.header.timestamp(),
-                system: system_time,
-                diff,
-            });
-        }
+        self.proposal.validate_timestamp_drift(system_time)?;
 
         Ok(())
     }
@@ -1046,12 +1067,35 @@ mod test {
     }
 
     impl Proposal {
-        async fn mock<const BLOCK_SIZE: usize>() -> Self {
+        async fn mock() -> Self {
+            const BLOCK_SIZE: usize = 10;
             let payload = [0; BLOCK_SIZE];
             let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
             let instance = NodeState::mock();
             let parent_leaf = Leaf::genesis(&instance.genesis_state, &instance).await;
             let header = parent_leaf.block_header().clone();
+            let block_size = BLOCK_SIZE as u32;
+            Self { header, block_size }
+        }
+
+        async fn mock_block_size<const BLOCK_SIZE: usize>() -> Self {
+            let payload = [0; BLOCK_SIZE];
+            let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+            let instance = NodeState::mock();
+            let parent_leaf = Leaf::genesis(&instance.genesis_state, &instance).await;
+            let header = parent_leaf.block_header().clone();
+            let block_size = BLOCK_SIZE as u32;
+            Self { header, block_size }
+        }
+
+        async fn mock_timestamp(timestamp: u64) -> Self {
+            const BLOCK_SIZE: usize = 10;
+            let payload = [0; BLOCK_SIZE];
+            let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+            let instance = NodeState::mock();
+            let parent_leaf = Leaf::genesis(&instance.genesis_state, &instance).await;
+            let mut header = parent_leaf.block_header().clone();
+            *header.timestamp_mut() = timestamp;
             let block_size = BLOCK_SIZE as u32;
             Self { header, block_size }
         }
@@ -1149,12 +1193,11 @@ mod test {
         let state = ValidatedState::default();
         let expected_chain_config = ChainConfig {
             max_block_size: BlockSize::from_integer(MAX_BLOCK_SIZE as u64).unwrap(),
-            base_fee: 0.into(),
             ..state.chain_config.resolve().unwrap()
         };
         let instance = NodeState::mock().with_chain_config(expected_chain_config);
 
-        let proposal = Proposal::mock::<20>().await;
+        let proposal = Proposal::mock_block_size::<20>().await;
         let block_size = proposal.block_size;
 
         // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
@@ -1180,20 +1223,15 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let max_block_size = 10;
-
         let state = ValidatedState::default();
         let instance = NodeState::mock().with_chain_config(ChainConfig {
-            base_fee: 1000.into(), // High base fee
-            max_block_size: max_block_size.into(),
+            base_fee: 1000.into(), // High expected base fee
             ..state.chain_config.resolve().unwrap()
         });
-        // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
-        // b/c version in `Leaf::genesis` is set to 1
+
         let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
-
-        let proposal = Proposal::mock::<10>().await;
+        let proposal = Proposal::mock_block_size::<10>().await;
 
         let err = ValidatedTransition::mock(instance.clone(), proposal)
             .await
@@ -1216,46 +1254,112 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let max_block_size = 10;
-
-        let state = ValidatedState::default();
-        let instance = NodeState::mock().with_chain_config(ChainConfig {
-            base_fee: 1000.into(), // High base fee
-            max_block_size: max_block_size.into(),
-            ..state.chain_config.resolve().unwrap()
-        });
-        // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
-        // b/c version in `Leaf::genesis` is set to 1
+        let instance = NodeState::mock();
         let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
 
-        let proposal = Proposal::mock::<10>().await;
-        let proposed_height = proposal.header.height();
+        let proposal = Proposal::mock_block_size::<10>().await;
+        let proposal_height = proposal.header.height();
 
         let err = ValidatedTransition::mock(instance.clone(), proposal)
             .await
             .validate_height()
             .unwrap_err();
 
-        // Validation fails because the proposal is using same default block height.
+        // Validation fails because the proposal is using same default.
         tracing::info!(%err, "task failed successfully");
         assert_eq!(
             ProposalValidationError::InvalidHeight {
                 parent_height: header.height(),
-                proposal_height: proposed_height
+                proposal_height
             },
             err
         );
 
-        // Success case
-        let mut proposal = Proposal::mock::<10>().await;
+        // Success case. Increment height on proposal.
+        let mut proposal = Proposal::mock_block_size::<10>().await;
         *proposal.header.height_mut() += 1;
-        let proposed_height = proposal.header.height();
 
         ValidatedTransition::mock(instance.clone(), proposal)
             .await
             .validate_height()
             .unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validation_timestamp_non_dec() {
+        setup_logging();
+        setup_backtrace();
+
+        let proposal = Proposal::mock_block_size::<10>().await;
+        let proposal_timestamp = proposal.header.timestamp();
+        let err = proposal.validate_timestamp_non_dec(u64::MAX).unwrap_err();
+
+        // Validation fails because the proposal is using same default.
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::DecrementingTimestamp {
+                proposal_timestamp,
+                parent_timestamp: u64::MAX,
+            },
+            err
+        );
+
+        // Success case (genesis timestamp is `0`).
+        let _ = proposal.validate_timestamp_non_dec(0).unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validation_timestamp_drift() {
+        setup_logging();
+        setup_backtrace();
+
+        let instance = NodeState::mock();
+
+        let mut parent = Leaf::genesis(&instance.genesis_state, &instance).await;
+        let header = parent.block_header();
+
+        let proposal = Proposal::mock().await;
+        let proposal_timestamp = proposal.header.timestamp();
+
+        let mock_time = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        let err = ValidatedTransition::mock(instance.clone(), proposal)
+            .await
+            .validate_timestamp()
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidTimestampDrift {
+                proposal: proposal_timestamp,
+                system: mock_time,
+                diff: mock_time
+            },
+            err
+        );
+
+        let mock_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        let proposal = Proposal::mock_timestamp(mock_time - 13).await;
+        let err = proposal.validate_timestamp_drift(mock_time).unwrap_err();
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidTimestampDrift {
+                proposal: mock_time - 13,
+                system: mock_time,
+                diff: 13
+            },
+            err
+        );
+
+        // Success cases.
+        let proposal = Proposal::mock_timestamp(mock_time).await;
+        let _ = proposal.validate_timestamp_drift(mock_time).unwrap();
+
+        let proposal = Proposal::mock_timestamp(mock_time - 11).await;
+        let _ = proposal.validate_timestamp_drift(mock_time).unwrap();
+
+        let proposal = Proposal::mock_timestamp(mock_time - 12).await;
+        let _ = proposal.validate_timestamp_drift(mock_time).unwrap();
     }
 
     #[test]
