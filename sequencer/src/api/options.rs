@@ -5,7 +5,7 @@ use async_std::sync::Arc;
 use clap::Parser;
 use espresso_types::{
     v0::traits::{EventConsumer, NullEventConsumer, SequencerPersistence},
-    BlockMerkleTree, FeeMerkleTree, PubKey,
+    BlockMerkleTree, PubKey,
 };
 use futures::{
     channel::oneshot,
@@ -356,7 +356,7 @@ impl Options {
             // Initialize merklized state module for fee merkle tree
             app.register_module(
                 "fee-state",
-                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>()?,
+                endpoints::get_balance::<_, SequencerApiVersion>()?,
             )?;
 
             let state = state.clone();
