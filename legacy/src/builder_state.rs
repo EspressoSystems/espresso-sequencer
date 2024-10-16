@@ -10,12 +10,13 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::{VidCommitment, VidPrecomputeData},
 };
+use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
 use committable::Commitment;
 
 use crate::{
     service::{GlobalState, ReceivedTransaction},
-    BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences,
+    LegacyCommit,
 };
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
@@ -112,6 +113,14 @@ pub struct DAProposalInfo<TYPES: NodeType> {
     pub num_nodes: usize,
 }
 
+/// [`ALLOW_EMPTY_BLOCK_PERIOD`] is a constant that is used to determine the
+/// number of future views that we will allow building empty blocks for.
+///
+/// This value governs the ability for the Builder to prioritize finalizing
+/// transactions by producing empty blocks rather than avoiding the creation
+/// of them, following the proposal that contains transactions.
+pub(crate) const ALLOW_EMPTY_BLOCK_PERIOD: u64 = 3;
+
 #[derive(Debug)]
 pub struct BuilderState<TYPES: NodeType> {
     /// Recent included txs set while building blocks
@@ -123,18 +132,18 @@ pub struct BuilderState<TYPES: NodeType> {
     /// Expiring txs to be garbage collected
     pub included_txns_expiring: HashSet<Commitment<TYPES::Transaction>>,
 
-    /// txns currently in the tx_queue
+    /// txns currently in the `tx_queue`
     pub txns_in_queue: HashSet<Commitment<TYPES::Transaction>>,
 
-    /// filtered queue of available transactions, taken from tx_receiver
+    /// filtered queue of available transactions, taken from `tx_receiver`
     pub tx_queue: VecDeque<Arc<ReceivedTransaction<TYPES>>>,
 
-    /// da_proposal_payload_commit to (da_proposal, node_count)
+    /// `da_proposal_payload_commit` to (`da_proposal`, `node_count`)
     #[allow(clippy::type_complexity)]
     pub da_proposal_payload_commit_to_da_proposal:
         HashMap<(BuilderCommitment, TYPES::Time), DAProposalInfo<TYPES>>,
 
-    /// quorum_proposal_payload_commit to quorum_proposal
+    /// `quorum_proposal_payload_commit` to `quorum_proposal`
     #[allow(clippy::type_complexity)]
     pub quorum_proposal_payload_commit_to_quorum_proposal:
         HashMap<(BuilderCommitment, TYPES::Time), Arc<Proposal<TYPES, QuorumProposal<TYPES>>>>,
@@ -177,7 +186,7 @@ pub struct BuilderState<TYPES: NodeType> {
     /// purposes of building a valid block payload within the sequencer.
     pub validated_state: Arc<TYPES::ValidatedState>,
 
-    /// instance state to enfoce max_block_size
+    /// instance state to enfoce `max_block_size`
     pub instance_state: Arc<TYPES::InstanceState>,
 
     /// txn garbage collection every duration time
@@ -185,57 +194,63 @@ pub struct BuilderState<TYPES: NodeType> {
 
     /// time of next garbage collection for txns
     pub next_txn_garbage_collect_time: Instant,
+
+    /// `allow_empty_block_until` is a variable that dictates the time until which
+    /// a builder should stop producing empty blocks. This is done specifically
+    /// to allow for faster finalization of previous blocks that have had
+    /// transactions included in them.
+    pub allow_empty_block_until: Option<TYPES::Time>,
 }
 
-/// [best_builder_states_to_extend] is a utility function that is used to
-/// in order to determine which [BuilderState]s are the best fit to extend
+/// [`best_builder_states_to_extend`] is a utility function that is used to
+/// in order to determine which [`BuilderState`]s are the best fit to extend
 /// from.
 ///
 /// This function is designed to inspect the current state of the global state
-/// in order to determine which [BuilderState]s are the best fit to extend
-/// from. We only want to use information from [GlobalState] as otherwise
-/// we would have some insider knowledge unique to our specific [BuilderState]
-/// rather than knowledge that is available to all [BuilderState]s. In fact,
-/// in order to ensure this, this function lives outside of the [BuilderState]
+/// in order to determine which [`BuilderState`]s are the best fit to extend
+/// from. We only want to use information from [`GlobalState`] as otherwise
+/// we would have some insider knowledge unique to our specific [`BuilderState`]
+/// rather than knowledge that is available to all [`BuilderState`]s. In fact,
+/// in order to ensure this, this function lives outside of the [`BuilderState`]
 /// itself.
 ///
-/// In an ideal circumstance the best [BuilderState] to extend from is going to
-/// be the one that is immediately preceding the [QuorumProposal] that we are
-/// attempting to extend from. However, if all we know is the [ViewNumber] of
-/// the [QuorumProposal] that we are attempting to extend from, then we may end
-/// up in a scenario where we have multiple [BuilderState]s that are all equally
+/// In an ideal circumstance the best [`BuilderState`] to extend from is going to
+/// be the one that is immediately preceding the [`QuorumProposal`] that we are
+/// attempting to extend from. However, if all we know is the view number of
+/// the [`QuorumProposal`] that we are attempting to extend from, then we may end
+/// up in a scenario where we have multiple [`BuilderState`]s that are all equally
 /// valid to extend from.  When this happens, we have the potential for a data
 /// race.
 ///
 /// The primary cause of this has to due with the interface of the
-/// [ProxyGlobalState]'s API.  In general, we want to be able to retrieve a
-/// [BuilderState] via the [BuilderStateId].  The [BuilderStateId] only
-/// references a [ViewNumber] and a [VidCommitment]. While this information is
-/// available in the [QuorumProposal], it only helps us to rule out
-/// [BuilderState]s that already exist.  It does **NOT** help us to pick a
-/// [BuilderState] that is the best fit to extend from.
+/// [`ProxyGlobalState`](crate::service::ProxyGlobalState)'s API.  In general,
+/// we want to be able to retrieve a [`BuilderState`] via the [`BuilderStateId`].
+/// The [`BuilderStateId`] only references a [`ViewNumber`](hotshot_types::data::ViewNumber)
+/// and a [`VidCommitment`] While this information is available in the [`QuorumProposal`],
+/// it only helps us to rule out [`BuilderState`]s that already exist.
+/// It does **NOT** help us to pick a [`BuilderState`] that is the best fit to extend from.
 ///
 /// This is where the `justify_qc` comes in to consideration.  The `justify_qc`
-/// contains the previous [ViewNumber] that is being extended from, and in
-/// addition it also contains the previous [Commitment<Leaf<TYPES>>] that is
-/// being built on top of.  Since our [BuilderState]s store identifying
+/// contains the previous [`ViewNumber`](hotshot_types::data::ViewNumber) that is
+/// being extended from, and in addition it also contains the previous [`Commitment<Leaf<TYPES>>`]
+/// that is being built on top of.  Since our [`BuilderState`]s store identifying
 /// information that contains this same `leaf_commit` we can compare these
-/// directly to ensure that we are extending from the correct [BuilderState].
+/// directly to ensure that we are extending from the correct [`BuilderState`].
 ///
-/// This function determines the best [BuilderState] in the following steps:
+/// This function determines the best [`BuilderState`] in the following steps:
 ///
-/// 1. If we have a [BuilderState] that is already spawned for the current
-///    [QuorumProposal], then we should should return no states, as one already
+/// 1. If we have a [`BuilderState`] that is already spawned for the current
+///    [`QuorumProposal`], then we should should return no states, as one already
 ///    exists.  This will prevent us from attempting to spawn duplicate
-///    [BuilderState]s.
-/// 2. Attempt to find all [BuilderState]s that are recorded within
-///    [GlobalState] that have matching view number and leaf commitments. There
+///    [`BuilderState`]s.
+/// 2. Attempt to find all [`BuilderState`]s that are recorded within
+///    [`GlobalState`] that have matching view number and leaf commitments. There
 ///    *should* only be one of these.  But all would be valid extension points.
-/// 3. If we can't find any [BuilderState]s that match the view number
+/// 3. If we can't find any [`BuilderState`]s that match the view number
 ///    and leaf commitment, then we should return for the maximum stored view
-///    number that is smaller than the current [QuorumProposal].
-/// 4. If there is is only one [BuilderState] stored in the [GlobalState], then
-///    we should return that [BuilderState] as the best fit.
+///    number that is smaller than the current [`QuorumProposal`].
+/// 4. If there is is only one [`BuilderState`] stored in the [`GlobalState`], then
+///    we should return that [`BuilderState`] as the best fit.
 /// 5. If none of the other criteria match, we return an empty result as it is
 ///    unclear what to do in this case.
 ///
@@ -253,7 +268,7 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
     let current_commitment = quorum_proposal.data.block_header.payload_commitment();
     let current_builder_state_id = BuilderStateId::<TYPES> {
         parent_commitment: current_commitment,
-        view: current_view_number,
+        parent_view: current_view_number,
     };
 
     let global_state_read_lock = global_state.read_arc().await;
@@ -305,7 +320,7 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
     let maximum_stored_view_number_smaller_than_quorum_proposal = global_state_read_lock
         .spawned_builder_states
         .keys()
-        .map(|builder_state_id| *builder_state_id.view)
+        .map(|builder_state_id| *builder_state_id.parent_view)
         .filter(|view_number| view_number < &current_view_number)
         .max();
 
@@ -323,7 +338,7 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
                 .spawned_builder_states
                 .keys()
                 .filter(|builder_state_id| {
-                    builder_state_id.view.u64()
+                    builder_state_id.parent_view.u64()
                         == maximum_stored_view_number_smaller_than_quorum_proposal
                 })
         {
@@ -353,9 +368,8 @@ async fn best_builder_states_to_extend<TYPES: NodeType>(
 }
 
 impl<TYPES: NodeType> BuilderState<TYPES> {
-    /// [am_i_the_best_builder_state_to_extend] is a utility method that
-    /// attempts to determine whether we are among the best [BuilderState]s to
-    /// extend from.
+    /// Utility method that attempts to determine whether
+    /// we are among the best [`BuilderState`]s to extend from.
     async fn am_i_the_best_builder_state_to_extend(
         &self,
         quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
@@ -372,7 +386,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
                 .map(|builder_state_id| format!(
                     "{}@{}",
                     builder_state_id.parent_commitment,
-                    builder_state_id.view.u64()
+                    builder_state_id.parent_view.u64()
                 ))
                 .collect::<Vec<String>>(),
             quorum_proposal.data.block_header.payload_commitment(),
@@ -383,7 +397,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // best [BuilderState]s to extend from.
         best_builder_states_to_extend.contains(&BuilderStateId {
             parent_commitment: self.parent_block_references.vid_commitment,
-            view: self.parent_block_references.view_number,
+            parent_view: self.parent_block_references.view_number,
         })
     }
 
@@ -531,13 +545,13 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             .await;
     }
 
-    /// [spawn_a_clone_that_extends_self] is a helper function that is used by
-    /// both [process_da_proposal] and [process_quorum_proposal] to spawn a
-    /// new [BuilderState] that extends from the current [BuilderState].
+    /// A helper function that is used by both [`BuilderState::process_da_proposal`]
+    /// and [`BuilderState::process_quorum_proposal`] to spawn a new [`BuilderState`]
+    /// that extends from the current [`BuilderState`].
     ///
     /// This helper function also adds additional checks in order to ensure
-    /// that the [BuilderState] that is being spawned is the best fit for the
-    /// [QuorumProposal] that is being extended from.
+    /// that the [`BuilderState`] that is being spawned is the best fit for the
+    /// [`QuorumProposal`] that is being extended from.
     async fn spawn_clone_that_extends_self(
         &mut self,
         da_proposal_info: DAProposalInfo<TYPES>,
@@ -628,7 +642,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
 
         let builder_state_id = BuilderStateId {
             parent_commitment: self.parent_block_references.vid_commitment,
-            view: self.parent_block_references.view_number,
+            parent_view: self.parent_block_references.view_number,
         };
 
         {
@@ -663,11 +677,17 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         self.tx_queue
             .retain(|tx| self.txns_in_queue.contains(&tx.commit));
 
+        if !txn_commitments.is_empty() {
+            self.allow_empty_block_until = Some(TYPES::Time::new(
+                da_proposal_info.view_number.u64() + ALLOW_EMPTY_BLOCK_PERIOD,
+            ));
+        }
+
         // register the spawned builder state to spawned_builder_states in the global state
         self.global_state.write_arc().await.register_builder_state(
             BuilderStateId {
                 parent_commitment: self.parent_block_references.vid_commitment,
-                view: self.parent_block_references.view_number,
+                parent_view: self.parent_block_references.view_number,
             },
             self.parent_block_references.clone(),
             req_sender,
@@ -698,8 +718,16 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             async_sleep(sleep_interval).await
         }
 
-        // Don't build an empty block
-        if self.tx_queue.is_empty() {
+        // should_prioritize_finalization is a flag that is used to determine
+        // whether we should return empty blocks or not.
+
+        let should_prioritize_finalization = self
+            .allow_empty_block_until
+            .map(|until| state_id.parent_view < until)
+            .unwrap_or(false);
+
+        if self.tx_queue.is_empty() && !should_prioritize_finalization {
+            // Don't build an empty block
             return None;
         }
 
@@ -746,7 +774,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
         // be included, because it alone goes over sequencer's block size limit.
         // We need to drop it and mark as "included" so that if we receive
         // it again we don't even bother with it.
-        if actual_txn_count == 0 {
+        if actual_txn_count == 0 && !should_prioritize_finalization {
             if let Some(txn) = self.tx_queue.pop_front() {
                 self.txns_in_queue.remove(&txn.commit);
                 self.included_txns.insert(txn.commit);
@@ -811,7 +839,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
     async fn process_block_request(&mut self, req: RequestMessage<TYPES>) {
         // If a spawned clone is active then it will handle the request, otherwise the highest view num builder will handle
         if req.state_id.parent_commitment != self.parent_block_references.vid_commitment
-            || req.state_id.view != self.parent_block_references.view_number
+            || req.state_id.parent_view != self.parent_block_references.view_number
         {
             tracing::debug!(
                 "Builder {:?} Requested Builder commitment does not match the built_from_view, so ignoring it",
@@ -827,7 +855,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             .highest_view_num_builder_id
             .clone();
 
-        if highest_view_num_builder_id.view != self.parent_block_references.view_number {
+        if highest_view_num_builder_id.parent_view != self.parent_block_references.view_number {
             tracing::debug!(
                 "Builder {:?} Requested Builder commitment does not match the highest_view_num_builder_id, so ignoring it",
                 self.parent_block_references.view_number
@@ -1033,6 +1061,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             txn_garbage_collect_duration,
             next_txn_garbage_collect_time: Instant::now() + txn_garbage_collect_duration,
             validated_state,
+            allow_empty_block_until: None,
         }
     }
     pub fn clone_with_receiver(&self, req_receiver: BroadcastReceiver<MessageType<TYPES>>) -> Self {
@@ -1081,6 +1110,7 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             txn_garbage_collect_duration: self.txn_garbage_collect_duration,
             next_txn_garbage_collect_time,
             validated_state: self.validated_state.clone(),
+            allow_empty_block_until: self.allow_empty_block_until,
         }
     }
 
@@ -1518,7 +1548,7 @@ mod test {
         current_spawned_builder_states
             .iter()
             .for_each(|(builder_state_id, _)| {
-                assert!(builder_state_id.view >= latest_decide_view_number)
+                assert!(builder_state_id.parent_view >= latest_decide_view_number)
             });
     }
 }

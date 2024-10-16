@@ -1,7 +1,4 @@
-use hotshot::{
-    traits::{election::static_committee::StaticCommittee, NodeImplementation},
-    types::{Event, SystemContextHandle},
-};
+use hotshot::types::Event;
 use hotshot_builder_api::v0_1::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     builder::BuildError,
@@ -13,10 +10,7 @@ use hotshot_types::{
     message::Proposal,
     traits::{
         block_contents::BlockPayload,
-        consensus_api::ConsensusApi,
-        election::Membership,
-        network::Topic,
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
     utils::BuilderCommitment,
@@ -25,19 +19,17 @@ use hotshot_types::{
 use lru::LruCache;
 use vbs::version::StaticVersionType;
 
+use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
+
+use crate::builder_state::{MessageType, RequestMessage, ResponseMessage};
 use crate::{
     builder_state::{
         BuildBlockInfo, DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
         TriggerStatus,
     },
-    BlockId, LegacyCommit as _,
-};
-use crate::{
-    builder_state::{MessageType, RequestMessage, ResponseMessage},
-    BuilderStateId, ParentBlockReferences,
+    LegacyCommit as _,
 };
 use crate::{WaitAndKeep, WaitAndKeepGetError};
-use anyhow::anyhow;
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{Sender as BroadcastSender, TrySendError};
 use async_compatibility_layer::{
@@ -50,15 +42,14 @@ use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use futures::stream::StreamExt;
 use futures::{future::BoxFuture, Stream};
-use hotshot_events_service::{events::Error as EventStreamError, events_source::StartupInfo};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{collections::HashMap, marker::PhantomData};
 use std::{fmt::Display, time::Instant};
 use tagged_base64::TaggedBase64;
-use tide_disco::{method::ReadState, Url};
+use tide_disco::method::ReadState;
 
 // Start assuming we're fine calculatig VID for 5 megabyte blocks
 const INITIAL_MAX_BLOCK_SIZE: u64 = 5_000_000;
@@ -84,8 +75,8 @@ pub struct BlockInfo<Types: NodeType> {
     pub truncated: bool,
 }
 
-/// [ReceivedTransaction] represents receipt information concerning a received
-/// [NodeType::Transaction].
+/// [`ReceivedTransaction`] represents receipt information concerning a received
+/// [`NodeType::Transaction`].
 #[derive(Debug)]
 pub struct ReceivedTransaction<Types: NodeType> {
     // the transaction
@@ -100,7 +91,7 @@ pub struct ReceivedTransaction<Types: NodeType> {
     pub time_in: Instant,
 }
 
-/// [GlobalState] represents the internalized state of the Builder service as
+/// [`GlobalState`] represents the internalized state of the Builder service as
 /// represented from its public facing API.
 #[allow(clippy::type_complexity)]
 #[derive(Debug)]
@@ -142,7 +133,7 @@ pub struct GlobalState<Types: NodeType> {
     pub max_block_size: u64,
 }
 
-/// GetChannelForMatchingBuilderError is an error enum that represents the
+/// `GetChannelForMatchingBuilderError` is an error enum that represents the
 /// class of possible errors that can be returned when calling
 /// `get_channel_for_matching_builder_or_highest_view_builder` on a
 /// `GlobalState`.  These errors are used for internal representations for
@@ -162,13 +153,13 @@ impl From<GetChannelForMatchingBuilderError> for BuildError {
 }
 
 impl<Types: NodeType> GlobalState<Types> {
-    /// [new] creates a new [GlobalState] with the given parameters.
-    /// The resulting [GlobalState] will have the given
+    /// Creates a new [`GlobalState`] with the given parameters.
+    /// The resulting [`GlobalState`] will have the given
     /// `last_garbage_collected_view_num` as passed.  Additionally, the
-    /// `highest_view_num_builder_id` will be set to a [BuilderStateId]
+    /// `highest_view_num_builder_id` will be set to a [`BuilderStateId`]
     /// comprised of the given `bootstrapped_builder_state_id` and
     /// `bootstrapped_view_num`.  The `spawned_builder_states` will be created
-    /// with a single entry of the same [BuilderStateId] and the given
+    /// with a single entry of the same [`BuilderStateId`] and the given
     /// `bootstrap_sender`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -182,7 +173,7 @@ impl<Types: NodeType> GlobalState<Types> {
         let mut spawned_builder_states = HashMap::new();
         let bootstrap_id = BuilderStateId {
             parent_commitment: bootstrapped_builder_state_id,
-            view: bootstrapped_view_num,
+            parent_view: bootstrapped_view_num,
         };
         spawned_builder_states.insert(bootstrap_id.clone(), (None, bootstrap_sender.clone()));
         GlobalState {
@@ -196,17 +187,17 @@ impl<Types: NodeType> GlobalState<Types> {
         }
     }
 
-    /// [register_builder_state] associates the given [BuilderStateId] with
-    /// the given [BroadcastSender] in the [GlobalState].
+    /// Associates the given [`BuilderStateId`] with
+    /// the given [`BroadcastSender`] in the [`GlobalState`].
     ///
-    /// Additionally, if the view of the [BuilderStateId] is greater than the
-    /// current highest view number, the [BuilderStateId] is set as the new
+    /// Additionally, if the view of the [`BuilderStateId`] is greater than the
+    /// current highest view number, the [`BuilderStateId`] is set as the new
     /// highest view number.
     ///
     /// There is potential here for data loss.  Since we just blindly insert
-    /// the [BuilderStateId] and [BroadcastSender] into the hashmap, we could
+    /// the [`BuilderStateId`] and [`BroadcastSender`] into the hashmap, we could
     /// potentially be overwriting an existing entry.  This would result in
-    /// the loss of access to a [BroadcastSender], and could potentially
+    /// the loss of access to a [`BroadcastSender`], and could potentially
     /// result in unexpected behavior.
     pub fn register_builder_state(
         &mut self,
@@ -228,7 +219,7 @@ impl<Types: NodeType> GlobalState<Types> {
         }
 
         // keep track of the max view number
-        if parent_id.view > self.highest_view_num_builder_id.view {
+        if parent_id.parent_view > self.highest_view_num_builder_id.parent_view {
             tracing::info!("registering builder {parent_id} as highest",);
             self.highest_view_num_builder_id = parent_id;
         } else {
@@ -239,17 +230,17 @@ impl<Types: NodeType> GlobalState<Types> {
         }
     }
 
-    /// [update_global_state] Ensures that the given [BuildBlockInfo]'d id
-    /// is within the [GlobalState]'s [blocks] LRU Cache.  The cache stores the
-    /// [BlockInfo] associated with the given [BuildBlockInfo]'s id.  However
+    /// Ensures that the given [`BuildBlockInfo`]'d id
+    /// is within the [`GlobalState`]'s [`blocks`](GlobalState::blocks) LRU Cache.  The cache stores the
+    /// [`BlockInfo`] associated with the given [`BuildBlockInfo`]'s id.  However
     /// if it already exists within the LRU cache, then the `BlockInfo` is not
     /// updated.
     ///
-    /// Additionally, the [BuilderStateId] is associated with the given
-    /// [ResponseMessage] in the [builder_state_to_last_built_block] hashmap.
+    /// Additionally, the [`BuilderStateId`] is associated with the given
+    /// [`ResponseMessage`] in the [`Self::builder_state_to_last_built_block`] hashmap.
     ///
     /// No care or consideration is given to anything that may have been
-    /// stored with the same key in the [builder_state_to_last_built_block].
+    /// stored with the same key in the [`Self::builder_state_to_last_built_block`].
     pub fn update_global_state(
         &mut self,
         state_id: BuilderStateId<Types>,
@@ -293,7 +284,7 @@ impl<Types: NodeType> GlobalState<Types> {
         }
     }
 
-    /// [remove_handles] cleans up the [GlobalState] by removing all
+    /// Cleans up the [`GlobalState`] by removing all
     /// `spawned_builder_states` that have been stored, up to a derived
     /// reference view.  This cutoff point can be up to the given
     /// `on_decide_view` so long as the provided value is less than or equal
@@ -308,9 +299,9 @@ impl<Types: NodeType> GlobalState<Types> {
     pub fn remove_handles(&mut self, on_decide_view: Types::Time) -> Types::Time {
         // remove everything from the spawned builder states when view_num <= on_decide_view;
         // if we don't have a highest view > decide, use highest view as cutoff.
-        let cutoff = std::cmp::min(self.highest_view_num_builder_id.view, on_decide_view);
+        let cutoff = std::cmp::min(self.highest_view_num_builder_id.parent_view, on_decide_view);
         self.spawned_builder_states
-            .retain(|id, _| id.view >= cutoff);
+            .retain(|id, _| id.parent_view >= cutoff);
 
         let cutoff_u64 = cutoff.u64();
         let gc_view = if cutoff_u64 > 0 { cutoff_u64 - 1 } else { 0 };
@@ -335,10 +326,9 @@ impl<Types: NodeType> GlobalState<Types> {
         .await
     }
 
-    /// [get_channel_for_matching_builder_or_highest_view_builder] is a helper
-    /// function that attempts to retrieve the broadcast sender for the given
-    /// [BuilderStateId]. If the sender does not exist, it will return the
-    /// broadcast sender for the for the hightest view number [BuilderStateId]
+    /// Helper function that attempts to retrieve the broadcast sender for the given
+    /// [`BuilderStateId`]. If the sender does not exist, it will return the
+    /// broadcast sender for the for the hightest view number [`BuilderStateId`]
     /// instead.
     pub(crate) fn get_channel_for_matching_builder_or_highest_view_builder(
         &self,
@@ -366,7 +356,7 @@ impl<Types: NodeType> GlobalState<Types> {
         // iterate over the spawned builder states and check if the view number exists
         self.spawned_builder_states
             .iter()
-            .any(|(id, _)| id.view == *key)
+            .any(|(id, _)| id.parent_view == *key)
     }
 
     pub fn should_view_handle_other_proposals(
@@ -374,7 +364,7 @@ impl<Types: NodeType> GlobalState<Types> {
         builder_view: &Types::Time,
         proposal_view: &Types::Time,
     ) -> bool {
-        *builder_view == self.highest_view_num_builder_id.view
+        *builder_view == self.highest_view_num_builder_id.parent_view
             && !self.check_builder_state_existence_for_a_view(proposal_view)
     }
 }
@@ -412,7 +402,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
     }
 }
 
-/// AvailableBlocksError is an error enum that represents the class of possible
+/// `AvailableBlocksError` is an error enum that represents the class of possible
 /// errors  that can be returned when calling `available_blocks` on a
 /// `ProxyGlobalState`.  These errors are used for internal representations
 /// for consistency and testing, and do not leak beyond the `ProxyGlobalState`
@@ -462,7 +452,7 @@ impl<Types: NodeType> From<AvailableBlocksError<Types>> for BuildError {
     }
 }
 
-/// ClaimBlockError is an error enum that represents the class of possible
+/// `ClaimBlockError` is an error enum that represents the class of possible
 /// errors that can be returned when calling `claim_block` on a
 /// `ProxyGlobalState`.  These errors are used for internal representations
 /// for consistency and testing, and do not leak beyond the `ProxyGlobalState`
@@ -541,7 +531,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
 
         let state_id = BuilderStateId {
             parent_commitment: *for_parent,
-            view: Types::Time::new(view_number),
+            parent_view: Types::Time::new(view_number),
         };
 
         // verify the signature
@@ -552,7 +542,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
 
         tracing::info!("Requesting available blocks for {state_id}",);
 
-        let view_num = state_id.view;
+        let view_num = state_id.parent_view;
         // check in the local spawned builder states
         // if it doesn't exist; there are three cases
         // 1) it has already been garbage collected (view < decide) and we should return an error
@@ -564,14 +554,14 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             // If this `BlockBuilder` hasn't been reaped, it should have been.
             let global_state = self.global_state.read_arc().await;
             if view_num < global_state.last_garbage_collected_view_num
-                && global_state.highest_view_num_builder_id.view
+                && global_state.highest_view_num_builder_id.parent_view
                     != global_state.last_garbage_collected_view_num
             {
                 tracing::warn!(
                     "Requesting for view {:?}, last decide-triggered cleanup on view {:?}, highest view num is {:?}",
                     view_num,
                     global_state.last_garbage_collected_view_num,
-                    global_state.highest_view_num_builder_id.view
+                    global_state.highest_view_num_builder_id.parent_view
                 );
                 return Err(AvailableBlocksError::RequestForAvailableViewThatHasAlreadyBeenDecided);
             }
@@ -1014,184 +1004,13 @@ impl<Types: NodeType> ReadState for ProxyGlobalState<Types> {
     }
 }
 
-/// [HotShotEventsService] is a trait that defines the interface for the
-/// hotshot events service. The service is expected to provide a stream of
-/// events and a startup info.
-#[async_trait]
-trait HotShotEventsService<Types: NodeType> {
-    type EventsStream: Stream<Item = Result<Event<Types>, EventStreamError>>;
-    type EventsError;
-
-    type StartUpInfo;
-    type StartUpInfoError;
-
-    /// [check_connection] is a function that will check that the service is
-    /// connected, or can be connected to the hotshot events service.
-    /// It's use is optional, and it has been included strictly for current
-    /// logic compatibility.
-    async fn check_connection(&self, timeout: Option<Duration>) -> bool;
-
-    /// [events] is a function that will return a stream of events from the
-    /// hotshot events service. The stream itself is expected to contain
-    /// items that are a [Result] of [Event] or an [EventsError].
-    /// If [check_connection] has not been called before this function, the
-    /// connection should be established.
-    async fn events(&self) -> Result<Self::EventsStream, Self::EventsError>;
-
-    /// [startup_info] is a function that will return the startup info from
-    /// the hotshot events service. The response is expected to be a
-    /// [Result] of [StartupInfo] or a [StartupInfoError].
-    /// If [check_connection] has not been called before this function, the
-    /// connection should be established.
-    async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError>;
-}
-
-struct HotShotEventsServiceTideDiscoClient<Types: NodeType, Ver: StaticVersionType> {
-    client: surf_disco::Client<hotshot_events_service::events::Error, Ver>,
-    _pd: PhantomData<Types>,
-}
-
-impl<Types: NodeType, Ver: StaticVersionType> HotShotEventsServiceTideDiscoClient<Types, Ver> {
-    fn new(client: surf_disco::Client<hotshot_events_service::events::Error, Ver>) -> Self {
-        HotShotEventsServiceTideDiscoClient {
-            client,
-            _pd: Default::default(),
-        }
-    }
-
-    fn from_url(url: Url) -> Self {
-        let client = surf_disco::Client::<hotshot_events_service::events::Error, Ver>::new(url);
-        Self::new(client)
-    }
-}
-
-#[async_trait]
-impl<Types: NodeType, Ver: StaticVersionType> HotShotEventsService<Types>
-    for HotShotEventsServiceTideDiscoClient<Types, Ver>
-{
-    type EventsStream = surf_disco::socket::Connection<
-        Event<Types>,
-        surf_disco::socket::Unsupported,
-        EventStreamError,
-        Ver,
-    >;
-    type EventsError = hotshot_events_service::events::Error;
-
-    type StartUpInfo = StartupInfo<Types>;
-    type StartUpInfoError = hotshot_events_service::events::Error;
-
-    async fn check_connection(&self, timeout: Option<Duration>) -> bool {
-        self.client.connect(timeout).await
-    }
-
-    async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
-        self.client
-            .socket("hotshot-events/events")
-            .subscribe::<Event<Types>>()
-            .await
-    }
-
-    async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
-        self.client
-            .get::<StartupInfo<Types>>("hotshot-events/startup_info")
-            .send()
-            .await
-    }
-}
-
-/// [ConnectToEventsServiceError] is an error enum that represents the class
-/// of possible errors that can be returned when calling
-/// `connect_to_events_service`.
-#[derive(Debug)]
-enum ConnectToEventsServiceError {
-    /// [Connection] is an error variant that represents a failure to
-    /// connect to the hotshot events service.
-    Connection,
-
-    /// [Subscription] is an error variant that represents a failure to
-    /// subscribe to the events stream.
-    Subscription(hotshot_events_service::events::Error),
-
-    /// [StartupInfo] is an error variant that represents a failure to
-    /// retrieve the startup info from the hotshot events service.
-    StartupInfo(hotshot_events_service::events::Error),
-}
-
-impl Display for ConnectToEventsServiceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ConnectToEventsServiceError::Connection => {
-                write!(f, "failed to connect to the hotshot events service")
-            }
-            ConnectToEventsServiceError::Subscription(e) => {
-                write!(f, "failed to subscribe to the events stream: {:?}", e)
-            }
-            ConnectToEventsServiceError::StartupInfo(e) => {
-                write!(f, "failed to retrieve the startup info: {:?}", e)
-            }
-        }
-    }
-}
-
-/// [connect_to_events_service] is a function that will attempt to connect to
-/// the hotshot events service, setup a subscription to the events stream,
-/// and retrieve the startup info.  If all is successful, it will return the
-/// stream, and membership information derived from the startup info.
-async fn connect_to_events_service<Types: NodeType, C, S>(
-    client: &C,
-) -> Result<(C::EventsStream, StaticCommittee<Types>), ConnectToEventsServiceError>
-where
-    C: HotShotEventsService<
-        Types,
-        EventsStream = S,
-        EventsError = hotshot_events_service::events::Error,
-        StartUpInfo = StartupInfo<Types>,
-        StartUpInfoError = hotshot_events_service::events::Error,
-    >,
-    S: Stream<Item = Result<Event<Types>, EventStreamError>>,
-{
-    if !(client.check_connection(None).await) {
-        return Err(ConnectToEventsServiceError::Connection);
-    }
-
-    tracing::info!("Builder client connected to the hotshot events api");
-
-    // client subscribe to hotshot events
-    let subscribed_events = client
-        .events()
-        .await
-        .map_err(ConnectToEventsServiceError::Subscription)?;
-
-    // handle the startup event at the start
-    let StartupInfo {
-        known_node_with_stake,
-        non_staked_node_count,
-    } = client
-        .startup_info()
-        .await
-        .map_err(ConnectToEventsServiceError::StartupInfo)?;
-
-    let membership: StaticCommittee<Types> = StaticCommittee::<Types>::new(
-        known_node_with_stake.clone(),
-        known_node_with_stake.clone(),
-        Topic::Global,
-    );
-
-    tracing::info!(
-        "Startup info: Known nodes with stake: {:?}, Non-staked node count: {:?}",
-        known_node_with_stake,
-        non_staked_node_count
-    );
-
-    Ok((subscribed_events, membership))
-}
-
 /*
 Running Non-Permissioned Builder Service
 */
 pub async fn run_non_permissioned_standalone_builder_service<
     Types: NodeType,
     Ver: StaticVersionType,
+    S: Stream<Item = Event<Types>> + Unpin,
 >(
     // sending a DA proposal from the hotshot to the builder states
     da_sender: BroadcastSender<MessageType<Types>>,
@@ -1202,267 +1021,120 @@ pub async fn run_non_permissioned_standalone_builder_service<
     // sending a Decide event from the hotshot to the builder states
     decide_sender: BroadcastSender<MessageType<Types>>,
 
-    // Url to (re)connect to for the events stream
-    hotshot_events_api_url: Url,
+    // HotShot event stream
+    hotshot_event_stream: S,
+
+    total_nodes: NonZeroUsize,
 
     // Global state
     global_state: Arc<RwLock<GlobalState<Types>>>,
 ) -> Result<(), anyhow::Error> {
-    // connection to the events stream
-    let events_service_client =
-        HotShotEventsServiceTideDiscoClient::<Types, Ver>::from_url(hotshot_events_api_url.clone());
-
-    let connect_to_events_service_result = connect_to_events_service(&events_service_client).await;
-    let (mut subscribed_events, mut membership) = match connect_to_events_service_result {
-        Ok((subscribed_events, membership)) => (subscribed_events, membership),
-        Err(err) => {
-            return Err(anyhow!(
-                "failed to connect to API at {hotshot_events_api_url}: {err}"
-            ));
-        }
-    };
-
     let tx_sender = {
         // This closure is likely unnecessary, but we want to play it safe
         // with our RWLocks.
         let global_state_read_lock_guard = global_state.read_arc().await;
         global_state_read_lock_guard.tx_sender.clone()
     };
+    let mut hotshot_event_stream = std::pin::pin!(hotshot_event_stream);
 
     loop {
-        let event = subscribed_events.next().await;
-        //tracing::debug!("Builder Event received from HotShot: {:?}", event);
-        match event {
-            Some(Ok(event)) => {
-                match event.event {
-                    EventType::Error { error } => {
-                        tracing::error!("Error event in HotShot: {:?}", error);
-                    }
-                    // tx event
-                    EventType::Transactions { transactions } => {
-                        let max_block_size = {
-                            // This closure is likely unnecessary, but we want
-                            // to play it safe with our RWLocks.
-                            let global_state_read_lock_guard = global_state.read_arc().await;
-                            global_state_read_lock_guard.max_block_size
-                        };
+        let Some(event) = hotshot_event_stream.next().await else {
+            anyhow::bail!("Event stream ended");
+        };
 
-                        handle_received_txns(
-                            &tx_sender,
-                            transactions,
-                            TransactionSource::HotShot,
-                            max_block_size,
-                        )
-                        .await;
-                    }
-                    // decide event
-                    EventType::Decide {
-                        block_size: _,
-                        leaf_chain,
-                        qc: _,
-                    } => {
-                        let latest_decide_view_num = leaf_chain[0].leaf.view_number();
-                        handle_decide_event(&decide_sender, latest_decide_view_num).await;
-                    }
-                    // DA proposal event
-                    EventType::DaProposal { proposal, sender } => {
-                        // get the leader for current view
-                        let leader = membership.leader(proposal.data.view_number);
-                        // get the committee mstatked node count
-                        let total_nodes = membership.total_nodes();
-
-                        handle_da_event(
-                            &da_sender,
-                            Arc::new(proposal),
-                            sender,
-                            leader,
-                            NonZeroUsize::new(total_nodes).unwrap_or(NonZeroUsize::MIN),
-                        )
-                        .await;
-                    }
-                    // Quorum proposal event
-                    EventType::QuorumProposal { proposal, sender } => {
-                        // get the leader for current view
-                        let leader = membership.leader(proposal.data.view_number);
-                        handle_quorum_event(&quorum_sender, Arc::new(proposal), sender, leader)
-                            .await;
-                    }
-                    _ => {
-                        tracing::debug!("Unhandled event from Builder");
-                    }
-                }
+        match event.event {
+            EventType::Error { error } => {
+                tracing::error!("Error event in HotShot: {:?}", error);
             }
-            Some(Err(e)) => {
-                tracing::error!("Error in the event stream: {:?}", e);
-            }
-            None => {
-                tracing::error!("Event stream ended");
-                let connected = connect_to_events_service(&events_service_client).await;
-
-                (subscribed_events, membership) = match connected {
-                    Ok((subscribed_events, membership)) => (subscribed_events, membership),
-                    Err(err) => {
-                        return Err(anyhow!(
-                            "failed to reconnect to API at {hotshot_events_api_url}: {err}"
-                        ));
-                    }
+            // tx event
+            EventType::Transactions { transactions } => {
+                let max_block_size = {
+                    // This closure is likely unnecessary, but we want
+                    // to play it safe with our RWLocks.
+                    let global_state_read_lock_guard = global_state.read_arc().await;
+                    global_state_read_lock_guard.max_block_size
                 };
+
+                handle_received_txns(
+                    &tx_sender,
+                    transactions,
+                    TransactionSource::HotShot,
+                    max_block_size,
+                )
+                .await;
+            }
+            // decide event
+            EventType::Decide {
+                block_size: _,
+                leaf_chain,
+                qc: _,
+            } => {
+                let latest_decide_view_num = leaf_chain[0].leaf.view_number();
+                handle_decide_event(&decide_sender, latest_decide_view_num).await;
+            }
+            // DA proposal event
+            EventType::DaProposal { proposal, sender } => {
+                handle_da_event(&da_sender, Arc::new(proposal), sender, total_nodes).await;
+            }
+            // QC proposal event
+            EventType::QuorumProposal { proposal, sender } => {
+                // get the leader for current view
+                handle_quorum_event(&quorum_sender, Arc::new(proposal), sender).await;
+            }
+            _ => {
+                tracing::debug!("Unhandled event from Builder");
             }
         }
     }
 }
 
-/*
-Running Permissioned Builder Service
-*/
-pub async fn run_permissioned_standalone_builder_service<
-    Types: NodeType,
-    I: NodeImplementation<Types>,
-    V: Versions,
->(
-    // sending a DA proposal from the hotshot to the builder states
-    da_sender: BroadcastSender<MessageType<Types>>,
-
-    // sending a Quorum proposal from the hotshot to the builder states
-    quorum_sender: BroadcastSender<MessageType<Types>>,
-
-    // sending a Decide event from the hotshot to the builder states
-    decide_sender: BroadcastSender<MessageType<Types>>,
-
-    // hotshot context handle
-    hotshot_handle: Arc<SystemContextHandle<Types, I, V>>,
-
-    // Global state
-    global_state: Arc<RwLock<GlobalState<Types>>>,
-) {
-    let mut event_stream = hotshot_handle.event_stream();
-    let tx_sender = {
-        // This closure is likely unnecessary, but we want to play it safe
-        // with our RWLocks.
-        let global_state_read_lock_guard = global_state.read_arc().await;
-        global_state_read_lock_guard.tx_sender.clone()
-    };
-
-    loop {
-        tracing::debug!("Waiting for events from HotShot");
-        match event_stream.next().await {
-            None => {
-                tracing::error!("Didn't receive any event from the HotShot event stream");
-            }
-            Some(event) => {
-                match event.event {
-                    // error event
-                    EventType::Error { error } => {
-                        tracing::error!("Error event in HotShot: {:?}", error);
-                    }
-                    // tx event
-                    EventType::Transactions { transactions } => {
-                        let max_block_size = {
-                            // This closure is likely unnecessary, but we want
-                            // to play it safe with our RWLocks.
-                            let global_state_read_lock_guard = global_state.read_arc().await;
-                            global_state_read_lock_guard.max_block_size
-                        };
-
-                        handle_received_txns(
-                            &tx_sender,
-                            transactions,
-                            TransactionSource::HotShot,
-                            max_block_size,
-                        )
-                        .await;
-                    }
-                    // decide event
-                    EventType::Decide { leaf_chain, .. } => {
-                        let latest_decide_view_number = leaf_chain[0].leaf.view_number();
-
-                        handle_decide_event(&decide_sender, latest_decide_view_number).await;
-                    }
-                    // DA proposal event
-                    EventType::DaProposal { proposal, sender } => {
-                        // get the leader for current view
-                        let leader = hotshot_handle.leader(proposal.data.view_number).await;
-                        // get the committee staked node count
-                        let total_nodes = hotshot_handle.total_nodes();
-
-                        handle_da_event(
-                            &da_sender,
-                            Arc::new(proposal),
-                            sender,
-                            leader,
-                            total_nodes,
-                        )
-                        .await;
-                    }
-                    // Quorum proposal event
-                    EventType::QuorumProposal { proposal, sender } => {
-                        // get the leader for current view
-                        let leader = hotshot_handle.leader(proposal.data.view_number).await;
-                        handle_quorum_event(&quorum_sender, Arc::new(proposal), sender, leader)
-                            .await;
-                    }
-                    _ => {
-                        tracing::error!("Unhandled event from Builder: {:?}", event.event);
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// [HandleDaEventError] represents the internal class of errors that can
+/// [`HandleDaEventError`] represents the internal class of errors that can
 /// occur when attempting to process an incoming da proposal event.  More
 /// specifically these are the class of error that can be returned from
-/// [handle_da_event_implementation].
+/// [`handle_da_event_implementation`].
 #[derive(Debug)]
 enum HandleDaEventError<Types: NodeType> {
-    SenderIsNotLeader,
     SignatureValidationFailed,
     BroadcastFailed(async_broadcast::SendError<MessageType<Types>>),
 }
 
-/// [handle_da_event] is a utility function that will attempt to broadcast the
+/// [`handle_da_event`] is a utility function that will attempt to broadcast the
 /// given `da_proposal` to the given `da_channel_sender` if the given details
-/// pass validation checks, and the [BroadcastSender] `da_channel_sender` is
+/// pass validation checks, and the [`BroadcastSender`] `da_channel_sender` is
 /// still open.
 async fn handle_da_event<Types: NodeType>(
     da_channel_sender: &BroadcastSender<MessageType<Types>>,
     da_proposal: Arc<Proposal<Types, DaProposal<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
-    leader: <Types as NodeType>::SignatureKey,
     total_nodes: NonZeroUsize,
 ) {
     // We're explicitly not inspecting this error, as this function is not
     // expected to return an error or any indication of an error.
     let _ =
-        handle_da_event_implementation(da_channel_sender, da_proposal, sender, leader, total_nodes)
-            .await;
+        handle_da_event_implementation(da_channel_sender, da_proposal, sender, total_nodes).await;
 }
 
-/// [handle_da_event_implementation] is a utility function that will attempt
-/// to broadcast the given da_proposal to the given [da_channel_sender] if the
+/// [`handle_da_event_implementation`] is a utility function that will attempt
+/// to broadcast the given `da_proposal` to the given `da_channel_sender` if the
 /// given details pass all relevant checks.
 ///
 /// There are only three conditions under which this will fail to send the
 /// message via the given `da_channel_sender`, and they are all represented
-/// via [HandleDaEventError]. They are as follows:
-/// - [HandleDaEventError::SenderIsNotLeader]: The sender is not the leader
-/// - [HandleDaEventError::SignatureValidationFailed]: The signature validation
-///    failed
-/// - [HandleDaEventError::BroadcastFailed]: The broadcast failed as no receiver
+/// via [`HandleDaEventError`]. They are as follows:
+/// - [`HandleDaEventError::SignatureValidationFailed`]: The signature validation failed
+/// - [`HandleDaEventError::BroadcastFailed`]: The broadcast failed as no receiver
 ///    is in place to receive the message
 ///
-/// This function is the implementation for [handle_da_event].
+/// This function is the implementation for [`handle_da_event`].
 async fn handle_da_event_implementation<Types: NodeType>(
     da_channel_sender: &BroadcastSender<MessageType<Types>>,
     da_proposal: Arc<Proposal<Types, DaProposal<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
-    leader: <Types as NodeType>::SignatureKey,
     total_nodes: NonZeroUsize,
 ) -> Result<(), HandleDaEventError<Types>> {
     tracing::debug!(
         "DaProposal: Leader: {:?} for the view: {:?}",
-        leader,
+        sender,
         da_proposal.data.view_number
     );
 
@@ -1470,21 +1142,18 @@ async fn handle_da_event_implementation<Types: NodeType>(
     let encoded_txns_hash = Sha256::digest(&da_proposal.data.encoded_transactions);
     // check if the sender is the leader and the signature is valid; if yes, broadcast the DA proposal
 
-    // We check the failure condition first to prevent unnecessary conditional
-    // blocks
-    if leader != sender {
-        tracing::error!("Sender is not Leader on DaProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", da_proposal.data.view_number, leader, sender);
-        return Err(HandleDaEventError::SenderIsNotLeader);
-    }
-
     if !sender.validate(&da_proposal.signature, &encoded_txns_hash) {
-        tracing::error!("Validation Failure on DaProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", da_proposal.data.view_number, leader, sender);
+        tracing::error!(
+            "Validation Failure on DaProposal for view {:?}: Leader: {:?}",
+            da_proposal.data.view_number,
+            sender
+        );
         return Err(HandleDaEventError::SignatureValidationFailed);
     }
 
     let da_msg = DaProposalMessage::<Types> {
         proposal: da_proposal,
-        sender: leader,
+        sender,
         total_nodes: total_nodes.into(),
     };
 
@@ -1509,76 +1178,67 @@ async fn handle_da_event_implementation<Types: NodeType>(
     Ok(())
 }
 
-/// [HandleQuorumEventError] represents the internal class of errors that can
+/// [`HandleQuorumEventError`] represents the internal class of errors that can
 /// occur when attempting to process an incoming quorum proposal event.  More
 /// specifically these are the class of error that can be returned from
-/// [handle_quorum_event_implementation].
+/// [`handle_quorum_event_implementation`].
 #[derive(Debug)]
 enum HandleQuorumEventError<Types: NodeType> {
-    SenderIsNotLeader,
     SignatureValidationFailed,
     BroadcastFailed(async_broadcast::SendError<MessageType<Types>>),
 }
 
-/// [handle_quorum_event] is a utility function that will attempt to broadcast the
+/// [`handle_quorum_event`] is a utility function that will attempt to broadcast the
 /// given `quorum_proposal` to the given `quorum_channel_sender` if the given details
-/// pass validation checks, and the [BroadcastSender] `quorum_channel_sender` is
+/// pass validation checks, and the [`BroadcastSender`] `quorum_channel_sender` is
 /// still open.
 async fn handle_quorum_event<Types: NodeType>(
     quorum_channel_sender: &BroadcastSender<MessageType<Types>>,
     quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
-    leader: <Types as NodeType>::SignatureKey,
 ) {
     // We're explicitly not inspecting this error, as this function is not
     // expected to return an error or any indication of an error.
     let _ =
-        handle_quorum_event_implementation(quorum_channel_sender, quorum_proposal, sender, leader)
-            .await;
+        handle_quorum_event_implementation(quorum_channel_sender, quorum_proposal, sender).await;
 }
 
-/// [handle_quorum_event_implementation] is a utility function that will attempt
-/// to broadcast the given quorum_proposal to the given [quorum_channel_sender] if the
-/// given details pass all relevant checks.
+/// Utility function that will attempt to broadcast the given `quorum_proposal`
+/// to the given `quorum_channel_sender` if the given details pass all relevant checks.
 ///
 /// There are only three conditions under which this will fail to send the
 /// message via the given `quorum_channel_sender`, and they are all represented
-/// via [HandleQuorumEventError]. They are as follows:
-/// - [HandleQuorumEventError::SenderIsNotLeader]: The sender is not the leader
-/// - [HandleQuorumEventError::SignatureValidationFailed]: The signature validation
-///   failed
-/// - [HandleQuorumEventError::BroadcastFailed]: The broadcast failed as no receiver
+/// via [`HandleQuorumEventError`]. They are as follows:
+/// - [`HandleQuorumEventError::SignatureValidationFailed`]: The signature validation failed
+/// - [`HandleQuorumEventError::BroadcastFailed`]: The broadcast failed as no receiver
 ///   is in place to receive the message
 ///
-/// This function is the implementation for [handle_quorum_event].
+/// This function is the implementation for [`handle_quorum_event`].
 async fn handle_quorum_event_implementation<Types: NodeType>(
     quorum_channel_sender: &BroadcastSender<MessageType<Types>>,
     quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
-    leader: <Types as NodeType>::SignatureKey,
 ) -> Result<(), HandleQuorumEventError<Types>> {
     tracing::debug!(
         "QuorumProposal: Leader: {:?} for the view: {:?}",
-        leader,
+        sender,
         quorum_proposal.data.view_number
     );
 
     let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
 
-    // check if the sender is the leader and the signature is valid; if yes, broadcast the Quorum proposal
-    if sender != leader {
-        tracing::error!("Sender is not Leader on QuorumProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", quorum_proposal.data.view_number, leader, sender);
-        return Err(HandleQuorumEventError::SenderIsNotLeader);
-    }
-
     if !sender.validate(&quorum_proposal.signature, leaf.legacy_commit().as_ref()) {
-        tracing::error!("Validation Failure on QuorumProposal for view {:?}: Leader for the current view: {:?} and sender: {:?}", quorum_proposal.data.view_number, leader, sender);
+        tracing::error!(
+            "Validation Failure on QuorumProposal for view {:?}: Leader for the current view: {:?}",
+            quorum_proposal.data.view_number,
+            sender
+        );
         return Err(HandleQuorumEventError::SignatureValidationFailed);
     }
 
     let quorum_msg = QuorumProposalMessage::<Types> {
         proposal: quorum_proposal,
-        sender: leader,
+        sender,
     };
     let view_number = quorum_msg.proposal.data.view_number;
     tracing::debug!(
@@ -1664,14 +1324,14 @@ impl<Types: NodeType> From<TrySendError<Arc<ReceivedTransaction<Types>>>>
     }
 }
 
-/// [handle_received_txns] is a utility function that will take the given list
-/// of transactions, [txns], wraps them in a [ReceivedTransaction] struct
-/// and attempt to broadcast them to the given transaction [BroadcastSender]
-/// [tx_sender]. The broadcast itself it a non-blocking operation, and any
+/// Utility function that will take the given list
+/// of transactions, `txns`, wraps them in a [`ReceivedTransaction`] struct
+/// and attempt to broadcast them to the given transaction [`BroadcastSender`]
+/// `tx_sender`. The broadcast itself it a non-blocking operation, and any
 /// failures of the broadcast are collected into the returned vector
 /// of [Result]s.
 ///
-/// There is also a [max_txn_len] parameter that is used to check to ensure
+/// There is also a `max_txn_len` parameter that is used to check to ensure
 /// that transactions that exceed this threshold will also not be broadcasted.
 pub(crate) async fn handle_received_txns<Types: NodeType>(
     tx_sender: &BroadcastSender<Arc<ReceivedTransaction<Types>>>,
@@ -1684,8 +1344,8 @@ pub(crate) async fn handle_received_txns<Types: NodeType>(
         .collect()
 }
 
-/// HandleReceivedTxns is a struct that is used to handle the processing of
-/// the function [handle_received_txns].  In order to avoid the need to
+/// `HandleReceivedTxns` is a struct that is used to handle the processing of
+/// the function [`handle_received_txns`].  In order to avoid the need to
 /// double allocate a [Vec] from processing these entries, this struct exists
 /// to be processed as an [Iterator] instead.
 struct HandleReceivedTxns<Types: NodeType> {
@@ -1793,16 +1453,12 @@ mod test {
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
     use committable::Commitment;
-    use futures::{
-        channel::mpsc::{channel, Receiver},
-        StreamExt,
-    };
+    use futures::StreamExt;
     use hotshot::{
         traits::BlockPayload,
-        types::{BLSPubKey, Event, SignatureKey},
+        types::{BLSPubKey, SignatureKey},
     };
     use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
-    use hotshot_events_service::events_source::StartupInfo;
     use hotshot_example_types::{
         block_types::{TestBlockPayload, TestMetadata, TestTransaction},
         node_types::{TestTypes, TestVersions},
@@ -1819,25 +1475,22 @@ mod test {
         },
         utils::BuilderCommitment,
     };
+    use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
     use sha2::{Digest, Sha256};
-    use tide_disco::StatusCode;
 
     use crate::{
         builder_state::{
             BuildBlockInfo, MessageType, RequestMessage, ResponseMessage, TransactionSource,
             TriggerStatus,
         },
-        service::{
-            connect_to_events_service, ConnectToEventsServiceError, HandleReceivedTxnsError,
-            INITIAL_MAX_BLOCK_SIZE,
-        },
-        BlockId, BuilderStateId, LegacyCommit, ParentBlockReferences,
+        service::{HandleReceivedTxnsError, INITIAL_MAX_BLOCK_SIZE},
+        LegacyCommit,
     };
 
     use super::{
         handle_da_event_implementation, handle_quorum_event_implementation, AvailableBlocksError,
         BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
-        HandleQuorumEventError, HandleReceivedTxns, HotShotEventsService, ProxyGlobalState,
+        HandleQuorumEventError, HandleReceivedTxns, ProxyGlobalState,
     };
 
     // GlobalState Tests
@@ -1864,7 +1517,7 @@ mod test {
 
         let builder_state_id = BuilderStateId {
             parent_commitment: parent_commit,
-            view: ViewNumber::new(1),
+            parent_view: ViewNumber::new(1),
         };
 
         // There should be a single entry within the spawned_builder_states,
@@ -1877,7 +1530,7 @@ mod test {
 
         assert!(state.spawned_builder_states.contains_key(&builder_state_id), "The spawned builder states should contain an entry with the bootstrapped parameters passed into new");
 
-        assert!(!state.spawned_builder_states.contains_key(&BuilderStateId { parent_commitment: parent_commit, view: ViewNumber::new(0) }), "The spawned builder states should not contain any other entry, as such it should not contain any entry with a higher view number, but the same parent commit");
+        assert!(!state.spawned_builder_states.contains_key(&BuilderStateId { parent_commitment: parent_commit, parent_view: ViewNumber::new(0) }), "The spawned builder states should not contain any other entry, as such it should not contain any entry with a higher view number, but the same parent commit");
 
         // We can't compare the Senders directly
 
@@ -1929,7 +1582,7 @@ mod test {
             let (req_sender, _) = async_broadcast::broadcast(10);
             let builder_state_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(5),
+                parent_view: ViewNumber::new(5),
             };
 
             state.register_builder_state(
@@ -1962,7 +1615,7 @@ mod test {
             let (req_sender, _) = async_broadcast::broadcast(10);
             let builder_state_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(6),
+                parent_view: ViewNumber::new(6),
             };
 
             state.register_builder_state(
@@ -2016,7 +1669,7 @@ mod test {
             let (req_sender, req_receiver) = async_broadcast::broadcast(10);
             let builder_state_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(5),
+                parent_view: ViewNumber::new(5),
             };
 
             state.register_builder_state(
@@ -2047,7 +1700,7 @@ mod test {
             let (req_sender, req_receiver) = async_broadcast::broadcast(10);
             let builder_state_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(5),
+                parent_view: ViewNumber::new(5),
             };
 
             // This is the same BuilderStateId as the previous one, so it should
@@ -2077,7 +1730,7 @@ mod test {
         {
             let builder_state_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(5),
+                parent_view: ViewNumber::new(5),
             };
 
             let req_id_and_sender = state.spawned_builder_states.get(&builder_state_id).unwrap();
@@ -2130,7 +1783,7 @@ mod test {
             let (req_sender, _) = async_broadcast::broadcast(10);
             let builder_state_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(6),
+                parent_view: ViewNumber::new(6),
             };
 
             state.register_builder_state(
@@ -2163,7 +1816,7 @@ mod test {
             let (req_sender, _) = async_broadcast::broadcast(10);
             let builder_state_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(5),
+                parent_view: ViewNumber::new(5),
             };
 
             state.register_builder_state(
@@ -2186,7 +1839,7 @@ mod test {
                 state.highest_view_num_builder_id,
                 BuilderStateId {
                     parent_commitment: parent_commit,
-                    view: ViewNumber::new(6)
+                    parent_view: ViewNumber::new(6)
                 },
                 "The highest view number builder id should now be the one that was just registered"
             );
@@ -2223,7 +1876,7 @@ mod test {
         let new_view_num = ViewNumber::new(1);
         let builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
-            view: new_view_num,
+            parent_view: new_view_num,
         };
 
         let builder_hash_1 = BuilderCommitment::from_bytes([1, 2, 3, 4]);
@@ -2422,7 +2075,7 @@ mod test {
         let new_view_num = ViewNumber::new(1);
         let builder_state_id = BuilderStateId {
             parent_commitment: new_parent_commit,
-            view: new_view_num,
+            parent_view: new_view_num,
         };
 
         let builder_hash = BuilderCommitment::from_bytes([1, 2, 3, 4]);
@@ -2698,7 +2351,7 @@ mod test {
             state.register_builder_state(
                 BuilderStateId {
                     parent_commitment: vid_commit,
-                    view,
+                    parent_view: view,
                 },
                 ParentBlockReferences {
                     view_number: view,
@@ -2730,7 +2383,7 @@ mod test {
 
         let builder_state_id = BuilderStateId {
             parent_commitment: vid_commitment(&[10], 4),
-            view: ViewNumber::new(10),
+            parent_view: ViewNumber::new(10),
         };
         assert_eq!(
             state.highest_view_num_builder_id, builder_state_id,
@@ -2746,7 +2399,7 @@ mod test {
         assert!(
             state.spawned_builder_states.contains_key(&BuilderStateId {
                 parent_commitment: vid_commitment(&[10], 4),
-                view: ViewNumber::new(10),
+                parent_view: ViewNumber::new(10),
             }),
             "The spawned builder states should contain the builder state id: {builder_state_id}"
         );
@@ -2790,7 +2443,7 @@ mod test {
             state.register_builder_state(
                 BuilderStateId {
                     parent_commitment: vid_commit,
-                    view,
+                    parent_view: view,
                 },
                 ParentBlockReferences {
                     view_number: view,
@@ -2806,7 +2459,7 @@ mod test {
             state.highest_view_num_builder_id,
             BuilderStateId {
                 parent_commitment: vid_commitment(&[10], 4),
-                view: ViewNumber::new(10),
+                parent_view: ViewNumber::new(10),
             },
             "The highest view number builder id should be the one that was just registered"
         );
@@ -2867,7 +2520,7 @@ mod test {
             state.register_builder_state(
                 BuilderStateId {
                     parent_commitment: vid_commit,
-                    view,
+                    parent_view: view,
                 },
                 ParentBlockReferences {
                     view_number: view,
@@ -2883,7 +2536,7 @@ mod test {
             state.highest_view_num_builder_id,
             BuilderStateId {
                 parent_commitment: vid_commitment(&[10], 4),
-                view: ViewNumber::new(10),
+                parent_view: ViewNumber::new(10),
             },
             "The highest view number builder id should be the one that was just registered"
         );
@@ -2908,7 +2561,7 @@ mod test {
             state.register_builder_state(
                 BuilderStateId {
                     parent_commitment: vid_commit,
-                    view,
+                    parent_view: view,
                 },
                 ParentBlockReferences {
                     view_number: view,
@@ -2964,7 +2617,7 @@ mod test {
             state.register_builder_state(
                 BuilderStateId {
                     parent_commitment: vid_commit,
-                    view,
+                    parent_view: view,
                 },
                 ParentBlockReferences {
                     view_number: view,
@@ -2986,7 +2639,7 @@ mod test {
             state.highest_view_num_builder_id,
             BuilderStateId {
                 parent_commitment: vid_commitment(&[10], 4),
-                view: ViewNumber::new(10),
+                parent_view: ViewNumber::new(10),
             },
             "The highest view number builder id should be the one that was just registered"
         );
@@ -3017,7 +2670,7 @@ mod test {
         for i in 0..5 {
             let builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment(&[i], 4),
-                view: ViewNumber::new(i as u64),
+                parent_view: ViewNumber::new(i as u64),
             };
             assert!(
                 !state.spawned_builder_states.contains_key(&builder_state_id),
@@ -3028,7 +2681,7 @@ mod test {
         for i in 5..=10 {
             let builder_state_id = BuilderStateId {
                 parent_commitment: vid_commitment(&[i], 4),
-                view: ViewNumber::new(i as u64),
+                parent_view: ViewNumber::new(i as u64),
             };
             assert!(
                 state.spawned_builder_states.contains_key(&builder_state_id),
@@ -3249,7 +2902,7 @@ mod test {
             let mut write_locked_global_state = state.global_state.write_arc().await;
             write_locked_global_state.highest_view_num_builder_id = BuilderStateId {
                 parent_commitment: parent_commit,
-                view: ViewNumber::new(5),
+                parent_view: ViewNumber::new(5),
             };
         }
 
@@ -3335,7 +2988,7 @@ mod test {
         // Now we want to make the block data available to the state.
         let expected_builder_state_id = BuilderStateId {
             parent_commitment: parent_commit,
-            view: ViewNumber::new(1),
+            parent_view: ViewNumber::new(1),
         };
 
         let mut response_receiver = {
@@ -3349,7 +3002,7 @@ mod test {
             write_locked_global_state.register_builder_state(
                 expected_builder_state_id.clone(),
                 ParentBlockReferences {
-                    view_number: expected_builder_state_id.view,
+                    view_number: expected_builder_state_id.parent_view,
                     vid_commitment: expected_builder_state_id.parent_commitment,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
@@ -3456,7 +3109,7 @@ mod test {
         // Now we want to make the block data available to the state.
         let expected_builder_state_id = BuilderStateId {
             parent_commitment: parent_commit,
-            view: ViewNumber::new(1),
+            parent_view: ViewNumber::new(1),
         };
 
         let mut response_receiver = {
@@ -3470,7 +3123,7 @@ mod test {
             write_locked_global_state.register_builder_state(
                 expected_builder_state_id.clone(),
                 ParentBlockReferences {
-                    view_number: expected_builder_state_id.view,
+                    view_number: expected_builder_state_id.parent_view,
                     vid_commitment: expected_builder_state_id.parent_commitment,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
@@ -4161,62 +3814,6 @@ mod test {
     /// is returned under the right conditions of invoking
     /// [handle_da_event_implementation].
     ///
-    /// To trigger this error, we simply need to ensure that the public keys
-    /// provided for the leader and the sender do not match.
-    #[async_std::test]
-    async fn test_handle_da_event_implementation_error_sender_is_not_leader() {
-        let (sender_public_key, sender_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, _) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
-        let (da_channel_sender, _) = async_broadcast::broadcast(10);
-        let total_nodes = NonZeroUsize::new(10).unwrap();
-        let view_number = ViewNumber::new(10);
-
-        let da_proposal = DaProposal::<TestTypes> {
-            encoded_transactions: Arc::new([1, 2, 3, 4, 5, 6]),
-            metadata: TestMetadata {
-                num_transactions: 1,
-            },
-            view_number,
-        };
-
-        let encoded_txns_hash = Sha256::digest(&da_proposal.encoded_transactions);
-        let signature =
-            <BLSPubKey as SignatureKey>::sign(&sender_private_key, &encoded_txns_hash).unwrap();
-
-        let signed_da_proposal = Arc::new(Proposal {
-            data: da_proposal,
-            signature,
-            _pd: Default::default(),
-        });
-
-        let result = handle_da_event_implementation(
-            &da_channel_sender,
-            signed_da_proposal.clone(),
-            sender_public_key,
-            leader_public_key,
-            total_nodes,
-        )
-        .await;
-
-        match result {
-            Err(HandleDaEventError::SenderIsNotLeader) => {
-                // This is expected.
-            }
-            Ok(_) => {
-                panic!("expected an error, but received a successful attempt instead")
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
-            }
-        }
-    }
-
-    /// This test checks that the error [HandleDaEventError::SignatureValidationFailed]
-    /// is returned under the right conditions of invoking
-    /// [handle_da_event_implementation].
-    ///
     /// To trigger this error, we simply need to ensure that signature provided
     /// to the [Proposal] does not match the public key of the sender.
     /// Additionally, the public keys passed for both the leader and the sender
@@ -4253,7 +3850,6 @@ mod test {
             &da_channel_sender,
             signed_da_proposal.clone(),
             sender_public_key,
-            sender_public_key,
             total_nodes,
         )
         .await;
@@ -4281,8 +3877,6 @@ mod test {
     #[async_std::test]
     async fn test_handle_da_event_implementation_error_broadcast_failed() {
         let (sender_public_key, sender_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let da_channel_sender = {
             let (da_channel_sender, _) = async_broadcast::broadcast(10);
@@ -4314,7 +3908,6 @@ mod test {
             &da_channel_sender,
             signed_da_proposal.clone(),
             sender_public_key,
-            leader_public_key,
             total_nodes,
         )
         .await;
@@ -4337,8 +3930,6 @@ mod test {
     #[async_std::test]
     async fn test_handle_da_event_implementation_success() {
         let (sender_public_key, sender_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let (da_channel_sender, da_channel_receiver) = async_broadcast::broadcast(10);
         let total_nodes = NonZeroUsize::new(10).unwrap();
@@ -4366,7 +3957,6 @@ mod test {
             &da_channel_sender,
             signed_da_proposal.clone(),
             sender_public_key,
-            leader_public_key,
             total_nodes,
         )
         .await;
@@ -4392,74 +3982,6 @@ mod test {
     }
 
     // handle_quorum_event Tests
-
-    /// This test checks that the error [HandleQuorumEventError::SenderIsNotLeader]
-    /// is returned under the right conditions of invoking
-    /// [handle_quorum_event_implementation].
-    ///
-    /// To trigger this error, we simply need to ensure that the public keys
-    /// provided for the leader and the sender do not match.
-    #[async_std::test]
-    async fn test_handle_quorum_event_error_sender_is_not_leader() {
-        let (sender_public_key, sender_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, _) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 1);
-        let (quorum_channel_sender, _) = async_broadcast::broadcast(10);
-        let view_number = ViewNumber::new(10);
-
-        let quorum_proposal = {
-            let leaf = Leaf::<TestTypes>::genesis(
-                &TestValidatedState::default(),
-                &TestInstanceState::default(),
-            )
-            .await;
-
-            QuorumProposal::<TestTypes> {
-                block_header: leaf.block_header().clone(),
-                view_number,
-                justify_qc: QuorumCertificate::genesis::<TestVersions>(
-                    &TestValidatedState::default(),
-                    &TestInstanceState::default(),
-                )
-                .await,
-                upgrade_certificate: None,
-                proposal_certificate: None,
-            }
-        };
-
-        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
-
-        let signature =
-            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.legacy_commit().as_ref())
-                .unwrap();
-
-        let signed_quorum_proposal = Arc::new(Proposal {
-            data: quorum_proposal,
-            signature,
-            _pd: Default::default(),
-        });
-
-        let result = handle_quorum_event_implementation(
-            &quorum_channel_sender,
-            signed_quorum_proposal.clone(),
-            sender_public_key,
-            leader_public_key,
-        )
-        .await;
-
-        match result {
-            Err(HandleQuorumEventError::SenderIsNotLeader) => {
-                // This is expected.
-            }
-            Ok(_) => {
-                panic!("expected an error, but received a successful attempt instead");
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
-            }
-        }
-    }
 
     /// This test checks that the error [HandleQuorumEventError::SignatureValidationFailed]
     /// is returned under the right conditions of invoking
@@ -4515,7 +4037,6 @@ mod test {
             &quorum_channel_sender,
             signed_quorum_proposal.clone(),
             sender_public_key,
-            sender_public_key,
         )
         .await;
 
@@ -4542,8 +4063,6 @@ mod test {
     #[async_std::test]
     async fn test_handle_quorum_event_error_broadcast_failed() {
         let (sender_public_key, sender_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let quorum_channel_sender = {
             let (quorum_channel_sender, _) = async_broadcast::broadcast(10);
@@ -4588,7 +4107,6 @@ mod test {
             &quorum_channel_sender,
             signed_quorum_proposal.clone(),
             sender_public_key,
-            leader_public_key,
         )
         .await;
 
@@ -4610,8 +4128,6 @@ mod test {
     #[async_std::test]
     async fn test_handle_quorum_event_success() {
         let (sender_public_key, sender_private_key) =
-            <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
-        let (leader_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
         let (quorum_channel_sender, quorum_channel_receiver) = async_broadcast::broadcast(10);
         let view_number = ViewNumber::new(10);
@@ -4652,7 +4168,6 @@ mod test {
             &quorum_channel_sender,
             signed_quorum_proposal.clone(),
             sender_public_key,
-            leader_public_key,
         )
         .await;
 
@@ -4873,215 +4388,6 @@ mod test {
                 _ => {
                     panic!("Expected a TransactionMessage, but got something else");
                 }
-            }
-        }
-    }
-
-    /// This test checks that the error [ConnectToEventsServiceError::Connection]
-    /// is returned when [connect_to_events_service] is invoked.
-    ///
-    /// This error may be difficult to control in all environments. In order
-    /// to control this specific case, the underlying client being passed to
-    /// [connect_to_events_service] is a mock that always returns false when
-    /// [check_connection] is invoked.
-    #[async_std::test]
-    async fn test_connect_to_events_service_mock_error_connection() {
-        struct ConnectionFailure;
-
-        #[async_trait::async_trait]
-        impl HotShotEventsService<TestTypes> for ConnectionFailure {
-            type EventsStream =
-                Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
-            type EventsError = hotshot_events_service::events::Error;
-            type StartUpInfo = StartupInfo<TestTypes>;
-            type StartUpInfoError = hotshot_events_service::events::Error;
-
-            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
-                false
-            }
-
-            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
-                todo!()
-            }
-
-            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
-                todo!()
-            }
-        }
-
-        let client = ConnectionFailure;
-
-        match connect_to_events_service(&client).await {
-            Err(ConnectToEventsServiceError::Connection) => {
-                // This is expected.
-            }
-            Ok(_) => {
-                panic!("Expected an error, but got a result");
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
-            }
-        }
-    }
-
-    /// This test checks that the error [ConnectToEventsServiceError::Subscription]
-    /// is returned when [connect_to_events_service] is invoked.
-    ///
-    /// This error may be difficult to control in all environments. In order
-    /// to control this specific case, the underlying client being passed to
-    /// [connect_to_events_service] is a mock that always returns an error when
-    /// [events] is invoked.
-    #[async_std::test]
-    async fn test_connect_to_events_service_mock_error_events() {
-        struct EventsFailure;
-
-        #[async_trait::async_trait]
-        impl HotShotEventsService<TestTypes> for EventsFailure {
-            type EventsStream =
-                Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
-            type EventsError = hotshot_events_service::events::Error;
-            type StartUpInfo = StartupInfo<TestTypes>;
-            type StartUpInfoError = hotshot_events_service::events::Error;
-
-            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
-                true
-            }
-
-            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
-                Err(hotshot_events_service::events::Error::Custom {
-                    message: "This is a custom error".to_string(),
-                    status: StatusCode::INTERNAL_SERVER_ERROR,
-                })
-            }
-
-            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
-                todo!()
-            }
-        }
-
-        let client = EventsFailure;
-
-        match connect_to_events_service(&client).await {
-            Err(ConnectToEventsServiceError::Subscription(
-                hotshot_events_service::events::Error::Custom { .. },
-            )) => {
-                // This is expected.
-            }
-            Ok(_) => {
-                panic!("Expected an error, but got a result");
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
-            }
-        }
-    }
-
-    /// This test checks that the error [ConnectToEventsServiceError::StartupInfo]
-    /// is returned when [connect_to_events_service] is invoked.
-    ///
-    /// This error may be difficult to control in all environments. In order
-    /// to control this specific case, the underlying client being passed to
-    /// [connect_to_events_service] is a mock that always returns an error when
-    /// [startup_info] is invoked.
-    #[async_std::test]
-    async fn test_connect_to_service_mock_error_startup_info() {
-        type EventsStream =
-            Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
-        struct StartupInfoFailure(Arc<RwLock<Option<EventsStream>>>);
-
-        #[async_trait::async_trait]
-        impl HotShotEventsService<TestTypes> for StartupInfoFailure {
-            type EventsStream = EventsStream;
-            type EventsError = hotshot_events_service::events::Error;
-            type StartUpInfo = StartupInfo<TestTypes>;
-            type StartUpInfoError = hotshot_events_service::events::Error;
-
-            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
-                true
-            }
-
-            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
-                let mut write_lock_guard = self.0.write_arc().await;
-
-                write_lock_guard
-                    .take()
-                    .ok_or(hotshot_events_service::events::Error::Custom {
-                        message: "This is a custom error".to_string(),
-                        status: StatusCode::INTERNAL_SERVER_ERROR,
-                    })
-            }
-
-            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
-                Err(hotshot_events_service::events::Error::Custom {
-                    message: "This is a custom error".to_string(),
-                    status: StatusCode::INTERNAL_SERVER_ERROR,
-                })
-            }
-        }
-
-        let client = StartupInfoFailure(Arc::new(RwLock::new(Some(channel(10).1))));
-
-        match connect_to_events_service(&client).await {
-            Err(ConnectToEventsServiceError::StartupInfo(
-                hotshot_events_service::events::Error::Custom { .. },
-            )) => {
-                // This is expected.
-            }
-            Ok(_) => {
-                panic!("Expected an error, but got a result");
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
-            }
-        }
-    }
-
-    /// This test checks that [connect_to_events_service] completes
-    /// successfully.
-    #[async_std::test]
-    async fn test_connect_to_service_mock_success() {
-        type EventsStream =
-            Receiver<Result<Event<TestTypes>, hotshot_events_service::events::Error>>;
-        struct Success(Arc<RwLock<Option<EventsStream>>>);
-
-        #[async_trait::async_trait]
-        impl HotShotEventsService<TestTypes> for Success {
-            type EventsStream = EventsStream;
-            type EventsError = hotshot_events_service::events::Error;
-            type StartUpInfo = StartupInfo<TestTypes>;
-            type StartUpInfoError = hotshot_events_service::events::Error;
-
-            async fn check_connection(&self, _timeout: Option<Duration>) -> bool {
-                true
-            }
-
-            async fn events(&self) -> Result<Self::EventsStream, Self::EventsError> {
-                let mut write_lock_guard = self.0.write_arc().await;
-
-                write_lock_guard
-                    .take()
-                    .ok_or(hotshot_events_service::events::Error::Custom {
-                        message: "This is a custom error".to_string(),
-                        status: StatusCode::INTERNAL_SERVER_ERROR,
-                    })
-            }
-
-            async fn startup_info(&self) -> Result<Self::StartUpInfo, Self::StartUpInfoError> {
-                Ok(StartupInfo {
-                    known_node_with_stake: vec![],
-                    non_staked_node_count: 0,
-                })
-            }
-        }
-
-        let client = Success(Arc::new(RwLock::new(Some(channel(10).1))));
-
-        match connect_to_events_service(&client).await {
-            Ok(_) => {
-                // This is expected.
-            }
-            Err(err) => {
-                panic!("Unexpected error: {:?}", err);
             }
         }
     }

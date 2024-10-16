@@ -6,7 +6,7 @@ use crate::{
         ResponseMessage,
     },
     service::BroadcastSenders,
-    utils::{BuilderStateId, LegacyCommit},
+    utils::LegacyCommit,
 };
 use async_broadcast::broadcast;
 use async_compatibility_layer::channel::{unbounded, UnboundedReceiver};
@@ -33,10 +33,10 @@ use hotshot_example_types::{
     node_types::TestVersions,
     state_types::{TestInstanceState, TestValidatedState},
 };
+use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
 use serde::{Deserialize, Serialize};
 
 use crate::service::{broadcast_channels, GlobalState};
-use crate::utils::ParentBlockReferences;
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use std::sync::Arc;

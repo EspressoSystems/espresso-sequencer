@@ -22,13 +22,10 @@ pub mod service;
 pub mod legacy_testing;
 
 use async_compatibility_layer::channel::UnboundedReceiver;
-use committable::Commitment;
 use hotshot_builder_api::v0_1::builder::BuildError;
-use hotshot_types::{
-    data::Leaf, traits::node_implementation::NodeType, utils::BuilderCommitment, vid::VidCommitment,
-};
+use hotshot_types::traits::node_implementation::NodeType;
 
-/// WaitAndKeep is a helper enum that allows for the lazy polling of a single
+/// `WaitAndKeep` is a helper enum that allows for the lazy polling of a single
 /// value from an unbound receiver.
 #[derive(Debug)]
 pub enum WaitAndKeep<T> {
@@ -53,9 +50,9 @@ impl From<WaitAndKeepGetError> for BuildError {
 
 impl<T: Clone> WaitAndKeep<T> {
     /// get will return a clone of the value that is already stored within the
-    /// value of WaitAndKeep::Keep if the value is already resolved.  Otherwise
+    /// value of `WaitAndKeep::Keep` if the value is already resolved.  Otherwise
     /// it will poll the next value from the channel and replace the locally
-    /// stored WaitAndKeep::Wait with the resolved value as a WaitAndKeep::Keep.
+    /// stored `WaitAndKeep::Wait` with the resolved value as a `WaitAndKeep::Keep`.
     ///
     /// Note: This pattern seems very similar to a Future, and ultimately
     /// returns a future. It's not clear why this needs to be implemented
@@ -75,50 +72,6 @@ impl<T: Clone> WaitAndKeep<T> {
                 got
             }
         }
-    }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct BlockId<Types: NodeType> {
-    hash: BuilderCommitment,
-    view: Types::Time,
-}
-
-impl<Types: NodeType> std::fmt::Display for BlockId<Types> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Block({}@{})",
-            hex::encode(self.hash.as_ref()),
-            *self.view
-        )
-    }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct BuilderStateId<Types: NodeType> {
-    parent_commitment: VidCommitment,
-    view: Types::Time,
-}
-
-impl<Types: NodeType> std::fmt::Display for BuilderStateId<Types> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BuilderState({}@{})", self.parent_commitment, *self.view)
-    }
-}
-
-/// References to the parent block that is extended to spawn the new builder state.
-#[derive(Debug, Clone)]
-pub struct ParentBlockReferences<TYPES: NodeType> {
-    pub view_number: TYPES::Time,
-    pub vid_commitment: VidCommitment,
-    pub leaf_commit: Commitment<Leaf<TYPES>>,
-    pub builder_commitment: BuilderCommitment,
-}
-// implement display for the referenced info
-impl<TYPES: NodeType> std::fmt::Display for ParentBlockReferences<TYPES> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "View Number: {:?}", self.view_number)
     }
 }
 

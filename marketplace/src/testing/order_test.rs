@@ -4,11 +4,9 @@ use hotshot_types::{
     data::QuorumProposal,
     traits::node_implementation::{ConsensusTime, NodeType},
 };
+use marketplace_builder_shared::block::BuilderStateId;
 
-use crate::{
-    service::{BuilderHooks, ProxyGlobalState},
-    utils::BuilderStateId,
-};
+use crate::service::{BuilderHooks, ProxyGlobalState};
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -22,59 +20,59 @@ use hotshot::{
 };
 use std::time::Duration;
 
-/// [NoOpHooks] is a struct placeholder that is used to implement the
-/// [BuilderHooks] trait for the [TestTypes] NodeType in a way that doesn't
-/// do anything.  This is a convenience for creating [ProxyGlobalState] objects
+/// [`NoOpHooks`] is a struct placeholder that is used to implement the
+/// [`BuilderHooks`] trait for the [`TestTypes`] `NodeType` in a way that doesn't
+/// do anything.  This is a convenience for creating [`ProxyGlobalState`] objects
 struct NoOpHooks;
 
 #[async_trait::async_trait]
 impl BuilderHooks<TestTypes> for NoOpHooks {
     #[inline(always)]
     async fn process_transactions(
-        self: &Arc<Self>,
+        &self,
         transactions: Vec<<TestTypes as NodeType>::Transaction>,
     ) -> Vec<<TestTypes as NodeType>::Transaction> {
         transactions
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(self: &Arc<Self>, _event: &Event<TestTypes>) {}
+    async fn handle_hotshot_event(&self, _event: &Event<TestTypes>) {}
 }
 
-/// [RoundTransactionBehavior] is an enum that is used to represent different
+/// [`RoundTransactionBehavior`] is an enum that is used to represent different
 /// behaviors that we may want to simulate during a round.  This applies to
 /// determining which transactions are included in the block, and how their
 /// order is adjusted before being included for consensus.
 #[derive(Clone, Debug)]
 enum RoundTransactionBehavior {
-    /// [NoAdjust] indicates that the transactions should be passed through
+    /// [`NoAdjust`] indicates that the transactions should be passed through
     /// without any adjustment
     NoAdjust,
 
     /// [Skip] indicates that the transactions should be omitted entirely
     Skip,
 
-    /// [AjdustAdd] indicates that a new transaction should be added to the
+    /// [`AjdustAdd`] indicates that a new transaction should be added to the
     /// transactions submitted
     AdjustAdd(usize),
 
-    /// [AdjustRemoveTail] indicates that the last transaction should be removed
+    /// [`AdjustRemoveTail`] indicates that the last transaction should be removed
     /// from the transactions submitted
     AdjustRemoveTail,
 
-    /// [ProposeInAdvance] indicates that a transaction should be added to the
+    /// [`ProposeInAdvance`] indicates that a transaction should be added to the
     /// transactions submitted that indicates that it is for the next round
     /// (i.e. the round after the one being processed)
     ProposeInAdvance(usize),
 
-    /// [AdjustRemove] indicates that a random transaction (not the last one)
+    /// [`AdjustRemove`] indicates that a random transaction (not the last one)
     /// should be removed from the transactions submitted
     AdjustRemove,
 }
 
 impl RoundTransactionBehavior {
-    /// [process_transactions] is a helper method that takes a vector of transactions
-    /// and applies the behavior specified by the [RoundTransactionBehavior] enum
+    /// [`process_transactions`] is a helper method that takes a vector of transactions
+    /// and applies the behavior specified by the [`RoundTransactionBehavior`] enum
     /// to the transactions before returning them.
     fn process_transactions(&self, transactions: Vec<TestTransaction>) -> Vec<TestTransaction> {
         match self {

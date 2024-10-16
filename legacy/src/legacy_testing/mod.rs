@@ -5,7 +5,7 @@ use crate::{
         BuilderState, DAProposalInfo, DaProposalMessage, MessageType, QuorumProposalMessage,
     },
     service::ReceivedTransaction,
-    BuilderStateId, LegacyCommit,
+    LegacyCommit,
 };
 use async_broadcast::broadcast;
 use async_broadcast::Sender as BroadcastSender;
@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::service::GlobalState;
-use crate::ParentBlockReferences;
+use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use std::sync::Arc;
@@ -241,7 +241,7 @@ pub async fn calc_proposal_msg(
     let da_proposal_msg = MessageType::DaProposalMessage(da_proposal_message);
     let builder_state_id = BuilderStateId {
         parent_commitment: block_vid_commitment,
-        view: ViewNumber::new(round as u64),
+        parent_view: ViewNumber::new(round as u64),
     };
     (
         quorum_proposal,
