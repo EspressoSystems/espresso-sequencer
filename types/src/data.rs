@@ -241,7 +241,7 @@ impl<TYPES: NodeType> ViewChangeEvidence<TYPES> {
     /// Check that the given ViewChangeEvidence is relevant to the current view.
     pub fn is_valid_for_view(&self, view: &TYPES::Time) -> bool {
         match self {
-            ViewChangeEvidence::Timeout(timeout_cert) => timeout_cert.date().view == *view - 1,
+            ViewChangeEvidence::Timeout(timeout_cert) => timeout_cert.data().view == *view - 1,
             ViewChangeEvidence::ViewSync(view_sync_cert) => view_sync_cert.view_number == *view,
         }
     }
@@ -769,7 +769,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         Leaf {
             view_number: *view_number,
             justify_qc: justify_qc.clone(),
-            parent_commitment: justify_qc.date().leaf_commit,
+            parent_commitment: justify_qc.data().leaf_commit,
             block_header: block_header.clone(),
             upgrade_certificate: upgrade_certificate.clone(),
             block_payload: None,

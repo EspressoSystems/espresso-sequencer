@@ -426,7 +426,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 {
                     warn!(
                         "View Sync Finalize certificate {:?} was invalid",
-                        certificate.date()
+                        certificate.data()
                     );
                     return;
                 }

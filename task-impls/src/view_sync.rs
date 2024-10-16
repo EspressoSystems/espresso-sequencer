@@ -505,7 +505,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
                     .await
                 {
-                    error!("Not valid view sync cert! {:?}", certificate.date());
+                    error!("Not valid view sync cert! {:?}", certificate.data());
 
                     return None;
                 }
@@ -516,13 +516,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     return Some(HotShotTaskCompleted);
                 }
 
-                if certificate.date().relay > self.relay {
-                    self.relay = certificate.date().relay;
+                if certificate.data().relay > self.relay {
+                    self.relay = certificate.data().relay;
                 }
 
                 let Ok(vote) = ViewSyncCommitVote::<TYPES>::create_signed_vote(
                     ViewSyncCommitData {
-                        relay: certificate.date().relay,
+                        relay: certificate.data().relay,
                         round: self.next_view,
                     },
                     self.next_view,
@@ -587,7 +587,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
                     .await
                 {
-                    error!("Not valid view sync cert! {:?}", certificate.date());
+                    error!("Not valid view sync cert! {:?}", certificate.data());
 
                     return None;
                 }
@@ -598,13 +598,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     return Some(HotShotTaskCompleted);
                 }
 
-                if certificate.date().relay > self.relay {
-                    self.relay = certificate.date().relay;
+                if certificate.data().relay > self.relay {
+                    self.relay = certificate.data().relay;
                 }
 
                 let Ok(vote) = ViewSyncFinalizeVote::<TYPES>::create_signed_vote(
                     ViewSyncFinalizeData {
-                        relay: certificate.date().relay,
+                        relay: certificate.data().relay,
                         round: self.next_view,
                     },
                     self.next_view,
@@ -679,7 +679,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
                     .await
                 {
-                    error!("Not valid view sync cert! {:?}", certificate.date());
+                    error!("Not valid view sync cert! {:?}", certificate.data());
 
                     return None;
                 }
@@ -690,8 +690,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     return Some(HotShotTaskCompleted);
                 }
 
-                if certificate.date().relay > self.relay {
-                    self.relay = certificate.date().relay;
+                if certificate.data().relay > self.relay {
+                    self.relay = certificate.data().relay;
                 }
 
                 if let Some(timeout_task) = self.timeout_task.take() {

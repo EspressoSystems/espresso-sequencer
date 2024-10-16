@@ -147,7 +147,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES
         &self.data
     }
 
-    fn date_commitment(&self) -> Commitment<DATA> {
+    fn data_commitment(&self) -> Commitment<DATA> {
         self.data.commit()
     }
 }
