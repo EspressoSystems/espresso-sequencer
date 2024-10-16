@@ -1164,7 +1164,7 @@ mod test {
         TestTypes,
     };
 
-    /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
+    /// check whether the `da_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing da proposal messages
     /// used for testing only
     fn check_equal_da_proposal_hashmap<TYPES: NodeType>(
         da_proposal_payload_commit_to_da_proposal: HashMap<
@@ -1189,7 +1189,7 @@ mod test {
         }
     }
 
-    /// check whether the quorum_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing quorum proposal messages
+    /// check whether the `quorum_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing quorum proposal messages
     /// used for testing only
     type QuorumProposalMap<TYPES> = HashMap<
         (BuilderCommitment, <TYPES as NodeType>::Time),
