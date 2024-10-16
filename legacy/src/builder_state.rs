@@ -105,7 +105,7 @@ pub enum Status {
     ShouldContinue,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DAProposalInfo<TYPES: NodeType> {
     pub view_number: TYPES::Time,
     pub proposal: Arc<Proposal<TYPES, DaProposal<TYPES>>>,
@@ -1129,32 +1129,31 @@ mod test {
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
 
-    use super::DaProposalMessage;
+    use super::DAProposalInfo;
     use super::MessageType;
     use super::ParentBlockReferences;
-    use crate::legacy_testing::{calc_proposal_msg, start_builder_state_without_event_loop, TestTypes};
+    use crate::legacy_testing::{calc_proposal_msg, calc_builder_commitment, start_builder_state_without_event_loop, TestTypes,};
 
     /// check whether the da_proposal_payload_commit_to_da_proposal has correct (key, value) pair after processing da proposal messages
     /// used for testing only
     fn check_equal_da_proposal_hashmap<TYPES: NodeType>(
         da_proposal_payload_commit_to_da_proposal: HashMap<
             (BuilderCommitment, <TYPES>::Time),
-            Arc<DaProposalMessage<TYPES>>,
+            DAProposalInfo<TYPES>,
         >,
         correct_da_proposal_payload_commit_to_da_proposal: HashMap<
             (BuilderCommitment, <TYPES>::Time),
-            Arc<DaProposalMessage<TYPES>>,
+            DAProposalInfo<TYPES>,
         >,
     ) {
         let deserialized_map: HashMap<_, _> = da_proposal_payload_commit_to_da_proposal.clone();
         for (key, value) in deserialized_map.iter() {
             let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
             assert_eq!(
-                value.as_ref().clone(),
+                value.clone(),
                 rkyv::option::ArchivedOption::Some(correct_value)
                     .unwrap()
                     .unwrap()
-                    .as_ref()
                     .clone()
             );
         }
@@ -1209,24 +1208,26 @@ mod test {
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
         let (_quorum_proposal, _quorum_proposal_msg, da_proposal_msg, builder_state_id) =
             calc_proposal_msg(NUM_STORAGE_NODES, 0, None, transactions.clone()).await;
-
+        
         // sub-test one
         // call process_da_proposal without matching quorum proposal message
         // da_proposal_payload_commit_to_da_proposal should insert the message
         let mut correct_da_proposal_payload_commit_to_da_proposal: HashMap<
             (BuilderCommitment, <TestTypes as NodeType>::Time),
-            Arc<DaProposalMessage<TestTypes>>,
+            DAProposalInfo<TestTypes>,
         > = HashMap::new();
         if let MessageType::DaProposalMessage(practice_da_msg) = da_proposal_msg.clone() {
+            let (payload_builder_commitment, da_proposal_info) = calc_builder_commitment(practice_da_msg.clone()).await;
+
             builder_state
                 .process_da_proposal(practice_da_msg.clone())
                 .await;
             correct_da_proposal_payload_commit_to_da_proposal.insert(
                 (
-                    practice_da_msg.proposal.data.builder_commitment.clone(),
+                    payload_builder_commitment,
                     practice_da_msg.proposal.data.view_number,
                 ),
-                practice_da_msg,
+                da_proposal_info,
             );
         } else {
             panic!("Not a da_proposal_message in correct format");
@@ -1516,7 +1517,7 @@ mod test {
         current_spawned_builder_states
             .iter()
             .for_each(|(builder_state_id, _)| {
-                assert!(builder_state_id.parent_view >= latest_decide_view_number)
+                assert!(builder_state_id.view >= latest_decide_view_number)
             });
     }
 }
