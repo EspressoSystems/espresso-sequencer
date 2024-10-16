@@ -20,6 +20,7 @@ use ethers::{
 use tempfile::TempDir;
 use url::Url;
 
+pub mod blocknative;
 pub mod deployer;
 pub mod logging;
 pub mod ser;
