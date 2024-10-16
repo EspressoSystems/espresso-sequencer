@@ -513,7 +513,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertGe(lc.stateHistoryRetentionPeriod(), 1 days);
     }
 
-    function setstateHistoryRetentionPeriod(uint32 duration) internal {
+    function setStateHistoryRetentionPeriod(uint32 duration) internal {
         // Set the new max block states allowed to half of the number of states available
         vm.prank(admin);
         lc.setstateHistoryRetentionPeriod(duration);
@@ -529,6 +529,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
      */
     function setUp() public {
         init();
+
         // Assert owner is correctly set, add this to check owner state
         assertEq(lc.owner(), admin, "Admin should be the owner.");
 
@@ -552,7 +553,13 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_1lBlockUpdatesIsUpdated() public {
         uint256 blockUpdatesCount = lc.getStateHistoryCount();
 
-        // Update the state and thus the l1BlockUpdates array would be updated
+        /**
+         * Update the state and thus the l1BlockUpdates array would be updated
+         * but first change the timestamp to be one day later and change to the next block
+         *
+         */
+        vm.roll(block.number + 1);
+        vm.warp(block.timestamp + 1 days);
         vm.prank(permissionedProver);
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
@@ -606,30 +613,32 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
-        // Add one numDays worth of a new state
+        // Add one ${numDays} worth of a new state with a timestamp of 1 hour later
         uint256 i;
         for (i = 0; i < numDays; i++) {
-            vm.warp(initialBlockTimestamp + ((i + 1) * 1 days)); // increase the timestamp for each
+            vm.warp(initialBlockTimestamp + ((i + 1) * 1 hours)); // increase the timestamp for each
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
             lc.newFinalizedState(states[i], proofs[i]);
         }
 
-        // assert that the first index is still zero as
-        // the number of duration between the 1st and last elements  are equal to the max state
-        // history duration
+        // assert that the first index is one since the stateHistoryRetentionPeriod is 86400, it
+        // already has one element in stateHistoryCommitments array and the blockchain has moved by
+        // 1 day in terms of timestamps
         assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // get oldest and newest state commitment info
         (, uint256 latestBlockTimestamp,,) =
             lc.stateHistoryCommitments(lc.getStateHistoryCount() - 1);
         (, uint256 oldestBlockTimestamp,,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
-        // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
-        // history allowed
-        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
+        // assert that the latest Commitment timestamp - oldest Commitment timestamp is less the max
+        // history allowed since it's timestamp is only one hour later than the last and the
+        // stateHistoryRetentionPeriod is 1 day
+        assertLe(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
 
-        // Add a new state so that the state history duration is only surpassed by one element
+        // Add a new state so that the state history duration is only surpassed by one element, with
+        // a timestamp of a day later
         vm.prank(permissionedProver);
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
@@ -677,7 +686,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertInitialStateHistoryConditions();
 
         // set the new max block states allowed to half of the number of states available
-        setstateHistoryRetentionPeriod(1 days * numDays);
+        setStateHistoryRetentionPeriod(1 days * numDays);
         assertEq(lc.stateHistoryRetentionPeriod(), 1 days * numDays);
 
         // Update the states to max state history allowed
@@ -690,8 +699,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             lc.newFinalizedState(states[i], proofs[i]);
         }
 
-        // the number of elements are equal to the max state history so the first index should still
-        // be zero
+        // the number of elements are equal to the max state history so the first index would
+        // be 0
         assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // get oldest and newest state commitment info
@@ -700,8 +709,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         (, uint256 oldestBlockTimestamp,,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
         // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
         // history allowed
-
-        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
+        assertLe(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
 
         // Add a new state so that the state history duration is only surpassed by one element
         vm.prank(permissionedProver);
@@ -737,48 +745,55 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         }
     }
 
+    /**
+     * tests that test the functionality of the `lagOverEscapeHatchThreshold` function
+     */
     function test_hotshotIsLiveFunctionWhenNoDelayOccurred() public {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 5;
 
+        // create the block numbers at each udpdate which can then be used for assessing lag in the
+        // test
         uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
         blockNumberUpdates[0] = 1;
         blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
         blockNumberUpdates[2] = blockNumberUpdates[1] + DELAY_THRESHOLD / 2; // 7
-        blockNumberUpdates[3] = blockNumberUpdates[2] + DELAY_THRESHOLD + 5; // 18
+        blockNumberUpdates[3] = blockNumberUpdates[2] + DELAY_THRESHOLD + 5; // 18 - even though
+            // there is delay because the history retention is 1 day it will not be available to
+            // check
         blockNumberUpdates[4] = blockNumberUpdates[3] + DELAY_THRESHOLD / 2; // 21
 
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
+        assertEq(lc.getStateHistoryCount(), numUpdates + 1);
 
-        for (uint256 i = 0; i < blockNumberUpdates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: blockNumberUpdates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
+        // confirm the first index is at position four because only 1 day of history is allowed
+        uint64 firstIndex = lc.stateHistoryFirstIndex();
+        assertEq(firstIndex, 4);
+
+        // confirm that the items before the first index are all zeros
+        for (uint64 i = 0; i < lc.getStateHistoryCount(); i++) {
+            (uint256 blockNumber,,,) = lc.stateHistoryCommitments(i);
+            if (i < firstIndex) assertEq(blockNumber, 0);
+            else assertNotEq(blockNumber, 0);
         }
-
-        lc.setStateHistory(stateHistoryCommitments);
-
-        // set the current block to block number larger than the l1 block numbers used in this test
-        vm.roll(blockNumberUpdates[4] + (DELAY_THRESHOLD * 5));
-
-        assertEq(lc.getStateHistoryCount(), numUpdates);
 
         // Reverts as it's within the first two updates which aren't valid times to check since it
         // was just getting initialized
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
         lc.lagOverEscapeHatchThreshold(blockNumberUpdates[1] - 1, DELAY_THRESHOLD);
 
-        // Hotshot should be live (l1BlockNumber = 7)
-        assertFalse(lc.lagOverEscapeHatchThreshold(blockNumberUpdates[2], DELAY_THRESHOLD));
+        // Hotshot should be live
+        assertFalse(lc.lagOverEscapeHatchThreshold(20, DELAY_THRESHOLD));
     }
 
     function test_hotshotIsDownWhenADelayExists() public {
@@ -791,27 +806,25 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         blockNumberUpdates[3] = blockNumberUpdates[2] + DELAY_THRESHOLD + 5; // 18
         blockNumberUpdates[4] = blockNumberUpdates[3] + DELAY_THRESHOLD / 2; // 21
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
+        // set the retention period to 5 days so that we have more history to check for delays
+        setStateHistoryRetentionPeriod(5 days);
 
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
-
-        for (uint256 i = 0; i < blockNumberUpdates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: blockNumberUpdates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(blockNumberUpdates[4] + (DELAY_THRESHOLD * 5));
+
+        // confirm the first index is at position 0 because 5 days of history is allowed
+        assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // Hotshot should be down (l1BlockNumber = 15)
         // for a block that should have been recorded but wasn't due to a delay
@@ -825,104 +838,86 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertWhenThereAreOnlyTwoUpdates() public {
         uint8 numUpdates = 2;
 
-        uint64[] memory updates = new uint64[](numUpdates);
-        updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD + 5; //12
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
+        blockNumberUpdates[0] = 1;
+        blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD + 5; //12
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
-
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
-
-        for (uint256 i = 0; i < updates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: updates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
 
         vm.roll(DELAY_THRESHOLD * 5);
 
-        assertEq(lc.getStateHistoryCount(), numUpdates);
+        assertEq(lc.getStateHistoryCount(), numUpdates + 1); //+1 since there's an update when the
+            // contract is first initialized
 
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
-        lc.lagOverEscapeHatchThreshold(updates[0] + 2, DELAY_THRESHOLD); //3
+        lc.lagOverEscapeHatchThreshold(blockNumberUpdates[0] + 2, DELAY_THRESHOLD); //3
     }
 
     function test_revertWhenThereIsOnlyOneUpdate() public {
         uint8 numUpdates = 1;
 
-        uint64[] memory updates = new uint64[](numUpdates);
-        updates[0] = 1;
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
+        blockNumberUpdates[0] = 1;
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
-
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
-
-        for (uint256 i = 0; i < updates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: updates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
 
         vm.roll(DELAY_THRESHOLD * 3);
 
-        assertEq(lc.getStateHistoryCount(), numUpdates);
+        assertEq(lc.getStateHistoryCount(), numUpdates + 1); //+1 since there was an update when the
+            // contract was first initialized
 
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
-        lc.lagOverEscapeHatchThreshold(updates[0] + 2, DELAY_THRESHOLD); //3
+        lc.lagOverEscapeHatchThreshold(blockNumberUpdates[0] + 2, DELAY_THRESHOLD); //3
     }
 
     function test_revertWhenBlockRequestedWithinFirstTwoUpdates() public {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 3;
 
-        uint64[] memory updates = new uint64[](numUpdates);
-        updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
-        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
+        blockNumberUpdates[0] = 1;
+        blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
+        blockNumberUpdates[2] = blockNumberUpdates[1] + DELAY_THRESHOLD / 2; // 7
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
+        // set the retention period to 5 days so that we have more history to check for delays
+        setStateHistoryRetentionPeriod(5 days);
 
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
-
-        for (uint256 i = 0; i < updates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: updates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
 
         vm.roll(DELAY_THRESHOLD * 5);
 
-        assertEq(lc.getStateHistoryCount(), numUpdates);
+        assertEq(lc.getStateHistoryCount(), numUpdates + 1); //+1 since there was an update when the
+            // contract was first initialized
 
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
-        lc.lagOverEscapeHatchThreshold(updates[0] + 2, DELAY_THRESHOLD); //3
+        lc.lagOverEscapeHatchThreshold(3, DELAY_THRESHOLD);
     }
 
     function test_revertWhenSetZeroMaxStateUpdatesAllowed() public {
@@ -931,43 +926,32 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         lc.setstateHistoryRetentionPeriod(0);
     }
 
-    function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()
-        public
-    {
+    function f() public {
         uint8 numUpdates = 3;
 
         // DELAY_THRESHOLD = 6
-        uint64[] memory updates = new uint64[](numUpdates);
-        updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
-        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
+        blockNumberUpdates[0] = 1;
+        blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
+        blockNumberUpdates[2] = blockNumberUpdates[1] + DELAY_THRESHOLD / 2; // 7
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
-
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
 
-        for (uint256 i = 0; i < updates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: updates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
         // set the current block to block number larger than the l1 block numbers used in this test
-        vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
+        vm.roll(blockNumberUpdates[2] + (DELAY_THRESHOLD * 5));
 
-        // Hotshot should be down (l1BlockNumber = 29)
+        // Hotshot should be down
         // in a block that's higher than the last recorded and past the delay threshold
-        assertTrue(
-            lc.lagOverEscapeHatchThreshold(updates[2] + DELAY_THRESHOLD + 3, DELAY_THRESHOLD)
-        );
+        assertTrue(lc.lagOverEscapeHatchThreshold(14, DELAY_THRESHOLD));
     }
 
     function test_hotShotIsLiveWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasNotPassed()
@@ -976,70 +960,53 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 3;
 
-        uint64[] memory updates = new uint64[](numUpdates);
-        updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
-        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
+        blockNumberUpdates[0] = 1;
+        blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
+        blockNumberUpdates[2] = blockNumberUpdates[1] + DELAY_THRESHOLD / 2; // 7
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
-
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
-
-        for (uint256 i = 0; i < updates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: updates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
 
         // set the current block to block number larger than the l1 block numbers used in this test
-        vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
+        vm.roll(blockNumberUpdates[2] + (DELAY_THRESHOLD * 5));
 
-        // Hotshot should be live (l1BlockNumber = 24)
-        assertFalse(lc.lagOverEscapeHatchThreshold(updates[2] + 3, DELAY_THRESHOLD));
+        // Hotshot should be live
+        assertFalse(lc.lagOverEscapeHatchThreshold(10, DELAY_THRESHOLD));
     }
 
     function test_revertWhenBlockInFuture() public {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 2;
 
-        uint64[] memory updates = new uint64[](numUpdates);
-        updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
+        blockNumberUpdates[0] = 1;
+        blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
-
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
-
-        for (uint256 i = 0; i < updates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: updates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
 
         // set the current block
         uint256 currBlock = 20;
         vm.roll(currBlock);
 
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
-
         lc.lagOverEscapeHatchThreshold(currBlock + 5, DELAY_THRESHOLD);
     }
 
@@ -1047,28 +1014,20 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 2;
 
-        uint64[] memory updates = new uint64[](numUpdates);
-        updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
+        blockNumberUpdates[0] = 2;
+        blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 5
 
-        LC.StateHistoryCommitment[] memory stateHistoryCommitments =
-            new LC.StateHistoryCommitment[](numUpdates);
-
-        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
-        for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialBlockTimestamp + ((i + 1) * 1 days);
+        // update the state history one at a time
+        for (uint64 i = 0; i < blockNumberUpdates.length; i++) {
+            // update the block and timestamp each time
+            vm.roll(blockNumberUpdates[i]);
+            uint64 blockTimestamp = initialBlockTimestamp + ((i + 1) * 1 days);
+            vm.warp(blockTimestamp);
+            LC.LightClientState memory state =
+                LC.LightClientState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.updateLCStateHistory(blockNumberUpdates[i], blockTimestamp, state);
         }
-
-        for (uint256 i = 0; i < updates.length; i++) {
-            stateHistoryCommitments[i] = LC.StateHistoryCommitment({
-                l1BlockHeight: updates[i],
-                l1BlockTimestamp: blockTimestampUpdates[i],
-                hotShotBlockHeight: newState.blockHeight,
-                hotShotBlockCommRoot: newState.blockCommRoot
-            });
-        }
-
-        lc.setStateHistory(stateHistoryCommitments);
 
         // set the current block
         uint256 currBlock = 20;
@@ -1076,7 +1035,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
 
-        lc.lagOverEscapeHatchThreshold(updates[0] - 1, DELAY_THRESHOLD);
+        lc.lagOverEscapeHatchThreshold(blockNumberUpdates[0] - 1, DELAY_THRESHOLD);
     }
 }
 
