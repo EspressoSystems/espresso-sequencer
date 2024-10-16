@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use hotshot::traits::election::static_committee::GeneralStaticCommittee;
+use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::ViewNumber,
     signature_key::BLSPubKey,
@@ -133,7 +133,7 @@ impl NodeType for SeqTypes {
     type Transaction = Transaction;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
-    type Membership = GeneralStaticCommittee<Self>;
+    type Membership = StaticCommittee<Self>;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }

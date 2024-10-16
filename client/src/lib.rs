@@ -1,6 +1,6 @@
 use anyhow::Context;
 use async_std::task::sleep;
-use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree};
+use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header};
 use ethers::types::Address;
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
@@ -9,14 +9,12 @@ use jf_merkle_tree::{
 use std::time::Duration;
 use surf_disco::{
     error::ClientError,
-    http::convert::DeserializeOwned,
     socket::{Connection, Unsupported},
     Url,
 };
 use vbs::version::StaticVersion;
 
 pub type SequencerApiVersion = StaticVersion<0, 1>;
-// pub type EspressoClient = surf_disco::Client<ClientError, SequencerApiVersion>;
 
 #[derive(Clone, Debug)]
 pub struct SequencerClient(surf_disco::Client<ClientError, SequencerApiVersion>);
@@ -46,13 +44,13 @@ impl SequencerClient {
             .context("getting Espresso transaction count")
     }
 
-    /// Subscribe to a stream to Block Headers
-    pub async fn subscribe_headers<FromServer: DeserializeOwned>(
+    /// Subscribe to a stream of Block Headers
+    pub async fn subscribe_headers(
         &self,
-        connect: &str,
-    ) -> anyhow::Result<Connection<FromServer, Unsupported, ClientError, SequencerApiVersion>> {
+        height: u64,
+    ) -> anyhow::Result<Connection<Header, Unsupported, ClientError, SequencerApiVersion>> {
         self.0
-            .socket(connect)
+            .socket(&format!("availability/stream/headers/{height}"))
             .subscribe()
             .await
             .context("subscribing to Espresso headers")

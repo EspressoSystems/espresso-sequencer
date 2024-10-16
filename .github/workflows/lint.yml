@@ -34,4 +34,4 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Check
-        run: cargo clippy --workspace --all-features --all-targets # Removing "-- -D warnings" warning because CI is complaining. TODO add back
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
