@@ -32,6 +32,8 @@ pub enum BlockBuildingError {
     MissingGenesis,
     #[error("Genesis transaction in non-genesis block")]
     UnexpectedGenesis,
+    #[error("ChainConfig is not available")]
+    MissingChainConfig(String),
 }
 
 impl Payload {
@@ -153,13 +155,12 @@ impl BlockPayload<SeqTypes> for Payload {
         } else {
             match validated_state_cf.resolve() {
                 Some(cf) => cf,
-                None => {
-                    instance_state
-                        .peers
-                        .as_ref()
-                        .fetch_chain_config(validated_state_cf.commit())
-                        .await
-                }
+                None => instance_state
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(validated_state_cf.commit())
+                    .await
+                    .map_err(|err| BlockBuildingError::MissingChainConfig(format!("{err:#}")))?,
             }
         };
 

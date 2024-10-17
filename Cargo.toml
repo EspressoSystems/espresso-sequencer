@@ -144,6 +144,7 @@ paste = "1.0"
 rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
+
 [profile.dev]
 # No optimizations
 opt-level = 0
@@ -153,3 +154,15 @@ debug = false
 strip = "debuginfo"
 [profile.dev.package."*"]
 opt-level = 3
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
+libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "jb/state-catchup-patch" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "jb/state-catchup-patch" }
