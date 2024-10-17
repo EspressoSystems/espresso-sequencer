@@ -2,8 +2,9 @@ use anyhow::{bail, ensure, Context};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use espresso_types::{
-    get_l1_deposits, v0_3::ChainConfig, BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf,
-    NodeState, ValidatedState,
+    get_l1_deposits,
+    v0_3::{ChainConfig, IterableFeeInfo},
+    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, NodeState, ValidatedState,
 };
 use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
@@ -339,7 +340,6 @@ async fn reconstruct_state<'a>(
     let mut accounts = accounts.iter().copied().collect::<HashSet<_>>();
     // Add in all the accounts we will need to replay any of the headers, to ensure that we don't
     // need to do catchup recursively.
-    accounts.insert(instance.chain_config.fee_recipient);
     accounts.extend(fee_account_dependencies(instance, parent, &leaves).await);
     let accounts = accounts.into_iter().collect::<Vec<_>>();
     state.fee_merkle_tree = load_accounts(tx, from_height, &accounts)
@@ -396,6 +396,8 @@ async fn fee_account_dependencies(
     leaves: impl IntoIterator<Item = &Leaf>,
 ) -> HashSet<FeeAccount> {
     let mut accounts = HashSet::default();
+    accounts.insert(instance.chain_config.fee_recipient);
+
     for proposal in leaves {
         accounts.extend(
             get_l1_deposits(
@@ -408,6 +410,7 @@ async fn fee_account_dependencies(
             .into_iter()
             .map(|fee| fee.account()),
         );
+        accounts.extend(proposal.block_header().fee_info().accounts());
         parent = proposal;
     }
     accounts
