@@ -255,7 +255,6 @@ mod test {
             signature_key::SignatureKey,
         },
     };
-    use marketplace_builder_shared::utils::run_permissioned_standalone_builder_service;
     use portpicker::pick_unused_port;
     use sequencer::{
         api::{

@@ -318,8 +318,8 @@ mod test {
     use marketplace_builder_core::{
         builder_state::{self, RequestMessage, TransactionSource},
         service::run_builder_service,
-        utils::BuilderStateId,
     };
+    use marketplace_builder_shared::block::BuilderStateId;
     use marketplace_solver::{testing::MockSolver, SolverError};
     use portpicker::pick_unused_port;
     use sequencer::{
