@@ -843,7 +843,12 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(height, view, &mut validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(
+                    instance_state,
+                    height,
+                    view,
+                    &mut validated_state.block_merkle_tree,
+                )
                 .await
                 .context("remembering block proof")?;
         }
@@ -969,7 +974,12 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(height, view, &mut validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(
+                    instance_state,
+                    height,
+                    view,
+                    &mut validated_state.block_merkle_tree,
+                )
                 .await
                 .context("remembering block proof")?;
         }

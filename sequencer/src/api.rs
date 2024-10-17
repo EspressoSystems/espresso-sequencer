@@ -294,9 +294,14 @@ impl<
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_frontier(height, view).await {
+        match self.as_ref().get_frontier(instance, height, view).await {
             Ok(frontier) => return Ok(frontier),
             Err(err) => {
                 tracing::info!("frontier is not in memory, trying storage: {err:#}");
@@ -304,7 +309,7 @@ impl<
         }
 
         // Try storage.
-        self.inner().get_frontier(height, view).await
+        self.inner().get_frontier(instance, height, view).await
     }
 
     async fn get_chain_config(
@@ -379,7 +384,12 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+    async fn get_frontier(
+        &self,
+        _instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
         let state = self
             .consensus()
             .await
