@@ -338,6 +338,21 @@ impl Proposal {
 
         Ok(())
     }
+
+    /// Validate Block Merkle Tree by comparing proposed commitment against expectation.
+    fn validate_block_merkle_tree(
+        &self,
+        block_merkle_tree_root: BlockMerkleCommitment,
+    ) -> Result<(), ProposalValidationError> {
+        if self.header.block_merkle_tree_root() != block_merkle_tree_root {
+            return Err(ProposalValidationError::InvalidBlockRoot {
+                expected_root: block_merkle_tree_root,
+                proposal_root: self.header.block_merkle_tree_root(),
+            });
+        }
+
+        Ok(())
+    }
 }
 /// Type to hold cloned validated state and provide validation methods.
 struct ValidatedTransition {
@@ -524,12 +539,8 @@ impl ValidatedTransition {
     /// Validate Block Merkle Tree by comparing proposed commitment against expectation.
     fn validate_block_merkle_tree(&self) -> Result<(), ProposalValidationError> {
         let block_merkle_tree_root = self.state.block_merkle_tree.commitment();
-        if self.proposal.header.block_merkle_tree_root() != block_merkle_tree_root {
-            return Err(ProposalValidationError::InvalidBlockRoot {
-                expected_root: block_merkle_tree_root,
-                proposal_root: self.proposal.header.block_merkle_tree_root(),
-            });
-        }
+        self.proposal
+            .validate_block_merkle_tree(block_merkle_tree_root)?;
 
         Ok(())
     }
@@ -1040,6 +1051,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
+    use hotshot_query_service::Resolvable;
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
@@ -1066,6 +1078,21 @@ mod test {
         }
     }
 
+    impl Header {
+        fn next(self) -> Self {
+            // dbg!(&self);
+            match self {
+                Header::V1(parent) => Header::V2(v0_2::Header {
+                    height: parent.height + 1,
+                    timestamp: OffsetDateTime::now_utc().unix_timestamp() as u64,
+                    ..parent.clone()
+                }),
+                Header::V2(_) => panic!("v1"),
+                Header::V3(_) => panic!("v3"),
+            }
+        }
+    }
+
     impl Proposal {
         async fn mock() -> Self {
             const BLOCK_SIZE: usize = 10;
@@ -1077,6 +1104,36 @@ mod test {
             let block_size = BLOCK_SIZE as u32;
             Self { header, block_size }
         }
+
+        // async fn mock_header() -> Self {
+        //     const BLOCK_SIZE: usize = 10;
+        //     let payload = [0; BLOCK_SIZE];
+        //     let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+
+        //     let instance = NodeState::mock();
+        //     let parent_state = instance.genesis_state.clone();
+        //     let forgotton_state = parent_state.forget();
+
+        //     let parent_leaf = Leaf::genesis(&instance.genesis_state, &instance).await;
+        //     let parent_header = parent_leaf.block_header().clone();
+        //     let block_size = BLOCK_SIZE as u32;
+
+        //     let proposal = Header::new_legacy(
+        //         &forgotten_state,
+        //         &genesis_state,
+        //         &parent_leaf,
+        //         payload_commitment,
+        //         builder_commitment.clone(),
+        //         ns_table,
+        //         builder_fee,
+        //         vid_common.clone(),
+        //         StaticVersion::<0, 1>::version(),
+        //     )
+        //     .await
+        //     .unwrap();
+
+        //     Self { header, block_size }
+        // }
 
         async fn mock_block_size<const BLOCK_SIZE: usize>() -> Self {
             let payload = [0; BLOCK_SIZE];
@@ -1360,6 +1417,42 @@ mod test {
 
         let proposal = Proposal::mock_timestamp(mock_time - 12).await;
         let _ = proposal.validate_timestamp_drift(mock_time).unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validation_block_root() {
+        setup_logging();
+        setup_backtrace();
+
+        let instance = NodeState::mock();
+        let proposal = Proposal::mock().await;
+
+        // Success case.
+        ValidatedTransition::mock(instance.clone(), proposal)
+            .await
+            .validate_block_merkle_tree()
+            .unwrap();
+
+        // Error case.
+        let proposal = Proposal::mock().await;
+        let header = proposal.header.clone();
+
+        let mut block_merkle_tree = ValidatedState::default().block_merkle_tree;
+        block_merkle_tree.push(header.commitment()).unwrap();
+        block_merkle_tree.push(header.next().commitment()).unwrap();
+
+        let err = proposal
+            .validate_block_merkle_tree(block_merkle_tree.commitment())
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidBlockRoot {
+                expected_root: block_merkle_tree.commitment(),
+                proposal_root: proposal.header.block_merkle_tree_root(),
+            },
+            err
+        );
     }
 
     #[test]
