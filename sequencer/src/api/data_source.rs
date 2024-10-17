@@ -10,9 +10,6 @@ use espresso_types::{
 };
 use ethers::prelude::Address;
 use futures::future::Future;
-use hotshot_orchestrator::config::{
-    BuilderType, CombinedNetworkConfig, Libp2pConfig, NetworkConfig, RandomBuilderConfig,
-};
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{MetricsDataSource, VersionedDataSource},
@@ -20,9 +17,13 @@ use hotshot_query_service::{
     node::NodeDataSource,
     status::StatusDataSource,
 };
+use hotshot_types::network::{
+    BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig,
+};
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
+    network::NetworkConfig,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };

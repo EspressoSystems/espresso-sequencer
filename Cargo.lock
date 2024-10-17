@@ -1320,6 +1320,7 @@ dependencies = [
  "jf-signature",
  "libp2p",
  "libp2p-networking",
+ "marketplace-builder-shared",
  "portpicker",
  "rand 0.8.5",
  "sequencer",
@@ -6200,6 +6201,7 @@ dependencies = [
  "jf-merkle-tree",
  "jf-signature",
  "marketplace-builder-core",
+ "marketplace-builder-shared",
  "marketplace-solver",
  "portpicker",
  "sequencer",
@@ -7577,7 +7579,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.77",
@@ -8698,6 +8700,7 @@ dependencies = [
  "libp2p",
  "libp2p-networking",
  "marketplace-builder-core",
+ "marketplace-builder-shared",
  "marketplace-solver",
  "num_enum",
  "portpicker",

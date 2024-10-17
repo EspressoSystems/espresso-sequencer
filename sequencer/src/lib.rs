@@ -51,10 +51,12 @@ use hotshot::{
     types::SignatureKey,
     MarketplaceConfig,
 };
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+use hotshot_orchestrator::client::get_complete_config;
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
+    network::NetworkConfig,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
@@ -267,7 +269,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
             tracing::error!(
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
             );
-            let config = NetworkConfig::get_complete_config(
+            let config = get_complete_config(
                 &orchestrator_client,
                 my_config.clone(),
                 // Register in our Libp2p advertise address and public key so other nodes
@@ -338,7 +340,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let network = {
-        let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+        let p2p_network = Libp2pNetwork::from_config(
             config.clone(),
             GossipConfig::default(),
             libp2p_bind_address,
@@ -487,8 +489,8 @@ pub mod testing {
     use marketplace_builder_core::{
         builder_state::BuilderState,
         service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
-        utils::ParentBlockReferences,
     };
+    use marketplace_builder_shared::block::ParentBlockReferences;
     use portpicker::pick_unused_port;
     use vbs::version::Version;
 
@@ -514,7 +516,8 @@ pub mod testing {
             >,
         ) {
             async_spawn(async move {
-                let res = run_builder_service::<SeqTypes>(self.hooks, self.senders, stream).await;
+                let res =
+                    run_builder_service::<SeqTypes, _>(self.hooks, self.senders, stream).await;
                 tracing::error!(?res, "Testing marketplace builder service exited");
             });
         }

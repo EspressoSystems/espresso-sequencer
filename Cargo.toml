@@ -62,6 +62,7 @@ hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "bump/r
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "bump/rc-0.5.78" }
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", branch = "bump/rc-0.5.78" }
 marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", branch = "bump/rc-0.5.78" }
+marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", branch = "bump/rc-0.5.78" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "bump/rc-0.5.78" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "bump/rc-0.5.78" }
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "bump/rc-0.5.78" }

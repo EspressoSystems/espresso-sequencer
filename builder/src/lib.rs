@@ -36,10 +36,8 @@ use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
-use hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::NetworkConfig,
-};
+use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
+use hotshot_types::network::NetworkConfig;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
@@ -71,7 +69,6 @@ use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
 pub mod non_permissioned;
-pub mod permissioned;
 
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {

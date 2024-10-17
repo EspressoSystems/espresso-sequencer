@@ -28,7 +28,6 @@ use hotshot_builder_core::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
-    ParentBlockReferences,
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -43,6 +42,8 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
+use marketplace_builder_shared::block::ParentBlockReferences;
+use marketplace_builder_shared::utils::EventServiceStream;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
@@ -194,12 +195,17 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
+
+        let event_stream =
+            EventServiceStream::<SeqTypes, SequencerApiVersion>::connect(events_url).await?;
+
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion>(
+            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion, _>(
                 da_sender,
                 qc_sender,
                 decide_sender,
-                events_url,
+                event_stream,
+                node_count,
                 global_state_clone,
             )
             .await;
@@ -236,10 +242,7 @@ mod test {
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
-    };
+    use hotshot_builder_core::service::run_non_permissioned_standalone_builder_service;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
@@ -252,6 +255,7 @@ mod test {
             signature_key::SignatureKey,
         },
     };
+    use marketplace_builder_shared::utils::run_permissioned_standalone_builder_service;
     use portpicker::pick_unused_port;
     use sequencer::{
         api::{
