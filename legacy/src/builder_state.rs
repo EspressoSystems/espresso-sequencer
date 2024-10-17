@@ -1176,17 +1176,7 @@ mod test {
             DAProposalInfo<TYPES>,
         >,
     ) {
-        let deserialized_map: HashMap<_, _> = da_proposal_payload_commit_to_da_proposal.clone();
-        for (key, value) in deserialized_map.iter() {
-            let correct_value = correct_da_proposal_payload_commit_to_da_proposal.get(key);
-            assert_eq!(
-                value.clone(),
-                rkyv::option::ArchivedOption::Some(correct_value)
-                    .unwrap()
-                    .unwrap()
-                    .clone()
-            );
-        }
+        assert_eq!(da_proposal_payload_commit_to_da_proposal, correct_da_proposal_payload_commit_to_da_proposal);
     }
 
     /// check whether the `quorum_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing quorum proposal messages
@@ -1199,18 +1189,7 @@ mod test {
         quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
         correct_quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
     ) {
-        let deserialized_map: HashMap<_, _> = quorum_proposal_payload_commit_to_da_proposal.clone();
-        for (key, value) in deserialized_map.iter() {
-            let correct_value = correct_quorum_proposal_payload_commit_to_da_proposal.get(key);
-            assert_eq!(
-                value.as_ref().clone(),
-                rkyv::option::ArchivedOption::Some(correct_value)
-                    .unwrap()
-                    .unwrap()
-                    .as_ref()
-                    .clone()
-            );
-        }
+        assert_eq!(quorum_proposal_payload_commit_to_da_proposal, correct_quorum_proposal_payload_commit_to_da_proposal);
     }
 
     /// This test the function `process_da_propsal`.
