@@ -19,7 +19,7 @@ pub mod service;
 
 // tracking the testing
 #[cfg(test)]
-pub mod legacy_testing;
+pub mod testing;
 
 use async_compatibility_layer::channel::UnboundedReceiver;
 use hotshot_builder_api::v0_1::builder::BuildError;

@@ -1159,7 +1159,7 @@ mod test {
     use super::DAProposalInfo;
     use super::MessageType;
     use super::ParentBlockReferences;
-    use crate::legacy_testing::{
+    use crate::testing::{
         calc_builder_commitment, calc_proposal_msg, start_builder_state_without_event_loop,
         TestTypes,
     };
