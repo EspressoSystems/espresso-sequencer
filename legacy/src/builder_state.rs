@@ -1160,9 +1160,7 @@ mod test {
     use super::DAProposalInfo;
     use super::MessageType;
     use super::ParentBlockReferences;
-    use crate::testing::{
-        calc_builder_commitment, calc_proposal_msg, create_builder_state,
-    };
+    use crate::testing::{calc_builder_commitment, calc_proposal_msg, create_builder_state};
 
     /// check whether the `da_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing da proposal messages
     /// used for testing only
@@ -1203,7 +1201,7 @@ mod test {
     /// when receiving a da proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
     #[async_std::test]
-    async fn test_legacy_process_da_proposal() {
+    async fn test_process_da_proposal() {
         async_compatibility_layer::logging::setup_logging();
         async_compatibility_layer::logging::setup_backtrace();
         tracing::info!("Testing the function `process_da_proposal` in `builder_state.rs`");
@@ -1343,7 +1341,7 @@ mod test {
     /// when receiving a quorum proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
     #[async_std::test]
-    async fn test_legacy_process_quorum_proposal() {
+    async fn test_process_quorum_proposal() {
         async_compatibility_layer::logging::setup_logging();
         async_compatibility_layer::logging::setup_backtrace();
         tracing::info!("Testing the function `process_quorum_proposal` in `builder_state.rs`");
@@ -1454,7 +1452,7 @@ mod test {
     /// It checkes whether we exit out correct builder states when there's a decide event coming in.
     /// This test also checks whether corresponding BuilderStateId is removed in global_state.
     #[async_std::test]
-    async fn test_legacy_process_decide_event() {
+    async fn test_process_decide_event() {
         async_compatibility_layer::logging::setup_logging();
         async_compatibility_layer::logging::setup_backtrace();
         tracing::info!("Testing the builder core with multiple messages from the channels");
