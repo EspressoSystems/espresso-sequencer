@@ -218,6 +218,7 @@ pub struct BackoffParams {
     jitter: Ratio,
 
     /// Disable retries and just fail after one failed attempt.
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_DISABLE")]
     disable: bool,
 }
 
