@@ -1,9 +1,10 @@
 use std::{
     io::{self, ErrorKind},
-    thread, time,
+    time,
 };
 
 use anyhow::Result;
+use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
 use futures::FutureExt;
 use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
@@ -83,7 +84,7 @@ impl FakeSolverState {
     ///
     /// # Errors
     /// Returns an error if the `should_fault` method is `Some`.
-    fn dump_builders(&self) -> Result<TestAuctionResult, ServerError> {
+    async fn dump_builders(&self) -> Result<TestAuctionResult, ServerError> {
         if let Some(fault) = self.should_fault() {
             match fault {
                 FakeSolverFaultType::InternalServerFault => {
@@ -94,7 +95,7 @@ impl FakeSolverState {
                 }
                 FakeSolverFaultType::TimeoutFault => {
                     // Sleep for the preconfigured 1 second timeout interval
-                    thread::sleep(SOLVER_MAX_TIMEOUT_S);
+                    async_sleep(SOLVER_MAX_TIMEOUT_S).await;
                 }
             }
         }
@@ -130,7 +131,7 @@ impl<TYPES: NodeType> FakeSolverApi<TYPES> for FakeSolverState {
         &self,
         _view_number: u64,
     ) -> Result<TestAuctionResult, ServerError> {
-        self.dump_builders()
+        self.dump_builders().await
     }
 
     /// Get the auction results with a valid signature.
@@ -139,7 +140,7 @@ impl<TYPES: NodeType> FakeSolverApi<TYPES> for FakeSolverState {
         _view_number: u64,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<TestAuctionResult, ServerError> {
-        self.dump_builders()
+        self.dump_builders().await
     }
 }
 

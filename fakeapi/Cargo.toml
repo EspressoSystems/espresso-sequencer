@@ -12,6 +12,7 @@ repository.workspace = true
 toml = { workspace = true }
 tide-disco = { workspace = true }
 anyhow = { workspace = true }
+async-compatibility-layer = { workspace = true }
 hotshot-types = { path = "../types" }
 vbs = { workspace = true }
 serde = { workspace = true }
