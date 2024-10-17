@@ -1420,6 +1420,43 @@ mod test {
     }
 
     #[async_std::test]
+    async fn test_validation_fee_root() {
+        setup_logging();
+        setup_backtrace();
+
+        let instance = NodeState::mock();
+        let proposal = Proposal::mock().await;
+
+        // Success case.
+        ValidatedTransition::mock(instance.clone(), proposal)
+            .await
+            .validate_fee_merkle_tree()
+            .unwrap();
+
+        // Error case.
+        let proposal = Proposal::mock().await;
+        let header = proposal.header.clone();
+
+        let mut fee_merkle_tree = instance.genesis_state.fee_merkle_tree;
+        fee_merkle_tree
+            .update_with(FeeAccount::default(), |_| Some(100.into()))
+            .unwrap();
+
+        let err = proposal
+            .validate_block_merkle_tree(fee_merkle_tree.commitment())
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidBlockRoot {
+                expected_root: fee_merkle_tree.commitment(),
+                proposal_root: proposal.header.block_merkle_tree_root(),
+            },
+            err
+        );
+    }
+
+    #[async_std::test]
     async fn test_validation_block_root() {
         setup_logging();
         setup_backtrace();
@@ -1437,7 +1474,7 @@ mod test {
         let proposal = Proposal::mock().await;
         let header = proposal.header.clone();
 
-        let mut block_merkle_tree = ValidatedState::default().block_merkle_tree;
+        let mut block_merkle_tree = instance.genesis_state.block_merkle_tree;
         block_merkle_tree.push(header.commitment()).unwrap();
         block_merkle_tree.push(header.next().commitment()).unwrap();
 
