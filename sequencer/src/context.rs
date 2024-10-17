@@ -414,17 +414,7 @@ async fn fetch_proposal_chain<N, P, V>(
     P: SequencerPersistence,
     V: Versions,
 {
-    let anchor_view = loop {
-        match persistence.load_anchor_leaf().await {
-            Ok(Some((leaf, _))) => break leaf.view_number(),
-            Ok(None) => break ViewNumber::genesis(),
-            Err(err) => {
-                tracing::warn!("error loading anchor view: {err:#}");
-                sleep(Duration::from_secs(1)).await;
-            }
-        }
-    };
-    while view > anchor_view {
+    while view > load_anchor_view(&*persistence).await {
         match persistence.load_quorum_proposal(view).await {
             Ok(proposal) => {
                 // If we already have the proposal in storage, keep traversing the chain to its
@@ -438,27 +428,26 @@ async fn fetch_proposal_chain<N, P, V>(
             }
         }
 
-        let proposal = loop {
-            let future = match consensus.read().await.request_proposal(view, leaf) {
-                Ok(future) => future,
-                Err(err) => {
-                    tracing::warn!(?view, %leaf, "failed to request proposal: {err:#}");
-                    sleep(Duration::from_secs(1)).await;
-                    continue;
-                }
-            };
-            match async_timeout(Duration::from_secs(30), future).await {
-                Ok(Ok(proposal)) => break proposal,
-                Ok(Err(err)) => {
-                    tracing::warn!("error fetching proposal: {err:#}");
-                }
-                Err(_) => {
-                    tracing::warn!("timed out fetching proposal");
-                }
+        let future = match consensus.read().await.request_proposal(view, leaf) {
+            Ok(future) => future,
+            Err(err) => {
+                tracing::warn!(?view, %leaf, "failed to request proposal: {err:#}");
+                sleep(Duration::from_secs(1)).await;
+                continue;
             }
-
-            // Sleep before retrying to avoid hot loop.
-            sleep(Duration::from_secs(1)).await;
+        };
+        let proposal = match async_timeout(Duration::from_secs(30), future).await {
+            Ok(Ok(proposal)) => proposal,
+            Ok(Err(err)) => {
+                tracing::warn!("error fetching proposal: {err:#}");
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+            Err(_) => {
+                tracing::warn!("timed out fetching proposal");
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
         };
 
         while let Err(err) = persistence.append_quorum_proposal(&proposal).await {
@@ -499,6 +488,19 @@ async fn fetch_proposal_chain<N, P, V>(
 
         view = proposal.data.justify_qc.view_number;
         leaf = proposal.data.justify_qc.data.leaf_commit;
+    }
+}
+
+async fn load_anchor_view(persistence: &impl SequencerPersistence) -> ViewNumber {
+    loop {
+        match persistence.load_anchor_leaf().await {
+            Ok(Some((leaf, _))) => break leaf.view_number(),
+            Ok(None) => break ViewNumber::genesis(),
+            Err(err) => {
+                tracing::warn!("error loading anchor view: {err:#}");
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
     }
 }
 
