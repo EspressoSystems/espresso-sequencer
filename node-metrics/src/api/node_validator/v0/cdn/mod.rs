@@ -315,7 +315,7 @@ mod test {
         match result {
             Ok(messages) => Ok(messages.clone()),
             Err(err) => match err {
-                NetworkError::ChannelSend => Err(NetworkError::ChannelSend),
+                NetworkError::ChannelSendError(e) => Err(NetworkError::ChannelSendError(e.clone())),
                 _ => panic!("unexpected network error"),
             },
         }
@@ -379,7 +379,7 @@ mod test {
     async fn test_cdn_receive_messages_task_fails_receiving_message() {
         let (url_sender, url_receiver) = mpsc::channel(1);
         let task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(Err(NetworkError::ChannelSend)),
+            TestConnectedNetworkConsumer(Err(NetworkError::ChannelSendError("".to_string()))),
             url_sender,
         );
 
@@ -530,7 +530,7 @@ mod test {
         ) -> Result<(), NetworkError> {
             let mut sender = self.0.clone();
             let send_result = sender.send(message).await;
-            send_result.map_err(|_| NetworkError::ChannelSend)
+            send_result.map_err(|_| NetworkError::ChannelSendError("".to_string()))
         }
     }
 

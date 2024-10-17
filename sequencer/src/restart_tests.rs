@@ -16,10 +16,8 @@ use futures::{
     stream::{BoxStream, StreamExt},
 };
 use hotshot::traits::implementations::derive_libp2p_peer_id;
-use hotshot_orchestrator::{
-    config::{Libp2pConfig, NetworkConfig},
-    run_orchestrator,
-};
+use hotshot_orchestrator::run_orchestrator;
+use hotshot_types::network::{Libp2pConfig, NetworkConfig};
 use hotshot_types::{
     event::{Event, EventType},
     light_client::StateKeyPair,

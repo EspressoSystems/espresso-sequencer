@@ -95,7 +95,7 @@ pub(crate) struct EspressoReserveHooks {
 impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
     #[inline(always)]
     async fn process_transactions(
-        self: &Arc<Self>,
+        &self,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
         transactions.retain(|txn| self.namespaces.contains(&txn.namespace()));
@@ -103,22 +103,28 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(self: &Arc<Self>, event: &Event<SeqTypes>) {
+    async fn handle_hotshot_event(&self, event: &Event<SeqTypes>) {
         let EventType::ViewFinished { view_number } = event.event else {
             return;
         };
 
-        let self = Arc::clone(self);
+        let fee_account = self.bid_key_pair.fee_account();
+        let bid_amount = self.bid_amount;
+        let namespaces = self.namespaces.iter().cloned().collect();
+        let builder_api_base_url = self.builder_api_base_url.clone();
+        let bid_key_pair = self.bid_key_pair.clone();
+        let solver_base_url = self.solver_base_url.clone();
+
         async_spawn(async move {
             let bid_tx = match BidTxBody::new(
-                self.bid_key_pair.fee_account(),
-                self.bid_amount,
+                fee_account,
+                bid_amount,
                 view_number + 3, // We submit a bid 3 views in advance.
-                self.namespaces.iter().cloned().collect(),
-                self.builder_api_base_url.clone(),
+                namespaces,
+                builder_api_base_url,
                 Default::default(),
             )
-            .signed(&self.bid_key_pair)
+            .signed(&bid_key_pair)
             {
                 Ok(bid) => bid,
                 Err(e) => {
@@ -127,7 +133,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
                 }
             };
 
-            let solver_client = connect_to_solver(self.solver_base_url.clone());
+            let solver_client = connect_to_solver(solver_base_url);
             if let Err(e) = solver_client
                 .post::<()>("submit_bid")
                 .body_json(&bid_tx)
@@ -150,14 +156,14 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
 pub(crate) struct EspressoFallbackHooks {
     /// Base URL to contact the solver.
     pub(crate) solver_base_url: Url,
-    pub(crate) namespaces_to_skip: RwLock<Option<HashSet<NamespaceId>>>,
+    pub(crate) namespaces_to_skip: Arc<RwLock<Option<HashSet<NamespaceId>>>>,
 }
 
 #[async_trait]
 impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
     #[inline(always)]
     async fn process_transactions(
-        self: &Arc<Self>,
+        &self,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
         let namespaces_to_skip = self.namespaces_to_skip.read().await;
@@ -176,7 +182,7 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(self: &Arc<Self>, event: &Event<SeqTypes>) {
+    async fn handle_hotshot_event(&self, event: &Event<SeqTypes>) {
         let EventType::ViewFinished { view_number } = event.event else {
             return;
         };
@@ -186,10 +192,12 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
             return;
         }
 
-        let self = Arc::clone(self);
+        let solver_base_url = self.solver_base_url.clone();
+        let namespaces_to_skip_lock = Arc::clone(&self.namespaces_to_skip);
+
         async_spawn(async move {
-            let namespaces_to_skip = fetch_namespaces_to_skip(self.solver_base_url.clone()).await;
-            *self.namespaces_to_skip.write().await = namespaces_to_skip;
+            let namespaces_to_skip = fetch_namespaces_to_skip(solver_base_url).await;
+            *namespaces_to_skip_lock.write().await = namespaces_to_skip;
         });
     }
 }
