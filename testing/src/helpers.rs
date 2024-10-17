@@ -40,12 +40,12 @@ use hotshot_types::{
     utils::{View, ViewInner},
     vid::{vid_scheme, VidCommitment, VidProposal, VidSchemeType},
     vote::{Certificate, HasViewNumber, Vote},
+    ValidatorConfig,
 };
 use jf_vid::VidScheme;
 use serde::Serialize;
 
-use crate::test_builder::TestDescription;
-
+use crate::{test_builder::TestDescription, test_launcher::TestLauncher};
 /// create the [`SystemContextHandle`] from a node id
 /// # Panics
 /// if cannot create a [`HotShotInitializer`]
@@ -67,18 +67,46 @@ pub async fn build_system_handle<
     let builder: TestDescription<TYPES, I, V> = TestDescription::default_multiple_rounds();
 
     let launcher = builder.gen_launcher(node_id);
+    build_system_handle_from_launcher(node_id, &launcher).await
+}
 
+/// create the [`SystemContextHandle`] from a node id and `TestLauncher`
+/// # Panics
+/// if cannot create a [`HotShotInitializer`]
+pub async fn build_system_handle_from_launcher<
+    TYPES: NodeType<InstanceState = TestInstanceState>,
+    I: NodeImplementation<
+            TYPES,
+            Storage = TestStorage<TYPES>,
+            AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
+        > + TestableNodeImplementation<TYPES>,
+    V: Versions,
+>(
+    node_id: u64,
+    launcher: &TestLauncher<TYPES, I, V>,
+) -> (
+    SystemContextHandle<TYPES, I, V>,
+    Sender<Arc<HotShotEvent<TYPES>>>,
+    Receiver<Arc<HotShotEvent<TYPES>>>,
+) {
     let network = (launcher.resource_generator.channel_generator)(node_id).await;
     let storage = (launcher.resource_generator.storage)(node_id);
     let marketplace_config = (launcher.resource_generator.marketplace_config)(node_id);
-    let config = launcher.resource_generator.config.clone();
+    let mut config = launcher.resource_generator.config.clone();
 
     let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::new(
-        launcher.metadata.async_delay_config,
+        launcher.metadata.async_delay_config.clone(),
     ))
     .await
     .unwrap();
 
+    // See whether or not we should be DA
+    let is_da = node_id < config.da_staked_committee_size as u64;
+
+    // We assign node's public key and stake value rather than read from config file since it's a test
+    let validator_config =
+        ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
+    config.my_own_validator_config = validator_config;
     let private_key = config.my_own_validator_config.private_key.clone();
     let public_key = config.my_own_validator_config.public_key.clone();
 

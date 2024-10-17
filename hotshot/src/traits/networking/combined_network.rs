@@ -7,7 +7,7 @@
 //! Networking Implementation that has a primary and a fallback network.  If the primary
 //! Errors we will use the backup to send or receive
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet, HashMap},
+    collections::{hash_map::DefaultHasher, BTreeMap, HashMap},
     future::Future,
     hash::{Hash, Hasher},
     num::NonZeroUsize,
@@ -391,7 +391,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
     async fn da_broadcast_message(
         &self,
         message: Vec<u8>,
-        recipients: BTreeSet<TYPES::SignatureKey>,
+        recipients: Vec<TYPES::SignatureKey>,
         broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         let primary = self.primary().clone();

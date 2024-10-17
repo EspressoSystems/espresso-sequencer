@@ -9,7 +9,11 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use std::{fmt, fmt::Debug, marker::PhantomData, sync::Arc};
+use std::{
+    fmt::{self, Debug},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use anyhow::{bail, ensure, Context, Result};
 use async_lock::RwLock;
@@ -115,6 +119,16 @@ pub enum MessageKind<TYPES: NodeType> {
     Data(DataMessage<TYPES>),
     /// A (still serialized) message to be passed through to external listeners
     External(Vec<u8>),
+}
+
+/// List of keys to send a message to, or broadcast to all known keys
+pub enum RecipientList<K: SignatureKey> {
+    /// Broadcast to all
+    Broadcast,
+    /// Send a message directly to a key
+    Direct(K),
+    /// Send a message directly to many keys
+    Many(Vec<K>),
 }
 
 impl<TYPES: NodeType> MessageKind<TYPES> {

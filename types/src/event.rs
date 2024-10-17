@@ -92,6 +92,7 @@ pub mod error_adaptor {
         Ok(Arc::new(HotShotError::FailedToDeserialize(str)))
     }
 }
+
 /// The type and contents of a status event emitted by a `HotShot` instance
 ///
 /// This enum does not include metadata shared among all variants, such as the stage and view
@@ -171,7 +172,12 @@ pub enum EventType<TYPES: NodeType> {
     },
 
     /// A message destined for external listeners was received
-    ExternalMessageReceived(Vec<u8>),
+    ExternalMessageReceived {
+        /// Public Key of the message sender
+        sender: TYPES::SignatureKey,
+        /// Serialized data of the message
+        data: Vec<u8>,
+    },
 }
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 /// A list of actions that we track for nodes

@@ -46,6 +46,9 @@ pub struct NetworkMessageTaskState<TYPES: NodeType> {
 
     /// Sender to send external events this task generates to the event stream
     pub external_event_stream: Sender<Event<TYPES>>,
+
+    /// This nodes public key
+    pub public_key: TYPES::SignatureKey,
 }
 
 impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
@@ -160,11 +163,14 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 
             // Handle external messages
             MessageKind::External(data) => {
+                if sender == self.public_key {
+                    return;
+                }
                 // Send the external message to the external event stream so it can be processed
                 broadcast_event(
                     Event {
                         view_number: TYPES::Time::new(1),
-                        event: EventType::ExternalMessageReceived(data),
+                        event: EventType::ExternalMessageReceived { sender, data },
                     },
                     &self.external_event_stream,
                 )
@@ -571,20 +577,12 @@ impl<
                         .await
                 }
                 TransmitType::DaCommitteeBroadcast => {
-                    net.da_broadcast_message(serialized_message, da_committee, broadcast_delay)
-                        .await
-                }
-                TransmitType::DaCommitteeAndLeaderBroadcast(recipient) => {
-                    if let Err(e) = net
-                        .direct_message(serialized_message.clone(), recipient)
-                        .await
-                    {
-                        warn!("Failed to send message: {e:?}");
-                    }
-
-                    // Otherwise, send the next message.
-                    net.da_broadcast_message(serialized_message, da_committee, broadcast_delay)
-                        .await
+                    net.da_broadcast_message(
+                        serialized_message,
+                        da_committee.iter().cloned().collect(),
+                        broadcast_delay,
+                    )
+                    .await
                 }
             };
 

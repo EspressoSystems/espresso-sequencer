@@ -885,7 +885,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
     async fn da_broadcast_message(
         &self,
         message: Vec<u8>,
-        recipients: BTreeSet<K>,
+        recipients: Vec<K>,
         _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         // If we're not ready, return an error

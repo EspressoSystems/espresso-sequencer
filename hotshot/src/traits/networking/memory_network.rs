@@ -11,7 +11,6 @@
 
 use core::time::Duration;
 use std::{
-    collections::BTreeSet,
     fmt::Debug,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -305,7 +304,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
     async fn da_broadcast_message(
         &self,
         message: Vec<u8>,
-        recipients: BTreeSet<K>,
+        recipients: Vec<K>,
         broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         // Iterate over all topics, compare to recipients, and get the `Topic`

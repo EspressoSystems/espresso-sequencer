@@ -107,6 +107,7 @@ pub fn add_network_message_task<
     let network_state: NetworkMessageTaskState<_> = NetworkMessageTaskState {
         internal_event_stream: handle.internal_event_stream.0.clone(),
         external_event_stream: handle.output_event_stream.0.clone(),
+        public_key: handle.public_key().clone(),
     };
 
     let upgrade_lock = handle.hotshot.upgrade_lock.clone();

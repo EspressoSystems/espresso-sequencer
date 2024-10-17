@@ -6,7 +6,7 @@
 
 #[cfg(feature = "hotshot-testing")]
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::{collections::BTreeSet, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 #[cfg(feature = "hotshot-testing")]
 use std::{path::Path, time::Duration};
 
@@ -487,7 +487,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
     async fn da_broadcast_message(
         &self,
         message: Vec<u8>,
-        _recipients: BTreeSet<K>,
+        _recipients: Vec<K>,
         _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         self.broadcast_message(message, Topic::Da)

@@ -161,11 +161,13 @@ pub async fn add_network_message_test_task<
     external_event_stream: Sender<Event<TYPES>>,
     upgrade_lock: UpgradeLock<TYPES, V>,
     channel: Arc<NET>,
+    public_key: TYPES::SignatureKey,
 ) -> JoinHandle<()> {
     let net = Arc::clone(&channel);
     let network_state: NetworkMessageTaskState<_> = NetworkMessageTaskState {
         internal_event_stream: internal_event_stream.clone(),
         external_event_stream: external_event_stream.clone(),
+        public_key,
     };
 
     let network = Arc::clone(&net);
