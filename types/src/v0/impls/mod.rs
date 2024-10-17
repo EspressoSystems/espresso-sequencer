@@ -15,4 +15,4 @@ pub use auction::SolverAuctionResultsProvider;
 pub use fee_info::FeeError;
 pub use instance_state::{mock, NodeState};
 pub use state::ProposalValidationError;
-pub use state::{validate_proposal, BuilderValidationError, StateValidationError, ValidatedState};
+pub use state::{BuilderValidationError, StateValidationError, ValidatedState};
