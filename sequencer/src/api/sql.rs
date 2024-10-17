@@ -1,9 +1,9 @@
 use anyhow::{bail, ensure, Context};
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use espresso_types::{
-    v0_3::ChainConfig, BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, NodeState, ValidatedState,
+    get_l1_deposits, v0_3::ChainConfig, BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf,
+    NodeState, ValidatedState,
 };
 use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
@@ -26,14 +26,14 @@ use jf_merkle_tree::{
     prelude::MerkleNode, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
     LookupResult, MerkleTreeScheme,
 };
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use super::{
     data_source::{Provider, SequencerDataSource},
     BlocksFrontier,
 };
 use crate::{
-    catchup::{CatchupStorage, SqlStateCatchup},
+    catchup::{CatchupStorage, NullStateCatchup},
     persistence::{
         sql::{sql_param, Options},
         ChainConfigPersistence,
@@ -333,9 +333,16 @@ async fn reconstruct_state<'a>(
     // Get the initial state.
     let mut parent = from_leaf;
     let mut state = ValidatedState::from_header(parent.block_header());
+
     // Pre-load the state with the accounts we care about to ensure they will be present in the
     // final state.
-    state.fee_merkle_tree = load_accounts(tx, from_height, accounts)
+    let mut accounts = accounts.iter().copied().collect::<HashSet<_>>();
+    // Add in all the accounts we will need to replay any of the headers, to ensure that we don't
+    // need to do catchup recursively.
+    accounts.insert(instance.chain_config.fee_recipient);
+    accounts.extend(fee_account_dependencies(instance, parent, &leaves).await);
+    let accounts = accounts.into_iter().collect::<Vec<_>>();
+    state.fee_merkle_tree = load_accounts(tx, from_height, &accounts)
         .await
         .context("unable to reconstruct state because accounts are not available at origin")?
         .0;
@@ -344,24 +351,66 @@ async fn reconstruct_state<'a>(
         "loaded fee state does not match parent header"
     );
 
-    // For catchup that is required during the following state replay, use the local database via
-    // this transaction.
-    let peers = SqlStateCatchup::new(Arc::new(tx), Default::default());
+    // We need the blocks frontier as well, to apply the STF.
+    let frontier = load_frontier(tx, from_height)
+        .await
+        .context("unable to reconstruct state because frontier is not available at origin")?;
+    match frontier
+        .proof
+        .first()
+        .context("empty proof for frontier at origin")?
+    {
+        MerkleNode::Leaf { pos, elem, .. } => state
+            .block_merkle_tree
+            .remember(*pos, *elem, frontier)
+            .context("failed to remember frontier")?,
+        _ => bail!("invalid frontier proof"),
+    }
 
     // Apply subsequent headers to compute the later state.
     for proposal in &leaves {
-        state = compute_state_update(&state, instance, &peers, parent, proposal)
-            .await
-            .context(format!(
-                "unable to reconstruct state because state update {} failed",
-                proposal.height(),
-            ))?
-            .0;
+        state = compute_state_update(
+            &state,
+            instance,
+            &NullStateCatchup::default(),
+            parent,
+            proposal,
+        )
+        .await
+        .context(format!(
+            "unable to reconstruct state because state update {} failed",
+            proposal.height(),
+        ))?
+        .0;
         parent = proposal;
     }
 
     tracing::info!(from_height, ?to_view, "successfully reconstructed state");
     Ok((state, to_leaf))
+}
+
+/// Get the set of all fee accounts on which the STF depends, applied to the given list of headers.
+async fn fee_account_dependencies(
+    instance: &NodeState,
+    mut parent: &Leaf,
+    leaves: impl IntoIterator<Item = &Leaf>,
+) -> HashSet<FeeAccount> {
+    let mut accounts = HashSet::default();
+    for proposal in leaves {
+        accounts.extend(
+            get_l1_deposits(
+                instance,
+                proposal.block_header(),
+                parent,
+                instance.chain_config.fee_contract,
+            )
+            .await
+            .into_iter()
+            .map(|fee| fee.account()),
+        );
+        parent = proposal;
+    }
+    accounts
 }
 
 async fn get_leaf_from_proposal<'a>(

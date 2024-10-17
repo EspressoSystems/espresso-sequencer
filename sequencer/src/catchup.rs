@@ -387,3 +387,44 @@ where
         &self.backoff
     }
 }
+
+/// Disable catchup entirely.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NullStateCatchup {
+    backoff: BackoffParams,
+}
+
+#[async_trait]
+impl StateCatchup for NullStateCatchup {
+    async fn try_fetch_accounts(
+        &self,
+        _instance: &NodeState,
+        _height: u64,
+        _view: ViewNumber,
+        _fee_merkle_tree_root: FeeMerkleCommitment,
+        _account: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
+        bail!("state catchup is disabled");
+    }
+
+    async fn try_remember_blocks_merkle_tree(
+        &self,
+        _instance: &NodeState,
+        _height: u64,
+        _view: ViewNumber,
+        _mt: &mut BlockMerkleTree,
+    ) -> anyhow::Result<()> {
+        bail!("state catchup is disabled");
+    }
+
+    async fn try_fetch_chain_config(
+        &self,
+        _commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        bail!("state catchup is disabled");
+    }
+
+    fn backoff(&self) -> &BackoffParams {
+        &self.backoff
+    }
+}
