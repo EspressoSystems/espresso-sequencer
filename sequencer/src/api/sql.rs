@@ -24,7 +24,7 @@ use hotshot_types::{
 };
 use jf_merkle_tree::{
     prelude::MerkleNode, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    MerkleTreeScheme,
+    LookupResult, MerkleTreeScheme,
 };
 use std::collections::VecDeque;
 
@@ -107,11 +107,39 @@ impl CatchupStorage for SqlStorage {
         }
     }
 
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
         let tx = self.read().await.context(format!(
             "opening transaction to fetch frontier at height {height}"
         ))?;
-        (&*tx).get_frontier(height, view).await
+
+        let block_height = NodeDataSource::<SeqTypes>::block_height(&*tx)
+            .await
+            .context("getting block height")? as u64;
+        ensure!(
+            block_height > 0,
+            "cannot get frontier for height {height}: no blocks available"
+        );
+
+        // Check if we have the desired state snapshot. If so, we can load the desired frontier
+        // directly.
+        if height < block_height {
+            load_frontier(&tx, height).await
+        } else {
+            // If we do not have the exact snapshot we need, we can try going back to the last
+            // snapshot we _do_ have and replaying subsequent blocks to compute the desired state.
+            let (state, _) = reconstruct_state(instance, &tx, block_height - 1, view, &[]).await?;
+            match state.block_merkle_tree.lookup(height - 1) {
+                LookupResult::Ok(_, proof) => Ok(proof),
+                _ => {
+                    bail!("state snapshot {view:?},{height} was found but does not contain frontier at height {}; this should not be possible", height - 1);
+                }
+            }
+        }
     }
 
     async fn get_chain_config(
@@ -136,13 +164,13 @@ impl<'a> CatchupStorage for &Transaction<'a> {
         load_accounts(self, height, accounts).await
     }
 
-    async fn get_frontier(&self, height: u64, _view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        self.get_path(
-            Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
-            height - 1,
-        )
-        .await
-        .context(format!("fetching frontier at height {height}"))
+    async fn get_frontier(
+        &self,
+        _instance: &NodeState,
+        height: u64,
+        _view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
+        load_frontier(self, height).await
     }
 
     async fn get_chain_config(
@@ -175,8 +203,13 @@ impl CatchupStorage for DataSource {
             .await
     }
 
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        self.as_ref().get_frontier(height, view).await
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
+        self.as_ref().get_frontier(instance, height, view).await
     }
 
     async fn get_chain_config(
@@ -201,6 +234,15 @@ impl<'a> ChainConfigPersistence for Transaction<'a> {
         .await
         .map_err(Into::into)
     }
+}
+
+async fn load_frontier<'a>(tx: &Transaction<'a>, height: u64) -> anyhow::Result<BlocksFrontier> {
+    tx.get_path(
+        Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
+        height - 1,
+    )
+    .await
+    .context(format!("fetching frontier at height {height}"))
 }
 
 async fn load_accounts<'a>(

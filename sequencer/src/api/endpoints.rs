@@ -294,7 +294,7 @@ where
                 .map_err(Error::from_request_error)?;
 
             state
-                .get_frontier(height, ViewNumber::new(view))
+                .get_frontier(state.node_state().await, height, ViewNumber::new(view))
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }

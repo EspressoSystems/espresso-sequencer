@@ -77,6 +77,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     /// Try to fetch and remember the blocks frontier, failing without retrying if unable.
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
@@ -85,13 +86,14 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     /// Fetch and remember the blocks frontier, retrying on transient errors.
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         self.backoff()
             .retry(mt, |mt| {
-                self.try_remember_blocks_merkle_tree(height, view, mt)
+                self.try_remember_blocks_merkle_tree(instance, height, view, mt)
                     .map_err(|err| err.context("fetching frontier"))
                     .boxed()
             })
@@ -148,22 +150,26 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
+            .try_remember_blocks_merkle_tree(instance, height, view, mt)
             .await
     }
 
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
+        (**self)
+            .remember_blocks_merkle_tree(instance, height, view, mt)
+            .await
     }
 
     async fn try_fetch_chain_config(
@@ -212,22 +218,26 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
+            .try_remember_blocks_merkle_tree(instance, height, view, mt)
             .await
     }
 
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
+        (**self)
+            .remember_blocks_merkle_tree(instance, height, view, mt)
+            .await
     }
 
     async fn try_fetch_chain_config(
@@ -276,13 +286,14 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     #[tracing::instrument(skip(self, mt))]
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         for provider in self {
             match provider
-                .try_remember_blocks_merkle_tree(height, view, mt)
+                .try_remember_blocks_merkle_tree(instance, height, view, mt)
                 .await
             {
                 Ok(()) => return Ok(()),

@@ -480,6 +480,7 @@ impl ValidatedState {
             );
             peers
                 .remember_blocks_merkle_tree(
+                    instance,
                     parent_height,
                     parent_view,
                     &mut validated_state.block_merkle_tree,

@@ -164,6 +164,7 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
     #[tracing::instrument(skip(self, mt), height = mt.num_leaves())]
     async fn try_remember_blocks_merkle_tree(
         &self,
+        _instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
@@ -258,6 +259,7 @@ pub(crate) trait CatchupStorage: Sync {
     /// decided view.
     fn get_frontier(
         &self,
+        _instance: &NodeState,
         _height: u64,
         _view: ViewNumber,
     ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>> {
@@ -299,8 +301,13 @@ where
             .await
     }
 
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        self.inner().get_frontier(height, view).await
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
+        self.inner().get_frontier(instance, height, view).await
     }
 
     async fn get_chain_config(
@@ -347,6 +354,7 @@ where
     #[tracing::instrument(skip(self))]
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         bh: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
@@ -355,7 +363,7 @@ where
             return Ok(());
         }
 
-        let proof = self.db.get_frontier(bh, view).await?;
+        let proof = self.db.get_frontier(instance, bh, view).await?;
         match proof
             .proof
             .first()
