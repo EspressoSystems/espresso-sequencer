@@ -1,4 +1,4 @@
-use std::{hash::Hash, marker::PhantomData};
+use std::marker::PhantomData;
 
 use crate::{
     builder_state::{
@@ -11,30 +11,24 @@ use crate::{
 use async_broadcast::broadcast;
 use async_compatibility_layer::channel::{unbounded, UnboundedReceiver};
 use hotshot::{
-    traits::{election::static_committee::StaticCommittee, BlockPayload},
+    traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
 };
 use hotshot_types::{
     data::{Leaf, QuorumProposal, ViewNumber},
     message::Proposal,
-    signature_key::BuilderKey,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     simple_vote::QuorumData,
-    traits::{
-        block_contents::vid_commitment,
-        node_implementation::{ConsensusTime, NodeType},
-    },
+    traits::{block_contents::vid_commitment, node_implementation::ConsensusTime},
     utils::BuilderCommitment,
 };
 
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResult,
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
-    node_types::TestVersions,
+    node_types::{TestTypes, TestVersions},
     state_types::{TestInstanceState, TestValidatedState},
 };
 use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
-use serde::{Deserialize, Serialize};
 
 use crate::service::{broadcast_channels, GlobalState};
 use async_lock::RwLock;
@@ -43,23 +37,6 @@ use std::sync::Arc;
 use std::time::Duration;
 pub mod basic_test;
 pub mod order_test;
-
-#[derive(
-    Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
-pub struct TestTypes;
-impl NodeType for TestTypes {
-    type Time = ViewNumber;
-    type BlockHeader = TestBlockHeader;
-    type BlockPayload = TestBlockPayload;
-    type SignatureKey = BLSPubKey;
-    type Transaction = TestTransaction;
-    type ValidatedState = TestValidatedState;
-    type InstanceState = TestInstanceState;
-    type Membership = StaticCommittee<Self>;
-    type BuilderSignatureKey = BuilderKey;
-    type AuctionResult = TestAuctionResult;
-}
 
 pub async fn start_builder_state_without_event_loop(
     channel_capacity: usize,

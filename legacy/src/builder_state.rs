@@ -1150,6 +1150,7 @@ mod test {
     use async_broadcast::broadcast;
     use committable::RawCommitmentBuilder;
     use hotshot_example_types::block_types::TestTransaction;
+    use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::data::ViewNumber;
     use hotshot_types::data::{Leaf, QuorumProposal};
     use hotshot_types::message::Proposal;
@@ -1161,7 +1162,6 @@ mod test {
     use super::ParentBlockReferences;
     use crate::testing::{
         calc_builder_commitment, calc_proposal_msg, start_builder_state_without_event_loop,
-        TestTypes,
     };
 
     /// check whether the `da_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing da proposal messages
