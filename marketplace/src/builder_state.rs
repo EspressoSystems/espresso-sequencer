@@ -1122,7 +1122,7 @@ mod test {
     use super::DaProposalMessage;
     use super::MessageType;
     use super::ParentBlockReferences;
-    use crate::testing::{calc_proposal_msg, start_builder_state_without_event_loop};
+    use crate::testing::{calc_proposal_msg, create_builder_state};
 
     /// check whether the `da_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing da proposal messages
     /// used for testing only
@@ -1177,7 +1177,7 @@ mod test {
 
         // start builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
-            start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+            create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
@@ -1314,7 +1314,7 @@ mod test {
 
         // start builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
-            start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+            create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // randomly generate a transaction
         let transactions = vec![TestTransaction::new(vec![1, 2, 3]); 3];
@@ -1427,7 +1427,7 @@ mod test {
 
         // start builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
-            start_builder_state_without_event_loop(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
+            create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
         // insert some builder states
 

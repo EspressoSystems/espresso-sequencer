@@ -38,7 +38,7 @@ use std::time::Duration;
 pub mod basic_test;
 pub mod order_test;
 
-pub async fn start_builder_state_without_event_loop(
+pub async fn create_builder_state(
     channel_capacity: usize,
     num_storage_nodes: usize,
 ) -> (
@@ -94,7 +94,7 @@ pub async fn start_builder_state(
     Arc<RwLock<GlobalState<TestTypes>>>,
 ) {
     let (senders, global_state, builder_state) =
-        start_builder_state_without_event_loop(channel_capacity, num_storage_nodes).await;
+        create_builder_state(channel_capacity, num_storage_nodes).await;
 
     // start the event loop
     builder_state.event_loop();

@@ -36,7 +36,7 @@ use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
 use std::sync::Arc;
 use std::time::Duration;
 
-pub async fn start_builder_state_without_event_loop(
+pub async fn create_builder_state(
     channel_capacity: usize,
     num_storage_nodes: usize,
 ) -> (
