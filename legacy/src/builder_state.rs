@@ -1176,7 +1176,10 @@ mod test {
             DAProposalInfo<TYPES>,
         >,
     ) {
-        assert_eq!(da_proposal_payload_commit_to_da_proposal, correct_da_proposal_payload_commit_to_da_proposal);
+        assert_eq!(
+            da_proposal_payload_commit_to_da_proposal,
+            correct_da_proposal_payload_commit_to_da_proposal
+        );
     }
 
     /// check whether the `quorum_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing quorum proposal messages
@@ -1189,7 +1192,10 @@ mod test {
         quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
         correct_quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
     ) {
-        assert_eq!(quorum_proposal_payload_commit_to_da_proposal, correct_quorum_proposal_payload_commit_to_da_proposal);
+        assert_eq!(
+            quorum_proposal_payload_commit_to_da_proposal,
+            correct_quorum_proposal_payload_commit_to_da_proposal
+        );
     }
 
     /// This test the function `process_da_propsal`.
