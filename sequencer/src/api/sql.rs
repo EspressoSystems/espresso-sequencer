@@ -150,35 +150,7 @@ impl CatchupStorage for SqlStorage {
         let tx = self.read().await.context(format!(
             "opening transaction to fetch chain config {commitment}"
         ))?;
-        (&*tx).get_chain_config(commitment).await
-    }
-}
-
-impl<'a> CatchupStorage for &Transaction<'a> {
-    async fn get_accounts(
-        &self,
-        _instance: &NodeState,
-        height: u64,
-        _view: ViewNumber,
-        accounts: &[FeeAccount],
-    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
-        load_accounts(self, height, accounts).await
-    }
-
-    async fn get_frontier(
-        &self,
-        _instance: &NodeState,
-        height: u64,
-        _view: ViewNumber,
-    ) -> anyhow::Result<BlocksFrontier> {
-        load_frontier(self, height).await
-    }
-
-    async fn get_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        let query = self
+        let query = tx
             .query_one(
                 "SELECT * from chain_config where commitment = $1",
                 [&commitment.to_string()],
