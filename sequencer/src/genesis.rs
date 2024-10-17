@@ -5,7 +5,8 @@ use std::{
 
 use anyhow::Context;
 use espresso_types::{
-    v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
+    v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Timestamp, Upgrade,
+    UpgradeType,
 };
 use ethers::{
     providers::{Http, Provider},
@@ -38,6 +39,13 @@ pub enum L1Finalized {
     /// syncing only when a finalized block with the given number becomes available. The configured
     /// L1 client will be used to fetch the rest of the block info once available.
     Number { number: u64 },
+
+    /// A time from which to start syncing L1 blocks.
+    ///
+    /// This allows a validator to specify a future time at which the network should start. The
+    /// network will start syncing from the first L1 block with timestamp greater than or equal to
+    /// this, once said block is finalized.
+    Timestamp { timestamp: Timestamp },
 }
 
 /// Genesis of an Espresso chain.
@@ -510,6 +518,38 @@ mod test {
 
         let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
         assert_eq!(genesis.l1_finalized, L1Finalized::Number { number: 42 });
+    }
+
+    #[test]
+    fn test_genesis_l1_finalized_timestamp_only() {
+        let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [l1_finalized]
+            timestamp = "2024-01-02T00:00:00Z"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+        assert_eq!(
+            genesis.l1_finalized,
+            L1Finalized::Timestamp {
+                timestamp: Timestamp::from_string("2024-01-02T00:00:00Z".to_string()).unwrap()
+            }
+        );
     }
 
     #[async_std::test]

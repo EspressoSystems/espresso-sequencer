@@ -10,12 +10,14 @@ use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
     availability::LeafId,
     data_source::{
-        sql::{postgres::types::ToSql, Config, SqlDataSource, Transaction},
-        storage::{AvailabilityStorage, SqlStorage},
+        sql::{Config, SqlDataSource, Transaction},
+        storage::{
+            sql::{query_as, Db, TransactionMode, Write},
+            AvailabilityStorage, MerklizedStateStorage, NodeStorage, SqlStorage,
+        },
         VersionedDataSource,
     },
-    merklized_state::{MerklizedStateDataSource, Snapshot},
-    node::NodeDataSource,
+    merklized_state::Snapshot,
     Resolvable,
 };
 use hotshot_types::{
@@ -27,6 +29,7 @@ use jf_merkle_tree::{
     prelude::MerkleNode, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
     LookupResult, MerkleTreeScheme,
 };
+use sqlx::{Encode, Type};
 use std::collections::{HashSet, VecDeque};
 
 use super::{
@@ -35,10 +38,7 @@ use super::{
 };
 use crate::{
     catchup::{CatchupStorage, NullStateCatchup},
-    persistence::{
-        sql::{sql_param, Options},
-        ChainConfigPersistence,
-    },
+    persistence::{sql::Options, ChainConfigPersistence},
     state::compute_state_update,
     SeqTypes,
 };
@@ -83,11 +83,11 @@ impl CatchupStorage for SqlStorage {
         view: ViewNumber,
         accounts: &[FeeAccount],
     ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
-        let tx = self.read().await.context(format!(
+        let mut tx = self.read().await.context(format!(
             "opening transaction to fetch account {accounts:?}; height {height}"
         ))?;
 
-        let block_height = NodeDataSource::<SeqTypes>::block_height(&*tx)
+        let block_height = NodeStorage::<SeqTypes>::block_height(&mut tx)
             .await
             .context("getting block height")? as u64;
         ensure!(
@@ -98,12 +98,12 @@ impl CatchupStorage for SqlStorage {
         // Check if we have the desired state snapshot. If so, we can load the desired accounts
         // directly.
         if height < block_height {
-            load_accounts(&tx, height, accounts).await
+            load_accounts(&mut tx, height, accounts).await
         } else {
             // If we do not have the exact snapshot we need, we can try going back to the last
             // snapshot we _do_ have and replaying subsequent blocks to compute the desired state.
             let (state, leaf) =
-                reconstruct_state(instance, &tx, block_height - 1, view, accounts).await?;
+                reconstruct_state(instance, &mut tx, block_height - 1, view, accounts).await?;
             Ok((state.fee_merkle_tree, leaf))
         }
     }
@@ -114,11 +114,11 @@ impl CatchupStorage for SqlStorage {
         height: u64,
         view: ViewNumber,
     ) -> anyhow::Result<BlocksFrontier> {
-        let tx = self.read().await.context(format!(
+        let mut tx = self.read().await.context(format!(
             "opening transaction to fetch frontier at height {height}"
         ))?;
 
-        let block_height = NodeDataSource::<SeqTypes>::block_height(&*tx)
+        let block_height = NodeStorage::<SeqTypes>::block_height(&mut tx)
             .await
             .context("getting block height")? as u64;
         ensure!(
@@ -129,11 +129,12 @@ impl CatchupStorage for SqlStorage {
         // Check if we have the desired state snapshot. If so, we can load the desired frontier
         // directly.
         if height < block_height {
-            load_frontier(&tx, height).await
+            load_frontier(&mut tx, height).await
         } else {
             // If we do not have the exact snapshot we need, we can try going back to the last
             // snapshot we _do_ have and replaying subsequent blocks to compute the desired state.
-            let (state, _) = reconstruct_state(instance, &tx, block_height - 1, view, &[]).await?;
+            let (state, _) =
+                reconstruct_state(instance, &mut tx, block_height - 1, view, &[]).await?;
             match state.block_merkle_tree.lookup(height - 1) {
                 LookupResult::Ok(_, proof) => Ok(proof),
                 _ => {
@@ -147,17 +148,15 @@ impl CatchupStorage for SqlStorage {
         &self,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        let tx = self.read().await.context(format!(
+        let mut tx = self.read().await.context(format!(
             "opening transaction to fetch chain config {commitment}"
         ))?;
-        let query = tx
-            .query_one(
-                "SELECT * from chain_config where commitment = $1",
-                [&commitment.to_string()],
-            )
-            .await?;
 
-        let data: Vec<u8> = query.try_get("data")?;
+        let (data,) = query_as::<(Vec<u8>,)>("SELECT * from chain_config where commitment = $1")
+            .bind(commitment.to_string())
+            .fetch_one(tx.as_mut())
+            .await
+            .unwrap();
 
         bincode::deserialize(&data[..]).context("failed to deserialize")
     }
@@ -194,7 +193,7 @@ impl CatchupStorage for DataSource {
 }
 
 #[async_trait]
-impl<'a> ChainConfigPersistence for Transaction<'a> {
+impl ChainConfigPersistence for Transaction<Write> {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
         let commitment = chain_config.commitment();
         let data = bincode::serialize(&chain_config)?;
@@ -202,14 +201,17 @@ impl<'a> ChainConfigPersistence for Transaction<'a> {
             "chain_config",
             ["commitment", "data"],
             ["commitment"],
-            [[sql_param(&(commitment.to_string())), sql_param(&data)]],
+            [(commitment.to_string(), data)],
         )
         .await
         .map_err(Into::into)
     }
 }
 
-async fn load_frontier<'a>(tx: &Transaction<'a>, height: u64) -> anyhow::Result<BlocksFrontier> {
+async fn load_frontier<Mode: TransactionMode>(
+    tx: &mut Transaction<Mode>,
+    height: u64,
+) -> anyhow::Result<BlocksFrontier> {
     tx.get_path(
         Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
         height - 1,
@@ -218,8 +220,8 @@ async fn load_frontier<'a>(tx: &Transaction<'a>, height: u64) -> anyhow::Result<
     .context(format!("fetching frontier at height {height}"))
 }
 
-async fn load_accounts<'a>(
-    tx: &Transaction<'a>,
+async fn load_accounts<Mode: TransactionMode>(
+    tx: &mut Transaction<Mode>,
     height: u64,
     accounts: &[FeeAccount],
 ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
@@ -263,9 +265,9 @@ async fn load_accounts<'a>(
 }
 
 #[tracing::instrument(skip(instance, tx))]
-async fn reconstruct_state<'a>(
+async fn reconstruct_state<Mode: TransactionMode>(
     instance: &NodeState,
-    tx: &Transaction<'a>,
+    tx: &mut Transaction<Mode>,
     from_height: u64,
     to_view: ViewNumber,
     accounts: &[FeeAccount],
@@ -388,18 +390,20 @@ async fn fee_account_dependencies(
     accounts
 }
 
-async fn get_leaf_from_proposal<'a>(
-    tx: &Transaction<'a>,
+async fn get_leaf_from_proposal<Mode, P>(
+    tx: &mut Transaction<Mode>,
     where_clause: &str,
-    param: &(dyn ToSql + Sync),
-) -> anyhow::Result<Leaf> {
-    let row = tx
-        .query_one(
-            &format!("SELECT data FROM quorum_proposals WHERE {where_clause} LIMIT 1",),
-            [param],
-        )
-        .await?;
-    let data: Vec<u8> = row.try_get("data")?;
+    param: P,
+) -> anyhow::Result<Leaf>
+where
+    P: Type<Db> + for<'q> Encode<'q, Db>,
+{
+    let (data,) = query_as::<(Vec<u8>,)>(&format!(
+        "SELECT data FROM quorum_proposals WHERE {where_clause} LIMIT 1",
+    ))
+    .bind(param)
+    .fetch_one(tx.as_mut())
+    .await?;
     let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&data)?;
     Ok(Leaf::from_quorum_proposal(&proposal.data))
 }

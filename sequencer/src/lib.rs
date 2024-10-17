@@ -396,6 +396,11 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
+        L1Finalized::Timestamp { timestamp } => {
+            l1_client
+                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .await
+        }
     };
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
