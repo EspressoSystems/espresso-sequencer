@@ -17,7 +17,7 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    mock, retain_accounts, validate_proposal, BuilderValidationError, FeeError,
+    get_l1_deposits, mock, retain_accounts, validate_proposal, BuilderValidationError, FeeError,
     ProposalValidationError, StateValidationError,
 };
 pub use utils::*;

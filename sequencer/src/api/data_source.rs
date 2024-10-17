@@ -159,6 +159,7 @@ pub(crate) trait CatchupDataSource: Sync {
     /// decided view.
     fn get_frontier(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
     ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>>;

@@ -209,6 +209,7 @@ pub mod mock {
 
         async fn try_remember_blocks_merkle_tree(
             &self,
+            _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
             mt: &mut BlockMerkleTree,
