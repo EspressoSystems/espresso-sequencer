@@ -51,8 +51,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
     ) -> anyhow::Result<Vec<FeeAccountProof>> {
-        Ok(self
-            .backoff()
+        self.backoff()
             .retry(self, |provider| {
                 async {
                     let tree = provider
@@ -74,7 +73,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
                 }
                 .boxed()
             })
-            .await)
+            .await
     }
 
     /// Try to fetch and remember the blocks frontier, failing without retrying if unable.
@@ -100,8 +99,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
                     .map_err(|err| err.context("fetching frontier"))
                     .boxed()
             })
-            .await;
-        Ok(())
+            .await
     }
 
     async fn try_fetch_chain_config(
@@ -109,7 +107,10 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig>;
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         self.backoff()
             .retry(self, |provider| {
                 provider
@@ -182,7 +183,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
         (**self).try_fetch_chain_config(commitment).await
     }
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         (**self).fetch_chain_config(commitment).await
     }
 
@@ -250,7 +254,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         (**self).try_fetch_chain_config(commitment).await
     }
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         (**self).fetch_chain_config(commitment).await
     }
 

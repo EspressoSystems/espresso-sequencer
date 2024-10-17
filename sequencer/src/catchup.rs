@@ -84,7 +84,7 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
     pub async fn fetch_config(
         &self,
         my_own_validator_config: ValidatorConfig<PubKey>,
-    ) -> NetworkConfig<PubKey> {
+    ) -> anyhow::Result<NetworkConfig<PubKey>> {
         self.backoff()
             .retry(self, move |provider| {
                 let my_own_validator_config = my_own_validator_config.clone();
@@ -412,9 +412,17 @@ where
 }
 
 /// Disable catchup entirely.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug)]
 pub struct NullStateCatchup {
     backoff: BackoffParams,
+}
+
+impl Default for NullStateCatchup {
+    fn default() -> Self {
+        Self {
+            backoff: BackoffParams::disabled(),
+        }
+    }
 }
 
 #[async_trait]

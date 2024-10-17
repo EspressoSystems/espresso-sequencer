@@ -2022,7 +2022,7 @@ mod test {
 
         // Fetch the config from node 1, a different node than the one running the service.
         let validator = ValidatorConfig::generated_from_seed_indexed([0; 32], 1, 1, false);
-        let mut config = peers.fetch_config(validator.clone()).await;
+        let mut config = peers.fetch_config(validator.clone()).await.unwrap();
 
         // Check the node-specific information in the recovered config is correct.
         assert_eq!(config.node_index, 1);

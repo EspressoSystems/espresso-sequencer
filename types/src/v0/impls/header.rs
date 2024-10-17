@@ -522,16 +522,16 @@ impl Header {
     async fn get_chain_config(
         validated_state: &ValidatedState,
         instance_state: &NodeState,
-    ) -> ChainConfig {
+    ) -> anyhow::Result<ChainConfig> {
         let validated_cf = validated_state.chain_config;
         let instance_cf = instance_state.chain_config;
 
         if validated_cf.commit() == instance_cf.commit() {
-            return instance_cf;
+            return Ok(instance_cf);
         }
 
         match validated_cf.resolve() {
-            Some(cf) => cf,
+            Some(cf) => Ok(cf),
             None => {
                 tracing::info!("fetching chain config {} from peers", validated_cf.commit());
 
@@ -769,10 +769,10 @@ impl BlockHeader<SeqTypes> for Header {
                     UpgradeType::Marketplace { chain_config } => chain_config,
                     UpgradeType::Fee { chain_config } => chain_config,
                 },
-                None => Header::get_chain_config(&validated_state, instance_state).await,
+                None => Header::get_chain_config(&validated_state, instance_state).await?,
             }
         } else {
-            Header::get_chain_config(&validated_state, instance_state).await
+            Header::get_chain_config(&validated_state, instance_state).await?
         };
 
         validated_state.chain_config = chain_config.into();
@@ -901,12 +901,12 @@ impl BlockHeader<SeqTypes> for Header {
             match instance_state.upgrades.get(&version) {
                 Some(upgrade) => match upgrade.upgrade_type {
                     UpgradeType::Fee { chain_config } => chain_config,
-                    _ => Header::get_chain_config(&validated_state, instance_state).await,
+                    _ => Header::get_chain_config(&validated_state, instance_state).await?,
                 },
-                None => Header::get_chain_config(&validated_state, instance_state).await,
+                None => Header::get_chain_config(&validated_state, instance_state).await?,
             }
         } else {
-            Header::get_chain_config(&validated_state, instance_state).await
+            Header::get_chain_config(&validated_state, instance_state).await?
         };
 
         validated_state.chain_config = chain_config.into();
