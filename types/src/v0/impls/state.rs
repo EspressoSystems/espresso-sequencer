@@ -91,8 +91,8 @@ pub enum ProposalValidationError {
         expected_root: FeeMerkleCommitment,
         proposal_root: FeeMerkleCommitment,
     },
-    #[error("Invalid namespace table: {err}")]
-    InvalidNsTable { err: NsTableValidationError },
+    #[error("Invalid namespace table: {0}")]
+    InvalidNsTable(NsTableValidationError),
     #[error("Some fee amount or their sum total out of range")]
     SomeFeeAmountOutOfRange,
     #[error("Invalid timestamp: proposal={proposal_timestamp}, parent={parent_timestamp}")]
@@ -582,7 +582,7 @@ impl ValidatedState {
 
 impl From<NsTableValidationError> for ProposalValidationError {
     fn from(err: NsTableValidationError) -> Self {
-        Self::InvalidNsTable { err }
+        Self::InvalidNsTable(err)
     }
 }
 
@@ -1055,6 +1055,7 @@ mod test {
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
+    use serde::de::Expected;
     use tracing::debug;
 
     use super::*;
@@ -1080,14 +1081,13 @@ mod test {
 
     impl Header {
         fn next(self) -> Self {
-            // dbg!(&self);
             match self {
                 Header::V1(parent) => Header::V2(v0_2::Header {
                     height: parent.height + 1,
                     timestamp: OffsetDateTime::now_utc().unix_timestamp() as u64,
                     ..parent.clone()
                 }),
-                Header::V2(_) => panic!("v1"),
+                Header::V2(_) => panic!("v2"),
                 Header::V3(_) => panic!("v3"),
             }
         }
@@ -1095,9 +1095,10 @@ mod test {
 
     impl Proposal {
         async fn mock() -> Self {
-            const BLOCK_SIZE: usize = 10;
+            const BLOCK_SIZE: usize = 0;
             let payload = [0; BLOCK_SIZE];
             let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+            let len = PayloadByteLen::from_vid_common(&vid_common);
             let instance = NodeState::mock();
             let parent_leaf = Leaf::genesis(&instance.genesis_state, &instance).await;
             let header = parent_leaf.block_header().clone();
@@ -1146,7 +1147,7 @@ mod test {
         }
 
         async fn mock_timestamp(timestamp: u64) -> Self {
-            const BLOCK_SIZE: usize = 10;
+            const BLOCK_SIZE: usize = 0;
             let payload = [0; BLOCK_SIZE];
             let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
             let instance = NodeState::mock();
@@ -1488,6 +1489,33 @@ mod test {
                 expected_root: block_merkle_tree.commitment(),
                 proposal_root: proposal.header.block_merkle_tree_root(),
             },
+            err
+        );
+    }
+
+    #[async_std::test]
+    async fn test_validation_ns_table() {
+        setup_logging();
+        setup_backtrace();
+
+        let instance = NodeState::mock();
+        let proposal = Proposal::mock().await;
+
+        // Success case.
+        ValidatedTransition::mock(instance.clone(), proposal)
+            .await
+            .validate_namespace_table()
+            .unwrap();
+
+        // Error case
+        let proposal = Proposal::mock_block_size::<10>().await;
+        let err = ValidatedTransition::mock(instance.clone(), proposal)
+            .await
+            .validate_namespace_table()
+            .unwrap_err();
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidNsTable(NsTableValidationError::ExpectNonemptyNsTable),
             err
         );
     }
