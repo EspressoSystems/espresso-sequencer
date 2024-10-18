@@ -67,7 +67,7 @@ impl<TYPES: NodeType> fmt::Debug for Message<TYPES> {
 
 impl<TYPES: NodeType> HasViewNumber<TYPES> for Message<TYPES> {
     /// get the view number out of a message
-    fn view_number(&self) -> TYPES::Time {
+    fn view_number(&self) -> TYPES::View {
         self.kind.view_number()
     }
 }
@@ -147,16 +147,16 @@ impl<TYPES: NodeType> From<DataMessage<TYPES>> for MessageKind<TYPES> {
 }
 
 impl<TYPES: NodeType> ViewMessage<TYPES> for MessageKind<TYPES> {
-    fn view_number(&self) -> TYPES::Time {
+    fn view_number(&self) -> TYPES::View {
         match &self {
             MessageKind::Consensus(message) => message.view_number(),
             MessageKind::Data(DataMessage::SubmitTransaction(_, v)) => *v,
             MessageKind::Data(DataMessage::RequestData(msg)) => msg.view,
             MessageKind::Data(DataMessage::DataResponse(msg)) => match msg {
                 ResponseMessage::Found(m) => m.view_number(),
-                ResponseMessage::NotFound | ResponseMessage::Denied => TYPES::Time::new(1),
+                ResponseMessage::NotFound | ResponseMessage::Denied => TYPES::View::new(1),
             },
-            MessageKind::External(_) => TYPES::Time::new(1),
+            MessageKind::External(_) => TYPES::View::new(1),
         }
     }
 
@@ -248,7 +248,7 @@ pub enum SequencingMessage<TYPES: NodeType> {
 
 impl<TYPES: NodeType> SequencingMessage<TYPES> {
     /// Get the view number this message relates to
-    fn view_number(&self) -> TYPES::Time {
+    fn view_number(&self) -> TYPES::View {
         match &self {
             SequencingMessage::General(general_message) => {
                 match general_message {
@@ -342,7 +342,7 @@ pub enum DataMessage<TYPES: NodeType> {
     /// Contains a transaction to be submitted
     /// TODO rethink this when we start to send these messages
     /// we only need the view number for broadcast
-    SubmitTransaction(TYPES::Transaction, TYPES::Time),
+    SubmitTransaction(TYPES::Transaction, TYPES::View),
     /// A request for data
     RequestData(DataRequest<TYPES>),
     /// A response to a data request
@@ -373,10 +373,11 @@ where
     pub async fn validate_signature<V: Versions>(
         &self,
         quorum_membership: &TYPES::Membership,
+        epoch: TYPES::Epoch,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         let view_number = self.data.view_number();
-        let view_leader_key = quorum_membership.leader(view_number);
+        let view_leader_key = quorum_membership.leader(view_number, epoch);
         let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
 
         ensure!(
@@ -424,7 +425,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
     ///
     /// # Errors
     /// Returns an error if we do not support the version required by the decided upgrade certificate.
-    pub async fn version(&self, view: TYPES::Time) -> Result<Version> {
+    pub async fn version(&self, view: TYPES::View) -> Result<Version> {
         let upgrade_certificate = self.decided_upgrade_certificate.read().await;
 
         let version = match *upgrade_certificate {
@@ -448,7 +449,7 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
     /// Calculate the version applied in a view, based on the provided upgrade lock.
     ///
     /// This function does not fail, since it does not check that the version is supported.
-    pub async fn version_infallible(&self, view: TYPES::Time) -> Version {
+    pub async fn version_infallible(&self, view: TYPES::View) -> Version {
         let upgrade_certificate = self.decided_upgrade_certificate.read().await;
 
         match *upgrade_certificate {

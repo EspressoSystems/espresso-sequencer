@@ -62,16 +62,18 @@ pub enum ViewSyncPhase {
 
 /// Type alias for a map from View Number to Relay to Vote Task
 type RelayMap<TYPES, VOTE, CERT, V> = HashMap<
-    <TYPES as NodeType>::Time,
+    <TYPES as NodeType>::View,
     BTreeMap<u64, VoteCollectionTaskState<TYPES, VOTE, CERT, V>>,
 >;
 
 /// Main view sync task state
 pub struct ViewSyncTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// View HotShot is currently in
-    pub current_view: TYPES::Time,
+    pub current_view: TYPES::View,
     /// View HotShot wishes to be in
-    pub next_view: TYPES::Time,
+    pub next_view: TYPES::View,
+    /// Epoch HotShot is currently in
+    pub current_epoch: TYPES::Epoch,
     /// The underlying network
     pub network: Arc<I::Network>,
     /// Membership for the quorum
@@ -87,7 +89,7 @@ pub struct ViewSyncTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: V
     pub num_timeouts_tracked: u64,
 
     /// Map of running replica tasks
-    pub replica_task_map: RwLock<HashMap<TYPES::Time, ViewSyncReplicaTaskState<TYPES, I, V>>>,
+    pub replica_task_map: RwLock<HashMap<TYPES::View, ViewSyncReplicaTaskState<TYPES, I, V>>>,
 
     /// Map of pre-commit vote accumulates for the relay
     pub pre_commit_relay_map: RwLock<
@@ -105,7 +107,7 @@ pub struct ViewSyncTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: V
     pub view_sync_timeout: Duration,
 
     /// Last view we garbage collected old tasks
-    pub last_garbage_collected_view: TYPES::Time,
+    pub last_garbage_collected_view: TYPES::View,
 
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
@@ -136,9 +138,11 @@ pub struct ViewSyncReplicaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES
     /// Timeout for view sync rounds
     pub view_sync_timeout: Duration,
     /// Current round HotShot is in
-    pub current_view: TYPES::Time,
+    pub current_view: TYPES::View,
     /// Round HotShot wishes to be in
-    pub next_view: TYPES::Time,
+    pub next_view: TYPES::View,
+    /// Current epoch HotShot is in
+    pub current_epoch: TYPES::Epoch,
     /// The relay index we are currently on
     pub relay: u64,
     /// Whether we have seen a finalized certificate
@@ -189,7 +193,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
     pub async fn send_to_or_create_replica(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
-        view: TYPES::Time,
+        view: TYPES::View,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
         // This certificate is old, we can throw it away
@@ -221,6 +225,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
         let mut replica_state: ViewSyncReplicaTaskState<TYPES, I, V> = ViewSyncReplicaTaskState {
             current_view: view,
             next_view: view,
+            current_epoch: self.current_epoch,
             relay: 0,
             finalized: false,
             sent_view_change_event: false,
@@ -299,7 +304,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                 }
 
                 // We do not have a relay task already running, so start one
-                if self.membership.leader(vote_view + relay) != self.public_key {
+                if self
+                    .membership
+                    .leader(vote_view + relay, self.current_epoch)
+                    != self.public_key
+                {
                     debug!("View sync vote sent to wrong leader");
                     return;
                 }
@@ -308,6 +317,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     public_key: self.public_key.clone(),
                     membership: Arc::clone(&self.membership),
                     view: vote_view,
+                    epoch: self.current_epoch,
                     id: self.id,
                 };
                 let vote_collector =
@@ -337,7 +347,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                 }
 
                 // We do not have a relay task already running, so start one
-                if self.membership.leader(vote_view + relay) != self.public_key {
+                if self
+                    .membership
+                    .leader(vote_view + relay, self.current_epoch)
+                    != self.public_key
+                {
                     debug!("View sync vote sent to wrong leader");
                     return;
                 }
@@ -346,6 +360,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     public_key: self.public_key.clone(),
                     membership: Arc::clone(&self.membership),
                     view: vote_view,
+                    epoch: self.current_epoch,
                     id: self.id,
                 };
                 let vote_collector =
@@ -375,7 +390,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                 }
 
                 // We do not have a relay task already running, so start one
-                if self.membership.leader(vote_view + relay) != self.public_key {
+                if self
+                    .membership
+                    .leader(vote_view + relay, self.current_epoch)
+                    != self.public_key
+                {
                     debug!("View sync vote sent to wrong leader");
                     return;
                 }
@@ -384,6 +403,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     public_key: self.public_key.clone(),
                     membership: Arc::clone(&self.membership),
                     view: vote_view,
+                    epoch: self.current_epoch,
                     id: self.id,
                 };
                 let vote_collector =
@@ -395,7 +415,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
             }
 
             &HotShotEvent::ViewChange(new_view) => {
-                let new_view = TYPES::Time::new(*new_view);
+                let new_view = TYPES::View::new(*new_view);
                 if self.current_view < new_view {
                     debug!(
                         "Change from view {} to view {} in view sync task",
@@ -414,19 +434,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                         self.replica_task_map
                             .write()
                             .await
-                            .remove_entry(&TYPES::Time::new(i));
+                            .remove_entry(&TYPES::View::new(i));
                         self.pre_commit_relay_map
                             .write()
                             .await
-                            .remove_entry(&TYPES::Time::new(i));
+                            .remove_entry(&TYPES::View::new(i));
                         self.commit_relay_map
                             .write()
                             .await
-                            .remove_entry(&TYPES::Time::new(i));
+                            .remove_entry(&TYPES::View::new(i));
                         self.finalize_relay_map
                             .write()
                             .await
-                            .remove_entry(&TYPES::Time::new(i));
+                            .remove_entry(&TYPES::View::new(i));
                     }
 
                     self.last_garbage_collected_view = self.current_view - 1;
@@ -434,12 +454,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
             }
             &HotShotEvent::Timeout(view_number) => {
                 // This is an old timeout and we can ignore it
-                if view_number <= TYPES::Time::new(*self.current_view) {
+                if view_number <= TYPES::View::new(*self.current_view) {
                     return;
                 }
 
                 self.num_timeouts_tracked += 1;
-                let leader = self.membership.leader(view_number);
+                let leader = self.membership.leader(view_number, self.current_epoch);
                 warn!(
                     %leader,
                     leader_mnemonic = cdn_proto::util::mnemonic(&leader),
@@ -465,7 +485,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     // If this is the first timeout we've seen advance to the next view
                     self.current_view = view_number;
                     broadcast_event(
-                        Arc::new(HotShotEvent::ViewChange(TYPES::Time::new(
+                        Arc::new(HotShotEvent::ViewChange(TYPES::View::new(
                             *self.current_view,
                         ))),
                         &event_stream,
@@ -502,7 +522,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                 // If certificate is not valid, return current state
                 if !certificate
-                    .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
+                    .is_valid_cert(
+                        self.membership.as_ref(),
+                        self.current_epoch,
+                        &self.upgrade_lock,
+                    )
                     .await
                 {
                     error!("Not valid view sync cert! {:?}", certificate.data());
@@ -561,7 +585,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                         broadcast_event(
                             Arc::new(HotShotEvent::ViewSyncTimeout(
-                                TYPES::Time::new(*next_view),
+                                TYPES::View::new(*next_view),
                                 relay,
                                 phase,
                             )),
@@ -584,7 +608,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                 // If certificate is not valid, return current state
                 if !certificate
-                    .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
+                    .is_valid_cert(
+                        self.membership.as_ref(),
+                        self.current_epoch,
+                        &self.upgrade_lock,
+                    )
                     .await
                 {
                     error!("Not valid view sync cert! {:?}", certificate.data());
@@ -655,7 +683,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         );
                         broadcast_event(
                             Arc::new(HotShotEvent::ViewSyncTimeout(
-                                TYPES::Time::new(*next_view),
+                                TYPES::View::new(*next_view),
                                 relay,
                                 phase,
                             )),
@@ -676,7 +704,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
                 // If certificate is not valid, return current state
                 if !certificate
-                    .is_valid_cert(self.membership.as_ref(), &self.upgrade_lock)
+                    .is_valid_cert(
+                        self.membership.as_ref(),
+                        self.current_epoch,
+                        &self.upgrade_lock,
+                    )
                     .await
                 {
                     error!("Not valid view sync cert! {:?}", certificate.data());
@@ -708,7 +740,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
 
             HotShotEvent::ViewSyncTrigger(view_number) => {
                 let view_number = *view_number;
-                if self.next_view != TYPES::Time::new(*view_number) {
+                if self.next_view != TYPES::View::new(*view_number) {
                     error!("Unexpected view number to triger view sync");
                     return None;
                 }
@@ -748,7 +780,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                         warn!("Vote sending timed out in ViewSyncTrigger");
                         broadcast_event(
                             Arc::new(HotShotEvent::ViewSyncTimeout(
-                                TYPES::Time::new(*next_view),
+                                TYPES::View::new(*next_view),
                                 relay,
                                 ViewSyncPhase::None,
                             )),
@@ -764,7 +796,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             HotShotEvent::ViewSyncTimeout(round, relay, last_seen_certificate) => {
                 let round = *round;
                 // Shouldn't ever receive a timeout for a relay higher than ours
-                if TYPES::Time::new(*round) == self.next_view && *relay == self.relay {
+                if TYPES::View::new(*round) == self.next_view && *relay == self.relay {
                     if let Some(timeout_task) = self.timeout_task.take() {
                         cancel_task(timeout_task).await;
                     }
@@ -817,7 +849,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                             );
                             broadcast_event(
                                 Arc::new(HotShotEvent::ViewSyncTimeout(
-                                    TYPES::Time::new(*next_view),
+                                    TYPES::View::new(*next_view),
                                     relay,
                                     last_cert,
                                 )),

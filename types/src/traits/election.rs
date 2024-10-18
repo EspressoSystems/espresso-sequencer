@@ -23,33 +23,45 @@ pub trait Membership<TYPES: NodeType>:
         committee_topic: Topic,
     ) -> Self;
 
-    /// Get all participants in the committee (including their stake)
-    fn stake_table(&self) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
+    /// Get all participants in the committee (including their stake) for a specific epoch
+    fn stake_table(
+        &self,
+        epoch: TYPES::Epoch,
+    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
-    /// Get all participants in the committee for a specific view
-    fn committee_members(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+    /// Get all participants in the committee for a specific view for a specific epoch
+    fn committee_members(
+        &self,
+        view_number: TYPES::View,
+        epoch: TYPES::Epoch,
+    ) -> BTreeSet<TYPES::SignatureKey>;
 
-    /// Get all leaders in the committee for a specific view
-    fn committee_leaders(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+    /// Get all leaders in the committee for a specific view for a specific epoch
+    fn committee_leaders(
+        &self,
+        view_number: TYPES::View,
+        epoch: TYPES::Epoch,
+    ) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get the stake table entry for a public key, returns `None` if the
-    /// key is not in the table
+    /// key is not in the table for a specific epoch
     fn stake(
         &self,
         pub_key: &TYPES::SignatureKey,
+        epoch: TYPES::Epoch,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
-    /// See if a node has stake in the committee
-    fn has_stake(&self, pub_key: &TYPES::SignatureKey) -> bool;
+    /// See if a node has stake in the committee in a specific epoch
+    fn has_stake(&self, pub_key: &TYPES::SignatureKey, epoch: TYPES::Epoch) -> bool;
 
-    /// The leader of the committee for view `view_number`.
-    fn leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey;
+    /// The leader of the committee for view `view_number` in an epoch `epoch`.
+    fn leader(&self, view_number: TYPES::View, epoch: TYPES::Epoch) -> TYPES::SignatureKey;
 
     /// Get the network topic for the committee
     fn committee_topic(&self) -> Topic;
 
-    /// Returns the number of total nodes in the committee
-    fn total_nodes(&self) -> usize;
+    /// Returns the number of total nodes in the committee in an epoch `epoch`
+    fn total_nodes(&self, epoch: TYPES::Epoch) -> usize;
 
     /// Returns the threshold for a specific `Membership` implementation
     fn success_threshold(&self) -> NonZeroU64;

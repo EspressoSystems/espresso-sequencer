@@ -170,10 +170,10 @@ where
 
         // add spinning task
         // map spinning to view
-        let mut changes: BTreeMap<TYPES::Time, Vec<ChangeNode>> = BTreeMap::new();
+        let mut changes: BTreeMap<TYPES::View, Vec<ChangeNode>> = BTreeMap::new();
         for (view, mut change) in spinning_changes {
             changes
-                .entry(TYPES::Time::new(view))
+                .entry(TYPES::View::new(view))
                 .or_insert_with(Vec::new)
                 .append(&mut change);
         }

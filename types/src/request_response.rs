@@ -16,7 +16,7 @@ use crate::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 /// A signed request for a proposal.
 pub struct ProposalRequestPayload<TYPES: NodeType> {
     /// The view number that we're requesting a proposal for.
-    pub view_number: TYPES::Time,
+    pub view_number: TYPES::View,
 
     /// Our public key. The ensures that the receipient can reply to
     /// us directly.

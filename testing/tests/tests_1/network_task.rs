@@ -17,6 +17,7 @@ use hotshot_testing::{
     helpers::build_system_handle, test_builder::TestDescription,
     test_task::add_network_message_test_task, view_generator::TestViewGenerator,
 };
+use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     data::ViewNumber,
     message::UpgradeLock,
@@ -25,6 +26,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
+
 // Test that the event task sends a message, and the message task receives it
 // and emits the proper event
 #[cfg(test)]
@@ -62,6 +64,7 @@ async fn test_network_task() {
         NetworkEventTaskState {
             network: network.clone(),
             view: ViewNumber::new(0),
+            epoch: EpochNumber::new(0),
             quorum_membership: membership.clone(),
             da_membership: membership.clone(),
             upgrade_lock: upgrade_lock.clone(),
@@ -242,6 +245,7 @@ async fn test_network_storage_fail() {
         NetworkEventTaskState {
             network: network.clone(),
             view: ViewNumber::new(0),
+            epoch: EpochNumber::new(0),
             quorum_membership: membership.clone(),
             da_membership: membership.clone(),
             upgrade_lock: upgrade_lock.clone(),

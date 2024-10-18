@@ -11,6 +11,7 @@ use hotshot_testing::{
     predicates::{event::*, Predicate, PredicateResult},
     view_generator::TestViewGenerator,
 };
+use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::ViewNumber,
@@ -96,6 +97,7 @@ async fn test_vote_dependency_handle() {
                 quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
                 storage: Arc::clone(&handle.storage()),
                 view_number,
+                epoch_number: EpochNumber::new(1),
                 sender: event_sender.clone(),
                 receiver: event_receiver.clone(),
                 upgrade_lock: handle.hotshot.upgrade_lock.clone(),

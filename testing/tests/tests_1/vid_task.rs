@@ -20,6 +20,7 @@ use hotshot_testing::{
     script::{Expectations, InputOrder, TaskScript},
     serial,
 };
+use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     data::{null_block, DaProposal, PackedBundle, VidDisperse, ViewNumber},
     traits::{
@@ -50,7 +51,11 @@ async fn test_vid_task() {
     // quorum membership for VID share distribution
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
 
-    let mut vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(0));
+    let mut vid = vid_scheme_from_view_number::<TestTypes>(
+        &quorum_membership,
+        ViewNumber::new(0),
+        EpochNumber::new(0),
+    );
     let transactions = vec![TestTransaction::new(vec![0])];
 
     let (payload, metadata) = <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
@@ -85,8 +90,12 @@ async fn test_vid_task() {
         _pd: PhantomData,
     };
 
-    let vid_disperse =
-        VidDisperse::from_membership(message.data.view_number, vid_disperse, &quorum_membership);
+    let vid_disperse = VidDisperse::from_membership(
+        message.data.view_number,
+        vid_disperse,
+        &quorum_membership,
+        EpochNumber::new(0),
+    );
 
     let vid_proposal = Proposal {
         data: vid_disperse.clone(),
@@ -104,7 +113,7 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    quorum_membership.total_nodes(),
+                    quorum_membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION
                 )
                 .unwrap()],
@@ -125,7 +134,7 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    quorum_membership.total_nodes(),
+                    quorum_membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION
                 )
                 .unwrap()],

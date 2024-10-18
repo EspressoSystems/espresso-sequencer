@@ -48,7 +48,7 @@ pub trait Vote<TYPES: NodeType>: HasViewNumber<TYPES> {
 /// Any type that is associated with a view
 pub trait HasViewNumber<TYPES: NodeType> {
     /// Returns the view number the type refers to.
-    fn view_number(&self) -> TYPES::Time;
+    fn view_number(&self) -> TYPES::View;
 }
 
 /**
@@ -68,13 +68,14 @@ pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
         vote_commitment: Commitment<VersionedVoteData<TYPES, Self::Voteable, V>>,
         data: Self::Voteable,
         sig: <TYPES::SignatureKey as SignatureKey>::QcType,
-        view: TYPES::Time,
+        view: TYPES::View,
     ) -> Self;
 
-    /// Checks if the cert is valid
+    /// Checks if the cert is valid in the given epoch
     fn is_valid_cert<MEMBERSHIP: Membership<TYPES>, V: Versions>(
         &self,
         membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> impl std::future::Future<Output = bool>;
     /// Returns the amount of stake needed to create this certificate
@@ -130,12 +131,14 @@ impl<
         V: Versions,
     > VoteAccumulator<TYPES, VOTE, CERT, V>
 {
-    /// Add a vote to the total accumulated votes.  Returns the accumulator or the certificate if we
+    /// Add a vote to the total accumulated votes for the given epoch.
+    /// Returns the accumulator or the certificate if we
     /// have accumulated enough votes to exceed the threshold for creating a certificate.
     pub async fn accumulate(
         &mut self,
         vote: &VOTE,
         membership: &TYPES::Membership,
+        epoch: TYPES::Epoch,
     ) -> Either<(), CERT> {
         let key = vote.signing_key();
 
@@ -158,10 +161,10 @@ impl<
             return Either::Left(());
         }
 
-        let Some(stake_table_entry) = membership.stake(&key) else {
+        let Some(stake_table_entry) = membership.stake(&key, epoch) else {
             return Either::Left(());
         };
-        let stake_table = membership.stake_table();
+        let stake_table = membership.stake_table(epoch);
         let Some(vote_node_id) = stake_table
             .iter()
             .position(|x| *x == stake_table_entry.clone())
@@ -184,7 +187,7 @@ impl<
         let (signers, sig_list) = self
             .signers
             .entry(vote_commitment)
-            .or_insert((bitvec![0; membership.total_nodes()], Vec::new()));
+            .or_insert((bitvec![0; membership.total_nodes(epoch)], Vec::new()));
         if signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
             return Either::Left(());

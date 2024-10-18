@@ -484,7 +484,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
         self.secondary().queue_node_lookup(view_number, pk)
     }
 
-    async fn update_view<'a, T>(&'a self, view: u64, membership: &T::Membership)
+    async fn update_view<'a, T>(&'a self, view: u64, epoch: u64, membership: &T::Membership)
     where
         T: NodeType<SignatureKey = TYPES::SignatureKey> + 'a,
     {
@@ -505,7 +505,10 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
             }
         });
         // Run `update_view` logic for the libp2p network
-        self.networks.1.update_view::<T>(view, membership).await;
+        self.networks
+            .1
+            .update_view::<T>(view, epoch, membership)
+            .await;
     }
 
     fn is_primary_down(&self) -> bool {

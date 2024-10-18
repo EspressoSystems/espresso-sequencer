@@ -47,7 +47,7 @@ impl<TYPES: NodeType> TaskEvent for HotShotEvent<TYPES> {
 #[derive(Debug, Clone)]
 pub struct ProposalMissing<TYPES: NodeType> {
     /// View of missing proposal
-    pub view: TYPES::Time,
+    pub view: TYPES::View,
     /// Channel to send the response back to
     pub response_chan: Sender<Option<Proposal<TYPES, QuorumProposal<TYPES>>>>,
 }
@@ -93,7 +93,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
     QuorumVoteSend(QuorumVote<TYPES>),
     /// All dependencies for the quorum vote are validated.
-    QuorumVoteDependenciesValidated(TYPES::Time),
+    QuorumVoteDependenciesValidated(TYPES::View),
     /// A quorum proposal with the given parent leaf is validated.
     /// The full validation checks include:
     /// 1. The proposal is not for an old view
@@ -124,9 +124,9 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
-    ViewChange(TYPES::Time),
+    ViewChange(TYPES::View),
     /// Timeout for the view sync protocol; emitted by a replica in the view sync task
-    ViewSyncTimeout(TYPES::Time, u64, ViewSyncPhase),
+    ViewSyncTimeout(TYPES::View, u64, ViewSyncPhase),
 
     /// Receive a `ViewSyncPreCommitVote` from the network; received by a relay in the view sync task
     ViewSyncPreCommitVoteRecv(ViewSyncPreCommitVote<TYPES>),
@@ -157,9 +157,9 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ViewSyncFinalizeCertificate2Send(ViewSyncFinalizeCertificate2<TYPES>, TYPES::SignatureKey),
 
     /// Trigger the start of the view sync protocol; emitted by view sync task; internal trigger only
-    ViewSyncTrigger(TYPES::Time),
+    ViewSyncTrigger(TYPES::View),
     /// A consensus view has timed out; emitted by a replica in the consensus task; received by the view sync task; internal event only
-    Timeout(TYPES::Time),
+    Timeout(TYPES::View),
     /// Receive transactions from the network
     TransactionsRecv(Vec<TYPES::Transaction>),
     /// Send transactions to the network
@@ -169,14 +169,14 @@ pub enum HotShotEvent<TYPES: NodeType> {
         VidCommitment,
         BuilderCommitment,
         <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
-        TYPES::Time,
+        TYPES::View,
         Vec1<BuilderFee<TYPES>>,
         Option<TYPES::AuctionResult>,
     ),
     /// Event when the transactions task has sequenced transactions. Contains the encoded transactions, the metadata, and the view number
     BlockRecv(PackedBundle<TYPES>),
     /// Event when the transactions task has a block formed
-    BlockReady(VidDisperse<TYPES>, TYPES::Time),
+    BlockReady(VidDisperse<TYPES>, TYPES::View),
     /// Event when consensus decided on a leaf
     LeafDecided(Vec<Leaf<TYPES>>),
     /// Send VID shares to VID storage nodes; emitted by the DA leader
@@ -205,13 +205,13 @@ pub enum HotShotEvent<TYPES: NodeType> {
 
     /* Consensus State Update Events */
     /// A undecided view has been created and added to the validated state storage.
-    ValidatedStateUpdated(TYPES::Time, View<TYPES>),
+    ValidatedStateUpdated(TYPES::View, View<TYPES>),
 
     /// A new locked view has been created (2-chain)
-    LockedViewUpdated(TYPES::Time),
+    LockedViewUpdated(TYPES::View),
 
     /// A new anchor view has been successfully reached by this node (3-chain).
-    LastDecidedViewUpdated(TYPES::Time),
+    LastDecidedViewUpdated(TYPES::View),
 
     /// A new high_qc has been reached by this node.
     UpdateHighQc(QuorumCertificate<TYPES>),
@@ -260,7 +260,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
 impl<TYPES: NodeType> HotShotEvent<TYPES> {
     #[allow(clippy::too_many_lines)]
     /// Return the view number for a hotshot event if present
-    pub fn view_number(&self) -> Option<TYPES::Time> {
+    pub fn view_number(&self) -> Option<TYPES::View> {
         match self {
             HotShotEvent::QuorumVoteRecv(v) => Some(v.view_number()),
             HotShotEvent::TimeoutVoteRecv(v) | HotShotEvent::TimeoutVoteSend(v) => {
@@ -512,7 +512,7 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 write!(f, "BlockReady(view_number={view_number:?})")
             }
             HotShotEvent::LeafDecided(leaves) => {
-                let view_numbers: Vec<<TYPES as NodeType>::Time> =
+                let view_numbers: Vec<<TYPES as NodeType>::View> =
                     leaves.iter().map(Leaf::view_number).collect();
                 write!(f, "LeafDecided({view_numbers:?})")
             }

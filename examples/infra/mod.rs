@@ -463,7 +463,7 @@ pub trait RunDa<
         let start = Instant::now();
 
         let mut event_stream = context.event_stream();
-        let mut anchor_view: TYPES::Time = <TYPES::Time as ConsensusTime>::genesis();
+        let mut anchor_view: TYPES::View = <TYPES::View as ConsensusTime>::genesis();
         let mut num_successful_commits = 0;
 
         context.hotshot.start_consensus().await;
@@ -563,7 +563,7 @@ pub trait RunDa<
             .hotshot
             .memberships
             .quorum_membership
-            .committee_leaders(TYPES::Time::genesis())
+            .committee_leaders(TYPES::View::genesis(), TYPES::Epoch::genesis())
             .len();
         let total_num_views = usize::try_from(consensus.locked_view().u64()).unwrap();
         // `failed_num_views` could include uncommitted views

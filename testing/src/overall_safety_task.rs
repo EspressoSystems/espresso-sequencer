@@ -61,12 +61,12 @@ pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     NotEnoughDecides { got: usize, expected: usize },
 
     #[error("Too many view failures: {0:?}")]
-    TooManyFailures(HashSet<TYPES::Time>),
+    TooManyFailures(HashSet<TYPES::View>),
 
     #[error("Inconsistent failed views: expected: {expected_failed_views:?}, actual: {actual_failed_views:?}")]
     InconsistentFailedViews {
-        expected_failed_views: Vec<TYPES::Time>,
-        actual_failed_views: HashSet<TYPES::Time>,
+        expected_failed_views: Vec<TYPES::View>,
+        actual_failed_views: HashSet<TYPES::View>,
     },
     #[error(
         "Not enough round results: results_count: {results_count}, views_count: {views_count}"
@@ -97,7 +97,7 @@ pub struct OverallSafetyTask<TYPES: NodeType, I: TestableNodeImplementation<TYPE
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions>
     OverallSafetyTask<TYPES, I, V>
 {
-    async fn handle_view_failure(&mut self, num_failed_views: usize, view_number: TYPES::Time) {
+    async fn handle_view_failure(&mut self, num_failed_views: usize, view_number: TYPES::View) {
         let expected_views_to_fail = &mut self.properties.expected_views_to_fail;
 
         self.ctx.failed_views.insert(view_number);
@@ -155,7 +155,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TestTas
                 block_size: maybe_block_size,
             } => {
                 // Skip the genesis leaf.
-                if leaf_chain.last().unwrap().leaf.view_number() == TYPES::Time::genesis() {
+                if leaf_chain.last().unwrap().leaf.view_number() == TYPES::View::genesis() {
                     return Ok(());
                 }
                 let paired_up = (leaf_chain.to_vec(), (*qc).clone());
@@ -364,18 +364,18 @@ impl<TYPES: NodeType> Default for RoundCtx<TYPES> {
 pub struct RoundCtx<TYPES: NodeType> {
     /// results from previous rounds
     /// view number -> round result
-    pub round_results: HashMap<TYPES::Time, RoundResult<TYPES>>,
+    pub round_results: HashMap<TYPES::View, RoundResult<TYPES>>,
     /// during the run view refactor
-    pub failed_views: HashSet<TYPES::Time>,
+    pub failed_views: HashSet<TYPES::View>,
     /// successful views
-    pub successful_views: HashSet<TYPES::Time>,
+    pub successful_views: HashSet<TYPES::View>,
 }
 
 impl<TYPES: NodeType> RoundCtx<TYPES> {
     /// inserts an error into the context
     pub fn insert_error_to_context(
         &mut self,
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
         idx: usize,
         error: Arc<HotShotError<TYPES>>,
     ) {
@@ -569,7 +569,7 @@ pub struct OverallSafetyPropertiesDescription<TYPES: NodeType> {
     /// required to mark view as successful
     pub threshold_calculator: Arc<dyn Fn(usize, usize) -> usize + Send + Sync>,
     /// pass in the views that we expect to fail
-    pub expected_views_to_fail: HashMap<TYPES::Time, bool>,
+    pub expected_views_to_fail: HashMap<TYPES::View, bool>,
 }
 
 impl<TYPES: NodeType> std::fmt::Debug for OverallSafetyPropertiesDescription<TYPES> {

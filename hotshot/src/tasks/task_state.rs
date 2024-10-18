@@ -70,6 +70,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
         return Self {
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             cur_view: handle.cur_view().await,
+            cur_epoch: handle.cur_epoch().await,
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             network: Arc::clone(&handle.hotshot.network),
             vote_collectors: BTreeMap::default(),
@@ -91,6 +92,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
         return Self {
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             cur_view: handle.cur_view().await,
+            cur_epoch: handle.cur_epoch().await,
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             network: Arc::clone(&handle.hotshot.network),
             vote_collector: None.into(),
@@ -118,6 +120,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
         Self {
             consensus: OuterConsensus::new(handle.hotshot.consensus()),
             cur_view: handle.cur_view().await,
+            cur_epoch: handle.cur_epoch().await,
             vote_collector: None,
             network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
@@ -140,6 +143,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             network: Arc::clone(&handle.hotshot.network),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             cur_view: handle.cur_view().await,
+            cur_epoch: handle.cur_epoch().await,
             vote_collectors: BTreeMap::default(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
@@ -160,6 +164,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
         Self {
             current_view: cur_view,
             next_view: cur_view,
+            current_epoch: handle.cur_epoch().await,
             network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
@@ -171,7 +176,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             finalize_relay_map: HashMap::default().into(),
             view_sync_timeout: handle.hotshot.config.view_sync_timeout,
             id: handle.hotshot.id,
-            last_garbage_collected_view: TYPES::Time::new(0),
+            last_garbage_collected_view: TYPES::View::new(0),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),
         }
     }
@@ -187,6 +192,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             consensus: OuterConsensus::new(handle.hotshot.consensus()),
             cur_view: handle.cur_view().await,
+            cur_epoch: handle.cur_epoch().await,
             network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
@@ -280,6 +286,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             consensus: OuterConsensus::new(consensus),
             cur_view: handle.cur_view().await,
             cur_view_time: Utc::now().timestamp(),
+            cur_epoch: handle.cur_epoch().await,
             network: Arc::clone(&handle.hotshot.network),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
@@ -317,6 +324,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             storage: Arc::clone(&handle.storage),
             cur_view: handle.cur_view().await,
             cur_view_time: Utc::now().timestamp(),
+            cur_epoch: handle.cur_epoch().await,
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             timeout_task: async_spawn(async {}),
             timeout: handle.hotshot.config.next_view_timeout,

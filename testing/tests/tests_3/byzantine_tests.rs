@@ -21,7 +21,7 @@ use hotshot_testing::{
     test_builder::{Behaviour, TestDescription},
 };
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     message::{GeneralConsensusMessage, MessageKind, SequencingMessage},
     traits::{
         election::Membership,
@@ -176,7 +176,7 @@ cross_tests!(
                 view_increment: nodes_count as u64,
                 modifier: Arc::new(move |_pk, message_kind, transmit_type: &mut TransmitType<TestTypes>, membership: &<TestTypes as NodeType>::Membership| {
                     if let MessageKind::Consensus(SequencingMessage::General(GeneralConsensusMessage::Vote(vote))) = message_kind {
-                        *transmit_type = TransmitType::Direct(membership.leader(vote.view_number() + 1 - nodes_count as u64));
+                        *transmit_type = TransmitType::Direct(membership.leader(vote.view_number() + 1 - nodes_count as u64, EpochNumber::new(0)));
                     } else {
                         {}
                     }

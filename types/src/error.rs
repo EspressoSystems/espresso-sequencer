@@ -41,7 +41,7 @@ pub enum HotShotError<TYPES: NodeType> {
     #[error("View {view_number} timed out: {state:?}")]
     ViewTimedOut {
         /// The view number that timed out
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
         /// The state that the round was in when it timed out
         state: RoundTimedoutState,
     },

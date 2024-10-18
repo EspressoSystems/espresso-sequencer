@@ -25,7 +25,7 @@ use crate::{
 #[serde(bound(deserialize = "TYPES: NodeType"))]
 pub struct Event<TYPES: NodeType> {
     /// The view number that this event originates from
-    pub view_number: TYPES::Time,
+    pub view_number: TYPES::View,
     /// The underlying event
     pub event: EventType<TYPES>,
 }
@@ -128,17 +128,17 @@ pub enum EventType<TYPES: NodeType> {
     /// A replica task was canceled by a timeout interrupt
     ReplicaViewTimeout {
         /// The view that timed out
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
     },
     /// The view has finished.  If values were decided on, a `Decide` event will also be emitted.
     ViewFinished {
         /// The view number that has just finished
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
     },
     /// The view timed out
     ViewTimeout {
         /// The view that timed out
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
     },
     /// New transactions were received from the network
     /// or submitted to the network by us

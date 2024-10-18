@@ -150,7 +150,7 @@ pub struct View<TYPES: NodeType> {
 #[derive(Debug, Clone)]
 pub struct RoundFinishedEvent<TYPES: NodeType> {
     /// The round that finished
-    pub view_number: TYPES::Time,
+    pub view_number: TYPES::View,
 }
 
 /// Whether or not to stop inclusively or exclusively when walking

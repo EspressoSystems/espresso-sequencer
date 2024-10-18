@@ -20,5 +20,5 @@ use super::node_implementation::NodeType;
 pub trait AuctionResultsProvider<TYPES: NodeType>: Send + Sync + Clone {
     /// Fetches the auction result for a view. Does not cache the result,
     /// subsequent calls will invoke additional wasted calls.
-    async fn fetch_auction_result(&self, view_number: TYPES::Time) -> Result<TYPES::AuctionResult>;
+    async fn fetch_auction_result(&self, view_number: TYPES::View) -> Result<TYPES::AuctionResult>;
 }

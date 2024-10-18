@@ -170,7 +170,8 @@ pub fn add_network_event_task<
 ) {
     let network_state: NetworkEventTaskState<_, V, _, _> = NetworkEventTaskState {
         network,
-        view: TYPES::Time::genesis(),
+        view: TYPES::View::genesis(),
+        epoch: TYPES::Epoch::genesis(),
         quorum_membership,
         da_membership,
         storage: Arc::clone(&handle.storage()),

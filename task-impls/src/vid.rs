@@ -30,7 +30,9 @@ use crate::{
 /// Tracks state of a VID task
 pub struct VidTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// View number this view is executing in.
-    pub cur_view: TYPES::Time,
+    pub cur_view: TYPES::View,
+    /// Epoch number this node is executing in.
+    pub cur_epoch: TYPES::Epoch,
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: OuterConsensus<TYPES>,
     /// The underlying network
@@ -42,7 +44,7 @@ pub struct VidTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Our Private Key
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// The view and ID of the current vote collection task, if there is one.
-    pub vote_collector: Option<(TYPES::Time, usize, usize)>,
+    pub vote_collector: Option<(TYPES::View, usize, usize)>,
     /// This state's ID
     pub id: u64,
 }
@@ -73,6 +75,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                     Arc::clone(encoded_transactions),
                     &Arc::clone(&self.membership),
                     *view_number,
+                    self.cur_epoch,
                     vid_precompute.clone(),
                 )
                 .await;

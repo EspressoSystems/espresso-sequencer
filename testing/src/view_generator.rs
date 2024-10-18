@@ -12,6 +12,9 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::helpers::{
+    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
+};
 use futures::{FutureExt, Stream};
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 use hotshot_example_types::{
@@ -19,6 +22,7 @@ use hotshot_example_types::{
     node_types::{MemoryImpl, TestTypes, TestVersions},
     state_types::{TestInstanceState, TestValidatedState},
 };
+use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     data::{
         DaProposal, Leaf, QuorumProposal, VidDisperse, VidDisperseShare, ViewChangeEvidence,
@@ -42,16 +46,13 @@ use hotshot_types::{
 use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
 
-use crate::helpers::{
-    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
-};
-
 #[derive(Clone)]
 pub struct TestView {
     pub da_proposal: Proposal<TestTypes, DaProposal<TestTypes>>,
     pub quorum_proposal: Proposal<TestTypes, QuorumProposal<TestTypes>>,
     pub leaf: Leaf<TestTypes>,
     pub view_number: ViewNumber,
+    pub epoch_number: EpochNumber,
     pub quorum_membership: <TestTypes as NodeType>::Membership,
     pub da_membership: <TestTypes as NodeType>::Membership,
     pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
@@ -75,6 +76,7 @@ impl TestView {
         da_membership: &<TestTypes as NodeType>::Membership,
     ) -> Self {
         let genesis_view = ViewNumber::new(1);
+        let genesis_epoch = EpochNumber::new(1);
         let upgrade_lock = UpgradeLock::new();
 
         let transactions = Vec::new();
@@ -97,12 +99,16 @@ impl TestView {
 
         let leader_public_key = public_key;
 
-        let payload_commitment =
-            da_payload_commitment::<TestTypes>(quorum_membership, transactions.clone());
+        let payload_commitment = da_payload_commitment::<TestTypes>(
+            quorum_membership,
+            transactions.clone(),
+            genesis_epoch,
+        );
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
             quorum_membership,
             genesis_view,
+            genesis_epoch,
             transactions.clone(),
             &private_key,
         );
@@ -111,6 +117,7 @@ impl TestView {
             quorum_membership,
             da_membership,
             genesis_view,
+            genesis_epoch,
             transactions.clone(),
             &public_key,
             &private_key,
@@ -180,6 +187,7 @@ impl TestView {
             quorum_proposal,
             leaf,
             view_number: genesis_view,
+            epoch_number: genesis_epoch,
             quorum_membership: quorum_membership.clone(),
             da_membership: da_membership.clone(),
             vid_disperse,
@@ -237,12 +245,16 @@ impl TestView {
             &metadata,
         );
 
-        let payload_commitment =
-            da_payload_commitment::<TestTypes>(quorum_membership, transactions.clone());
+        let payload_commitment = da_payload_commitment::<TestTypes>(
+            quorum_membership,
+            transactions.clone(),
+            self.epoch_number,
+        );
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
             quorum_membership,
             next_view,
+            self.epoch_number,
             transactions.clone(),
             &private_key,
         );
@@ -251,6 +263,7 @@ impl TestView {
             quorum_membership,
             da_membership,
             next_view,
+            self.epoch_number,
             transactions.clone(),
             &public_key,
             &private_key,
@@ -268,6 +281,7 @@ impl TestView {
             quorum_data,
             quorum_membership,
             old_view,
+            self.epoch_number,
             &old_public_key,
             &old_private_key,
             &self.upgrade_lock,
@@ -285,6 +299,7 @@ impl TestView {
                 data.clone(),
                 quorum_membership,
                 next_view,
+                self.epoch_number,
                 &public_key,
                 &private_key,
                 &self.upgrade_lock,
@@ -307,6 +322,7 @@ impl TestView {
                 data.clone(),
                 quorum_membership,
                 next_view,
+                self.epoch_number,
                 &public_key,
                 &private_key,
                 &self.upgrade_lock,
@@ -329,6 +345,7 @@ impl TestView {
                 data.clone(),
                 quorum_membership,
                 next_view,
+                self.epoch_number,
                 &public_key,
                 &private_key,
                 &self.upgrade_lock,
@@ -406,6 +423,7 @@ impl TestView {
             quorum_proposal,
             leaf,
             view_number: next_view,
+            epoch_number: self.epoch_number,
             quorum_membership: quorum_membership.clone(),
             da_membership: self.da_membership.clone(),
             vid_disperse,

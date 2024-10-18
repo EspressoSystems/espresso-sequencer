@@ -232,6 +232,8 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     pub start_voting_time: u64,
     /// Unix time in seconds at which we stop voting on an upgrade. To prevent voting on an upgrade, set stop_voting_time <= start_voting_time.
     pub stop_voting_time: u64,
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<KEY: SignatureKey> HotShotConfig<KEY> {

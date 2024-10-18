@@ -42,7 +42,10 @@ pub(crate) async fn handle_quorum_vote_recv<
 ) -> Result<()> {
     // Are we the leader for this view?
     ensure!(
-        task_state.quorum_membership.leader(vote.view_number() + 1) == task_state.public_key,
+        task_state
+            .quorum_membership
+            .leader(vote.view_number() + 1, task_state.cur_epoch)
+            == task_state.public_key,
         format!(
             "We are not the leader for view {:?}",
             vote.view_number() + 1
@@ -54,6 +57,7 @@ pub(crate) async fn handle_quorum_vote_recv<
         vote,
         task_state.public_key.clone(),
         &task_state.quorum_membership,
+        task_state.cur_epoch,
         task_state.id,
         &event,
         sender,
@@ -77,7 +81,10 @@ pub(crate) async fn handle_timeout_vote_recv<
 ) -> Result<()> {
     // Are we the leader for this view?
     ensure!(
-        task_state.timeout_membership.leader(vote.view_number() + 1) == task_state.public_key,
+        task_state
+            .timeout_membership
+            .leader(vote.view_number() + 1, task_state.cur_epoch)
+            == task_state.public_key,
         format!(
             "We are not the leader for view {:?}",
             vote.view_number() + 1
@@ -89,6 +96,7 @@ pub(crate) async fn handle_timeout_vote_recv<
         vote,
         task_state.public_key.clone(),
         &task_state.quorum_membership,
+        task_state.cur_epoch,
         task_state.id,
         &event,
         sender,
@@ -106,7 +114,7 @@ pub(crate) async fn handle_view_change<
     I: NodeImplementation<TYPES>,
     V: Versions,
 >(
-    new_view_number: TYPES::Time,
+    new_view_number: TYPES::View,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
@@ -147,7 +155,7 @@ pub(crate) async fn handle_view_change<
         async move {
             async_sleep(Duration::from_millis(timeout)).await;
             broadcast_event(
-                Arc::new(HotShotEvent::Timeout(TYPES::Time::new(*view_number))),
+                Arc::new(HotShotEvent::Timeout(TYPES::View::new(*view_number))),
                 &stream,
             )
             .await;
@@ -167,7 +175,11 @@ pub(crate) async fn handle_view_change<
         .current_view
         .set(usize::try_from(task_state.cur_view.u64()).unwrap());
     let cur_view_time = Utc::now().timestamp();
-    if task_state.quorum_membership.leader(old_view_number) == task_state.public_key {
+    if task_state
+        .quorum_membership
+        .leader(old_view_number, task_state.cur_epoch)
+        == task_state.public_key
+    {
         #[allow(clippy::cast_precision_loss)]
         consensus
             .metrics
@@ -203,7 +215,7 @@ pub(crate) async fn handle_view_change<
 /// Handle a `Timeout` event.
 #[instrument(skip_all)]
 pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
-    view_number: TYPES::Time,
+    view_number: TYPES::View,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
@@ -215,7 +227,7 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
     ensure!(
         task_state
             .timeout_membership
-            .has_stake(&task_state.public_key),
+            .has_stake(&task_state.public_key, task_state.cur_epoch),
         format!("We were not chosen for the consensus committee for view {view_number:?}")
     );
 
@@ -260,7 +272,11 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
         .metrics
         .number_of_timeouts
         .add(1);
-    if task_state.quorum_membership.leader(view_number) == task_state.public_key {
+    if task_state
+        .quorum_membership
+        .leader(view_number, task_state.cur_epoch)
+        == task_state.public_key
+    {
         task_state
             .consensus
             .read()

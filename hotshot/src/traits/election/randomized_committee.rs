@@ -82,6 +82,7 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     /// Get the stake table for the current view
     fn stake_table(
         &self,
+        _epoch: <TYPES as NodeType>::Epoch,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
         self.stake_table.clone()
     }
@@ -89,7 +90,8 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     /// Get all members of the committee for the current view
     fn committee_members(
         &self,
-        _view_number: <TYPES as NodeType>::Time,
+        _view_number: <TYPES as NodeType>::View,
+        _epoch: <TYPES as NodeType>::Epoch,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.stake_table
             .iter()
@@ -100,7 +102,8 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     /// Get all eligible leaders of the committee for the current view
     fn committee_leaders(
         &self,
-        _view_number: <TYPES as NodeType>::Time,
+        _view_number: <TYPES as NodeType>::View,
+        _epoch: <TYPES as NodeType>::Epoch,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.eligible_leaders
             .iter()
@@ -112,13 +115,18 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     fn stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
+        _epoch: <TYPES as NodeType>::Epoch,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         // Only return the stake if it is above zero
         self.indexed_stake_table.get(pub_key).cloned()
     }
 
     /// Check if a node has stake in the committee
-    fn has_stake(&self, pub_key: &<TYPES as NodeType>::SignatureKey) -> bool {
+    fn has_stake(
+        &self,
+        pub_key: &<TYPES as NodeType>::SignatureKey,
+        _epoch: <TYPES as NodeType>::Epoch,
+    ) -> bool {
         self.indexed_stake_table
             .get(pub_key)
             .is_some_and(|x| x.stake() > U256::zero())
@@ -130,7 +138,11 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     }
 
     /// Index the vector of public keys with the current view number
-    fn leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey {
+    fn leader(
+        &self,
+        view_number: TYPES::View,
+        _epoch: <TYPES as NodeType>::Epoch,
+    ) -> TYPES::SignatureKey {
         let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
 
         let randomized_view_number: u64 = rng.gen_range(0..=u64::MAX);
@@ -143,7 +155,7 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
     }
 
     /// Get the total number of nodes in the committee
-    fn total_nodes(&self) -> usize {
+    fn total_nodes(&self, _epoch: <TYPES as NodeType>::Epoch) -> usize {
         self.stake_table.len()
     }
 

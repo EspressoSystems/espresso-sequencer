@@ -29,17 +29,17 @@ use hotshot_types::{
 use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
 
 type VidShares<TYPES> = HashMap<
-    <TYPES as NodeType>::Time,
+    <TYPES as NodeType>::View,
     HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
 >;
 
 #[derive(Clone, Debug)]
 pub struct TestStorageState<TYPES: NodeType> {
     vids: VidShares<TYPES>,
-    das: HashMap<TYPES::Time, Proposal<TYPES, DaProposal<TYPES>>>,
-    proposals: BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
+    das: HashMap<TYPES::View, Proposal<TYPES, DaProposal<TYPES>>>,
+    proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>>,
     high_qc: Option<hotshot_types::simple_certificate::QuorumCertificate<TYPES>>,
-    action: TYPES::Time,
+    action: TYPES::View,
 }
 
 impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
@@ -49,7 +49,7 @@ impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
             das: HashMap::new(),
             proposals: BTreeMap::new(),
             high_qc: None,
-            action: TYPES::Time::genesis(),
+            action: TYPES::View::genesis(),
         }
     }
 }
@@ -87,7 +87,7 @@ impl<TYPES: NodeType> TestableDelay for TestStorage<TYPES> {
 impl<TYPES: NodeType> TestStorage<TYPES> {
     pub async fn proposals_cloned(
         &self,
-    ) -> BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>> {
+    ) -> BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>> {
         self.inner.read().await.proposals.clone()
     }
     pub async fn high_qc_cloned(&self) -> Option<QuorumCertificate<TYPES>> {
@@ -96,7 +96,7 @@ impl<TYPES: NodeType> TestStorage<TYPES> {
     pub async fn decided_upgrade_certificate(&self) -> Option<UpgradeCertificate<TYPES>> {
         self.decided_upgrade_certificate.read().await.clone()
     }
-    pub async fn last_actioned_view(&self) -> TYPES::Time {
+    pub async fn last_actioned_view(&self) -> TYPES::View {
         self.inner.read().await.action
     }
 }
@@ -145,7 +145,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
 
     async fn record_action(
         &self,
-        view: <TYPES as NodeType>::Time,
+        view: <TYPES as NodeType>::View,
         action: hotshot_types::event::HotShotAction,
     ) -> Result<()> {
         if self.should_return_err {
@@ -180,7 +180,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     async fn update_undecided_state(
         &self,
         _leafs: CommitmentMap<Leaf<TYPES>>,
-        _state: BTreeMap<TYPES::Time, View<TYPES>>,
+        _state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to update high qc to storage");

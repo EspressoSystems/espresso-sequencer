@@ -43,7 +43,10 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ve
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
     /// View number this view is executing in.
-    pub cur_view: TYPES::Time,
+    pub cur_view: TYPES::View,
+
+    /// Epoch number this node is executing in.
+    pub cur_epoch: TYPES::Epoch,
 
     /// Membership for Quorum Certs/votes
     pub quorum_membership: Arc<TYPES::Membership>,
@@ -166,7 +169,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                 // the `UpgradeProposalRecv` event. Otherwise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO Come back to this - we probably don't need this, but we should also never receive a UpgradeCertificate where this fails, investigate block ready so it doesn't make one for the genesis block
-                if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
+                if self.cur_view != TYPES::View::genesis() && view < self.cur_view - 1 {
                     warn!("Discarding old upgrade proposal; the proposal is for view {:?}, but the current view is {:?}.",
                       view,
                       self.cur_view
@@ -175,7 +178,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                 }
 
                 // We then validate that the proposal was issued by the leader for the view.
-                let view_leader_key = self.quorum_membership.leader(view);
+                let view_leader_key = self.quorum_membership.leader(view, self.cur_epoch);
                 if &view_leader_key != sender {
                     error!("Upgrade proposal doesn't have expected leader key for view {} \n Upgrade proposal is: {:?}", *view, proposal.data.clone());
                     return None;
@@ -219,11 +222,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                 // Check if we are the leader.
                 {
                     let view = vote.view_number();
-                    if self.quorum_membership.leader(view) != self.public_key {
+                    if self.quorum_membership.leader(view, self.cur_epoch) != self.public_key {
                         error!(
                             "We are not the leader for view {} are we leader for next view? {}",
                             *view,
-                            self.quorum_membership.leader(view + 1) == self.public_key
+                            self.quorum_membership.leader(view + 1, self.cur_epoch)
+                                == self.public_key
                         );
                         return None;
                     }
@@ -234,6 +238,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     vote,
                     self.public_key.clone(),
                     &self.quorum_membership,
+                    self.cur_epoch,
                     self.id,
                     &event,
                     &tx,
@@ -260,23 +265,23 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     && time >= self.start_proposing_time
                     && time < self.stop_proposing_time
                     && !self.upgraded().await
-                    && self
-                        .quorum_membership
-                        .leader(TYPES::Time::new(view + UPGRADE_PROPOSE_OFFSET))
-                        == self.public_key
+                    && self.quorum_membership.leader(
+                        TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
+                        self.cur_epoch,
+                    ) == self.public_key
                 {
                     let upgrade_proposal_data = UpgradeProposalData {
                         old_version: V::Base::VERSION,
                         new_version: V::Upgrade::VERSION,
                         new_version_hash: V::UPGRADE_HASH.to_vec(),
-                        old_version_last_view: TYPES::Time::new(view + UPGRADE_BEGIN_OFFSET),
-                        new_version_first_view: TYPES::Time::new(view + UPGRADE_FINISH_OFFSET),
-                        decide_by: TYPES::Time::new(view + UPGRADE_DECIDE_BY_OFFSET),
+                        old_version_last_view: TYPES::View::new(view + UPGRADE_BEGIN_OFFSET),
+                        new_version_first_view: TYPES::View::new(view + UPGRADE_FINISH_OFFSET),
+                        decide_by: TYPES::View::new(view + UPGRADE_DECIDE_BY_OFFSET),
                     };
 
                     let upgrade_proposal = UpgradeProposal {
                         upgrade_proposal: upgrade_proposal_data.clone(),
-                        view_number: TYPES::Time::new(view + UPGRADE_PROPOSE_OFFSET),
+                        view_number: TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
                     };
 
                     let signature = TYPES::SignatureKey::sign(

@@ -36,7 +36,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
         proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     ) -> Result<()>;
     /// Record a HotShotAction taken.
-    async fn record_action(&self, view: TYPES::Time, action: HotShotAction) -> Result<()>;
+    async fn record_action(&self, view: TYPES::View, action: HotShotAction) -> Result<()>;
     /// Update the current high QC in storage.
     async fn update_high_qc(&self, high_qc: QuorumCertificate<TYPES>) -> Result<()>;
     /// Update the currently undecided state of consensus.  This includes the undecided leaf chain,
@@ -44,7 +44,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     async fn update_undecided_state(
         &self,
         leafs: CommitmentMap<Leaf<TYPES>>,
-        state: BTreeMap<TYPES::Time, View<TYPES>>,
+        state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Result<()>;
     /// Upgrade the current decided upgrade certificate in storage.
     async fn update_decided_upgrade_certificate(

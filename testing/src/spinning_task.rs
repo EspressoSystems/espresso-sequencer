@@ -58,9 +58,9 @@ pub struct SpinningTask<
     /// late start nodes
     pub(crate) late_start: HashMap<u64, LateStartNode<TYPES, I, V>>,
     /// time based changes
-    pub(crate) changes: BTreeMap<TYPES::Time, Vec<ChangeNode>>,
+    pub(crate) changes: BTreeMap<TYPES::View, Vec<ChangeNode>>,
     /// most recent view seen by spinning task
-    pub(crate) latest_view: Option<TYPES::Time>,
+    pub(crate) latest_view: Option<TYPES::View>,
     /// Last decided leaf that can be used as the anchor leaf to initialize the node.
     pub(crate) last_decided_leaf: Leaf<TYPES>,
     /// Highest qc seen in the test for restarting nodes
@@ -155,8 +155,8 @@ where
                                             self.last_decided_leaf.clone(),
                                             TestInstanceState::new(self.async_delay_config.clone()),
                                             None,
-                                            TYPES::Time::genesis(),
-                                            TYPES::Time::genesis(),
+                                            TYPES::View::genesis(),
+                                            TYPES::View::genesis(),
                                             BTreeMap::new(),
                                             self.high_qc.clone(),
                                             None,

@@ -56,7 +56,7 @@ pub struct NetworkRequestState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// before sending a request
     pub state: OuterConsensus<TYPES>,
     /// Last seen view, we won't request for proposals before older than this view
-    pub view: TYPES::Time,
+    pub view: TYPES::View,
     /// Delay before requesting peers
     pub delay: Duration,
     /// DA Membership
@@ -70,7 +70,7 @@ pub struct NetworkRequestState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// A flag indicating that `HotShotEvent::Shutdown` has been received
     pub shutdown_flag: Arc<AtomicBool>,
     /// A flag indicating that `HotShotEvent::Shutdown` has been received
-    pub spawned_tasks: BTreeMap<TYPES::Time, Vec<JoinHandle<()>>>,
+    pub spawned_tasks: BTreeMap<TYPES::View, Vec<JoinHandle<()>>>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Drop for NetworkRequestState<TYPES, I> {
@@ -97,6 +97,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
         match event.as_ref() {
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
                 let prop_view = proposal.view_number();
+                let current_epoch = self.state.read().await.cur_epoch();
 
                 // If we already have the VID shares for the next view, do nothing.
                 if prop_view >= self.view
@@ -107,7 +108,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                         .vid_shares()
                         .contains_key(&prop_view)
                 {
-                    self.spawn_requests(prop_view, sender, receiver);
+                    self.spawn_requests(prop_view, current_epoch, sender, receiver);
                 }
                 Ok(())
             }
@@ -144,7 +145,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
     /// Creates and signs the payload, then will create a request task
     fn spawn_requests(
         &mut self,
-        view: TYPES::Time,
+        view: TYPES::View,
+        epoch: TYPES::Epoch,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
         receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     ) {
@@ -158,6 +160,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
                 sender.clone(),
                 receiver.clone(),
                 view,
+                epoch,
             );
         }
     }
@@ -170,19 +173,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         signature: Signature<TYPES>,
         sender: Sender<Arc<HotShotEvent<TYPES>>>,
         receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
-        view: TYPES::Time,
+        view: TYPES::View,
+        epoch: TYPES::Epoch,
     ) {
         let state = OuterConsensus::new(Arc::clone(&self.state.inner_consensus));
         let network = Arc::clone(&self.network);
         let shutdown_flag = Arc::clone(&self.shutdown_flag);
         let delay = self.delay;
-        let da_committee_for_view = self.da_membership.committee_members(view);
+        let da_committee_for_view = self.da_membership.committee_members(view, epoch);
         let public_key = self.public_key.clone();
 
         // Get committee members for view
         let mut recipients: Vec<TYPES::SignatureKey> = self
             .da_membership
-            .committee_members(view)
+            .committee_members(view, epoch)
             .into_iter()
             .collect();
         // Randomize the recipients so all replicas don't overload the same 1 recipients
@@ -256,7 +260,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         recipient: &TYPES::SignatureKey,
         da_committee_for_view: &BTreeSet<<TYPES as NodeType>::SignatureKey>,
         public_key: &<TYPES as NodeType>::SignatureKey,
-        view: TYPES::Time,
+        view: TYPES::View,
     ) -> bool {
         // First send request to a random DA member for the view
         broadcast_event(
@@ -299,7 +303,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
     async fn handle_event_dependency(
         receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
         da_members_for_view: BTreeSet<<TYPES as NodeType>::SignatureKey>,
-        view: TYPES::Time,
+        view: TYPES::View,
     ) -> Option<Arc<HotShotEvent<TYPES>>> {
         EventDependency::new(
             receiver.clone(),
@@ -326,7 +330,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         state: &OuterConsensus<TYPES>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
         public_key: &<TYPES as NodeType>::SignatureKey,
-        view: &TYPES::Time,
+        view: &TYPES::View,
         shutdown_flag: &Arc<AtomicBool>,
     ) -> bool {
         let state = state.read().await;

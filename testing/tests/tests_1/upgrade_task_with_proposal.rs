@@ -29,6 +29,7 @@ use hotshot_testing::{
     serial,
     view_generator::TestViewGenerator,
 };
+use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     data::{null_block, Leaf, ViewNumber},
     simple_vote::UpgradeProposalData,
@@ -145,7 +146,7 @@ async fn test_upgrade_task_with_proposal() {
     let genesis_leaf = Leaf::genesis(&validated_state, &*handle.hotshot.instance_state()).await;
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
-        quorum_membership.total_nodes(),
+        quorum_membership.total_nodes(EpochNumber::new(1)),
         <TestVersions as Versions>::Base::VERSION,
     )
     .unwrap();
@@ -171,7 +172,11 @@ async fn test_upgrade_task_with_proposal() {
         random![
             QcFormed(either::Left(genesis_cert.clone())),
             SendPayloadCommitmentAndMetadata(
-                build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(1)),
+                build_payload_commitment::<TestTypes>(
+                    &quorum_membership,
+                    ViewNumber::new(1),
+                    EpochNumber::new(1)
+                ),
                 builder_commitment.clone(),
                 TestMetadata {
                     num_transactions: 0
@@ -190,7 +195,11 @@ async fn test_upgrade_task_with_proposal() {
             QuorumProposalPreliminarilyValidated(proposals[0].clone()),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(2)),
+                build_payload_commitment::<TestTypes>(
+                    &quorum_membership,
+                    ViewNumber::new(2),
+                    EpochNumber::new(1)
+                ),
                 builder_commitment.clone(),
                 proposals[0].data.block_header.metadata,
                 ViewNumber::new(2),
@@ -208,7 +217,11 @@ async fn test_upgrade_task_with_proposal() {
             QuorumProposalPreliminarilyValidated(proposals[1].clone()),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                build_payload_commitment::<TestTypes>(&quorum_membership, ViewNumber::new(3)),
+                build_payload_commitment::<TestTypes>(
+                    &quorum_membership,
+                    ViewNumber::new(3),
+                    EpochNumber::new(1)
+                ),
                 builder_commitment.clone(),
                 proposals[1].data.block_header.metadata,
                 ViewNumber::new(3),

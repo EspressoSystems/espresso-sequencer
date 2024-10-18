@@ -70,10 +70,13 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: 
     pub storage: Arc<RwLock<I::Storage>>,
 
     /// The view number that this node is currently executing in.
-    pub cur_view: TYPES::Time,
+    pub cur_view: TYPES::View,
 
     /// Timestamp this view starts at.
     pub cur_view_time: i64,
+
+    /// The epoch number that this node is currently executing in.
+    pub cur_epoch: TYPES::Epoch,
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
@@ -88,7 +91,7 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: 
     pub consensus: OuterConsensus<TYPES>,
 
     /// The last decided view
-    pub last_decided_view: TYPES::Time,
+    pub last_decided_view: TYPES::View,
 
     /// The node's id
     pub id: u64,

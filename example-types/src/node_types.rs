@@ -4,6 +4,12 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use crate::{
+    auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::{TestInstanceState, TestValidatedState},
+    storage_types::TestStorage,
+};
 use hotshot::traits::{
     election::{
         randomized_committee::RandomizedCommittee, static_committee::StaticCommittee,
@@ -12,6 +18,7 @@ use hotshot::traits::{
     implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork},
     NodeImplementation,
 };
+use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     data::ViewNumber,
     signature_key::{BLSPubKey, BuilderKey},
@@ -19,13 +26,6 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use vbs::version::StaticVersion;
-
-use crate::{
-    auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
-    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::{TestInstanceState, TestValidatedState},
-    storage_types::TestStorage,
-};
 
 #[derive(
     Copy,
@@ -45,7 +45,8 @@ use crate::{
 pub struct TestTypes;
 impl NodeType for TestTypes {
     type AuctionResult = TestAuctionResult;
-    type Time = ViewNumber;
+    type View = ViewNumber;
+    type Epoch = EpochNumber;
     type BlockHeader = TestBlockHeader;
     type BlockPayload = TestBlockPayload;
     type SignatureKey = BLSPubKey;
@@ -74,7 +75,8 @@ impl NodeType for TestTypes {
 pub struct TestTypesRandomizedLeader;
 impl NodeType for TestTypesRandomizedLeader {
     type AuctionResult = TestAuctionResult;
-    type Time = ViewNumber;
+    type View = ViewNumber;
+    type Epoch = EpochNumber;
     type BlockHeader = TestBlockHeader;
     type BlockPayload = TestBlockPayload;
     type SignatureKey = BLSPubKey;
@@ -103,7 +105,8 @@ impl NodeType for TestTypesRandomizedLeader {
 pub struct TestConsecutiveLeaderTypes;
 impl NodeType for TestConsecutiveLeaderTypes {
     type AuctionResult = TestAuctionResult;
-    type Time = ViewNumber;
+    type View = ViewNumber;
+    type Epoch = EpochNumber;
     type BlockHeader = TestBlockHeader;
     type BlockPayload = TestBlockPayload;
     type SignatureKey = BLSPubKey;
@@ -235,8 +238,8 @@ mod tests {
 
         let data = TestData { data: 10 };
 
-        let view_0 = <TestTypes as NodeType>::Time::new(0);
-        let view_1 = <TestTypes as NodeType>::Time::new(1);
+        let view_0 = <TestTypes as NodeType>::View::new(0);
+        let view_1 = <TestTypes as NodeType>::View::new(1);
 
         let versioned_data_0 =
             VersionedVoteData::<TestTypes, TestData, MarketplaceTestVersions>::new(

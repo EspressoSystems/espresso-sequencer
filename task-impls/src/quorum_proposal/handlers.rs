@@ -60,10 +60,10 @@ pub(crate) enum ProposalDependency {
 /// Handler for the proposal dependency
 pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
     /// Latest view number that has been proposed for (proxy for cur_view).
-    pub latest_proposed_view: TYPES::Time,
+    pub latest_proposed_view: TYPES::View,
 
     /// The view number to propose for.
-    pub view_number: TYPES::Time,
+    pub view_number: TYPES::View,
 
     /// The event sender.
     pub sender: Sender<Arc<HotShotEvent<TYPES>>>,

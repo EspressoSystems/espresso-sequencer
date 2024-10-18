@@ -78,7 +78,7 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Thr
     /// commitment of all the votes this cert should be signed over
     vote_commitment: Commitment<VOTEABLE>,
     /// Which view this QC relates to
-    pub view_number: TYPES::Time,
+    pub view_number: TYPES::View,
     /// assembled signature for certificate aggregation
     pub signatures: Option<<TYPES::SignatureKey as SignatureKey>::QcType>,
     /// phantom data for `THRESHOLD` and `TYPES`
@@ -92,7 +92,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Threshold<TYPES>>
     pub fn new(
         data: VOTEABLE,
         vote_commitment: Commitment<VOTEABLE>,
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
         signatures: Option<<TYPES::SignatureKey as SignatureKey>::QcType>,
         pd: PhantomData<(TYPES, THRESHOLD)>,
     ) -> Self {
@@ -133,7 +133,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
         vote_commitment: Commitment<VersionedVoteData<TYPES, VOTEABLE, V>>,
         data: Self::Voteable,
         sig: <TYPES::SignatureKey as SignatureKey>::QcType,
-        view: TYPES::Time,
+        view: TYPES::View,
     ) -> Self {
         let vote_commitment_bytes: [u8; 32] = vote_commitment.into();
 
@@ -148,13 +148,14 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
     async fn is_valid_cert<MEMBERSHIP: Membership<TYPES>, V: Versions>(
         &self,
         membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> bool {
-        if self.view_number == TYPES::Time::genesis() {
+        if self.view_number == TYPES::View::genesis() {
             return true;
         }
         let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::public_parameter(
-            membership.stake_table(),
+            membership.stake_table(epoch),
             U256::from(Self::threshold(membership)),
         );
         let Ok(commit) = self.data_commitment(upgrade_lock).await else {
@@ -187,7 +188,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
 impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
     HasViewNumber<TYPES> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
-    fn view_number(&self) -> TYPES::Time {
+    fn view_number(&self) -> TYPES::View {
         self.view_number
     }
 }
@@ -205,7 +206,7 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     /// Returns an error when the certificate is no longer relevant
     pub async fn is_relevant(
         &self,
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
         decided_upgrade_certificate: Arc<RwLock<Option<Self>>>,
     ) -> Result<()> {
         let decided_upgrade_certificate_read = decided_upgrade_certificate.read().await;
@@ -226,11 +227,13 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     pub async fn validate<V: Versions>(
         upgrade_certificate: &Option<Self>,
         quorum_membership: &TYPES::Membership,
+        epoch: TYPES::Epoch,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         if let Some(ref cert) = upgrade_certificate {
             ensure!(
-                cert.is_valid_cert(quorum_membership, upgrade_lock).await,
+                cert.is_valid_cert(quorum_membership, epoch, upgrade_lock)
+                    .await,
                 "Invalid upgrade certificate."
             );
             Ok(())
@@ -241,7 +244,7 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
 
     /// Given an upgrade certificate and a view, tests whether the view is in the period
     /// where we are upgrading, which requires that we propose with null blocks.
-    pub fn upgrading_in(&self, view: TYPES::Time) -> bool {
+    pub fn upgrading_in(&self, view: TYPES::View) -> bool {
         view > self.data.old_version_last_view && view < self.data.new_version_first_view
     }
 }

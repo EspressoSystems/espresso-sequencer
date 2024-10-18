@@ -210,7 +210,9 @@ pub trait NodeType:
     /// The time type that this hotshot setup is using.
     ///
     /// This should be the same `Time` that `ValidatedState::Time` is using.
-    type Time: ConsensusTime + Display;
+    type View: ConsensusTime + Display;
+    /// Same as above but for epoch.
+    type Epoch: ConsensusTime + Display;
     /// The AuctionSolverResult is a type that holds the data associated with a particular solver
     /// run, for a particular view.
     type AuctionResult: Debug
@@ -244,7 +246,7 @@ pub trait NodeType:
     type InstanceState: InstanceState;
 
     /// The validated state type that this hotshot setup is using.
-    type ValidatedState: ValidatedState<Self, Instance = Self::InstanceState, Time = Self::Time>;
+    type ValidatedState: ValidatedState<Self, Instance = Self::InstanceState, Time = Self::View>;
 
     /// Membership used for this implementation
     type Membership: Membership<Self>;

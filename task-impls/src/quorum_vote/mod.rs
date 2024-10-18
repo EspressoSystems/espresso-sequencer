@@ -75,7 +75,9 @@ pub struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     /// Reference to the storage.
     pub storage: Arc<RwLock<I::Storage>>,
     /// View number to vote on.
-    pub view_number: TYPES::Time,
+    pub view_number: TYPES::View,
+    /// Epoch number to vote on.
+    pub epoch_number: TYPES::Epoch,
     /// Event sender.
     pub sender: Sender<Arc<HotShotEvent<TYPES>>>,
     /// Event receiver.
@@ -200,7 +202,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         vid_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
     ) -> Result<()> {
         ensure!(
-            self.quorum_membership.has_stake(&self.public_key),
+            self.quorum_membership
+                .has_stake(&self.public_key, self.epoch_number),
             format!(
                 "We were not chosen for quorum committee on {:?}",
                 self.view_number
@@ -373,10 +376,10 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     pub instance_state: Arc<TYPES::InstanceState>,
 
     /// Latest view number that has been voted for.
-    pub latest_voted_view: TYPES::Time,
+    pub latest_voted_view: TYPES::View,
 
     /// Table for the in-progress dependency tasks.
-    pub vote_dependencies: HashMap<TYPES::Time, JoinHandle<()>>,
+    pub vote_dependencies: HashMap<TYPES::View, JoinHandle<()>>,
 
     /// The underlying network
     pub network: Arc<I::Network>,
@@ -406,7 +409,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
     fn create_event_dependency(
         &self,
         dependency_type: VoteDependency,
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     ) -> EventDependency<Arc<HotShotEvent<TYPES>>> {
         EventDependency::new(
@@ -450,7 +453,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
     #[instrument(skip_all, fields(id = self.id, latest_voted_view = *self.latest_voted_view), name = "Quorum vote crete dependency task if new", level = "error")]
     fn create_dependency_task_if_new(
         &mut self,
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
+        epoch_number: TYPES::Epoch,
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
         event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
         event: Option<Arc<HotShotEvent<TYPES>>>,
@@ -493,6 +497,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 quorum_membership: Arc::clone(&self.quorum_membership),
                 storage: Arc::clone(&self.storage),
                 view_number,
+                epoch_number,
                 sender: event_sender.clone(),
                 receiver: event_receiver.clone(),
                 upgrade_lock: self.upgrade_lock.clone(),
@@ -505,7 +510,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
     /// Update the latest voted view number.
     #[instrument(skip_all, fields(id = self.id, latest_voted_view = *self.latest_voted_view), name = "Quorum vote update latest voted view", level = "error")]
-    async fn update_latest_voted_view(&mut self, new_view: TYPES::Time) -> bool {
+    async fn update_latest_voted_view(&mut self, new_view: TYPES::View) -> bool {
         if *self.latest_voted_view < *new_view {
             debug!(
                 "Updating next vote view from {} to {} in the quorum vote task",
@@ -514,7 +519,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
             // Cancel the old dependency tasks.
             for view in *self.latest_voted_view..(*new_view) {
-                if let Some(dependency) = self.vote_dependencies.remove(&TYPES::Time::new(view)) {
+                if let Some(dependency) = self.vote_dependencies.remove(&TYPES::View::new(view)) {
                     cancel_task(dependency).await;
                     debug!("Vote dependency removed for view {:?}", view);
                 }
@@ -535,6 +540,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
         event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
         event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
+        let current_epoch = self.consensus.read().await.cur_epoch();
         match event.as_ref() {
             HotShotEvent::QuorumProposalValidated(proposal, _leaf) => {
                 trace!("Received Proposal for view {}", *proposal.view_number());
@@ -548,6 +554,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 self.create_dependency_task_if_new(
                     proposal.view_number,
+                    current_epoch,
                     event_receiver,
                     &event_sender,
                     Some(Arc::clone(&event)),
@@ -560,9 +567,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     return;
                 }
 
+                let current_epoch = self.consensus.read().await.cur_epoch();
                 // Validate the DAC.
                 if !cert
-                    .is_valid_cert(self.da_membership.as_ref(), &self.upgrade_lock)
+                    .is_valid_cert(
+                        self.da_membership.as_ref(),
+                        current_epoch,
+                        &self.upgrade_lock,
+                    )
                     .await
                 {
                     return;
@@ -579,7 +591,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     &event_sender.clone(),
                 )
                 .await;
-                self.create_dependency_task_if_new(view, event_receiver, &event_sender, None);
+                self.create_dependency_task_if_new(
+                    view,
+                    current_epoch,
+                    event_receiver,
+                    &event_sender,
+                    None,
+                );
             }
             HotShotEvent::VidShareRecv(sender, disperse) => {
                 let view = disperse.data.view_number();
@@ -590,10 +608,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 // Validate the VID share.
                 let payload_commitment = disperse.data.payload_commitment;
+                let current_epoch = self.consensus.read().await.cur_epoch();
                 // Check sender of VID disperse share is signed by DA committee member
                 let validate_sender = sender
                     .validate(&disperse.signature, payload_commitment.as_ref())
-                    && self.da_membership.committee_members(view).contains(sender);
+                    && self
+                        .da_membership
+                        .committee_members(view, current_epoch)
+                        .contains(sender);
 
                 // Check whether the data satisfies one of the following.
                 // * From the right leader for this view.
@@ -603,7 +625,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     .validate(&disperse.signature, payload_commitment.as_ref())
                     || self
                         .quorum_membership
-                        .leader(view)
+                        .leader(view, current_epoch)
                         .validate(&disperse.signature, payload_commitment.as_ref());
                 if !validate_sender && !validated {
                     warn!("Failed to validated the VID dispersal/share sig.");
@@ -613,7 +635,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 // NOTE: `verify_share` returns a nested `Result`, so we must check both the inner
                 // and outer results
                 #[allow(clippy::no_effect)]
-                match vid_scheme(self.quorum_membership.total_nodes()).verify_share(
+                match vid_scheme(self.quorum_membership.total_nodes(current_epoch)).verify_share(
                     &disperse.data.share,
                     &disperse.data.common,
                     &payload_commitment,
@@ -641,7 +663,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     &event_sender.clone(),
                 )
                 .await;
-                self.create_dependency_task_if_new(view, event_receiver, &event_sender, None);
+                self.create_dependency_task_if_new(
+                    view,
+                    current_epoch,
+                    event_receiver,
+                    &event_sender,
+                    None,
+                );
             }
             HotShotEvent::QuorumVoteDependenciesValidated(view_number) => {
                 debug!("All vote dependencies verified for view {:?}", view_number);

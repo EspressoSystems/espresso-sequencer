@@ -136,6 +136,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
     if !justify_qc
         .is_valid_cert(
             task_state.quorum_membership.as_ref(),
+            task_state.cur_epoch,
             &task_state.upgrade_lock,
         )
         .await

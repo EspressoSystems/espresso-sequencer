@@ -65,6 +65,8 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub builder_urls: Vec1<Url>,
     /// Upgrade config
     pub upgrade: UpgradeConfig,
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
@@ -98,6 +100,7 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
             stop_proposing_time: val.upgrade.stop_proposing_time,
             start_voting_time: val.upgrade.start_voting_time,
             stop_voting_time: val.upgrade.stop_voting_time,
+            epoch_height: val.epoch_height,
         }
     }
 }
@@ -147,6 +150,7 @@ impl<KEY: SignatureKey> HotShotConfigFile<KEY> {
             data_request_delay: Some(Duration::from_millis(REQUEST_DATA_DELAY)),
             builder_urls: default_builder_urls(),
             upgrade: UpgradeConfig::default(),
+            epoch_height: 0,
         }
     }
 }

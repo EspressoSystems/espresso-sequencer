@@ -50,7 +50,7 @@ use crate::{
 #[instrument(skip_all)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
-    view_number: TYPES::Time,
+    view_number: TYPES::View,
     event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
     event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
@@ -80,6 +80,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     .await;
 
     let mem = Arc::clone(&quorum_membership);
+    let current_epoch = consensus.read().await.cur_epoch();
     // Make a background task to await the arrival of the event data.
     let Ok(Some(proposal)) =
         // We want to explicitly timeout here so we aren't waiting around for the data.
@@ -111,7 +112,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
                         hs_event.as_ref()
                     {
                         // Make sure that the quorum_proposal is valid
-                        if quorum_proposal.validate_signature(&mem, upgrade_lock).await.is_ok() {
+                        if quorum_proposal.validate_signature(&mem, current_epoch, upgrade_lock).await.is_ok() {
                             proposal = Some(quorum_proposal.clone());
                         }
 
@@ -130,7 +131,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     let justify_qc = proposal.data.justify_qc.clone();
 
     if !justify_qc
-        .is_valid_cert(quorum_membership.as_ref(), upgrade_lock)
+        .is_valid_cert(quorum_membership.as_ref(), current_epoch, upgrade_lock)
         .await
     {
         bail!("Invalid justify_qc in proposal for view {}", *view_number);
@@ -167,10 +168,10 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
 #[derive(Debug)]
 pub struct LeafChainTraversalOutcome<TYPES: NodeType> {
     /// The new locked view obtained from a 2 chain starting from the proposal's parent.
-    pub new_locked_view_number: Option<TYPES::Time>,
+    pub new_locked_view_number: Option<TYPES::View>,
 
     /// The new decided view obtained from a 3 chain starting from the proposal's parent.
-    pub new_decided_view_number: Option<TYPES::Time>,
+    pub new_decided_view_number: Option<TYPES::View>,
 
     /// The qc for the decided chain.
     pub new_decide_qc: Option<QuorumCertificate<TYPES>>,
@@ -355,7 +356,7 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
 #[instrument(skip_all)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
-    next_proposal_view_number: TYPES::Time,
+    next_proposal_view_number: TYPES::View,
     event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
@@ -364,8 +365,9 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
     consensus: OuterConsensus<TYPES>,
     upgrade_lock: &UpgradeLock<TYPES, V>,
 ) -> Result<(Leaf<TYPES>, Arc<<TYPES as NodeType>::ValidatedState>)> {
+    let current_epoch = consensus.read().await.cur_epoch();
     ensure!(
-        quorum_membership.leader(next_proposal_view_number) == public_key,
+        quorum_membership.leader(next_proposal_view_number, current_epoch) == public_key,
         "Somehow we formed a QC but are not the leader for the next view {next_proposal_view_number:?}",
     );
     let parent_view_number = consensus.read().await.high_qc().view_number();
@@ -485,18 +487,20 @@ pub async fn validate_proposal_safety_and_liveness<
         if let Err(e) = consensus_write.update_proposed_view(proposal.clone()) {
             tracing::debug!("Internal proposal update failed; error = {e:#}");
         };
-
-        // Broadcast that we've updated our consensus state so that other tasks know it's safe to grab.
-        broadcast_event(
-            Arc::new(HotShotEvent::ValidatedStateUpdated(view_number, view)),
-            &event_stream,
-        )
-        .await;
     }
 
+    // Broadcast that we've updated our consensus state so that other tasks know it's safe to grab.
+    broadcast_event(
+        Arc::new(HotShotEvent::ValidatedStateUpdated(view_number, view)),
+        &event_stream,
+    )
+    .await;
+
+    let current_epoch = task_state.cur_epoch;
     UpgradeCertificate::validate(
         &proposal.data.upgrade_certificate,
         &task_state.quorum_membership,
+        current_epoch,
         &task_state.upgrade_lock,
     )
     .await?;
@@ -606,7 +610,11 @@ pub async fn validate_proposal_view_and_certs<
 
     // Validate the proposal's signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
     proposal
-        .validate_signature(&task_state.quorum_membership, &task_state.upgrade_lock)
+        .validate_signature(
+            &task_state.quorum_membership,
+            task_state.cur_epoch,
+            &task_state.upgrade_lock,
+        )
         .await?;
 
     // Verify a timeout certificate OR a view sync certificate exists and is valid.
@@ -628,6 +636,7 @@ pub async fn validate_proposal_view_and_certs<
                     timeout_cert
                         .is_valid_cert(
                             task_state.timeout_membership.as_ref(),
+                            task_state.cur_epoch,
                             &task_state.upgrade_lock
                         )
                         .await,
@@ -648,6 +657,7 @@ pub async fn validate_proposal_view_and_certs<
                     view_sync_cert
                         .is_valid_cert(
                             task_state.quorum_membership.as_ref(),
+                            task_state.cur_epoch,
                             &task_state.upgrade_lock
                         )
                         .await,
@@ -662,6 +672,7 @@ pub async fn validate_proposal_view_and_certs<
     UpgradeCertificate::validate(
         &proposal.data.upgrade_certificate,
         &task_state.quorum_membership,
+        task_state.cur_epoch,
         &task_state.upgrade_lock,
     )
     .await?;
@@ -675,7 +686,7 @@ pub async fn validate_proposal_view_and_certs<
 /// # Errors
 /// Returns an [`anyhow::Error`] when the new view is not greater than the current view.
 pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
-    new_view: TYPES::Time,
+    new_view: TYPES::View,
     event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut QuorumProposalRecvTaskState<TYPES, I, V>,
 ) -> Result<()> {
@@ -684,8 +695,10 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>, V
         "New view is not greater than our current view"
     );
 
-    let is_old_view_leader =
-        task_state.quorum_membership.leader(task_state.cur_view) == task_state.public_key;
+    let is_old_view_leader = task_state
+        .quorum_membership
+        .leader(task_state.cur_view, task_state.cur_epoch)
+        == task_state.public_key;
     let old_view = task_state.cur_view;
 
     debug!("Updating view from {} to {}", *old_view, *new_view);
@@ -722,7 +735,7 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>, V
         async move {
             async_sleep(timeout).await;
             broadcast_event(
-                Arc::new(HotShotEvent::Timeout(TYPES::Time::new(*view_number))),
+                Arc::new(HotShotEvent::Timeout(TYPES::View::new(*view_number))),
                 &stream,
             )
             .await;

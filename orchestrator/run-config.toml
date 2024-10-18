@@ -38,6 +38,7 @@ timeout_ratio = [11, 10]
 round_start_delay = 1
 start_delay = 1
 num_bootstrap = 5
+epoch_height = 0
 
 [random_builder]
 txn_in_block = 100

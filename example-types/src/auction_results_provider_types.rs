@@ -48,7 +48,7 @@ pub struct TestAuctionResultsProvider<TYPES: NodeType> {
 impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for TestAuctionResultsProvider<TYPES> {
     /// Mock fetching the auction results, with optional error injection to simulate failure cases
     /// in the solver.
-    async fn fetch_auction_result(&self, view_number: TYPES::Time) -> Result<TYPES::AuctionResult> {
+    async fn fetch_auction_result(&self, view_number: TYPES::View) -> Result<TYPES::AuctionResult> {
         if let Some(url) = &self.broadcast_url {
             let resp =
                 reqwest::get(url.join(&format!("/v0/api/auction_results/{}", *view_number))?)

@@ -49,7 +49,10 @@ pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Version
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
     /// View number this view is executing in.
-    pub cur_view: TYPES::Time,
+    pub cur_view: TYPES::View,
+
+    /// Epoch number this node is executing in.
+    pub cur_epoch: TYPES::Epoch,
 
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: OuterConsensus<TYPES>,
@@ -108,7 +111,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 // the `DaProposalRecv` event. Otherwise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
-                if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
+                if self.cur_view != TYPES::View::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away DA proposal that is more than one view older");
                     return None;
                 }
@@ -127,7 +130,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let encoded_transactions_hash = Sha256::digest(&proposal.data.encoded_transactions);
 
                 // ED Is this the right leader?
-                let view_leader_key = self.da_membership.leader(view);
+                let view_leader_key = self.da_membership.leader(view, self.cur_epoch);
                 if view_leader_key != sender {
                     error!("DA proposal doesn't have expected leader key for view {} \n DA proposal is: {:?}", *view, proposal.data.clone());
                     return None;
@@ -163,7 +166,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 )
                 .await;
 
-                if !self.da_membership.has_stake(&self.public_key) {
+                if !self
+                    .da_membership
+                    .has_stake(&self.public_key, self.cur_epoch)
+                {
                     debug!(
                         "We were not chosen for consensus committee on {:?}",
                         self.cur_view
@@ -178,7 +184,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     return None;
                 }
                 let txns = Arc::clone(&proposal.data.encoded_transactions);
-                let num_nodes = self.quorum_membership.total_nodes();
+                let num_nodes = self.quorum_membership.total_nodes(self.cur_epoch);
                 let payload_commitment =
                     spawn_blocking(move || vid_commitment(&txns, num_nodes)).await;
                 #[cfg(async_executor_impl = "tokio")]
@@ -229,12 +235,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     let pk = self.private_key.clone();
                     let public_key = self.public_key.clone();
                     let chan = event_stream.clone();
+                    let current_epoch = self.cur_epoch;
                     async_spawn(async move {
                         Consensus::calculate_and_update_vid(
                             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
                             view_number,
                             membership,
                             &pk,
+                            current_epoch,
                         )
                         .await;
                         if let Some(Some(vid_share)) = consensus
@@ -260,8 +268,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 debug!("DA vote recv, Main Task {:?}", vote.view_number());
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.view_number();
-                if self.da_membership.leader(view) != self.public_key {
-                    error!("We are not the DA committee leader for view {} are we leader for next view? {}", *view, self.da_membership.leader(view + 1) == self.public_key);
+                if self.da_membership.leader(view, self.cur_epoch) != self.public_key {
+                    error!("We are not the DA committee leader for view {} are we leader for next view? {}", *view, self.da_membership.leader(view + 1, self.cur_epoch) == self.public_key);
                     return None;
                 }
 
@@ -270,6 +278,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     vote,
                     self.public_key.clone(),
                     &self.da_membership,
+                    self.cur_epoch,
                     self.id,
                     &event,
                     &event_stream,
@@ -289,7 +298,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 self.cur_view = view;
 
                 // If we are not the next leader (DA leader for this view) immediately exit
-                if self.da_membership.leader(self.cur_view + 1) != self.public_key {
+                if self.da_membership.leader(self.cur_view + 1, self.cur_epoch) != self.public_key {
                     return None;
                 }
                 debug!("Polling for DA votes for view {}", *self.cur_view + 1);

@@ -41,7 +41,7 @@ pub struct DaData {
 /// Data used for a timeout vote.
 pub struct TimeoutData<TYPES: NodeType> {
     /// View the timeout is for
-    pub view: TYPES::Time,
+    pub view: TYPES::View,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a VID vote.
@@ -55,7 +55,7 @@ pub struct ViewSyncPreCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
     pub relay: u64,
     /// The view number we are trying to sync on
-    pub round: TYPES::Time,
+    pub round: TYPES::View,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Commit vote.
@@ -63,7 +63,7 @@ pub struct ViewSyncCommitData<TYPES: NodeType> {
     /// The relay this vote is intended for
     pub relay: u64,
     /// The view number we are trying to sync on
-    pub round: TYPES::Time,
+    pub round: TYPES::View,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Finalize vote.
@@ -71,7 +71,7 @@ pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     /// The relay this vote is intended for
     pub relay: u64,
     /// The view number we are trying to sync on
-    pub round: TYPES::Time,
+    pub round: TYPES::View,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Upgrade vote.
@@ -82,13 +82,13 @@ pub struct UpgradeProposalData<TYPES: NodeType + DeserializeOwned> {
     pub new_version: Version,
     /// The last view in which we are allowed to reach a decide on this upgrade.
     /// If it is not decided by that view, we discard it.
-    pub decide_by: TYPES::Time,
+    pub decide_by: TYPES::View,
     /// A unique identifier for the specific protocol being voted on.
     pub new_version_hash: Vec<u8>,
     /// The last block for which the old version will be in effect.
-    pub old_version_last_view: TYPES::Time,
+    pub old_version_last_view: TYPES::View,
     /// The first block for which the new version will be in effect.
-    pub new_version_first_view: TYPES::Time,
+    pub new_version_first_view: TYPES::View,
 }
 
 /// Marker trait for data or commitments that can be voted on.
@@ -123,11 +123,11 @@ pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
     /// The leaf commitment being voted on.
     pub data: DATA,
     /// The view this vote was cast for
-    pub view_number: TYPES::Time,
+    pub view_number: TYPES::View,
 }
 
 impl<TYPES: NodeType, DATA: Voteable + 'static> HasViewNumber<TYPES> for SimpleVote<TYPES, DATA> {
-    fn view_number(&self) -> <TYPES as NodeType>::Time {
+    fn view_number(&self) -> <TYPES as NodeType>::View {
         self.view_number
     }
 }
@@ -158,7 +158,7 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
     /// If we are unable to sign the data
     pub async fn create_signed_vote<V: Versions>(
         data: DATA,
-        view: TYPES::Time,
+        view: TYPES::View,
         pub_key: &TYPES::SignatureKey,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         upgrade_lock: &UpgradeLock<TYPES, V>,
@@ -187,7 +187,7 @@ pub struct VersionedVoteData<TYPES: NodeType, DATA: Voteable, V: Versions> {
     data: DATA,
 
     /// view number
-    view: TYPES::Time,
+    view: TYPES::View,
 
     /// version applied to the view number
     version: Version,
@@ -204,7 +204,7 @@ impl<TYPES: NodeType, DATA: Voteable, V: Versions> VersionedVoteData<TYPES, DATA
     /// Returns an error if `upgrade_lock.version(view)` is unable to return a version we support
     pub async fn new(
         data: DATA,
-        view: TYPES::Time,
+        view: TYPES::View,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<Self> {
         let version = upgrade_lock.version(view).await?;
@@ -222,7 +222,7 @@ impl<TYPES: NodeType, DATA: Voteable, V: Versions> VersionedVoteData<TYPES, DATA
     /// This function cannot error, but may use an invalid version.
     pub async fn new_infallible(
         data: DATA,
-        view: TYPES::Time,
+        view: TYPES::View,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Self {
         let version = upgrade_lock.version_infallible(view).await;
@@ -303,7 +303,7 @@ impl<TYPES: NodeType> Committable for UpgradeProposalData<TYPES> {
 
 /// This implements commit for all the types which contain a view and relay public key.
 fn view_and_relay_commit<TYPES: NodeType, T: Committable>(
-    view: TYPES::Time,
+    view: TYPES::View,
     relay: u64,
     tag: &str,
 ) -> Commitment<T> {

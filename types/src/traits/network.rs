@@ -126,7 +126,7 @@ pub trait Id: Eq + PartialEq + Hash {}
 /// a message
 pub trait ViewMessage<TYPES: NodeType> {
     /// get the view out of the message
-    fn view_number(&self) -> TYPES::Time;
+    fn view_number(&self) -> TYPES::View;
     // TODO move out of this trait.
     /// get the purpose of the message
     fn purpose(&self) -> MessagePurpose;
@@ -139,7 +139,7 @@ pub struct DataRequest<TYPES: NodeType> {
     /// Request
     pub request: RequestKind<TYPES>,
     /// View this message is for
-    pub view: TYPES::Time,
+    pub view: TYPES::View,
     /// signature of the Sha256 hash of the data so outsiders can't use know
     /// public keys with stake.
     pub signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
@@ -149,11 +149,11 @@ pub struct DataRequest<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RequestKind<TYPES: NodeType> {
     /// Request VID data by our key and the VID commitment
-    Vid(TYPES::Time, TYPES::SignatureKey),
+    Vid(TYPES::View, TYPES::SignatureKey),
     /// Request a DA proposal for a certain view
-    DaProposal(TYPES::Time),
+    DaProposal(TYPES::View),
     /// Request for quorum proposal for a view
-    Proposal(TYPES::Time),
+    Proposal(TYPES::View),
 }
 
 /// A response for a request.  `SequencingMessage` is the same as other network messages
@@ -271,8 +271,12 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
 
     /// Update view can be used for any reason, but mostly it's for canceling tasks,
     /// and looking up the address of the leader of a future view.
-    async fn update_view<'a, TYPES>(&'a self, _view: u64, _membership: &TYPES::Membership)
-    where
+    async fn update_view<'a, TYPES>(
+        &'a self,
+        _view: u64,
+        _epoch: u64,
+        _membership: &TYPES::Membership,
+    ) where
         TYPES: NodeType<SignatureKey = K> + 'a,
     {
     }
