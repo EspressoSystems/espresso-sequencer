@@ -429,6 +429,15 @@ impl Default for NullStateCatchup {
 }
 
 impl NullStateCatchup {
+    /// Add a chain config preimage which can be fetched by hash during STF evaluation.
+    ///
+    /// [`NullStateCatchup`] is used to disable catchup entirely when evaluating the STF, which
+    /// requires the [`ValidatedState`](espresso_types::ValidatedState) to be pre-seeded with all
+    /// the dependencies of STF evaluation. However, the STF also depends on having the preimage of
+    /// various [`ChainConfig`] commitments, which are not stored in the
+    /// [`ValidatedState`](espresso_types::ValidatedState), but which instead must be supplied by a
+    /// separate preimage oracle. Thus, [`NullStateCatchup`] may be populated with a set of
+    /// [`ChainConfig`]s, which it can feed to the STF during evaluation.
     pub fn add_chain_config(&mut self, cf: ChainConfig) {
         self.chain_configs.insert(cf.commit(), cf);
     }
