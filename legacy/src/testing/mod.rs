@@ -134,8 +134,6 @@ pub async fn calc_proposal_msg(
             view_number: ViewNumber::new(round as u64),
         };
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
-        let seed = [round as u8; 32];
-        let (pub_key, private_key) = BLSPubKey::generated_from_seed_indexed(seed, round as u64);
         let da_signature =
     <TestTypes as hotshot_types::traits::node_implementation::NodeType>::SignatureKey::sign(
         &private_key,
