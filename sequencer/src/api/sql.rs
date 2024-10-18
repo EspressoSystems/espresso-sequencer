@@ -151,14 +151,7 @@ impl CatchupStorage for SqlStorage {
         let mut tx = self.read().await.context(format!(
             "opening transaction to fetch chain config {commitment}"
         ))?;
-
-        let (data,) = query_as::<(Vec<u8>,)>("SELECT * from chain_config where commitment = $1")
-            .bind(commitment.to_string())
-            .fetch_one(tx.as_mut())
-            .await
-            .unwrap();
-
-        bincode::deserialize(&data[..]).context("failed to deserialize")
+        load_chain_config(&mut tx, commitment).await
     }
 }
 
@@ -264,6 +257,19 @@ async fn load_accounts<Mode: TransactionMode>(
     Ok((snapshot, leaf.leaf().clone()))
 }
 
+async fn load_chain_config<Mode: TransactionMode>(
+    tx: &mut Transaction<Mode>,
+    commitment: Commitment<ChainConfig>,
+) -> anyhow::Result<ChainConfig> {
+    let (data,) = query_as::<(Vec<u8>,)>("SELECT data from chain_config where commitment = $1")
+        .bind(commitment.to_string())
+        .fetch_one(tx.as_mut())
+        .await
+        .unwrap();
+
+    bincode::deserialize(&data[..]).context("failed to deserialize")
+}
+
 #[tracing::instrument(skip(instance, tx))]
 async fn reconstruct_state<Mode: TransactionMode>(
     instance: &NodeState,
@@ -314,7 +320,8 @@ async fn reconstruct_state<Mode: TransactionMode>(
     let mut accounts = accounts.iter().copied().collect::<HashSet<_>>();
     // Add in all the accounts we will need to replay any of the headers, to ensure that we don't
     // need to do catchup recursively.
-    accounts.extend(fee_account_dependencies(instance, parent, &leaves).await);
+    let (catchup, dependencies) = header_dependencies(tx, instance, parent, &leaves).await?;
+    accounts.extend(dependencies);
     let accounts = accounts.into_iter().collect::<Vec<_>>();
     state.fee_merkle_tree = load_accounts(tx, from_height, &accounts)
         .await
@@ -343,19 +350,13 @@ async fn reconstruct_state<Mode: TransactionMode>(
 
     // Apply subsequent headers to compute the later state.
     for proposal in &leaves {
-        state = compute_state_update(
-            &state,
-            instance,
-            &NullStateCatchup::default(),
-            parent,
-            proposal,
-        )
-        .await
-        .context(format!(
-            "unable to reconstruct state because state update {} failed",
-            proposal.height(),
-        ))?
-        .0;
+        state = compute_state_update(&state, instance, &catchup, parent, proposal)
+            .await
+            .context(format!(
+                "unable to reconstruct state because state update {} failed",
+                proposal.height(),
+            ))?
+            .0;
         parent = proposal;
     }
 
@@ -363,31 +364,68 @@ async fn reconstruct_state<Mode: TransactionMode>(
     Ok((state, to_leaf))
 }
 
-/// Get the set of all fee accounts on which the STF depends, applied to the given list of headers.
-async fn fee_account_dependencies(
+/// Get the dependencies needed to apply the STF to the given list of headers.
+///
+/// Returns
+/// * A state catchup implementation seeded with all the chain configs required to apply the headers
+///   in `leaves`
+/// * The set of accounts that must be preloaded to apply these headers
+async fn header_dependencies<Mode: TransactionMode>(
+    tx: &mut Transaction<Mode>,
     instance: &NodeState,
     mut parent: &Leaf,
     leaves: impl IntoIterator<Item = &Leaf>,
-) -> HashSet<FeeAccount> {
+) -> anyhow::Result<(NullStateCatchup, HashSet<FeeAccount>)> {
+    let mut catchup = NullStateCatchup::default();
     let mut accounts = HashSet::default();
-    accounts.insert(instance.chain_config.fee_recipient);
 
     for proposal in leaves {
+        let header = proposal.block_header();
+        let height = header.height();
+        let view = proposal.view_number();
+        tracing::debug!(height, ?view, "fetching dependencies for proposal");
+
+        let header_cf = header.chain_config();
+        let chain_config = if header_cf.commit() == instance.chain_config.commit() {
+            instance.chain_config
+        } else {
+            match header_cf.resolve() {
+                Some(cf) => cf,
+                None => {
+                    tracing::info!(
+                        height,
+                        ?view,
+                        commit = %header_cf.commit(),
+                        "chain config not available, attempting to load from storage",
+                    );
+                    let cf = load_chain_config(tx, header_cf.commit())
+                        .await
+                        .context(format!(
+                            "loading chain config {} for header {},{:?}",
+                            header_cf.commit(),
+                            header.height(),
+                            proposal.view_number()
+                        ))?;
+
+                    // If we had to fetch a chain config now, store it in the catchup implementation
+                    // so the STF will be able to look it up later.
+                    catchup.add_chain_config(cf);
+                    cf
+                }
+            }
+        };
+
+        accounts.insert(chain_config.fee_recipient);
         accounts.extend(
-            get_l1_deposits(
-                instance,
-                proposal.block_header(),
-                parent,
-                instance.chain_config.fee_contract,
-            )
-            .await
-            .into_iter()
-            .map(|fee| fee.account()),
+            get_l1_deposits(instance, header, parent, chain_config.fee_contract)
+                .await
+                .into_iter()
+                .map(|fee| fee.account()),
         );
-        accounts.extend(proposal.block_header().fee_info().accounts());
+        accounts.extend(header.fee_info().accounts());
         parent = proposal;
     }
-    accounts
+    Ok((catchup, accounts))
 }
 
 async fn get_leaf_from_proposal<Mode, P>(

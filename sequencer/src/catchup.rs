@@ -17,6 +17,7 @@ use hotshot_types::{
 };
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;
+use std::collections::HashMap;
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
@@ -412,16 +413,24 @@ where
 }
 
 /// Disable catchup entirely.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct NullStateCatchup {
     backoff: BackoffParams,
+    chain_configs: HashMap<Commitment<ChainConfig>, ChainConfig>,
 }
 
 impl Default for NullStateCatchup {
     fn default() -> Self {
         Self {
             backoff: BackoffParams::disabled(),
+            chain_configs: Default::default(),
         }
+    }
+}
+
+impl NullStateCatchup {
+    pub fn add_chain_config(&mut self, cf: ChainConfig) {
+        self.chain_configs.insert(cf.commit(), cf);
     }
 }
 
@@ -450,9 +459,12 @@ impl StateCatchup for NullStateCatchup {
 
     async fn try_fetch_chain_config(
         &self,
-        _commitment: Commitment<ChainConfig>,
+        commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        bail!("state catchup is disabled");
+        self.chain_configs
+            .get(&commitment)
+            .copied()
+            .context(format!("chain config {commitment} not available"))
     }
 
     fn backoff(&self) -> &BackoffParams {
