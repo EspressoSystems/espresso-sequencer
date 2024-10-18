@@ -6,7 +6,10 @@ use hotshot_types::{
 };
 use marketplace_builder_shared::block::BuilderStateId;
 
-use crate::service::{BuilderHooks, ProxyGlobalState};
+use crate::{
+    builder_state::MessageType,
+    service::{BuilderHooks, ProxyGlobalState},
+};
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -240,12 +243,12 @@ async fn test_builder_order() {
             // send quorum and DA proposals for this round
             senders
                 .da_proposal
-                .broadcast(da_proposal_msg)
+                .broadcast(MessageType::DaProposalMessage(da_proposal_msg))
                 .await
                 .unwrap();
             senders
                 .quorum_proposal
-                .broadcast(quorum_proposal_msg)
+                .broadcast(MessageType::QuorumProposalMessage(quorum_proposal_msg))
                 .await
                 .unwrap();
 
@@ -374,12 +377,12 @@ async fn test_builder_order_chain_fork() {
             // send quorum and DA proposals for this round
             senders
                 .da_proposal
-                .broadcast(da_proposal_msg)
+                .broadcast(MessageType::DaProposalMessage(da_proposal_msg))
                 .await
                 .unwrap();
             senders
                 .quorum_proposal
-                .broadcast(quorum_proposal_msg)
+                .broadcast(MessageType::QuorumProposalMessage(quorum_proposal_msg))
                 .await
                 .unwrap();
 
@@ -413,12 +416,12 @@ async fn test_builder_order_chain_fork() {
             // to prevent builders resend the transactions we've already committed
             senders
                 .da_proposal
-                .broadcast(da_proposal_msg)
+                .broadcast(MessageType::DaProposalMessage(da_proposal_msg))
                 .await
                 .unwrap();
             senders
                 .quorum_proposal
-                .broadcast(quorum_proposal_msg)
+                .broadcast(MessageType::QuorumProposalMessage(quorum_proposal_msg))
                 .await
                 .unwrap();
 
@@ -563,12 +566,12 @@ async fn test_builder_order_should_fail() {
             // send quorum and DA proposals for this round
             senders
                 .da_proposal
-                .broadcast(da_proposal_msg)
+                .broadcast(MessageType::DaProposalMessage(da_proposal_msg))
                 .await
                 .unwrap();
             senders
                 .quorum_proposal
-                .broadcast(quorum_proposal_msg)
+                .broadcast(MessageType::QuorumProposalMessage(quorum_proposal_msg))
                 .await
                 .unwrap();
 

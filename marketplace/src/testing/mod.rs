@@ -111,8 +111,8 @@ pub async fn calc_proposal_msg(
     transactions: Vec<TestTransaction>,
 ) -> (
     QuorumProposal<TestTypes>,
-    MessageType<TestTypes>,
-    MessageType<TestTypes>,
+    QuorumProposalMessage<TestTypes>,
+    Arc<DaProposalMessage<TestTypes>>,
     BuilderStateId<TestTypes>,
 ) {
     // get transactions submitted in previous rounds, [] for genesis
@@ -191,17 +191,14 @@ pub async fn calc_proposal_msg(
         )
         .expect("Failed to sign payload commitment while preparing Quorum proposal");
 
-    let quorum_proposal_msg =
-        MessageType::QuorumProposalMessage(QuorumProposalMessage::<TestTypes> {
-            proposal: Arc::new(Proposal {
-                data: quorum_proposal.clone(),
-                signature: quorum_signature,
-                _pd: PhantomData,
-            }),
-            sender: pub_key,
-        });
-
-    let da_proposal_msg = MessageType::DaProposalMessage(Arc::clone(&da_proposal));
+    let quorum_proposal_msg = QuorumProposalMessage::<TestTypes> {
+        proposal: Arc::new(Proposal {
+            data: quorum_proposal.clone(),
+            signature: quorum_signature,
+            _pd: PhantomData,
+        }),
+        sender: pub_key,
+    };
     let builder_state_id = BuilderStateId {
         parent_commitment: block_vid_commitment,
         parent_view: ViewNumber::new(round as u64),
@@ -209,7 +206,7 @@ pub async fn calc_proposal_msg(
     (
         quorum_proposal,
         quorum_proposal_msg,
-        da_proposal_msg,
+        da_proposal,
         builder_state_id,
     )
 }

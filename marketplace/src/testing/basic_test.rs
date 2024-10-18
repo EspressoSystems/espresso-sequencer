@@ -5,6 +5,7 @@ use async_std::prelude::FutureExt;
 
 use hotshot_example_types::block_types::TestTransaction;
 
+use crate::builder_state::MessageType;
 use crate::{builder_state::TransactionSource, testing::TestTypes};
 use crate::{
     service::handle_received_txns,
@@ -71,12 +72,12 @@ async fn test_builder() {
         // send quorum and DA proposals for this round
         senders
             .da_proposal
-            .broadcast(da_proposal_msg)
+            .broadcast(MessageType::DaProposalMessage(da_proposal_msg))
             .await
             .unwrap();
         senders
             .quorum_proposal
-            .broadcast(quorum_proposal_msg)
+            .broadcast(MessageType::QuorumProposalMessage(quorum_proposal_msg))
             .await
             .unwrap();
 
