@@ -1177,7 +1177,7 @@ mod test {
         // Number of nodes on DA committee
         const NUM_STORAGE_NODES: usize = 4;
 
-        // start builder_state without entering event loop
+        // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
             create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
@@ -1313,7 +1313,7 @@ mod test {
         // Number of nodes on DA committee
         const NUM_STORAGE_NODES: usize = 4;
 
-        // start builder_state without entering event loop
+        // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
             create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
 
@@ -1429,11 +1429,9 @@ mod test {
         // Number of nodes on DA committee
         const NUM_STORAGE_NODES: usize = 4;
 
-        // start builder_state without entering event loop
+        // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
             create_builder_state(CHANNEL_CAPACITY, NUM_STORAGE_NODES).await;
-
-        // insert some builder states
 
         // Transactions to send
         let all_transactions = (0..NUM_ROUNDS)
@@ -1444,6 +1442,7 @@ mod test {
             })
             .collect::<Vec<_>>();
         let mut prev_quorum_proposal: Option<QuorumProposal<TestTypes>> = None;
+        // register some builder states for later decide event
         #[allow(clippy::needless_range_loop)]
         for round in 0..NUM_ROUNDS {
             let transactions = all_transactions[round].clone();
