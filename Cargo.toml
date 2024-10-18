@@ -57,7 +57,9 @@ dyn-clone = "1.0"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77", features = ["dependency-tasks"] }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77", features = [
+  "dependency-tasks",
+] }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.77" }
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.51" }
@@ -68,7 +70,9 @@ hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-quer
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77", features = ["dependency-tasks"] }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77", features = [
+  "dependency-tasks",
+] }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77" }
 libp2p-networking = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.77" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
@@ -79,11 +83,11 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", ta
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.4.5", package = "cdn-broker" }
+], tag = "0.5.1-upgrade", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.4.5", package = "cdn-marshal" }
+], tag = "0.5.1-upgrade", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.1", features = [
   "test-apis",

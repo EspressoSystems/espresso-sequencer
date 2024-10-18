@@ -1436,12 +1436,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "capnp"
+version = "0.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9e0676a27d3cf41fc949b3061cca99c67791a8a3baf1544b30ef712936e7e3b"
+dependencies = [
+ "embedded-io",
+]
+
+[[package]]
 name = "capnpc"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c75ba30e0f08582d53c2f3710cf4bb65ff562614b1ba86906d7391adffe189ec"
 dependencies = [
- "capnp",
+ "capnp 0.19.6",
+]
+
+[[package]]
+name = "capnpc"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d13cb6e2643fd1f9fb804ba938323636ef52e07d6e495e372d933ad0cb98207"
+dependencies = [
+ "capnp 0.20.2",
 ]
 
 [[package]]
@@ -1468,6 +1486,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo_toml"
+version = "0.15.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "599aa35200ffff8f04c1925aa1acc92fa2e08874379ef42e210a80e527e60838"
+dependencies = [
+ "serde",
+ "toml 0.7.8",
+]
+
+[[package]]
 name = "cbor4ii"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1490,10 +1518,10 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5#f6cc7c2fc53eaa52a4901e775d9be7ac820af72c"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7#5406fde54e61058428a7b55e1a98b699f0f606f1"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7)",
  "clap",
  "console-subscriber 0.3.0",
  "dashmap",
@@ -1514,10 +1542,10 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7#5406fde54e61058428a7b55e1a98b699f0f606f1"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7)",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
  "clap",
  "console-subscriber 0.3.0",
  "dashmap",
@@ -1554,20 +1582,6 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5#f6cc7c2fc53eaa52a4901e775d9be7ac820af72c"
-dependencies = [
- "async-std",
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
- "clap",
- "jf-signature",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.18",
-]
-
-[[package]]
-name = "cdn-marshal"
-version = "0.4.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7#5406fde54e61058428a7b55e1a98b699f0f606f1"
 dependencies = [
  "async-std",
@@ -1580,15 +1594,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "cdn-marshal"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
+ "clap",
+ "jf-signature",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
 name = "cdn-proto"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5#f6cc7c2fc53eaa52a4901e775d9be7ac820af72c"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7#5406fde54e61058428a7b55e1a98b699f0f606f1"
 dependencies = [
  "anyhow",
  "ark-serialize",
  "async-trait",
- "capnp",
- "capnpc",
+ "capnp 0.19.6",
+ "capnpc 0.19.0",
  "derivative",
  "jf-signature",
  "kanal",
@@ -1600,7 +1628,7 @@ dependencies = [
  "quinn",
  "rand 0.8.5",
  "rcgen 0.13.1",
- "redis 0.25.4",
+ "redis 0.26.1",
  "rkyv",
  "rustls 0.23.12",
  "rustls-pki-types",
@@ -1616,13 +1644,13 @@ dependencies = [
 [[package]]
 name = "cdn-proto"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7#5406fde54e61058428a7b55e1a98b699f0f606f1"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
 dependencies = [
  "anyhow",
  "ark-serialize",
  "async-trait",
- "capnp",
- "capnpc",
+ "capnp 0.20.2",
+ "capnpc 0.20.0",
  "derivative",
  "jf-signature",
  "kanal",
@@ -1634,7 +1662,7 @@ dependencies = [
  "quinn",
  "rand 0.8.5",
  "rcgen 0.13.1",
- "redis 0.26.1",
+ "redis 0.27.5",
  "rkyv",
  "rustls 0.23.12",
  "rustls-pki-types",
@@ -1898,7 +1926,7 @@ dependencies = [
  "rust-ini",
  "serde",
  "serde_json",
- "toml",
+ "toml 0.8.19",
  "yaml-rust",
 ]
 
@@ -3147,7 +3175,7 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 2.0.77",
- "toml",
+ "toml 0.8.19",
  "walkdir",
 ]
 
@@ -4156,7 +4184,7 @@ dependencies = [
  "snafu 0.8.4",
  "tagged-base64",
  "tide-disco",
- "toml",
+ "toml 0.8.19",
  "vbs",
 ]
 
@@ -4237,7 +4265,7 @@ dependencies = [
  "snafu 0.8.4",
  "tagged-base64",
  "tide-disco",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "vbs",
 ]
@@ -4289,7 +4317,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "tide-disco",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "vbs",
 ]
@@ -4329,7 +4357,7 @@ dependencies = [
  "thiserror",
  "tide-disco",
  "tokio",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "vbs",
  "vec1",
@@ -4379,7 +4407,7 @@ dependencies = [
  "tempfile",
  "tide-disco",
  "time 0.3.36",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "trait-variant",
  "typenum",
@@ -4444,7 +4472,7 @@ dependencies = [
  "surf-disco",
  "tide-disco",
  "time 0.3.36",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "url",
  "vbs",
@@ -6225,7 +6253,7 @@ dependencies = [
  "tagged-base64",
  "tide-disco",
  "tokio",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "url",
  "vbs",
@@ -6258,7 +6286,7 @@ dependencies = [
  "surf-disco",
  "thiserror",
  "tide-disco",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "vbs",
 ]
@@ -6639,7 +6667,7 @@ dependencies = [
  "surf-disco",
  "tide-disco",
  "time 0.3.36",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "url",
  "vbs",
@@ -7408,7 +7436,7 @@ version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecf48c7ca261d60b74ab1a7b20da18bede46776b2e55535cb958eb595c5fa7b"
 dependencies = [
- "toml_edit",
+ "toml_edit 0.22.20",
 ]
 
 [[package]]
@@ -7532,7 +7560,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.77",
@@ -7818,28 +7846,6 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.25.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0d7a6955c7511f60f3ba9e86c6d02b3c3f144f8c24b288d1f4e18074ab8bbec"
-dependencies = [
- "arc-swap",
- "async-trait",
- "bytes 1.7.1",
- "combine",
- "futures",
- "futures-util",
- "itoa",
- "percent-encoding",
- "pin-project-lite 0.2.14",
- "ryu",
- "tokio",
- "tokio-retry",
- "tokio-util",
- "url",
-]
-
-[[package]]
-name = "redis"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e902a69d09078829137b4a5d9d082e0490393537badd7c91a3d69d14639e115f"
@@ -7857,6 +7863,29 @@ dependencies = [
  "ryu",
  "tokio",
  "tokio-retry",
+ "tokio-util",
+ "url",
+]
+
+[[package]]
+name = "redis"
+version = "0.27.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81cccf17a692ce51b86564334614d72dcae1def0fd5ecebc9f02956da74352b5"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "bytes 1.7.1",
+ "combine",
+ "futures",
+ "futures-util",
+ "itoa",
+ "num-bigint",
+ "percent-encoding",
+ "pin-project-lite 0.2.14",
+ "ryu",
+ "tokio",
+ "tokio-retry2",
  "tokio-util",
  "url",
 ]
@@ -7907,7 +7936,7 @@ dependencies = [
  "time 0.3.36",
  "tokio",
  "tokio-postgres",
- "toml",
+ "toml 0.8.19",
  "url",
  "walkdir",
 ]
@@ -8616,8 +8645,8 @@ dependencies = [
  "async-std",
  "async-trait",
  "bincode",
- "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
- "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
  "clap",
  "client",
  "committable",
@@ -8674,7 +8703,8 @@ dependencies = [
  "tempfile",
  "tide-disco",
  "time 0.3.36",
- "toml",
+ "todo_by",
+ "toml 0.8.19",
  "tracing",
  "tracing-subscriber 0.3.18",
  "url",
@@ -9941,7 +9971,7 @@ dependencies = [
  "tagged-base64",
  "tide",
  "tide-websockets",
- "toml",
+ "toml 0.8.19",
  "tracing",
  "tracing-distributed",
  "tracing-futures",
@@ -10065,6 +10095,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
+name = "todo_by"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e25529b77ab1841ec52a4e8356632b417698b53ea9ad62c6be7d04d5e420dc4"
+dependencies = [
+ "cargo_toml",
+ "chrono",
+ "proc-macro2",
+ "quote",
+ "semver 1.0.23",
+ "syn 2.0.77",
+]
+
+[[package]]
 name = "tokio"
 version = "1.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10152,6 +10196,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-retry2"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "903934dba1c4c2f2e9cb460ef10b5695e0b0ecad3bf9ee7c8675e540c5e8b2d1"
+dependencies = [
+ "pin-project",
+ "rand 0.8.5",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-rustls"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10213,6 +10268,18 @@ dependencies = [
 
 [[package]]
 name = "toml"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd79e69d3b627db300ff956027cc6c3798cef26d22526befdfcd12feeb6d2257"
+dependencies = [
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_edit 0.19.15",
+]
+
+[[package]]
+name = "toml"
 version = "0.8.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1ed1f98e3fdc28d6d910e6737ae6ab1a93bf1985935a1193e68f93eeb68d24e"
@@ -10220,7 +10287,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit",
+ "toml_edit 0.22.20",
 ]
 
 [[package]]
@@ -10234,6 +10301,19 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
+version = "0.19.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
+dependencies = [
+ "indexmap 2.5.0",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "winnow 0.5.40",
+]
+
+[[package]]
+name = "toml_edit"
 version = "0.22.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "583c44c02ad26b0c3f3066fe629275e50627026c51ac2e595cca4c230ce1ce1d"
@@ -10242,7 +10322,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow",
+ "winnow 0.6.18",
 ]
 
 [[package]]
@@ -11229,6 +11309,15 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "winnow"
+version = "0.5.40"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "winnow"
