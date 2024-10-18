@@ -1211,8 +1211,7 @@ mod test {
             panic!("Not a da_proposal_message in correct format");
         }
         assert_eq!(
-            builder_state
-                .da_proposal_payload_commit_to_da_proposal,
+            builder_state.da_proposal_payload_commit_to_da_proposal,
             correct_da_proposal_payload_commit_to_da_proposal
         );
         // check global_state didn't change
@@ -1239,8 +1238,7 @@ mod test {
             panic!("Not a da_proposal_message in correct format");
         }
         assert_eq!(
-            builder_state
-                .da_proposal_payload_commit_to_da_proposal,
+            builder_state.da_proposal_payload_commit_to_da_proposal,
             correct_da_proposal_payload_commit_to_da_proposal
         );
         // check global_state didn't change
@@ -1282,8 +1280,7 @@ mod test {
             panic!("Not a da_proposal_message in correct format");
         }
         assert_eq!(
-            builder_state
-                .da_proposal_payload_commit_to_da_proposal,
+            builder_state.da_proposal_payload_commit_to_da_proposal,
             correct_da_proposal_payload_commit_to_da_proposal,
         );
         // check global_state has this new builder_state_id
@@ -1400,7 +1397,7 @@ mod test {
                 .clone(),
             correct_quorum_proposal_payload_commit_to_quorum_proposal.clone()
         );
-        
+
         // check global_state has this new builder_state_id
         if let Some(_x) = global_state
             .read_arc()

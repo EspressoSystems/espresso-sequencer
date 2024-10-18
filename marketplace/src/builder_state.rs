@@ -1174,7 +1174,7 @@ mod test {
             builder_state
                 .da_proposal_payload_commit_to_da_proposal
                 .clone(),
-                correct_da_proposal_payload_commit_to_da_proposal.clone(),
+            correct_da_proposal_payload_commit_to_da_proposal.clone(),
         );
         // check global_state didn't change
         if global_state
@@ -1438,7 +1438,7 @@ mod test {
             );
         }
 
-         // send out a decide event in a middle round
+        // send out a decide event in a middle round
         let latest_decide_view_number = ViewNumber::new(3);
 
         let decide_message = MessageType::DecideMessage(crate::builder_state::DecideMessage {
