@@ -1115,7 +1115,6 @@ mod test {
     use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::data::ViewNumber;
     use hotshot_types::data::{Leaf, QuorumProposal};
-    use hotshot_types::message::Proposal;
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
 
@@ -1123,40 +1122,6 @@ mod test {
     use super::MessageType;
     use super::ParentBlockReferences;
     use crate::testing::{calc_proposal_msg, create_builder_state};
-
-    /// check whether the `da_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing da proposal messages
-    /// used for testing only
-    fn check_equal_da_proposal_hashmap<TYPES: NodeType>(
-        da_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TYPES>::Time),
-            Arc<DaProposalMessage<TYPES>>,
-        >,
-        correct_da_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TYPES>::Time),
-            Arc<DaProposalMessage<TYPES>>,
-        >,
-    ) {
-        assert_eq!(
-            da_proposal_payload_commit_to_da_proposal,
-            correct_da_proposal_payload_commit_to_da_proposal
-        );
-    }
-
-    /// check whether the `quorum_proposal_payload_commit_to_da_proposal` has correct (key, value) pair after processing quorum proposal messages
-    /// used for testing only
-    type QuorumProposalMap<TYPES> = HashMap<
-        (BuilderCommitment, <TYPES as NodeType>::Time),
-        Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
-    >;
-    fn check_equal_quorum_proposal_hashmap<TYPES: NodeType>(
-        quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
-        correct_quorum_proposal_payload_commit_to_da_proposal: QuorumProposalMap<TYPES>,
-    ) {
-        assert_eq!(
-            quorum_proposal_payload_commit_to_da_proposal,
-            correct_quorum_proposal_payload_commit_to_da_proposal
-        );
-    }
 
     /// This test the function `process_da_propsal`.
     /// It checkes da_proposal_payload_commit_to_da_proposal change appropriately
@@ -1205,18 +1170,18 @@ mod test {
         } else {
             panic!("Not a da_proposal_message in correct format");
         }
-        check_equal_da_proposal_hashmap(
+        assert_eq!(
             builder_state
                 .da_proposal_payload_commit_to_da_proposal
                 .clone(),
-            correct_da_proposal_payload_commit_to_da_proposal.clone(),
+                correct_da_proposal_payload_commit_to_da_proposal.clone(),
         );
         // check global_state didn't change
-        if let Some(_x) = global_state
+        if global_state
             .read_arc()
             .await
             .spawned_builder_states
-            .get(&builder_state_id)
+            .contains_key(&builder_state_id)
         {
             panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
         }
@@ -1234,18 +1199,18 @@ mod test {
         } else {
             panic!("Not a da_proposal_message in correct format");
         }
-        check_equal_da_proposal_hashmap(
+        assert_eq!(
             builder_state
                 .da_proposal_payload_commit_to_da_proposal
                 .clone(),
             correct_da_proposal_payload_commit_to_da_proposal.clone(),
         );
         // check global_state didn't change
-        if let Some(_x) = global_state
+        if global_state
             .read_arc()
             .await
             .spawned_builder_states
-            .get(&builder_state_id_1)
+            .contains_key(&builder_state_id_1)
         {
             panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
         }
@@ -1278,9 +1243,11 @@ mod test {
         } else {
             panic!("Not a da_proposal_message in correct format");
         }
-        check_equal_da_proposal_hashmap(
-            builder_state.da_proposal_payload_commit_to_da_proposal,
-            correct_da_proposal_payload_commit_to_da_proposal,
+        assert_eq!(
+            builder_state
+                .da_proposal_payload_commit_to_da_proposal
+                .clone(),
+            correct_da_proposal_payload_commit_to_da_proposal.clone(),
         );
         // check global_state has this new builder_state_id
         if let Some(_x) = global_state
@@ -1345,18 +1312,18 @@ mod test {
         } else {
             panic!("Not a quorum_proposal_message in correct format");
         }
-        check_equal_quorum_proposal_hashmap(
+        assert_eq!(
             builder_state
                 .quorum_proposal_payload_commit_to_quorum_proposal
                 .clone(),
-            correct_quorum_proposal_payload_commit_to_quorum_proposal.clone(),
+            correct_quorum_proposal_payload_commit_to_quorum_proposal.clone()
         );
         // check global_state didn't change
-        if let Some(_x) = global_state
+        if global_state
             .read_arc()
             .await
             .spawned_builder_states
-            .get(&builder_state_id)
+            .contains_key(&builder_state_id)
         {
             panic!("global_state shouldn't have cooresponding builder_state_id without matching quorum proposal.");
         }
@@ -1389,10 +1356,11 @@ mod test {
         } else {
             panic!("Not a quorum_proposal_message in correct format");
         }
-
-        check_equal_quorum_proposal_hashmap(
-            builder_state.quorum_proposal_payload_commit_to_quorum_proposal,
-            correct_quorum_proposal_payload_commit_to_quorum_proposal,
+        assert_eq!(
+            builder_state
+                .quorum_proposal_payload_commit_to_quorum_proposal
+                .clone(),
+            correct_quorum_proposal_payload_commit_to_quorum_proposal.clone()
         );
         // check global_state has this new builder_state_id
         if let Some(_x) = global_state
