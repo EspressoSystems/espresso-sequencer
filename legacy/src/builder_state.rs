@@ -1477,8 +1477,7 @@ mod test {
             );
         }
 
-        // send out a decide event
-        // randomly choose a latest_decide_view_number between [0, NUM_ROUNDS]
+        // send out a decide event in a middle round
         let latest_decide_view_number = ViewNumber::new(3);
 
         let decide_message = MessageType::DecideMessage(crate::builder_state::DecideMessage {
