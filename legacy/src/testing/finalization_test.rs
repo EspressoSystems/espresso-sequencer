@@ -30,8 +30,15 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
-use marketplace_builder_shared::block::BuilderStateId;
-use marketplace_builder_shared::block::ParentBlockReferences;
+use marketplace_builder_shared::testing::constants::{
+    TEST_CHANNEL_BUFFER_SIZE, TEST_NUM_CONSENSUS_RETRIES, TEST_NUM_NODES_IN_VID_COMPUTATION,
+};
+use marketplace_builder_shared::{
+    block::BuilderStateId, testing::constants::TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
+};
+use marketplace_builder_shared::{
+    block::ParentBlockReferences, testing::constants::TEST_PROTOCOL_MAX_BLOCK_SIZE,
+};
 use sha2::{Digest, Sha256};
 
 use super::basic_test::{BuilderState, MessageType};
@@ -43,20 +50,6 @@ type TestSetup = (
     async_broadcast::Sender<MessageType<TestTypes>>,
     async_broadcast::Sender<Arc<ReceivedTransaction<TestTypes>>>,
 );
-
-/// [`TEST_NUM_NODES_IN_VID_COMPUTATION`] controls the number of nodes that are
-/// used in the VID computation for the test.
-const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
-
-/// [`TEST_NUM_CONSENSUS_RETRIES`] controls the number of attempts that the
-/// simulated consensus will perform when an error is returned from the
-/// Builder when asking for available blocks.
-const TEST_NUM_CONSENSUS_RETRIES: usize = 4;
-
-/// [`TEST_CHANNEL_BUFFER_SIZE`] governs the buffer size used for the test
-/// channels. All of the channels created need a capacity.  The specific
-/// capacity isn't specifically bounded, so it is set to an arbitrary value.
-const TEST_CHANNEL_BUFFER_SIZE: usize = 32;
 
 /// [`setup_builder_for_test`] sets up a test environment for the builder state.
 /// It returns a tuple containing the proxy global state, the sender for decide
@@ -76,7 +69,8 @@ fn setup_builder_for_test() -> TestSetup {
         bootstrap_builder_state_id.parent_commitment,
         bootstrap_builder_state_id.parent_view,
         bootstrap_builder_state_id.parent_view,
-        0,
+        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
+        TEST_PROTOCOL_MAX_BLOCK_SIZE,
     )));
 
     let max_api_duration = Duration::from_millis(100);

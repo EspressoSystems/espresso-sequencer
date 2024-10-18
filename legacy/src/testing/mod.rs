@@ -32,9 +32,15 @@ use sha2::{Digest, Sha256};
 use crate::service::GlobalState;
 use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
-use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
+use marketplace_builder_shared::{
+    block::{BuilderStateId, ParentBlockReferences},
+    testing::constants::{TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_PROTOCOL_MAX_BLOCK_SIZE},
+};
 use std::sync::Arc;
 use std::time::Duration;
+
+mod basic_test;
+mod finalization_test;
 
 pub async fn create_builder_state(
     channel_capacity: usize,
@@ -65,7 +71,8 @@ pub async fn create_builder_state(
         genesis_vid_commitment,
         ViewNumber::genesis(),
         ViewNumber::genesis(),
-        10,
+        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
+        TEST_PROTOCOL_MAX_BLOCK_SIZE,
     )));
 
     // instantiate the bootstrap builder state

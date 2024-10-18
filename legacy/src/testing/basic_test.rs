@@ -2,7 +2,7 @@ pub use hotshot::traits::election::static_committee::StaticCommittee;
 pub use hotshot_types::{
     data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
     message::Proposal,
-    signature_key::{BLSPrivKey, BLSPubKey},
+    signature_key::BLSPubKey,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
     traits::{
         block_contents::BlockPayload,
@@ -10,10 +10,8 @@ pub use hotshot_types::{
     },
 };
 
-pub use crate::builder_state::{BuilderState, MessageType, ResponseMessage};
-pub use async_broadcast::{
-    broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
-};
+pub use crate::builder_state::{BuilderState, MessageType};
+pub use async_broadcast::broadcast;
 /// The following tests are performed:
 #[cfg(test)]
 mod tests {
@@ -39,6 +37,9 @@ mod tests {
         state_types::{TestInstanceState, TestValidatedState},
     };
     use marketplace_builder_shared::block::ParentBlockReferences;
+    use marketplace_builder_shared::testing::constants::{
+        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_PROTOCOL_MAX_BLOCK_SIZE,
+    };
 
     use crate::builder_state::{
         DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
@@ -90,7 +91,7 @@ mod tests {
         // no of test messages to send
         let num_test_messages = 5;
         let multiplication_factor = 5;
-        const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
+        const NUM_NODES_IN_VID_COMPUTATION: usize = 4;
 
         // settingup the broadcast channels i.e [From hostshot: (tx, decide, da, quorum, )], [From api:(req - broadcast, res - mpsc channel) ]
         let (decide_sender, decide_receiver) =
@@ -117,7 +118,8 @@ mod tests {
             vid_commitment(&[], 8),
             ViewNumber::new(0),
             ViewNumber::new(0),
-            10,
+            TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
+            TEST_PROTOCOL_MAX_BLOCK_SIZE,
         )));
 
         let bootstrap_builder_state = BuilderState::new(
@@ -134,7 +136,7 @@ mod tests {
             tx_receiver,
             tx_queue,
             global_state.clone(),
-            NonZeroUsize::new(TEST_NUM_NODES_IN_VID_COMPUTATION).unwrap(),
+            NonZeroUsize::new(NUM_NODES_IN_VID_COMPUTATION).unwrap(),
             Duration::from_millis(100),
             1,
             Arc::new(TestInstanceState::default()),
@@ -298,7 +300,7 @@ mod tests {
                             _pd: PhantomData,
                         }),
                         sender: pub_key,
-                        total_nodes: TEST_NUM_NODES_IN_VID_COMPUTATION,
+                        total_nodes: NUM_NODES_IN_VID_COMPUTATION,
                     }
                 };
 
@@ -311,11 +313,11 @@ mod tests {
                     tracing::debug!(
                         "Encoded transactions: {:?} Num nodes:{}",
                         encoded_transactions,
-                        TEST_NUM_NODES_IN_VID_COMPUTATION
+                        NUM_NODES_IN_VID_COMPUTATION
                     );
 
                     let block_payload_commitment =
-                        vid_commitment(&encoded_transactions, TEST_NUM_NODES_IN_VID_COMPUTATION);
+                        vid_commitment(&encoded_transactions, NUM_NODES_IN_VID_COMPUTATION);
 
                     tracing::debug!(
                         "Block Payload vid commitment: {:?}",
@@ -422,10 +424,7 @@ mod tests {
                                 &quorum_certificate_message.proposal.data,
                             );
                             current_leaf
-                                .fill_block_payload(
-                                    block_payload,
-                                    TEST_NUM_NODES_IN_VID_COMPUTATION,
-                                )
+                                .fill_block_payload(block_payload, NUM_NODES_IN_VID_COMPUTATION)
                                 .unwrap();
                             current_leaf
                         }

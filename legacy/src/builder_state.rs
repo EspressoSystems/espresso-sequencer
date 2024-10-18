@@ -731,7 +731,12 @@ impl<TYPES: NodeType> BuilderState<TYPES> {
             return None;
         }
 
-        let max_block_size = self.global_state.read_arc().await.max_block_size;
+        let max_block_size = self
+            .global_state
+            .read_arc()
+            .await
+            .block_size_limits
+            .max_block_size;
         let transactions_to_include = self.tx_queue.iter().scan(0, |total_size, tx| {
             let prev_size = *total_size;
             *total_size += tx.len;
