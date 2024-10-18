@@ -165,7 +165,7 @@ impl BlockPayload<SeqTypes> for Payload {
                         .peers
                         .as_ref()
                         .fetch_chain_config(validated_state_cf.commit())
-                        .await
+                        .await?
                 }
             }
         };
