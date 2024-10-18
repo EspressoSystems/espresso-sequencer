@@ -86,28 +86,28 @@ where
     }
 }
 
-type EventServiceConnection<TYPES, V> = surf_disco::socket::Connection<
-    Event<TYPES>,
+type EventServiceConnection<Types, V> = surf_disco::socket::Connection<
+    Event<Types>,
     surf_disco::socket::Unsupported,
     EventStreamError,
     V,
 >;
 
-type EventServiceReconnect<TYPES, V> =
-    Pin<Box<dyn Future<Output = anyhow::Result<EventServiceConnection<TYPES, V>>> + Send + Sync>>;
+type EventServiceReconnect<Types, V> =
+    Pin<Box<dyn Future<Output = anyhow::Result<EventServiceConnection<Types, V>>> + Send + Sync>>;
 
 /// A wrapper around event streaming API that provides auto-reconnection capability
-pub struct EventServiceStream<TYPES: NodeType, V: StaticVersionType> {
+pub struct EventServiceStream<Types: NodeType, V: StaticVersionType> {
     api_url: Url,
-    connection: Either<EventServiceConnection<TYPES, V>, EventServiceReconnect<TYPES, V>>,
+    connection: Either<EventServiceConnection<Types, V>, EventServiceReconnect<Types, V>>,
 }
 
-impl<TYPES: NodeType, V: StaticVersionType> EventServiceStream<TYPES, V> {
+impl<Types: NodeType, V: StaticVersionType> EventServiceStream<Types, V> {
     async fn connect_inner(
         url: Url,
     ) -> anyhow::Result<
         surf_disco::socket::Connection<
-            Event<TYPES>,
+            Event<Types>,
             surf_disco::socket::Unsupported,
             EventStreamError,
             V,
@@ -123,7 +123,7 @@ impl<TYPES: NodeType, V: StaticVersionType> EventServiceStream<TYPES, V> {
 
         Ok(client
             .socket("hotshot-events/events")
-            .subscribe::<Event<TYPES>>()
+            .subscribe::<Event<Types>>()
             .await?)
     }
 
@@ -138,8 +138,8 @@ impl<TYPES: NodeType, V: StaticVersionType> EventServiceStream<TYPES, V> {
     }
 }
 
-impl<TYPES: NodeType, V: StaticVersionType + 'static> Stream for EventServiceStream<TYPES, V> {
-    type Item = Event<TYPES>;
+impl<Types: NodeType, V: StaticVersionType + 'static> Stream for EventServiceStream<Types, V> {
+    type Item = Event<Types>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,

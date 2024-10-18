@@ -7,14 +7,14 @@ use hotshot_types::{
 
 /// Unique identifier for a block
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct BlockId<TYPES: NodeType> {
+pub struct BlockId<Types: NodeType> {
     /// Block hash
     pub hash: BuilderCommitment,
     /// Block view
-    pub view: TYPES::Time,
+    pub view: Types::Time,
 }
 
-impl<TYPES: NodeType> std::fmt::Display for BlockId<TYPES> {
+impl<Types: NodeType> std::fmt::Display for BlockId<Types> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -32,14 +32,14 @@ impl<TYPES: NodeType> std::fmt::Display for BlockId<TYPES> {
 /// builder with given state ID assumes blocks/bundles it's building
 /// are going to be included immediately after the parent block.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct BuilderStateId<TYPES: NodeType> {
+pub struct BuilderStateId<Types: NodeType> {
     /// View number of the parent block
-    pub parent_view: TYPES::Time,
+    pub parent_view: Types::Time,
     /// VID commitment of the parent block
     pub parent_commitment: VidCommitment,
 }
 
-impl<TYPES: NodeType> std::fmt::Display for BuilderStateId<TYPES> {
+impl<Types: NodeType> std::fmt::Display for BuilderStateId<Types> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -51,15 +51,15 @@ impl<TYPES: NodeType> std::fmt::Display for BuilderStateId<TYPES> {
 
 /// References to the parent block that is extended to spawn the new builder state.
 #[derive(Debug, Clone)]
-pub struct ParentBlockReferences<TYPES: NodeType> {
-    pub view_number: TYPES::Time,
+pub struct ParentBlockReferences<Types: NodeType> {
+    pub view_number: Types::Time,
     pub vid_commitment: VidCommitment,
-    pub leaf_commit: Commitment<Leaf<TYPES>>,
+    pub leaf_commit: Commitment<Leaf<Types>>,
     pub builder_commitment: BuilderCommitment,
 }
 
 // implement display for the derived info
-impl<TYPES: NodeType> std::fmt::Display for ParentBlockReferences<TYPES> {
+impl<Types: NodeType> std::fmt::Display for ParentBlockReferences<Types> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "View Number: {:?}", self.view_number)
     }

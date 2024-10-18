@@ -51,25 +51,25 @@ pub use marketplace_builder_shared::utils::EventServiceStream;
 
 // It holds all the necessary information for a block
 #[derive(Debug)]
-pub struct BlockInfo<TYPES: NodeType> {
-    pub block_payload: TYPES::BlockPayload,
-    pub metadata: <<TYPES as NodeType>::BlockPayload as BlockPayload<TYPES>>::Metadata,
+pub struct BlockInfo<Types: NodeType> {
+    pub block_payload: Types::BlockPayload,
+    pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
     pub offered_fee: u64,
 }
 
 // It holds the information for the proposed block
 #[derive(Debug)]
-pub struct ProposedBlockId<TYPES: NodeType> {
+pub struct ProposedBlockId<Types: NodeType> {
     pub parent_commitment: VidCommitment,
     pub payload_commitment: BuilderCommitment,
-    pub parent_view: TYPES::Time,
+    pub parent_view: Types::Time,
 }
 
-impl<TYPES: NodeType> ProposedBlockId<TYPES> {
+impl<Types: NodeType> ProposedBlockId<Types> {
     pub fn new(
         parent_commitment: VidCommitment,
         payload_commitment: BuilderCommitment,
-        parent_view: TYPES::Time,
+        parent_view: Types::Time,
     ) -> Self {
         ProposedBlockId {
             parent_commitment,
@@ -81,19 +81,19 @@ impl<TYPES: NodeType> ProposedBlockId<TYPES> {
 
 #[derive(Debug, Derivative)]
 #[derivative(Default(bound = ""))]
-pub struct BuilderStatesInfo<TYPES: NodeType> {
+pub struct BuilderStatesInfo<Types: NodeType> {
     // list of all the builder states spawned for a view
     pub vid_commitments: Vec<VidCommitment>,
     // list of all the proposed blocks for a view
-    pub block_ids: Vec<ProposedBlockId<TYPES>>,
+    pub block_ids: Vec<ProposedBlockId<Types>>,
 }
 
 #[derive(Debug)]
-pub struct ReceivedTransaction<TYPES: NodeType> {
+pub struct ReceivedTransaction<Types: NodeType> {
     // the transaction
-    pub tx: TYPES::Transaction,
+    pub tx: Types::Transaction,
     // its hash
-    pub commit: Commitment<TYPES::Transaction>,
+    pub commit: Commitment<Types::Transaction>,
     // its source
     pub source: TransactionSource,
     // received time
@@ -102,13 +102,13 @@ pub struct ReceivedTransaction<TYPES: NodeType> {
 
 #[allow(clippy::type_complexity)]
 #[derive(Debug)]
-pub struct GlobalState<TYPES: NodeType> {
+pub struct GlobalState<Types: NodeType> {
     // data store for the blocks
-    pub blocks: lru::LruCache<BlockId<TYPES>, BlockInfo<TYPES>>,
+    pub blocks: lru::LruCache<BlockId<Types>, BlockInfo<Types>>,
 
     // registered builder states
     pub spawned_builder_states: HashMap<
-        BuilderStateId<TYPES>,
+        BuilderStateId<Types>,
         (
             // This is provided as an Option for convenience with initialization.
             // When we build the initial state, we don't necessarily want to
@@ -117,33 +117,33 @@ pub struct GlobalState<TYPES: NodeType> {
             // result in the call signature to `GlobalState::new` changing.
             // However for every subsequent BuilderState, we expect this value
             // to be populated.
-            Option<Commitment<Leaf<TYPES>>>,
-            BroadcastSender<MessageType<TYPES>>,
+            Option<Commitment<Leaf<Types>>>,
+            BroadcastSender<MessageType<Types>>,
         ),
     >,
 
     // builder state -> last built block , it is used to respond the client
     // if the req channel times out during get_available_blocks
-    pub builder_state_to_last_built_block: HashMap<BuilderStateId<TYPES>, ResponseMessage<TYPES>>,
+    pub builder_state_to_last_built_block: HashMap<BuilderStateId<Types>, ResponseMessage<Types>>,
 
     // sending a transaction from the hotshot/private mempool to the builder states
     // NOTE: Currently, we don't differentiate between the transactions from the hotshot and the private mempool
-    pub tx_sender: BroadcastSender<Arc<ReceivedTransaction<TYPES>>>,
+    pub tx_sender: BroadcastSender<Arc<ReceivedTransaction<Types>>>,
 
     // last garbage collected view number
-    pub last_garbage_collected_view_num: TYPES::Time,
+    pub last_garbage_collected_view_num: Types::Time,
 
     // highest view running builder task
-    pub highest_view_num_builder_id: BuilderStateId<TYPES>,
+    pub highest_view_num_builder_id: BuilderStateId<Types>,
 }
 
-impl<TYPES: NodeType> GlobalState<TYPES> {
+impl<Types: NodeType> GlobalState<Types> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        bootstrap_sender: BroadcastSender<MessageType<TYPES>>,
-        tx_sender: BroadcastSender<Arc<ReceivedTransaction<TYPES>>>,
+        bootstrap_sender: BroadcastSender<MessageType<Types>>,
+        tx_sender: BroadcastSender<Arc<ReceivedTransaction<Types>>>,
         bootstrapped_builder_state_id: VidCommitment,
-        bootstrapped_view_num: TYPES::Time,
+        bootstrapped_view_num: Types::Time,
     ) -> Self {
         let mut spawned_builder_states = HashMap::new();
         let bootstrap_id = BuilderStateId {
@@ -163,9 +163,9 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
 
     pub fn register_builder_state(
         &mut self,
-        parent_id: BuilderStateId<TYPES>,
-        parent_block_references: ParentBlockReferences<TYPES>,
-        request_sender: BroadcastSender<MessageType<TYPES>>,
+        parent_id: BuilderStateId<Types>,
+        parent_block_references: ParentBlockReferences<Types>,
+        request_sender: BroadcastSender<MessageType<Types>>,
     ) {
         // register the builder state
         self.spawned_builder_states.insert(
@@ -187,9 +187,9 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
 
     pub fn update_global_state(
         &mut self,
-        state_id: BuilderStateId<TYPES>,
-        build_block_info: BuildBlockInfo<TYPES>,
-        response_msg: ResponseMessage<TYPES>,
+        state_id: BuilderStateId<Types>,
+        build_block_info: BuildBlockInfo<Types>,
+        response_msg: ResponseMessage<Types>,
     ) {
         if self.blocks.contains(&build_block_info.id) {
             self.blocks.promote(&build_block_info.id)
@@ -210,7 +210,7 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
     }
 
     // remove the builder state handles based on the decide event
-    pub fn remove_handles(&mut self, on_decide_view: TYPES::Time) -> TYPES::Time {
+    pub fn remove_handles(&mut self, on_decide_view: Types::Time) -> Types::Time {
         // remove everything from the spawned builder states when view_num <= on_decide_view;
         // if we don't have a highest view > decide, use highest view as cutoff.
         let cutoff = std::cmp::min(self.highest_view_num_builder_id.parent_view, on_decide_view);
@@ -220,7 +220,7 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
         let cutoff_u64 = cutoff.u64();
         let gc_view = if cutoff_u64 > 0 { cutoff_u64 - 1 } else { 0 };
 
-        self.last_garbage_collected_view_num = TYPES::Time::new(gc_view);
+        self.last_garbage_collected_view_num = Types::Time::new(gc_view);
 
         cutoff
     }
@@ -229,15 +229,15 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
     // Currently, we don't differentiate between the transactions from the hotshot and the private mempool
     pub async fn submit_client_txns(
         &self,
-        txns: Vec<<TYPES as NodeType>::Transaction>,
-    ) -> Vec<Result<Commitment<<TYPES as NodeType>::Transaction>, BuildError>> {
+        txns: Vec<<Types as NodeType>::Transaction>,
+    ) -> Vec<Result<Commitment<<Types as NodeType>::Transaction>, BuildError>> {
         handle_received_txns(&self.tx_sender, txns, TransactionSource::External).await
     }
 
     pub fn get_channel_for_matching_builder_or_highest_view_buider(
         &self,
-        key: &BuilderStateId<TYPES>,
-    ) -> Result<&BroadcastSender<MessageType<TYPES>>, BuildError> {
+        key: &BuilderStateId<Types>,
+    ) -> Result<&BroadcastSender<MessageType<Types>>, BuildError> {
         if let Some(id_and_sender) = self.spawned_builder_states.get(key) {
             tracing::info!("Got matching builder for parent {}", key);
             Ok(&id_and_sender.1)
@@ -258,7 +258,7 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
     }
 
     // check for the existence of the builder state for a view
-    pub fn check_builder_state_existence_for_a_view(&self, key: &TYPES::Time) -> bool {
+    pub fn check_builder_state_existence_for_a_view(&self, key: &Types::Time) -> bool {
         // iterate over the spawned builder states and check if the view number exists
         self.spawned_builder_states
             .iter()
@@ -267,17 +267,17 @@ impl<TYPES: NodeType> GlobalState<TYPES> {
 
     pub fn should_view_handle_other_proposals(
         &self,
-        builder_view: &TYPES::Time,
-        proposal_view: &TYPES::Time,
+        builder_view: &Types::Time,
+        proposal_view: &Types::Time,
     ) -> bool {
         *builder_view == self.highest_view_num_builder_id.parent_view
             && !self.check_builder_state_existence_for_a_view(proposal_view)
     }
 }
 
-pub struct ProxyGlobalState<TYPES: NodeType, H: BuilderHooks<TYPES>> {
+pub struct ProxyGlobalState<Types: NodeType, H: BuilderHooks<Types>> {
     // global state
-    global_state: Arc<RwLock<GlobalState<TYPES>>>,
+    global_state: Arc<RwLock<GlobalState<Types>>>,
 
     // hooks
     hooks: Arc<H>,
@@ -286,29 +286,29 @@ pub struct ProxyGlobalState<TYPES: NodeType, H: BuilderHooks<TYPES>> {
     // May be ideal place as GlobalState interacts with hotshot apis
     // and then can sign on responders as desired
     builder_keys: (
-        TYPES::BuilderSignatureKey, // pub key
-        <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey, // private key
+        Types::BuilderSignatureKey, // pub key
+        <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey, // private key
     ),
 
     // Maximum time allotted to wait for bundle before returning an error
     api_timeout: Duration,
 }
 
-impl<TYPES, H> ProxyGlobalState<TYPES, H>
+impl<Types, H> ProxyGlobalState<Types, H>
 where
-    TYPES: NodeType,
-    H: BuilderHooks<TYPES>,
-    for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
+    Types: NodeType,
+    H: BuilderHooks<Types>,
+    for<'a> <<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
-    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
+    for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     pub fn new(
-        global_state: Arc<RwLock<GlobalState<TYPES>>>,
+        global_state: Arc<RwLock<GlobalState<Types>>>,
         hooks: Arc<H>,
         builder_keys: (
-            TYPES::BuilderSignatureKey,
-            <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
+            Types::BuilderSignatureKey,
+            <<Types as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
         ),
         api_timeout: Duration,
     ) -> Self {
@@ -322,13 +322,13 @@ where
 
     /// Consumes `self` and returns a `tide_disco` [`App`] with builder and private mempool APIs registered
     pub fn into_app(self) -> Result<App<Self, BuilderApiError>, AppError> {
-        let builder_api = define_api::<Self, TYPES>(&Default::default())?;
+        let builder_api = define_api::<Self, Types>(&Default::default())?;
 
         // TODO: Replace StaticVersion with proper constant when added in HotShot
         let private_mempool_api =
-            submit_api::<Self, TYPES, StaticVersion<0, 1>>(&Default::default())?;
+            submit_api::<Self, Types, StaticVersion<0, 1>>(&Default::default())?;
 
-        let mut app: App<ProxyGlobalState<TYPES, H>, BuilderApiError> = App::with_state(self);
+        let mut app: App<ProxyGlobalState<Types, H>, BuilderApiError> = App::with_state(self);
 
         app.register_module(
             hotshot_types::constants::MARKETPLACE_BUILDER_MODULE,
@@ -345,14 +345,14 @@ where
 Handling Builder API responses
 */
 #[async_trait]
-impl<TYPES, H> BuilderDataSource<TYPES> for ProxyGlobalState<TYPES, H>
+impl<Types, H> BuilderDataSource<Types> for ProxyGlobalState<Types, H>
 where
-    TYPES: NodeType,
-    H: BuilderHooks<TYPES>,
-    for<'a> <<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
+    Types: NodeType,
+    H: BuilderHooks<Types>,
+    for<'a> <<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
         &'a TaggedBase64,
     >>::Error: Display,
-    for<'a> <TYPES::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
+    for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     #[tracing::instrument(skip(self))]
     async fn bundle(
@@ -360,10 +360,10 @@ where
         parent_view: u64,
         parent_hash: &VidCommitment,
         _view_number: u64,
-    ) -> Result<Bundle<TYPES>, BuildError> {
+    ) -> Result<Bundle<Types>, BuildError> {
         let start = Instant::now();
 
-        let parent_view = TYPES::Time::new(parent_view);
+        let parent_view = Types::Time::new(parent_view);
         let state_id = BuilderStateId {
             parent_view,
             parent_commitment: *parent_hash,
@@ -453,7 +453,7 @@ where
             })?;
 
             let fee_signature =
-                <TYPES::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+                <Types::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
                     &self.builder_keys.1,
                     response.offered_fee,
                 )
@@ -461,7 +461,7 @@ where
                     message: e.to_string(),
                 })?;
 
-            let sequencing_fee: BuilderFee<TYPES> = BuilderFee {
+            let sequencing_fee: BuilderFee<Types> = BuilderFee {
                 fee_amount: response.offered_fee,
                 fee_account: self.builder_keys.0.clone(),
                 fee_signature,
@@ -474,7 +474,7 @@ where
                 .collect::<Vec<u8>>();
 
             let signature =
-                <TYPES::BuilderSignatureKey as BuilderSignatureKey>::sign_builder_message(
+                <Types::BuilderSignatureKey as BuilderSignatureKey>::sign_builder_message(
                     &self.builder_keys.1,
                     &commitments,
                 )
@@ -497,21 +497,21 @@ where
 
     async fn builder_address(
         &self,
-    ) -> Result<<TYPES as NodeType>::BuilderSignatureKey, BuildError> {
+    ) -> Result<<Types as NodeType>::BuilderSignatureKey, BuildError> {
         Ok(self.builder_keys.0.clone())
     }
 }
 
 #[async_trait]
-impl<TYPES, H> AcceptsTxnSubmits<TYPES> for ProxyGlobalState<TYPES, H>
+impl<Types, H> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types, H>
 where
-    TYPES: NodeType,
-    H: BuilderHooks<TYPES>,
+    Types: NodeType,
+    H: BuilderHooks<Types>,
 {
     async fn submit_txns(
         &self,
-        txns: Vec<<TYPES as NodeType>::Transaction>,
-    ) -> Result<Vec<Commitment<<TYPES as NodeType>::Transaction>>, BuildError> {
+        txns: Vec<<Types as NodeType>::Transaction>,
+    ) -> Result<Vec<Commitment<<Types as NodeType>::Transaction>>, BuildError> {
         tracing::debug!(
             "Submitting {:?} transactions to the builder states{:?}",
             txns.len(),
@@ -537,12 +537,12 @@ where
     }
 }
 #[async_trait]
-impl<TYPES, H> ReadState for ProxyGlobalState<TYPES, H>
+impl<Types, H> ReadState for ProxyGlobalState<Types, H>
 where
-    TYPES: NodeType,
-    H: BuilderHooks<TYPES> + 'static,
+    Types: NodeType,
+    H: BuilderHooks<Types> + 'static,
 {
-    type State = ProxyGlobalState<TYPES, H>;
+    type State = ProxyGlobalState<Types, H>;
 
     async fn read<T>(
         &self,
@@ -552,9 +552,9 @@ where
     }
 }
 
-pub fn broadcast_channels<TYPES: NodeType>(
+pub fn broadcast_channels<Types: NodeType>(
     capacity: usize,
-) -> (BroadcastSenders<TYPES>, BroadcastReceivers<TYPES>) {
+) -> (BroadcastSenders<Types>, BroadcastReceivers<Types>) {
     macro_rules! pair {
         ($s:ident, $r:ident) => {
             let ($s, $r) = broadcast(capacity);
@@ -584,41 +584,41 @@ pub fn broadcast_channels<TYPES: NodeType>(
 }
 
 // Receivers for HotShot events for the builder states
-pub struct BroadcastReceivers<TYPES: NodeType> {
+pub struct BroadcastReceivers<Types: NodeType> {
     /// For transactions, shared.
-    pub transactions: InactiveReceiver<Arc<ReceivedTransaction<TYPES>>>,
+    pub transactions: InactiveReceiver<Arc<ReceivedTransaction<Types>>>,
     /// For the DA proposal.
-    pub da_proposal: InactiveReceiver<MessageType<TYPES>>,
+    pub da_proposal: InactiveReceiver<MessageType<Types>>,
     /// For the quorum proposal.
-    pub quorum_proposal: InactiveReceiver<MessageType<TYPES>>,
+    pub quorum_proposal: InactiveReceiver<MessageType<Types>>,
     /// For the decide.
-    pub decide: InactiveReceiver<MessageType<TYPES>>,
+    pub decide: InactiveReceiver<MessageType<Types>>,
 }
 
 // Senders to broadcast data from HotShot to the builder states.
-pub struct BroadcastSenders<TYPES: NodeType> {
+pub struct BroadcastSenders<Types: NodeType> {
     /// For transactions, shared.
-    pub transactions: BroadcastSender<Arc<ReceivedTransaction<TYPES>>>,
+    pub transactions: BroadcastSender<Arc<ReceivedTransaction<Types>>>,
     /// For the DA proposal.
-    pub da_proposal: BroadcastSender<MessageType<TYPES>>,
+    pub da_proposal: BroadcastSender<MessageType<Types>>,
     /// For the quorum proposal.
-    pub quorum_proposal: BroadcastSender<MessageType<TYPES>>,
+    pub quorum_proposal: BroadcastSender<MessageType<Types>>,
     /// For the decide.
-    pub decide: BroadcastSender<MessageType<TYPES>>,
+    pub decide: BroadcastSender<MessageType<Types>>,
 }
 
 #[async_trait]
-pub trait BuilderHooks<TYPES: NodeType>: Sync + Send + 'static {
+pub trait BuilderHooks<Types: NodeType>: Sync + Send + 'static {
     #[inline(always)]
     async fn process_transactions(
         &self,
-        transactions: Vec<TYPES::Transaction>,
-    ) -> Vec<TYPES::Transaction> {
+        transactions: Vec<Types::Transaction>,
+    ) -> Vec<Types::Transaction> {
         transactions
     }
 
     #[inline(always)]
-    async fn handle_hotshot_event(&self, _event: &Event<TYPES>) {}
+    async fn handle_hotshot_event(&self, _event: &Event<Types>) {}
 }
 
 #[async_trait]
@@ -641,18 +641,18 @@ where
     }
 }
 
-pub struct NoHooks<TYPES: NodeType>(pub PhantomData<TYPES>);
+pub struct NoHooks<Types: NodeType>(pub PhantomData<Types>);
 
-impl<TYPES: NodeType> BuilderHooks<TYPES> for NoHooks<TYPES> {}
+impl<Types: NodeType> BuilderHooks<Types> for NoHooks<Types> {}
 
 /// Run builder service,
 /// Refer to documentation for [`ProxyGlobalState`] for more details
 pub async fn run_builder_service<
-    TYPES: NodeType<Time = ViewNumber>,
-    S: Stream<Item = Event<TYPES>> + Unpin,
+    Types: NodeType<Time = ViewNumber>,
+    S: Stream<Item = Event<Types>> + Unpin,
 >(
-    hooks: Arc<impl BuilderHooks<TYPES>>,
-    senders: BroadcastSenders<TYPES>,
+    hooks: Arc<impl BuilderHooks<Types>>,
+    senders: BroadcastSenders<Types>,
     hotshot_event_stream: S,
 ) -> Result<(), anyhow::Error> {
     let mut hotshot_event_stream = std::pin::pin!(hotshot_event_stream);
@@ -711,10 +711,10 @@ pub async fn run_builder_service<
 Utility functions to handle the hotshot events
 */
 #[instrument(skip_all, fields(sender, da_proposal.data.view_number))]
-async fn handle_da_event<TYPES: NodeType>(
-    da_channel_sender: &BroadcastSender<MessageType<TYPES>>,
-    da_proposal: Proposal<TYPES, DaProposal<TYPES>>,
-    sender: <TYPES as NodeType>::SignatureKey,
+async fn handle_da_event<Types: NodeType>(
+    da_channel_sender: &BroadcastSender<MessageType<Types>>,
+    da_proposal: Proposal<Types, DaProposal<Types>>,
+    sender: <Types as NodeType>::SignatureKey,
 ) {
     // get the encoded transactions hash
     let encoded_txns_hash = Sha256::digest(&da_proposal.data.encoded_transactions);
@@ -728,7 +728,7 @@ async fn handle_da_event<TYPES: NodeType>(
     tracing::debug!("Sending DA proposal to the builder states",);
 
     // form a block payload from the encoded transactions
-    let block_payload = <TYPES::BlockPayload as BlockPayload<TYPES>>::from_bytes(
+    let block_payload = <Types::BlockPayload as BlockPayload<Types>>::from_bytes(
         &da_proposal.data.encoded_transactions,
         &da_proposal.data.metadata,
     );
@@ -761,10 +761,10 @@ async fn handle_da_event<TYPES: NodeType>(
 }
 
 #[instrument(skip_all, fields(sender, quorum_proposal.data.view_number))]
-async fn handle_quorum_event<TYPES: NodeType>(
-    quorum_channel_sender: &BroadcastSender<MessageType<TYPES>>,
-    quorum_proposal: Arc<Proposal<TYPES, QuorumProposal<TYPES>>>,
-    sender: <TYPES as NodeType>::SignatureKey,
+async fn handle_quorum_event<Types: NodeType>(
+    quorum_channel_sender: &BroadcastSender<MessageType<Types>>,
+    quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+    sender: <Types as NodeType>::SignatureKey,
 ) {
     let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
 
@@ -774,7 +774,7 @@ async fn handle_quorum_event<TYPES: NodeType>(
         return;
     };
 
-    let quorum_msg = QuorumProposalMessage::<TYPES> {
+    let quorum_msg = QuorumProposalMessage::<Types> {
         proposal: quorum_proposal,
         sender,
     };
@@ -794,11 +794,11 @@ async fn handle_quorum_event<TYPES: NodeType>(
     }
 }
 
-async fn handle_decide_event<TYPES: NodeType>(
-    decide_channel_sender: &BroadcastSender<MessageType<TYPES>>,
-    latest_decide_view_number: TYPES::Time,
+async fn handle_decide_event<Types: NodeType>(
+    decide_channel_sender: &BroadcastSender<MessageType<Types>>,
+    latest_decide_view_number: Types::Time,
 ) {
-    let decide_msg: DecideMessage<TYPES> = DecideMessage::<TYPES> {
+    let decide_msg: DecideMessage<Types> = DecideMessage::<Types> {
         latest_decide_view_number,
     };
     tracing::debug!(
@@ -816,11 +816,11 @@ async fn handle_decide_event<TYPES: NodeType>(
     }
 }
 
-pub(crate) async fn handle_received_txns<TYPES: NodeType>(
-    tx_sender: &BroadcastSender<Arc<ReceivedTransaction<TYPES>>>,
-    txns: Vec<TYPES::Transaction>,
+pub(crate) async fn handle_received_txns<Types: NodeType>(
+    tx_sender: &BroadcastSender<Arc<ReceivedTransaction<Types>>>,
+    txns: Vec<Types::Transaction>,
     source: TransactionSource,
-) -> Vec<Result<Commitment<<TYPES as NodeType>::Transaction>, BuildError>> {
+) -> Vec<Result<Commitment<<Types as NodeType>::Transaction>, BuildError>> {
     let mut results = Vec::with_capacity(txns.len());
     let time_in = Instant::now();
     for tx in txns.into_iter() {
