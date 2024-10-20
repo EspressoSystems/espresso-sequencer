@@ -63,6 +63,61 @@ pub struct PermissionedBuilderOptions {
     )]
     pub libp2p_advertise_address: String,
 
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INTERVAL", default_value = "1s", value_parser = parse_duration)]
+    pub libp2p_heartbeat_interval: Duration,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_GOSSIP",
+        default_value = "3"
+    )]
+    pub libp2p_history_gossip: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_LENGTH",
+        default_value = "5"
+    )]
+    pub libp2p_history_length: usize,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N", default_value = "8")]
+    pub libp2p_mesh_n: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_HIGH",
+        default_value = "12"
+    )]
+    pub libp2p_mesh_n_high: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_LOW",
+        default_value = "6"
+    )]
+    pub libp2p_mesh_n_low: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_OUTBOUND_MIN",
+        default_value = "2"
+    )]
+    pub libp2p_mesh_outbound_min: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_LENGTH",
+        default_value = "2000"
+    )]
+    pub libp2p_max_ihave_length: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_MESSAGES",
+        default_value = "10"
+    )]
+    pub libp2p_max_ihave_messages: usize,
+
     /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
     /// nodes.
     ///
@@ -256,6 +311,16 @@ async fn run<V: Versions>(
         libp2p_advertise_address,
         libp2p_bind_address,
         libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
+        libp2p_history_gossip: opt.libp2p_history_gossip,
+        libp2p_history_length: opt.libp2p_history_length,
+        libp2p_max_ihave_length: opt.libp2p_max_ihave_length,
+        libp2p_max_ihave_messages: opt.libp2p_max_ihave_messages,
+        libp2p_max_transmit_size: 2_000_000_000,
+        libp2p_mesh_n: opt.libp2p_mesh_n,
+        libp2p_mesh_n_high: opt.libp2p_mesh_n_high,
+        libp2p_heartbeat_interval: opt.libp2p_heartbeat_interval,
+        libp2p_mesh_n_low: opt.libp2p_mesh_n_low,
+        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),
