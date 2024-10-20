@@ -6,12 +6,13 @@ use std::{
     fmt::{self, Formatter},
     iter::once,
     path::PathBuf,
+    time::Duration,
 };
 
 use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use derivative::Derivative;
-use espresso_types::BackoffParams;
+use espresso_types::{parse_duration, BackoffParams};
 use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use url::Url;
@@ -82,6 +83,61 @@ pub struct Options {
         default_value = "localhost:1769"
     )]
     pub libp2p_advertise_address: String,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INTERVAL", default_value = "1s", value_parser = parse_duration)]
+    pub libp2p_heartbeat_interval: Duration,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_GOSSIP",
+        default_value = "3"
+    )]
+    pub libp2p_history_gossip: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_LENGTH",
+        default_value = "5"
+    )]
+    pub libp2p_history_length: usize,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N", default_value = "8")]
+    pub libp2p_mesh_n: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_HIGH",
+        default_value = "12"
+    )]
+    pub libp2p_mesh_n_high: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_LOW",
+        default_value = "6"
+    )]
+    pub libp2p_mesh_n_low: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_OUTBOUND_MIN",
+        default_value = "2"
+    )]
+    pub libp2p_mesh_outbound_min: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_LENGTH",
+        default_value = "2000"
+    )]
+    pub libp2p_max_ihave_length: usize,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_MESSAGES",
+        default_value = "10"
+    )]
+    pub libp2p_max_ihave_messages: usize,
 
     /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
     /// nodes.

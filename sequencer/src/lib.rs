@@ -121,6 +121,29 @@ pub struct NetworkParams {
     /// The (optional) bootstrap node addresses for Libp2p. If supplied, these will
     /// override the bootstrap nodes specified in the config file.
     pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
+
+    /// The heartbeat interval
+    pub libp2p_heartbeat_interval: Duration,
+
+    /// The number of past heartbeats to gossip about
+    pub libp2p_history_gossip: usize,
+    /// The number of past heartbeats to remember the full messages for
+    pub libp2p_history_length: usize,
+
+    /// The target number of peers in the mesh
+    pub libp2p_mesh_n: usize,
+    /// The maximum number of peers in the mesh
+    pub libp2p_mesh_n_high: usize,
+    /// The minimum number of peers in the mesh
+    pub libp2p_mesh_n_low: usize,
+    /// The minimum number of mesh peers that must be outbound
+    pub libp2p_mesh_outbound_min: usize,
+
+    /// The maximum gossip message size
+    pub libp2p_max_transmit_size: usize,
+
+    pub libp2p_max_ihave_length: usize,
+    pub libp2p_max_ihave_messages: usize,
 }
 
 pub struct L1Params {
@@ -321,12 +344,25 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     )
     .with_context(|| "Failed to create CDN network")?;
 
+    let gossip_config = GossipConfig {
+        heartbeat_interval: network_params.libp2p_heartbeat_interval,
+        history_gossip: network_params.libp2p_history_gossip,
+        history_length: network_params.libp2p_history_length,
+        mesh_n: network_params.libp2p_mesh_n,
+        mesh_n_high: network_params.libp2p_mesh_n_high,
+        mesh_n_low: network_params.libp2p_mesh_n_low,
+        mesh_outbound_min: network_params.libp2p_mesh_outbound_min,
+        max_ihave_messages: network_params.libp2p_max_ihave_messages,
+        max_transmit_size: network_params.libp2p_max_transmit_size,
+        max_ihave_length: network_params.libp2p_max_ihave_length,
+    };
+
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
-            GossipConfig::default(),
+            gossip_config,
             network_params.libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair
