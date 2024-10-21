@@ -894,6 +894,33 @@
 <a href="#894" id="894">894</a>
 <a href="#895" id="895">895</a>
 <a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+<a href="#904" id="904">904</a>
+<a href="#905" id="905">905</a>
+<a href="#906" id="906">906</a>
+<a href="#907" id="907">907</a>
+<a href="#908" id="908">908</a>
+<a href="#909" id="909">909</a>
+<a href="#910" id="910">910</a>
+<a href="#911" id="911">911</a>
+<a href="#912" id="912">912</a>
+<a href="#913" id="913">913</a>
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
+<a href="#916" id="916">916</a>
+<a href="#917" id="917">917</a>
+<a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a>
+<a href="#923" id="923">923</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -909,12 +936,16 @@
 };
 <span class="kw">use </span>contract_bindings::light_client::{LightClient, LightClientErrors};
 <span class="kw">use </span>displaydoc::Display;
+<span class="kw">use </span>ethers::middleware::{
+    gas_oracle::{GasCategory, GasOracle},
+    signer::SignerMiddlewareError,
+};
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::SignerMiddleware,
     providers::{Http, Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
-    types::{Address, U256},
+    types::{transaction::eip2718::TypedTransaction, Address, U256},
 };
 <span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_contract_adapter::{
@@ -938,6 +969,7 @@
 <span class="kw">use </span>jf_plonk::errors::PlonkError;
 <span class="kw">use </span>jf_relation::Circuit <span class="kw">as _</span>;
 <span class="kw">use </span>jf_signature::constants::CS_ID_SCHNORR;
+<span class="kw">use </span>sequencer_utils::blocknative::BlockNative;
 <span class="kw">use </span>sequencer_utils::deployer::is_proxy_contract;
 <span class="kw">use </span>serde::Deserialize;
 <span class="kw">use </span>surf_disco::Client;
@@ -1172,11 +1204,8 @@
 
 <span class="doccomment">/// get the `finalizedState` from the LightClient contract storage on L1
 </span><span class="kw">pub async fn </span>read_contract_state(
-    provider: Url,
-    key: SigningKey,
-    light_client_address: Address,
+    contract: <span class="kw-2">&amp;</span>LightClient&lt;SignerWallet&gt;,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(LightClientState, StakeTableState), ProverError&gt; {
-    <span class="kw">let </span>contract = prepare_contract(provider, key, light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">let </span>state: ParsedLightClientState = <span class="kw">match </span>contract.finalized_state().call().<span class="kw">await </span>{
         <span class="prelude-val">Ok</span>(s) =&gt; s.into(),
         <span class="prelude-val">Err</span>(e) =&gt; {
@@ -1202,16 +1231,34 @@
 </span><span class="kw">pub async fn </span>submit_state_and_proof(
     proof: Proof,
     public_input: PublicInput,
-    provider: Url,
-    key: SigningKey,
-    light_client_address: Address,
+    contract: <span class="kw-2">&amp;</span>LightClient&lt;SignerWallet&gt;,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(), ProverError&gt; {
-    <span class="kw">let </span>contract = prepare_contract(provider, key, light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
-
     <span class="comment">// prepare the input the contract call and the tx itself
     </span><span class="kw">let </span>proof: ParsedPlonkProof = proof.into();
     <span class="kw">let </span>new_state: ParsedLightClientState = public_input.into();
-    <span class="kw">let </span>tx = contract.new_finalized_state(new_state.into(), proof.into());
+
+    <span class="kw">let </span><span class="kw-2">mut </span>tx = contract.new_finalized_state(new_state.into(), proof.into());
+
+    <span class="comment">// only use gas oracle for mainnet
+    </span><span class="kw">if </span>contract.client_ref().get_chainid().<span class="kw">await</span><span class="question-mark">?</span>.as_u64() == <span class="number">1 </span>{
+        <span class="kw">let </span>gas_oracle = BlockNative::new(<span class="prelude-val">None</span>).category(GasCategory::SafeLow);
+        <span class="kw">match </span>gas_oracle.estimate_eip1559_fees().<span class="kw">await </span>{
+            <span class="prelude-val">Ok</span>((max_fee, priority_fee)) =&gt; {
+                <span class="kw">if let </span>TypedTransaction::Eip1559(inner) = <span class="kw-2">&amp;mut </span>tx.tx {
+                    inner.max_fee_per_gas = <span class="prelude-val">Some</span>(max_fee);
+                    inner.max_priority_fee_per_gas = <span class="prelude-val">Some</span>(priority_fee);
+                    <span class="macro">tracing::info!</span>(
+                        <span class="string">"Setting maxFeePerGas: {}; maxPriorityFeePerGas to: {}"</span>,
+                        max_fee,
+                        priority_fee
+                    );
+                }
+            }
+            <span class="prelude-val">Err</span>(e) =&gt; {
+                <span class="macro">tracing::warn!</span>(<span class="string">"!! BlockNative Price Oracle failed: {}"</span>, e);
+            }
+        }
+    }
 
     <span class="comment">// send the tx
     </span><span class="kw">let </span>(receipt, included_block) = sequencer_utils::contract_send::&lt;<span class="kw">_</span>, <span class="kw">_</span>, LightClientErrors&gt;(<span class="kw-2">&amp;</span>tx)
@@ -1245,8 +1292,8 @@
     <span class="kw">let </span>bundle = fetch_latest_state(relay_server_client).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="macro">tracing::info!</span>(<span class="string">"Bundle accumulated weight: {}"</span>, bundle.accumulated_weight);
     <span class="macro">tracing::info!</span>(<span class="string">"Latest HotShot block height: {}"</span>, bundle.state.block_height);
-    <span class="kw">let </span>(old_state, st_state) =
-        read_contract_state(provider.clone(), key.clone(), light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">let </span>contract = prepare_contract(provider.clone(), key.clone(), light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">let </span>(old_state, st_state) = read_contract_state(<span class="kw-2">&amp;</span>contract).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="macro">tracing::info!</span>(
         <span class="string">"Current HotShot block height on contract: {}"</span>,
         old_state.block_height
@@ -1304,7 +1351,7 @@
     <span class="kw">let </span>proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     <span class="macro">tracing::info!</span>(<span class="string">"Proof generation completed. Elapsed: {proof_gen_elapsed:.3}"</span>);
 
-    submit_state_and_proof(proof, public_input, provider, key, light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
+    submit_state_and_proof(proof, public_input, <span class="kw-2">&amp;</span>contract).<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="macro">tracing::info!</span>(<span class="string">"Successfully synced light client state."</span>);
     <span class="prelude-val">Ok</span>(())
@@ -1417,6 +1464,8 @@
     </span>PlonkError(PlonkError),
     <span class="doccomment">/// Internal error
     </span>Internal(String),
+    <span class="doccomment">/// General network issue: {0}
+    </span>NetworkError(anyhow::Error),
 }
 
 <span class="kw">impl </span>From&lt;ServerError&gt; <span class="kw">for </span>ProverError {
@@ -1439,6 +1488,11 @@
 
 <span class="kw">impl </span>From&lt;ProviderError&gt; <span class="kw">for </span>ProverError {
     <span class="kw">fn </span>from(err: ProviderError) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::ContractError(<span class="macro">anyhow!</span>(<span class="string">"{}"</span>, err))
+    }
+}
+<span class="kw">impl </span>From&lt;SignerMiddlewareError&lt;Provider&lt;Http&gt;, LocalWallet&gt;&gt; <span class="kw">for </span>ProverError {
+    <span class="kw">fn </span>from(err: SignerMiddlewareError&lt;Provider&lt;Http&gt;, LocalWallet&gt;) -&gt; <span class="self">Self </span>{
         <span class="self">Self</span>::ContractError(<span class="macro">anyhow!</span>(<span class="string">"{}"</span>, err))
     }
 }
@@ -1739,12 +1793,13 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>config = StateProverConfig::default();
         config.update_l1_info(<span class="kw-2">&amp;</span>anvil, contract.address());
-        <span class="kw">let </span>(state, st_state) = <span class="kw">super</span>::read_contract_state(
+        <span class="kw">let </span>contract = <span class="kw">super</span>::prepare_contract(
             config.provider,
             config.signing_key,
             config.light_client_address,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>(state, st_state) = <span class="kw">super</span>::read_contract_state(<span class="kw-2">&amp;</span>contract).<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="macro">assert_eq!</span>(state, genesis.into());
         <span class="macro">assert_eq!</span>(st_state, stake_genesis.into());
@@ -1775,14 +1830,13 @@
         <span class="kw">let </span>(pi, proof) = gen_state_proof(new_state.clone(), <span class="kw-2">&amp;</span>stake_genesis, <span class="kw-2">&amp;</span>state_keys, <span class="kw-2">&amp;</span>st);
         <span class="macro">tracing::info!</span>(<span class="string">"Successfully generated proof for new state."</span>);
 
-        <span class="kw">super</span>::submit_state_and_proof(
-            proof,
-            pi,
+        <span class="kw">let </span>contract = <span class="kw">super</span>::prepare_contract(
             config.provider,
             config.signing_key,
             config.light_client_address,
         )
         .<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">super</span>::submit_state_and_proof(proof, pi, <span class="kw-2">&amp;</span>contract).<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="macro">tracing::info!</span>(<span class="string">"Successfully submitted new finalized state to L1."</span>);
         <span class="comment">// test if new state is updated in l1
         </span><span class="kw">let </span>finalized_l1: ParsedLightClientState = contract.finalized_state().<span class="kw">await</span><span class="question-mark">?</span>.into();
