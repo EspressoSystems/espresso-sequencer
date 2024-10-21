@@ -11,7 +11,7 @@ pub struct BlockId<Types: NodeType> {
     /// Block hash
     pub hash: BuilderCommitment,
     /// Block view
-    pub view: Types::Time,
+    pub view: Types::View,
 }
 
 impl<Types: NodeType> std::fmt::Display for BlockId<Types> {
@@ -34,7 +34,7 @@ impl<Types: NodeType> std::fmt::Display for BlockId<Types> {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct BuilderStateId<Types: NodeType> {
     /// View number of the parent block
-    pub parent_view: Types::Time,
+    pub parent_view: Types::View,
     /// VID commitment of the parent block
     pub parent_commitment: VidCommitment,
 }
@@ -52,7 +52,7 @@ impl<Types: NodeType> std::fmt::Display for BuilderStateId<Types> {
 /// References to the parent block that is extended to spawn the new builder state.
 #[derive(Debug, Clone)]
 pub struct ParentBlockReferences<Types: NodeType> {
-    pub view_number: Types::Time,
+    pub view_number: Types::View,
     pub vid_commitment: VidCommitment,
     pub leaf_commit: Commitment<Leaf<Types>>,
     pub builder_commitment: BuilderCommitment,

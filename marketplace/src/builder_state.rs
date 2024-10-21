@@ -45,12 +45,12 @@ pub enum TransactionSource {
 /// Decide Message to be put on the decide channel
 #[derive(Clone, Debug)]
 pub struct DecideMessage<Types: NodeType> {
-    pub latest_decide_view_number: Types::Time,
+    pub latest_decide_view_number: Types::View,
 }
 /// DA Proposal Message to be put on the da proposal channel
 #[derive(Debug, Clone, PartialEq)]
 pub struct DaProposalMessage<Types: NodeType> {
-    pub view_number: Types::Time,
+    pub view_number: Types::View,
     pub txn_commitments: Vec<Commitment<Types::Transaction>>,
     pub sender: <Types as NodeType>::SignatureKey,
     pub builder_commitment: BuilderCommitment,
@@ -65,7 +65,7 @@ pub struct QuorumProposalMessage<Types: NodeType> {
 /// Request Message to be put on the request channel
 #[derive(Clone, Debug)]
 pub struct RequestMessage<Types: NodeType> {
-    pub requested_view_number: Types::Time,
+    pub requested_view_number: Types::View,
     pub response_channel: UnboundedSender<ResponseMessage<Types>>,
 }
 pub enum TriggerStatus {
@@ -121,12 +121,12 @@ pub struct BuilderState<Types: NodeType> {
     /// `da_proposal_payload_commit` to (`da_proposal`, `node_count`)
     #[allow(clippy::type_complexity)]
     pub da_proposal_payload_commit_to_da_proposal:
-        HashMap<(BuilderCommitment, Types::Time), Arc<DaProposalMessage<Types>>>,
+        HashMap<(BuilderCommitment, Types::View), Arc<DaProposalMessage<Types>>>,
 
     /// `quorum_proposal_payload_commit` to `quorum_proposal`
     #[allow(clippy::type_complexity)]
     pub quorum_proposal_payload_commit_to_quorum_proposal:
-        HashMap<(BuilderCommitment, Types::Time), Arc<Proposal<Types, QuorumProposal<Types>>>>,
+        HashMap<(BuilderCommitment, Types::View), Arc<Proposal<Types, QuorumProposal<Types>>>>,
 
     /// Spawned-from references to the parent block.
     pub parent_block_references: ParentBlockReferences<Types>,
@@ -1153,7 +1153,7 @@ mod test {
         // call process_da_proposal without matching quorum proposal message
         // da_proposal_payload_commit_to_da_proposal should insert the message
         let mut correct_da_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TestTypes as NodeType>::Time),
+            (BuilderCommitment, <TestTypes as NodeType>::View),
             Arc<DaProposalMessage<TestTypes>>,
         > = HashMap::new();
 

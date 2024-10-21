@@ -62,14 +62,14 @@ pub struct BlockInfo<Types: NodeType> {
 pub struct ProposedBlockId<Types: NodeType> {
     pub parent_commitment: VidCommitment,
     pub payload_commitment: BuilderCommitment,
-    pub parent_view: Types::Time,
+    pub parent_view: Types::View,
 }
 
 impl<Types: NodeType> ProposedBlockId<Types> {
     pub fn new(
         parent_commitment: VidCommitment,
         payload_commitment: BuilderCommitment,
-        parent_view: Types::Time,
+        parent_view: Types::View,
     ) -> Self {
         ProposedBlockId {
             parent_commitment,
@@ -131,7 +131,7 @@ pub struct GlobalState<Types: NodeType> {
     pub tx_sender: BroadcastSender<Arc<ReceivedTransaction<Types>>>,
 
     // last garbage collected view number
-    pub last_garbage_collected_view_num: Types::Time,
+    pub last_garbage_collected_view_num: Types::View,
 
     // highest view running builder task
     pub highest_view_num_builder_id: BuilderStateId<Types>,
@@ -143,7 +143,7 @@ impl<Types: NodeType> GlobalState<Types> {
         bootstrap_sender: BroadcastSender<MessageType<Types>>,
         tx_sender: BroadcastSender<Arc<ReceivedTransaction<Types>>>,
         bootstrapped_builder_state_id: VidCommitment,
-        bootstrapped_view_num: Types::Time,
+        bootstrapped_view_num: Types::View,
     ) -> Self {
         let mut spawned_builder_states = HashMap::new();
         let bootstrap_id = BuilderStateId {
@@ -210,7 +210,7 @@ impl<Types: NodeType> GlobalState<Types> {
     }
 
     // remove the builder state handles based on the decide event
-    pub fn remove_handles(&mut self, on_decide_view: Types::Time) -> Types::Time {
+    pub fn remove_handles(&mut self, on_decide_view: Types::View) -> Types::View {
         // remove everything from the spawned builder states when view_num <= on_decide_view;
         // if we don't have a highest view > decide, use highest view as cutoff.
         let cutoff = std::cmp::min(self.highest_view_num_builder_id.parent_view, on_decide_view);
@@ -220,7 +220,7 @@ impl<Types: NodeType> GlobalState<Types> {
         let cutoff_u64 = cutoff.u64();
         let gc_view = if cutoff_u64 > 0 { cutoff_u64 - 1 } else { 0 };
 
-        self.last_garbage_collected_view_num = Types::Time::new(gc_view);
+        self.last_garbage_collected_view_num = Types::View::new(gc_view);
 
         cutoff
     }
@@ -251,14 +251,12 @@ impl<Types: NodeType> GlobalState<Types> {
             self.spawned_builder_states
                 .get(&self.highest_view_num_builder_id)
                 .map(|(_, sender)| sender)
-                .ok_or_else(|| BuildError::Error {
-                    message: "No builder state found".to_string(),
-                })
+                .ok_or_else(|| BuildError::Error("No builder state found".to_string()))
         }
     }
 
     // check for the existence of the builder state for a view
-    pub fn check_builder_state_existence_for_a_view(&self, key: &Types::Time) -> bool {
+    pub fn check_builder_state_existence_for_a_view(&self, key: &Types::View) -> bool {
         // iterate over the spawned builder states and check if the view number exists
         self.spawned_builder_states
             .iter()
@@ -267,8 +265,8 @@ impl<Types: NodeType> GlobalState<Types> {
 
     pub fn should_view_handle_other_proposals(
         &self,
-        builder_view: &Types::Time,
-        proposal_view: &Types::Time,
+        builder_view: &Types::View,
+        proposal_view: &Types::View,
     ) -> bool {
         *builder_view == self.highest_view_num_builder_id.parent_view
             && !self.check_builder_state_existence_for_a_view(proposal_view)
@@ -363,7 +361,7 @@ where
     ) -> Result<Bundle<Types>, BuildError> {
         let start = Instant::now();
 
-        let parent_view = Types::Time::new(parent_view);
+        let parent_view = Types::View::new(parent_view);
         let state_id = BuilderStateId {
             parent_view,
             parent_commitment: *parent_hash,
@@ -403,10 +401,9 @@ where
                         highest_observed_view = ?highest_observed_view,
                         "Requested a bundle for view we already GCd as decided",
                     );
-                    return Err(BuildError::Error {
-                        message: "Request for a bundle for a view that has already been decided."
-                            .to_owned(),
-                    });
+                    return Err(BuildError::Error(
+                        "Request for a bundle for a view that has already been decided.".to_owned(),
+                    ));
                 } else {
                     // If we couldn't find the state because it hasn't yet been created, try again
                     async_compatibility_layer::art::async_sleep(self.api_timeout / 10).await;
@@ -429,9 +426,7 @@ where
                 .map_err(|err| {
                     tracing::warn!(%err, "Error requesting bundle");
 
-                    BuildError::Error {
-                        message: "Error requesting bundle".to_owned(),
-                    }
+                    BuildError::Error("Error requesting bundle".to_owned())
                 })?;
 
             let response = async_compatibility_layer::art::async_timeout(
@@ -447,9 +442,7 @@ where
             .map_err(|err| {
                 tracing::warn!(%err, "Channel closed while waiting for bundle");
 
-                BuildError::Error {
-                    message: "Channel closed while waiting for bundle".to_owned(),
-                }
+                BuildError::Error("Channel closed while waiting for bundle".to_owned())
             })?;
 
             let fee_signature =
@@ -457,9 +450,9 @@ where
                     &self.builder_keys.1,
                     response.offered_fee,
                 )
-                .map_err(|e| BuildError::Error {
-                    message: e.to_string(),
-                })?;
+                .map_err(|e| BuildError::Error(
+                    e.to_string()
+                ))?;
 
             let sequencing_fee: BuilderFee<Types> = BuilderFee {
                 fee_amount: response.offered_fee,
@@ -478,9 +471,7 @@ where
                     &self.builder_keys.1,
                     &commitments,
                 )
-                .map_err(|e| BuildError::Error {
-                    message: e.to_string(),
-                })?;
+                .map_err(|e| BuildError::Error(e.to_string()))?;
 
             let bundle = Bundle {
                 sequencing_fee,
@@ -648,7 +639,7 @@ impl<Types: NodeType> BuilderHooks<Types> for NoHooks<Types> {}
 /// Run builder service,
 /// Refer to documentation for [`ProxyGlobalState`] for more details
 pub async fn run_builder_service<
-    Types: NodeType<Time = ViewNumber>,
+    Types: NodeType<View = ViewNumber>,
     S: Stream<Item = Event<Types>> + Unpin,
 >(
     hooks: Arc<impl BuilderHooks<Types>>,
@@ -796,7 +787,7 @@ async fn handle_quorum_event<Types: NodeType>(
 
 async fn handle_decide_event<Types: NodeType>(
     decide_channel_sender: &BroadcastSender<MessageType<Types>>,
-    latest_decide_view_number: Types::Time,
+    latest_decide_view_number: Types::View,
 ) {
     let decide_msg: DecideMessage<Types> = DecideMessage::<Types> {
         latest_decide_view_number,
@@ -845,12 +836,10 @@ pub(crate) async fn handle_received_txns<Types: NodeType>(
                 tracing::warn!("Failed to broadcast txn with commit {:?}: {}", commit, err);
             })
             .map_err(|err| match err {
-                TrySendError::Full(_) => BuildError::Error {
-                    message: "Too many transactions".to_owned(),
-                },
-                e => BuildError::Error {
-                    message: format!("Internal error when submitting transaction: {}", e),
-                },
+                TrySendError::Full(_) => BuildError::Error("Too many transactions".to_owned()),
+                e => {
+                    BuildError::Error(format!("Internal error when submitting transaction: {}", e))
+                }
             });
         results.push(res);
     }

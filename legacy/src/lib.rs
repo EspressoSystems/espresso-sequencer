@@ -41,9 +41,9 @@ pub(crate) enum WaitAndKeepGetError {
 impl From<WaitAndKeepGetError> for BuildError {
     fn from(e: WaitAndKeepGetError) -> Self {
         match e {
-            WaitAndKeepGetError::FailedToResolvedVidCommitmentFromChannel => BuildError::Error {
-                message: "failed to resolve VidCommitment from channel".to_string(),
-            },
+            WaitAndKeepGetError::FailedToResolvedVidCommitmentFromChannel => {
+                BuildError::Error("failed to resolve VidCommitment from channel".to_string())
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 pub use hotshot::traits::election::static_committee::StaticCommittee;
 pub use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
+    data::{DaProposal, EpochNumber, Leaf, QuorumProposal, ViewNumber},
     message::Proposal,
     signature_key::BLSPubKey,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
@@ -77,7 +77,8 @@ mod tests {
         )]
         struct TestTypes;
         impl NodeType for TestTypes {
-            type Time = ViewNumber;
+            type View = ViewNumber;
+            type Epoch = EpochNumber;
             type BlockHeader = TestBlockHeader;
             type BlockPayload = TestBlockPayload;
             type SignatureKey = BLSPubKey;

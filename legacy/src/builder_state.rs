@@ -52,7 +52,7 @@ pub enum TransactionSource {
 /// Decide Message to be put on the decide channel
 #[derive(Clone, Debug)]
 pub struct DecideMessage<Types: NodeType> {
-    pub latest_decide_view_number: Types::Time,
+    pub latest_decide_view_number: Types::View,
 }
 /// DA Proposal Message to be put on the da proposal channel
 #[derive(Clone, Debug, PartialEq)]
@@ -108,7 +108,7 @@ pub enum Status {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DAProposalInfo<Types: NodeType> {
-    pub view_number: Types::Time,
+    pub view_number: Types::View,
     pub proposal: Arc<Proposal<Types, DaProposal<Types>>>,
     pub num_nodes: usize,
 }
@@ -141,12 +141,12 @@ pub struct BuilderState<Types: NodeType> {
     /// `da_proposal_payload_commit` to (`da_proposal`, `node_count`)
     #[allow(clippy::type_complexity)]
     pub da_proposal_payload_commit_to_da_proposal:
-        HashMap<(BuilderCommitment, Types::Time), DAProposalInfo<Types>>,
+        HashMap<(BuilderCommitment, Types::View), DAProposalInfo<Types>>,
 
     /// `quorum_proposal_payload_commit` to `quorum_proposal`
     #[allow(clippy::type_complexity)]
     pub quorum_proposal_payload_commit_to_quorum_proposal:
-        HashMap<(BuilderCommitment, Types::Time), Arc<Proposal<Types, QuorumProposal<Types>>>>,
+        HashMap<(BuilderCommitment, Types::View), Arc<Proposal<Types, QuorumProposal<Types>>>>,
 
     /// Spawned-from references to the parent block.
     pub parent_block_references: ParentBlockReferences<Types>,
@@ -199,7 +199,7 @@ pub struct BuilderState<Types: NodeType> {
     /// a builder should stop producing empty blocks. This is done specifically
     /// to allow for faster finalization of previous blocks that have had
     /// transactions included in them.
-    pub allow_empty_block_until: Option<Types::Time>,
+    pub allow_empty_block_until: Option<Types::View>,
 }
 
 /// [`best_builder_states_to_extend`] is a utility function that is used to
@@ -678,7 +678,7 @@ impl<Types: NodeType> BuilderState<Types> {
             .retain(|tx| self.txns_in_queue.contains(&tx.commit));
 
         if !txn_commitments.is_empty() {
-            self.allow_empty_block_until = Some(Types::Time::new(
+            self.allow_empty_block_until = Some(Types::View::new(
                 da_proposal_info.view_number.u64() + ALLOW_EMPTY_BLOCK_PERIOD,
             ));
         }
@@ -1195,7 +1195,7 @@ mod test {
         // call process_da_proposal without matching quorum proposal message
         // da_proposal_payload_commit_to_da_proposal should insert the message
         let mut correct_da_proposal_payload_commit_to_da_proposal: HashMap<
-            (BuilderCommitment, <TestTypes as NodeType>::Time),
+            (BuilderCommitment, <TestTypes as NodeType>::View),
             DAProposalInfo<TestTypes>,
         > = HashMap::new();
         let (payload_builder_commitment, da_proposal_info) =
