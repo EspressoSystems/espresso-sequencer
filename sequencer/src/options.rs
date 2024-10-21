@@ -94,7 +94,7 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N", default_value = "8")]
     pub libp2p_mesh_n: usize,
 
-    /// Maximum number of peers in mesh network before removing some
+    /// Maximum number of peers in the Libp2p mesh network before removing some
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_HIGH",
@@ -150,7 +150,7 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_MESSAGES_PER_RPC")]
     pub libp2p_max_messages_per_rpc: Option<usize>,
 
-    /// How many times we will allow a peer to request the same message id through IWANT gossip before we start ignoring them
+    /// How many times we will allow a Libp2p peer to request the same message id through IWANT gossip before we start ignoring them
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_RETRANSMISSION",
