@@ -383,11 +383,8 @@ async fn handle_events<V: Versions>(
         state_signer.handle_event(&event).await;
 
         // Handle external messages
-        if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
-            if let Err(err) = external_event_handler
-                .handle_event(external_message_bytes)
-                .await
-            {
+        if let EventType::ExternalMessageReceived { data, .. } = &event.event {
+            if let Err(err) = external_event_handler.handle_event(data).await {
                 tracing::warn!("Failed to handle external message: {:?}", err);
             };
         }

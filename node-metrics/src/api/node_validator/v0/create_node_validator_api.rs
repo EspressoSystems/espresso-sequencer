@@ -136,8 +136,8 @@ impl HotShotEventProcessingTask {
                     }
                 }
 
-                EventType::ExternalMessageReceived(external_message_bytes) => {
-                    let roll_call_info = match bincode::deserialize(&external_message_bytes) {
+                EventType::ExternalMessageReceived { data, .. } => {
+                    let roll_call_info = match bincode::deserialize(&data) {
                         Ok(ExternalMessage::RollCallResponse(roll_call_info)) => roll_call_info,
 
                         Err(err) => {
