@@ -1,0 +1,37 @@
+html {
+    font-family: Arial,Verdana,Helvetica; font-size: 1em;
+    background-image: rgb(251,251,251);
+    background-image: linear-gradient(135deg,
+                                      rgba(251,251,251,1) 0%,
+                                      rgba(190,190,190,1) 100%);
+    min-height: 100%;
+}
+body {
+    font-family: Arial,Verdana,Helvetica; font-size: 1em;
+    margin-left: 1em;
+}
+h1, h2, h3 { margin-left: 1.5em; }
+p, table, ul, ol { margin-left: 3em; margin-top: 0; }
+pre { margin-left: 4em; margin-top: 0; }
+h1 { font-size: 1.4em; margin-top: 3em; color: gray; }
+h2 { font-size: 1.2em; margin-top: 3em; color: gray; font-variant: small-caps; }
+h3 { font-size: 1.1em; margin-top: 1em; margin-bottom: 0; color: gray; font-variant: small-caps; }
+p { margin-bottom: 0; }
+table, th, td { border: none; border-collapse: collapse; padding-right: 1em; }
+.entry { margin-top: 3em; color: black;
+         border-style: none none solid none;
+         border-width: 2px;
+         border-color: lightgray;
+         padding-bottom: 2px;
+         font-variant: normal;
+       }
+.meta { font-size: 1.1em;
+        margin-left: 3em; margin-top: 0; margin-bottom: 0;
+        color: black;
+        font-style: italic; }
+.meth { color: gray; font-variant: small-caps; }
+.path { font-size: 1.1em; margin-left: 3em; margin-top: 0; margin-bottom: 0; }
+.parameter { font-size: 1.1em;
+             margin-top: 0; margin-bottom: 0;
+             color: black; }
+.type { font-size: 1.1em; margin-top: 0; margin-bottom: 0; }

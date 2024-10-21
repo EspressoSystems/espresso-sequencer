@@ -3,8 +3,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
-    SequencerVersions, V0_0, V0_1,
+    eth_signature_key::EthKeyPair, parse_duration, v0_3::ChainConfig, FeeVersion,
+    MarketplaceVersion, SequencerVersions, V0_0, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -76,14 +76,6 @@ struct NonPermissionedBuilderOptions {
     )]
     max_api_timeout_duration: Duration,
 
-    /// The number of views to buffer before a builder garbage collects its state
-    #[clap(
-        long,
-        env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
-        default_value = "15"
-    )]
-    buffer_view_num_count: usize,
-
     /// Path to TOML file containing genesis state.
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
@@ -148,8 +140,6 @@ async fn run<V: Versions>(
     // make the txn timeout as 1/4 of the api_response_timeout_duration
     let txn_timeout_duration = api_response_timeout_duration / 4;
 
-    let buffer_view_num_count = opt.buffer_view_num_count;
-
     let _builder_config = BuilderConfig::init::<V>(
         builder_key_pair,
         bootstrapped_view,
@@ -161,7 +151,7 @@ async fn run<V: Versions>(
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
-        buffer_view_num_count,
+        ChainConfig::default().max_block_size.into(),
         txn_timeout_duration,
         base_fee,
     )

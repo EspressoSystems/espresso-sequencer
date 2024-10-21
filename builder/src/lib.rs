@@ -465,7 +465,7 @@ pub mod testing {
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
-                15,
+                ChainConfig::default().max_block_size.into(),
                 Duration::from_millis(500),
                 ChainConfig::default().base_fee,
             )
