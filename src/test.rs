@@ -29,7 +29,7 @@ mod tests {
     use crate::events_source::{EventConsumer, EventsStreamer, StartupInfo}; // EventsUpdater};
 
     // return a empty transaction event
-    fn generate_event<Types: NodeType<Time = ViewNumber>>(view_number: u64) -> Event<Types> {
+    fn generate_event<Types: NodeType<View = ViewNumber>>(view_number: u64) -> Event<Types> {
         Event {
             view_number: ViewNumber::new(view_number),
             event: EventType::Transactions {
