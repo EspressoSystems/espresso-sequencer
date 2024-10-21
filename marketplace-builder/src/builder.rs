@@ -148,7 +148,6 @@ impl BuilderConfig {
         events_api_url: Url,
         builder_api_url: Url,
         api_timeout: Duration,
-        protocol_max_block_size: u64,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
         bid_config: Option<BidConfig>,
@@ -160,7 +159,7 @@ impl BuilderConfig {
             %tx_channel_capacity,
             %event_channel_capacity,
             ?api_timeout,
-            protocol_max_block_size,
+            ?instance_state.chain_config.max_block_size,
             ?maximize_txns_count_timeout_duration,
             "initializing builder",
         );
@@ -637,7 +636,6 @@ mod test {
             urls.event.clone(),
             urls.builder.clone(),
             Duration::from_secs(2),
-            ChainConfig::default().max_block_size.into(),
             Duration::from_secs(2),
             base_fee,
             Some(BidConfig {
@@ -769,7 +767,6 @@ mod test {
             urls.event.clone(),
             urls.builder.clone(),
             Duration::from_secs(2),
-            ChainConfig::default().max_block_size.into(),
             Duration::from_secs(2),
             base_fee,
             None,

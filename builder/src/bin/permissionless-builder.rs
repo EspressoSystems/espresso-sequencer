@@ -3,8 +3,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, v0_3::ChainConfig, FeeVersion,
-    MarketplaceVersion, SequencerVersions, V0_0, V0_1,
+    eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
+    SequencerVersions, V0_0, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -156,13 +156,12 @@ async fn run<V: Versions>(
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
         opt.node_count,
-        instance_state,
+        instance_state.clone(),
         validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
         opt.max_block_size_increment_period,
-        ChainConfig::default().max_block_size.into(),
         txn_timeout_duration,
         base_fee,
     )

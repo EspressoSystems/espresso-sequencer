@@ -92,7 +92,6 @@ impl BuilderConfig {
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
         max_block_size_increment_period: Duration,
-        protocol_max_block_size: u64,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
     ) -> anyhow::Result<Self> {
@@ -102,7 +101,7 @@ impl BuilderConfig {
             %tx_channel_capacity,
             %event_channel_capacity,
             ?max_api_timeout_duration,
-            protocol_max_block_size,
+            ?instance_state.chain_config.max_block_size,
             ?maximize_txns_count_timeout_duration,
             "initializing builder",
         );
@@ -148,7 +147,7 @@ impl BuilderConfig {
             bootstrapped_view,
             bootstrapped_view,
             max_block_size_increment_period,
-            protocol_max_block_size,
+            instance_state.chain_config.max_block_size.into(),
         );
 
         let global_state = Arc::new(RwLock::new(global_state));

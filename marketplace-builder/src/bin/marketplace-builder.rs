@@ -3,8 +3,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, v0_3::ChainConfig, FeeAmount, FeeVersion,
-    MarketplaceVersion, NamespaceId, SequencerVersions, V0_0, V0_1,
+    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion,
+    NamespaceId, SequencerVersions, V0_0, V0_1,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -183,12 +183,11 @@ async fn run<V: Versions>(
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
-        instance_state,
+        instance_state.clone(),
         validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
-        ChainConfig::default().max_block_size.into(),
         txn_timeout_duration,
         base_fee,
         bid_config,
