@@ -76,6 +76,16 @@ struct NonPermissionedBuilderOptions {
     )]
     max_api_timeout_duration: Duration,
 
+    /// The amount of time a builder can wait before incrementing the max block size.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_MAX_BLOCK_SIZE_INCREMENT_PERIOD",
+        default_value = "3600s",
+        value_parser = parse_duration
+    )]
+    max_block_size_increment_period: Duration,
+
     /// The number of views to buffer before a builder garbage collects its state
     #[clap(
         long,
@@ -161,6 +171,7 @@ async fn run<V: Versions>(
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
+        opt.max_block_size_increment_period,
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,

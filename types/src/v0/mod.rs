@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
     traits::{
         node_implementation::{NodeType, Versions},
@@ -126,7 +126,8 @@ reexport_unchanged_types!(
 pub struct SeqTypes;
 
 impl NodeType for SeqTypes {
-    type Time = ViewNumber;
+    type View = ViewNumber;
+    type Epoch = EpochNumber;
     type BlockHeader = Header;
     type BlockPayload = Payload;
     type SignatureKey = PubKey;

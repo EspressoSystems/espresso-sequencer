@@ -91,6 +91,7 @@ impl BuilderConfig {
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
+        max_block_size_increment_period: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
@@ -146,6 +147,7 @@ impl BuilderConfig {
             vid_commitment,
             bootstrapped_view,
             bootstrapped_view,
+            max_block_size_increment_period,
             buffered_view_num_count as u64,
         );
 

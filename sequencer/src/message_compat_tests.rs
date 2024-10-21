@@ -21,7 +21,7 @@ use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{
-        DaProposal, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
+        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
         ViewChangeEvidence, ViewNumber,
     },
     message::{
@@ -222,6 +222,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                 ViewNumber::genesis(),
                 vid_scheme(1).disperse(payload.encode()).unwrap(),
                 &membership,
+                EpochNumber::genesis(),
             ))
             .remove(0),
             signature: signature.clone(),

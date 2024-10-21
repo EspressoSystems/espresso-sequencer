@@ -242,6 +242,7 @@ pub mod testing {
                 start_voting_time: 0,
                 stop_proposing_time: 0,
                 stop_voting_time: 0,
+                epoch_height: 0,
             };
 
             Self {
@@ -465,6 +466,7 @@ pub mod testing {
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
+                Duration::from_secs(60),
                 15,
                 Duration::from_millis(500),
                 ChainConfig::default().base_fee,
