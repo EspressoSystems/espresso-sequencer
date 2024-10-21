@@ -388,6 +388,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
                 prevUpdateFound = true;
                 prevBlock = stateHistoryCommitments[i].l1BlockHeight;
+                break;
             }
 
             i--;
