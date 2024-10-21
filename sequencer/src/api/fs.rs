@@ -3,8 +3,8 @@ use std::path::Path;
 use async_trait::async_trait;
 use hotshot_query_service::data_source::FileSystemDataSource;
 
-use super::data_source::{CatchupDataSource, Provider, SequencerDataSource};
-use crate::{persistence::fs::Options, SeqTypes};
+use super::data_source::{Provider, SequencerDataSource};
+use crate::{catchup::CatchupStorage, persistence::fs::Options, SeqTypes};
 
 pub type DataSource = FileSystemDataSource<SeqTypes, Provider>;
 
@@ -26,7 +26,7 @@ impl SequencerDataSource for DataSource {
     }
 }
 
-impl CatchupDataSource for DataSource {}
+impl CatchupStorage for DataSource {}
 
 #[cfg(test)]
 mod impl_testable_data_source {

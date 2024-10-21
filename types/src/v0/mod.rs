@@ -17,8 +17,8 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    mock, validate_proposal, BuilderValidationError, FeeError, ProposalValidationError,
-    StateValidationError,
+    get_l1_deposits, mock, retain_accounts, validate_proposal, BuilderValidationError, FeeError,
+    ProposalValidationError, StateValidationError,
 };
 pub use utils::*;
 use vbs::version::{StaticVersion, StaticVersionType};
