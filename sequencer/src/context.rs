@@ -21,11 +21,12 @@ use hotshot::{
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
+    network::NetworkConfig,
     traits::{
         election::Membership,
         metrics::Metrics,

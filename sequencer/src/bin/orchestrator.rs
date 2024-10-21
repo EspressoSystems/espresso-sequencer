@@ -4,10 +4,8 @@ use clap::Parser;
 use derive_more::From;
 use espresso_types::{parse_duration, PubKey, Ratio};
 use ethers::utils::hex::{self, FromHexError};
-use hotshot_orchestrator::{
-    config::{Libp2pConfig, NetworkConfig},
-    run_orchestrator,
-};
+use hotshot_orchestrator::run_orchestrator;
+use hotshot_types::network::{Libp2pConfig, NetworkConfig};
 use sequencer_utils::logging;
 use snafu::Snafu;
 use url::Url;
