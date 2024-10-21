@@ -142,13 +142,13 @@ time = "0.3"
 trait-set = "0.3.0"
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "2123a96eb8360380c79ddf4352663a9eee14ae47" }
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", rev = "e6389ba1f04f670918671d5aac1840b4e758b680" }

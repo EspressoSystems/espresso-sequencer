@@ -130,6 +130,56 @@ pub struct PermissionedBuilderOptions {
     )]
     pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
 
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_PUBLISHED_MESSAGE_IDS_CACHE_TIME", default_value = "10s", value_parser = parse_duration)]
+    pub libp2p_published_message_ids_cache_time: Duration,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IWANT_FOLLOWUP_TIME",
+        default_value = "3s", value_parser = parse_duration
+    )]
+    pub libp2p_iwant_followup_time: Duration,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_MESSAGES_PER_RPC")]
+    pub libp2p_max_messages_per_rpc: Option<usize>,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_RETRANSMISSION",
+        default_value = "3"
+    )]
+    pub libp2p_gossip_retransmission: u32,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_FLOOD_PUBLISH",
+        default_value = "true"
+    )]
+    pub libp2p_flood_publish: bool,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_DUPLICATE_CACHE_TIME", default_value = "60s", value_parser = parse_duration)]
+    pub libp2p_duplicate_cache_time: Duration,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_FANOUT_TTL", default_value = "60s", value_parser = parse_duration)]
+    pub libp2p_fanout_ttl: Duration,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INITIAL_DELAY", default_value = "5s", value_parser = parse_duration)]
+    pub libp2p_heartbeat_initial_delay: Duration,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_FACTOR",
+        default_value = "0.25"
+    )]
+    pub libp2p_gossip_factor: f64,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_LAZY",
+        default_value = "6"
+    )]
+    pub libp2p_gossip_lazy: usize,
+
     /// URL of the Light Client State Relay Server
     #[clap(
         long,
@@ -325,6 +375,16 @@ async fn run<V: Versions>(
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),
         private_state_key,
+        libp2p_published_message_ids_cache_time: opt.libp2p_published_message_ids_cache_time,
+        libp2p_iwant_followup_time: opt.libp2p_iwant_followup_time,
+        libp2p_max_messages_per_rpc: opt.libp2p_max_messages_per_rpc,
+        libp2p_gossip_retransmission: opt.libp2p_gossip_retransmission,
+        libp2p_flood_publish: opt.libp2p_flood_publish,
+        libp2p_duplicate_cache_time: opt.libp2p_duplicate_cache_time,
+        libp2p_fanout_ttl: opt.libp2p_fanout_ttl,
+        libp2p_heartbeat_initial_delay: opt.libp2p_heartbeat_initial_delay,
+        libp2p_gossip_factor: opt.libp2p_gossip_factor,
+        libp2p_gossip_lazy: opt.libp2p_gossip_lazy,
         state_peers: opt.state_peers,
         public_api_url: None,
         config_peers: None,

@@ -144,6 +144,17 @@ pub struct NetworkParams {
 
     pub libp2p_max_ihave_length: usize,
     pub libp2p_max_ihave_messages: usize,
+
+    pub libp2p_published_message_ids_cache_time: Duration,
+    pub libp2p_iwant_followup_time: Duration,
+    pub libp2p_max_messages_per_rpc: Option<usize>,
+    pub libp2p_gossip_retransmission: u32,
+    pub libp2p_flood_publish: bool,
+    pub libp2p_duplicate_cache_time: Duration,
+    pub libp2p_fanout_ttl: Duration,
+    pub libp2p_heartbeat_initial_delay: Duration,
+    pub libp2p_gossip_factor: f64,
+    pub libp2p_gossip_lazy: usize,
 }
 
 pub struct L1Params {
@@ -355,6 +366,16 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         max_ihave_messages: network_params.libp2p_max_ihave_messages,
         max_transmit_size: network_params.libp2p_max_transmit_size,
         max_ihave_length: network_params.libp2p_max_ihave_length,
+        published_message_ids_cache_time: network_params.libp2p_published_message_ids_cache_time,
+        iwant_followup_time: network_params.libp2p_iwant_followup_time,
+        max_messages_per_rpc: network_params.libp2p_max_messages_per_rpc,
+        gossip_retransmission: network_params.libp2p_gossip_retransmission,
+        flood_publish: network_params.libp2p_flood_publish,
+        duplicate_cache_time: network_params.libp2p_duplicate_cache_time,
+        fanout_ttl: network_params.libp2p_fanout_ttl,
+        heartbeat_initial_delay: network_params.libp2p_heartbeat_initial_delay,
+        gossip_factor: network_params.libp2p_gossip_factor,
+        gossip_lazy: network_params.libp2p_gossip_lazy,
     };
 
     // Initialize the Libp2p network (if enabled)
