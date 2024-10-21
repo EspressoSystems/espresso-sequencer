@@ -3062,8 +3062,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3085,7 +3085,6 @@ dependencies = [
  "either",
  "ethereum-types",
  "futures",
- "hotshot-orchestrator",
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
@@ -3099,8 +3098,8 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
- "snafu 0.8.4",
  "surf-disco",
+ "thiserror",
  "time 0.3.36",
  "tokio",
  "tracing",
@@ -3111,7 +3110,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "async-trait",
  "clap",
@@ -3120,8 +3119,8 @@ dependencies = [
  "futures",
  "hotshot-types",
  "serde",
- "snafu 0.8.4",
  "tagged-base64",
+ "thiserror",
  "tide-disco",
  "toml",
  "vbs",
@@ -3129,8 +3128,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3152,7 +3151,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "sha3",
- "snafu 0.8.4",
+ "thiserror",
  "time 0.3.36",
  "tokio",
  "tracing",
@@ -3162,10 +3161,11 @@ dependencies = [
 
 [[package]]
 name = "hotshot-fakeapi"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
+ "async-compatibility-layer",
  "async-lock 2.8.0",
  "async-trait",
  "futures",
@@ -3181,8 +3181,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -3192,8 +3192,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3208,7 +3208,6 @@ dependencies = [
  "libp2p",
  "multiaddr",
  "serde",
- "serde-inline-default",
  "serde_json",
  "surf-disco",
  "thiserror",
@@ -3278,8 +3277,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3293,8 +3292,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3317,9 +3316,9 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2 0.10.8",
- "snafu 0.8.4",
  "surf-disco",
  "tagged-base64",
+ "thiserror",
  "time 0.3.36",
  "tokio",
  "tracing",
@@ -3330,8 +3329,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3364,8 +3363,8 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "sha3",
- "snafu 0.8.4",
  "tagged-base64",
+ "thiserror",
  "tide-disco",
  "tokio",
  "tracing",
@@ -3377,7 +3376,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3394,6 +3393,7 @@ dependencies = [
  "bitvec",
  "blake3",
  "cdn-proto",
+ "clap",
  "committable",
  "custom_debug 0.5.1",
  "derivative",
@@ -3415,12 +3415,16 @@ dependencies = [
  "rand_chacha 0.3.1",
  "reqwest",
  "serde",
+ "serde-inline-default",
  "serde_bytes",
+ "serde_json",
  "sha2 0.10.8",
- "snafu 0.8.4",
+ "surf-disco",
  "tagged-base64",
+ "thiserror",
  "time 0.3.36",
  "tokio",
+ "toml",
  "tracing",
  "typenum",
  "url",
@@ -4438,8 +4442,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.77"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.77#e8c3e75775e2124f11a60ec4d6a6090d012dbb35"
+version = "0.5.78"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78#be7d9be60abbf8f293b7e95940ff77eff2e0739e"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4464,7 +4468,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "snafu 0.8.4",
+ "thiserror",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -6611,13 +6615,13 @@ dependencies = [
 
 [[package]]
 name = "serde-inline-default"
-version = "0.1.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa824cde50b5f01ff28a955114d8152a07cd62d81f53459dad0f2610136be844"
+checksum = "b3acbd21cb24261fc36f595b38d3b34d0ff4e31a6b42edd6a43387d27c5787c8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.77",
 ]
 
 [[package]]

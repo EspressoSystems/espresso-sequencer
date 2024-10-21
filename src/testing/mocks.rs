@@ -125,7 +125,8 @@ impl<Types: NodeType> QueryablePayload<Types> for MockPayload {
 pub struct MockTypes;
 
 impl NodeType for MockTypes {
-    type Time = ViewNumber;
+    type View = ViewNumber;
+    type Epoch = ViewNumber;
     type BlockHeader = MockHeader;
     type BlockPayload = MockPayload;
     type SignatureKey = BLSPubKey;

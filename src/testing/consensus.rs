@@ -154,6 +154,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             stop_proposing_time: 0,
             start_voting_time: 0,
             stop_voting_time: 0,
+            epoch_height: 0,
         };
         update_config(&mut config);
 
