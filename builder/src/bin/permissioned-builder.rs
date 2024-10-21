@@ -273,7 +273,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_FANOUT_TTL", default_value = "60s", value_parser = parse_duration)]
     pub libp2p_fanout_ttl: Duration,
 
-    /// Initial delay in each  ibp2p heartbeat
+    /// Initial delay in each Libp2p heartbeat
     #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INITIAL_DELAY", default_value = "5s", value_parser = parse_duration)]
     pub libp2p_heartbeat_initial_delay: Duration,
 
