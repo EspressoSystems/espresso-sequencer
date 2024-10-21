@@ -14,6 +14,7 @@
 //! This crate and all downstream crates should talk to the VID scheme only
 //! via the traits exposed here.
 
+#![allow(missing_docs)]
 use std::{fmt::Debug, ops::Range};
 
 use ark_bn254::Bn254;
@@ -59,6 +60,7 @@ use crate::{
 /// # Panics
 /// When the construction fails for the underlying VID scheme.
 #[must_use]
+#[memoize::memoize(SharedCache, Capacity: 10)]
 pub fn vid_scheme(num_storage_nodes: usize) -> VidSchemeType {
     // recovery_threshold is currently num_storage_nodes rounded down to a power of two
     // TODO recovery_threshold should be a function of the desired erasure code rate
@@ -85,6 +87,7 @@ pub fn vid_scheme(num_storage_nodes: usize) -> VidSchemeType {
 
 /// Similar to [`vid_scheme()`], but with `KZG_SRS_TEST` for testing purpose only.
 #[cfg(feature = "test-srs")]
+#[memoize::memoize(SharedCache, Capacity: 10)]
 pub fn vid_scheme_for_test(num_storage_nodes: usize) -> VidSchemeType {
     let recovery_threshold = 1 << num_storage_nodes.ilog2();
     #[allow(clippy::panic)]
@@ -123,6 +126,7 @@ type Advz = advz::AdvzGPU<'static, E, H>;
 
 /// Newtype wrapper for a VID scheme type that impls
 /// [`VidScheme`], [`PayloadProver`], [`Precomputable`].
+#[derive(Clone)]
 pub struct VidSchemeType(Advz);
 
 /// Newtype wrapper for a large payload range proof.
