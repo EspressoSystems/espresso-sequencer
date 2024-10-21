@@ -220,11 +220,35 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     )
     .with_context(|| "Failed to create CDN network")?;
 
+    // Configure gossipsub based on the command line options
+    let gossip_config = GossipConfig {
+        heartbeat_interval: network_params.libp2p_heartbeat_interval,
+        history_gossip: network_params.libp2p_history_gossip,
+        history_length: network_params.libp2p_history_length,
+        mesh_n: network_params.libp2p_mesh_n,
+        mesh_n_high: network_params.libp2p_mesh_n_high,
+        mesh_n_low: network_params.libp2p_mesh_n_low,
+        mesh_outbound_min: network_params.libp2p_mesh_outbound_min,
+        max_ihave_messages: network_params.libp2p_max_ihave_messages,
+        max_transmit_size: network_params.libp2p_max_transmit_size,
+        max_ihave_length: network_params.libp2p_max_ihave_length,
+        published_message_ids_cache_time: network_params.libp2p_published_message_ids_cache_time,
+        iwant_followup_time: network_params.libp2p_iwant_followup_time,
+        max_messages_per_rpc: network_params.libp2p_max_messages_per_rpc,
+        gossip_retransmission: network_params.libp2p_gossip_retransmission,
+        flood_publish: network_params.libp2p_flood_publish,
+        duplicate_cache_time: network_params.libp2p_duplicate_cache_time,
+        fanout_ttl: network_params.libp2p_fanout_ttl,
+        heartbeat_initial_delay: network_params.libp2p_heartbeat_initial_delay,
+        gossip_factor: network_params.libp2p_gossip_factor,
+        gossip_lazy: network_params.libp2p_gossip_lazy,
+    };
+
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
         config.clone(),
-        GossipConfig::default(),
+        gossip_config,
         network_params.libp2p_bind_address,
         &my_config.public_key,
         // We need the private key so we can derive our Libp2p keypair

@@ -171,6 +171,138 @@ pub struct PermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENTS_PROVIDER")]
     pub hotshot_events_streaming_server_url: Url,
 
+    /// Time between each Libp2p heartbeat
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INTERVAL", default_value = "1s", value_parser = parse_duration)]
+    pub libp2p_heartbeat_interval: Duration,
+
+    /// Number of past heartbeats to gossip about on Libp2p
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_GOSSIP",
+        default_value = "3"
+    )]
+    pub libp2p_history_gossip: usize,
+
+    /// Number of heartbeats to keep in the Libp2p `memcache`
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_LENGTH",
+        default_value = "5"
+    )]
+    pub libp2p_history_length: usize,
+
+    /// Target number of peers for the Libp2p mesh network
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N", default_value = "8")]
+    pub libp2p_mesh_n: usize,
+
+    /// Maximum number of peers in mesh network before removing some
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_HIGH",
+        default_value = "12"
+    )]
+    pub libp2p_mesh_n_high: usize,
+
+    /// Minimum number of peers in the Libp2p mesh network before adding more
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_LOW",
+        default_value = "6"
+    )]
+    pub libp2p_mesh_n_low: usize,
+
+    /// Minimum number of outbound Libp2p peers in the mesh network before adding more
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_OUTBOUND_MIN",
+        default_value = "2"
+    )]
+    pub libp2p_mesh_outbound_min: usize,
+
+    /// The maximum number of messages to include in a Libp2p IHAVE message
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_LENGTH",
+        default_value = "5000"
+    )]
+    pub libp2p_max_ihave_length: usize,
+
+    /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_MESSAGES",
+        default_value = "10"
+    )]
+    pub libp2p_max_ihave_messages: usize,
+
+    /// Libp2p published message ids time cache duration
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_PUBLISHED_MESSAGE_IDS_CACHE_TIME", default_value = "10s", value_parser = parse_duration)]
+    pub libp2p_published_message_ids_cache_time: Duration,
+
+    /// Time to wait for a Libp2p message requested through IWANT following an IHAVE advertisement
+    #[clap(
+          long,
+          env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IWANT_FOLLOWUP_TIME",
+          default_value = "3s", value_parser = parse_duration
+      )]
+    pub libp2p_iwant_followup_time: Duration,
+
+    /// The maximum number of Libp2p messages we will process in a given RPC
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_MESSAGES_PER_RPC")]
+    pub libp2p_max_messages_per_rpc: Option<usize>,
+
+    /// How many times we will allow a peer to request the same message id through IWANT gossip before we start ignoring them
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_RETRANSMISSION",
+        default_value = "3"
+    )]
+    pub libp2p_gossip_retransmission: u32,
+
+    /// If enabled newly created messages will always be sent to all peers that are subscribed to the topic and have a good enough score
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_FLOOD_PUBLISH",
+        default_value = "true"
+    )]
+    pub libp2p_flood_publish: bool,
+
+    /// The time period that Libp2p message hashes are stored in the cache
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_DUPLICATE_CACHE_TIME", default_value = "20m", value_parser = parse_duration)]
+    pub libp2p_duplicate_cache_time: Duration,
+
+    /// Time to live for Libp2p fanout peers
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_FANOUT_TTL", default_value = "60s", value_parser = parse_duration)]
+    pub libp2p_fanout_ttl: Duration,
+
+    /// Initial delay in each  ibp2p heartbeat
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INITIAL_DELAY", default_value = "5s", value_parser = parse_duration)]
+    pub libp2p_heartbeat_initial_delay: Duration,
+
+    /// How many Libp2p peers we will emit gossip to at each heartbeat
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_FACTOR",
+        default_value = "0.25"
+    )]
+    pub libp2p_gossip_factor: f64,
+
+    /// Minimum number of Libp2p peers to emit gossip to during a heartbeat
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_LAZY",
+        default_value = "6"
+    )]
+    pub libp2p_gossip_lazy: usize,
+
+    /// The maximum number of bytes we will send in a single Libp2p gossip message
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_TRANSMIT_SIZE",
+        default_value = "2_000_000"
+    )]
+    pub libp2p_max_transmit_size: usize,
+
     /// The amount of time a builder can wait before timing out a request to the API.
     #[clap(
         short,
@@ -262,6 +394,26 @@ async fn run<V: Versions>(
         private_state_key,
         state_peers: opt.state_peers,
         public_api_url: None,
+        libp2p_history_gossip: opt.libp2p_history_gossip,
+        libp2p_history_length: opt.libp2p_history_length,
+        libp2p_max_ihave_length: opt.libp2p_max_ihave_length,
+        libp2p_max_ihave_messages: opt.libp2p_max_ihave_messages,
+        libp2p_max_transmit_size: opt.libp2p_max_transmit_size,
+        libp2p_mesh_n: opt.libp2p_mesh_n,
+        libp2p_mesh_n_high: opt.libp2p_mesh_n_high,
+        libp2p_heartbeat_interval: opt.libp2p_heartbeat_interval,
+        libp2p_mesh_n_low: opt.libp2p_mesh_n_low,
+        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
+        libp2p_published_message_ids_cache_time: opt.libp2p_published_message_ids_cache_time,
+        libp2p_iwant_followup_time: opt.libp2p_iwant_followup_time,
+        libp2p_max_messages_per_rpc: opt.libp2p_max_messages_per_rpc,
+        libp2p_gossip_retransmission: opt.libp2p_gossip_retransmission,
+        libp2p_flood_publish: opt.libp2p_flood_publish,
+        libp2p_duplicate_cache_time: opt.libp2p_duplicate_cache_time,
+        libp2p_fanout_ttl: opt.libp2p_fanout_ttl,
+        libp2p_heartbeat_initial_delay: opt.libp2p_heartbeat_initial_delay,
+        libp2p_gossip_factor: opt.libp2p_gossip_factor,
+        libp2p_gossip_lazy: opt.libp2p_gossip_lazy,
         config_peers: None,
         catchup_backoff: Default::default(),
     };

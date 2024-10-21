@@ -121,6 +121,62 @@ pub struct NetworkParams {
     /// The (optional) bootstrap node addresses for Libp2p. If supplied, these will
     /// override the bootstrap nodes specified in the config file.
     pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
+
+    /// The heartbeat interval
+    pub libp2p_heartbeat_interval: Duration,
+
+    /// The number of past heartbeats to gossip about
+    pub libp2p_history_gossip: usize,
+    /// The number of past heartbeats to remember the full messages for
+    pub libp2p_history_length: usize,
+
+    /// The target number of peers in the mesh
+    pub libp2p_mesh_n: usize,
+    /// The maximum number of peers in the mesh
+    pub libp2p_mesh_n_high: usize,
+    /// The minimum number of peers in the mesh
+    pub libp2p_mesh_n_low: usize,
+    /// The minimum number of mesh peers that must be outbound
+    pub libp2p_mesh_outbound_min: usize,
+
+    /// The maximum gossip message size
+    pub libp2p_max_transmit_size: usize,
+
+    /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
+    pub libp2p_max_ihave_length: usize,
+
+    /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
+    pub libp2p_max_ihave_messages: usize,
+
+    /// The time period that message hashes are stored in the cache
+    pub libp2p_published_message_ids_cache_time: Duration,
+
+    /// The time to wait for a Libp2p message requested through IWANT following an IHAVE advertisement
+    pub libp2p_iwant_followup_time: Duration,
+
+    /// The maximum number of Libp2p messages we will process in a given RPC
+    pub libp2p_max_messages_per_rpc: Option<usize>,
+
+    /// How many times we will allow a peer to request the same message id through IWANT gossip before we start ignoring them
+    pub libp2p_gossip_retransmission: u32,
+
+    /// If enabled newly created messages will always be sent to all peers that are subscribed to the topic and have a good enough score
+    pub libp2p_flood_publish: bool,
+
+    /// The time period that Libp2p message hashes are stored in the cache
+    pub libp2p_duplicate_cache_time: Duration,
+
+    /// Time to live for Libp2p fanout peers
+    pub libp2p_fanout_ttl: Duration,
+
+    /// Initial delay in each Libp2p heartbeat
+    pub libp2p_heartbeat_initial_delay: Duration,
+
+    /// How many Libp2p peers we will emit gossip to at each heartbeat
+    pub libp2p_gossip_factor: f64,
+
+    /// Minimum number of Libp2p peers to emit gossip to during a heartbeat
+    pub libp2p_gossip_lazy: usize,
 }
 
 pub struct L1Params {
@@ -321,12 +377,36 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     )
     .with_context(|| "Failed to create CDN network")?;
 
+    // Configure gossipsub based on the command line options
+    let gossip_config = GossipConfig {
+        heartbeat_interval: network_params.libp2p_heartbeat_interval,
+        history_gossip: network_params.libp2p_history_gossip,
+        history_length: network_params.libp2p_history_length,
+        mesh_n: network_params.libp2p_mesh_n,
+        mesh_n_high: network_params.libp2p_mesh_n_high,
+        mesh_n_low: network_params.libp2p_mesh_n_low,
+        mesh_outbound_min: network_params.libp2p_mesh_outbound_min,
+        max_ihave_messages: network_params.libp2p_max_ihave_messages,
+        max_transmit_size: network_params.libp2p_max_transmit_size,
+        max_ihave_length: network_params.libp2p_max_ihave_length,
+        published_message_ids_cache_time: network_params.libp2p_published_message_ids_cache_time,
+        iwant_followup_time: network_params.libp2p_iwant_followup_time,
+        max_messages_per_rpc: network_params.libp2p_max_messages_per_rpc,
+        gossip_retransmission: network_params.libp2p_gossip_retransmission,
+        flood_publish: network_params.libp2p_flood_publish,
+        duplicate_cache_time: network_params.libp2p_duplicate_cache_time,
+        fanout_ttl: network_params.libp2p_fanout_ttl,
+        heartbeat_initial_delay: network_params.libp2p_heartbeat_initial_delay,
+        gossip_factor: network_params.libp2p_gossip_factor,
+        gossip_lazy: network_params.libp2p_gossip_lazy,
+    };
+
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
-            GossipConfig::default(),
+            gossip_config,
             network_params.libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair
