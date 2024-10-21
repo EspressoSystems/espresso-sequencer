@@ -233,7 +233,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             consensus: OuterConsensus::new(consensus),
             instance_state: handle.hotshot.instance_state(),
             latest_voted_view: handle.cur_view().await,
-            vote_dependencies: HashMap::new(),
+            vote_dependencies: BTreeMap::new(),
             network: Arc::clone(&handle.hotshot.network),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             da_membership: handle.hotshot.memberships.da_membership.clone().into(),

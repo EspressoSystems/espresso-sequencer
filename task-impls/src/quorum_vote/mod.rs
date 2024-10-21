@@ -4,10 +4,10 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{bail, ensure, Context, Result};
-use async_broadcast::{Receiver, Sender};
+use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
@@ -81,7 +81,7 @@ pub struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     /// Event sender.
     pub sender: Sender<Arc<HotShotEvent<TYPES>>>,
     /// Event receiver.
-    pub receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
+    pub receiver: InactiveReceiver<Arc<HotShotEvent<TYPES>>>,
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
     /// The node's id
@@ -113,7 +113,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
             None => fetch_proposal(
                 justify_qc.view_number(),
                 self.sender.clone(),
-                self.receiver.clone(),
+                self.receiver.activate_cloned(),
                 Arc::clone(&self.quorum_membership),
                 OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                 self.public_key.clone(),
@@ -259,7 +259,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
         {
             // Block on receiving the event from the event stream.
             EventDependency::new(
-                self.receiver.clone(),
+                self.receiver.activate_cloned(),
                 Box::new(move |event| {
                     let event = event.as_ref();
                     if let HotShotEvent::ValidatedStateUpdated(view_number, _) = event {
@@ -379,7 +379,7 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     pub latest_voted_view: TYPES::View,
 
     /// Table for the in-progress dependency tasks.
-    pub vote_dependencies: HashMap<TYPES::View, JoinHandle<()>>,
+    pub vote_dependencies: BTreeMap<TYPES::View, JoinHandle<()>>,
 
     /// The underlying network
     pub network: Arc<I::Network>,
@@ -499,7 +499,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 view_number,
                 epoch_number,
                 sender: event_sender.clone(),
-                receiver: event_receiver.clone(),
+                receiver: event_receiver.clone().deactivate(),
                 upgrade_lock: self.upgrade_lock.clone(),
                 id: self.id,
             },
@@ -678,6 +678,23 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     return;
                 }
             }
+            HotShotEvent::Timeout(view) => {
+                // cancel old tasks
+                let current_tasks = self.vote_dependencies.split_off(view);
+                while let Some((_, task)) = self.vote_dependencies.pop_last() {
+                    cancel_task(task).await;
+                }
+                self.vote_dependencies = current_tasks;
+            }
+            HotShotEvent::ViewChange(mut view) => {
+                view = TYPES::View::new(view.saturating_sub(1));
+                // cancel old tasks
+                let current_tasks = self.vote_dependencies.split_off(&view);
+                while let Some((_, task)) = self.vote_dependencies.pop_last() {
+                    cancel_task(task).await;
+                }
+                self.vote_dependencies = current_tasks;
+            }
             _ => {}
         }
     }
@@ -701,7 +718,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
     }
 
     async fn cancel_subtasks(&mut self) {
-        for handle in self.vote_dependencies.drain().map(|(_view, handle)| handle) {
+        while let Some((_, handle)) = self.vote_dependencies.pop_last() {
             #[cfg(async_executor_impl = "async-std")]
             handle.cancel().await;
             #[cfg(async_executor_impl = "tokio")]

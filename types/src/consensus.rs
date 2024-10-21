@@ -348,6 +348,8 @@ pub struct ConsensusMetricsValue {
     pub number_of_timeouts_as_leader: Box<dyn Counter>,
     /// The number of empty blocks that have been proposed
     pub number_of_empty_blocks_proposed: Box<dyn Counter>,
+    /// Number of events in the hotshot event queue
+    pub internal_event_queue_len: Box<dyn Gauge>,
 }
 
 impl ConsensusMetricsValue {
@@ -376,6 +378,8 @@ impl ConsensusMetricsValue {
                 .create_counter(String::from("number_of_timeouts_as_leader"), None),
             number_of_empty_blocks_proposed: metrics
                 .create_counter(String::from("number_of_empty_blocks_proposed"), None),
+            internal_event_queue_len: metrics
+                .create_gauge(String::from("internal_event_queue_len"), None),
         }
     }
 }

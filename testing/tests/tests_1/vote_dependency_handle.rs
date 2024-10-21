@@ -99,7 +99,7 @@ async fn test_vote_dependency_handle() {
                 view_number,
                 epoch_number: EpochNumber::new(1),
                 sender: event_sender.clone(),
-                receiver: event_receiver.clone(),
+                receiver: event_receiver.clone().deactivate(),
                 upgrade_lock: handle.hotshot.upgrade_lock.clone(),
                 id: handle.hotshot.id,
             };

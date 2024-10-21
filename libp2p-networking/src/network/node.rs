@@ -205,6 +205,20 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                 .mesh_n_low(config.gossip_config.mesh_n_low) // Lower limit of mesh peers
                 .mesh_outbound_min(config.gossip_config.mesh_outbound_min) // Minimum number of outbound peers in mesh
                 .max_transmit_size(config.gossip_config.max_transmit_size) // Maximum size of a message
+                .max_ihave_length(config.gossip_config.max_ihave_length) // Maximum number of messages to include in an IHAVE message
+                .max_ihave_messages(config.gossip_config.max_ihave_messages) // Maximum number of IHAVE messages to accept from a peer within a heartbeat
+                .published_message_ids_cache_time(
+                    config.gossip_config.published_message_ids_cache_time,
+                ) // Cache duration for published message IDs
+                .iwant_followup_time(config.gossip_config.iwant_followup_time) // Time to wait for a message requested through IWANT following an IHAVE advertisement
+                .max_messages_per_rpc(config.gossip_config.max_messages_per_rpc) // The maximum number of messages we will process in a given RPC
+                .gossip_retransimission(config.gossip_config.gossip_retransmission) // Controls how many times we will allow a peer to request the same message id through IWANT gossip before we start ignoring them.
+                .flood_publish(config.gossip_config.flood_publish) // If enabled newly created messages will always be sent to all peers that are subscribed to the topic and have a good enough score.
+                .duplicate_cache_time(config.gossip_config.duplicate_cache_time) // The time period that messages are stored in the cache
+                .fanout_ttl(config.gossip_config.fanout_ttl) // Time to live for fanout peers
+                .heartbeat_initial_delay(config.gossip_config.heartbeat_initial_delay) // Initial delay in each heartbeat
+                .gossip_factor(config.gossip_config.gossip_factor) // Affects how many peers we will emit gossip to at each heartbeat
+                .gossip_lazy(config.gossip_config.gossip_lazy) // Minimum number of peers to emit gossip to during a heartbeat
                 .build()
                 .map_err(|err| {
                     NetworkError::ConfigError(format!("error building gossipsub config: {err:?}"))

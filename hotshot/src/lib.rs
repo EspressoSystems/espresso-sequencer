@@ -252,14 +252,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         let anchored_leaf = initializer.inner;
         let instance_state = initializer.instance_state;
 
-        let (internal_tx, internal_rx) = internal_channel;
+        let (internal_tx, mut internal_rx) = internal_channel;
         let (mut external_tx, mut external_rx) = external_channel;
 
         let upgrade_lock =
             UpgradeLock::<TYPES, V>::from_certificate(&initializer.decided_upgrade_certificate);
 
-        // Allow overflow on the channel, otherwise sending to it may block.
+        // Allow overflow on the external channel, otherwise sending to it may block.
         external_rx.set_overflow(true);
+
+        // Allow overflow on the internal channel as well. We don't want to block consensus if we
+        // have a slow receiver
+        internal_rx.set_overflow(true);
 
         // Get the validated state from the initializer or construct an incomplete one from the
         // block header.

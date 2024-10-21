@@ -8,9 +8,10 @@
 
 /// Provides trait to create task states from a `SystemContextHandle`
 pub mod task_state;
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use async_broadcast::{broadcast, RecvError};
+use async_compatibility_layer::art::async_sleep;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -92,6 +93,29 @@ pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
         handle.internal_event_stream.1.activate_cloned(),
         handle.internal_event_stream.0.clone(),
     ));
+}
+
+/// Add a task which updates our queue lenght metric at a set interval
+pub fn add_queue_len_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
+    handle: &mut SystemContextHandle<TYPES, I, V>,
+) {
+    let consensus = handle.hotshot.consensus();
+    let rx = handle.internal_event_stream.1.clone();
+    let shutdown_signal = create_shutdown_event_monitor(handle).fuse();
+    let task_handle = async_spawn(async move {
+        futures::pin_mut!(shutdown_signal);
+        loop {
+            futures::select! {
+                () = shutdown_signal => {
+                    return;
+                },
+                () = async_sleep(Duration::from_millis(500)).fuse() => {
+                    consensus.read().await.metrics.internal_event_queue_len.set(rx.len());
+                }
+            }
+        }
+    });
+    handle.network_registry.register(task_handle);
 }
 
 /// Add the network task to handle messages and publish events.
@@ -228,7 +252,7 @@ pub async fn add_consensus_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>, 
         handle.add_task(QuorumProposalRecvTaskState::<TYPES, I, V>::create_from(handle).await);
         handle.add_task(ConsensusTaskState::<TYPES, I, V>::create_from(handle).await);
     }
-
+    add_queue_len_task(handle);
     #[cfg(feature = "rewind")]
     handle.add_task(RewindTaskState::<TYPES>::create_from(&handle).await);
 }
