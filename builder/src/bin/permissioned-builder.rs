@@ -299,7 +299,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_TRANSMIT_SIZE",
-        default_value = "2_000_000"
+        default_value = "2000000"
     )]
     pub libp2p_max_transmit_size: usize,
 
