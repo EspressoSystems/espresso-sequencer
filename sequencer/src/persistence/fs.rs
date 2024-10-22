@@ -806,6 +806,12 @@ fn migrate_network_config(
         config.insert("stop_voting_time".into(), 0.into());
     }
 
+    // HotShotConfig was upgraded to include an `epoch_height` parameter. Initialize with a default
+    // if missing.
+    if !config.contains_key("epoch_height") {
+        config.insert("epoch_height".into(), 0.into());
+    }
+
     Ok(network_config)
 }
 
