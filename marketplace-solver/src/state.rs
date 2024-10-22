@@ -203,7 +203,7 @@ impl UpdateSolverState for GlobalState {
             registration.body.active = active;
         }
 
-        // The given signature key should also be from the database `signature_keys`.`
+        // The given signature key should also be from the database `signature_keys`.
         if !registration.body.signature_keys.contains(&signature_key) {
             return Err(SolverError::SignatureKeysMismatch(
                 signature_key.to_string(),
