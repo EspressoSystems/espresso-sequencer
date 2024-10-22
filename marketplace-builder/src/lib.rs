@@ -38,10 +38,8 @@ use hotshot::{
 use hotshot_builder_api::v0_3::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
-use hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::NetworkConfig,
-};
+use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
+use hotshot_types::network::NetworkConfig;
 use marketplace_builder_core::service::{BuilderHooks, GlobalState, ProxyGlobalState};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;

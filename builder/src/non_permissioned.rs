@@ -28,7 +28,6 @@ use hotshot_builder_core::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
-    ParentBlockReferences,
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -43,6 +42,8 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
+use marketplace_builder_shared::block::ParentBlockReferences;
+use marketplace_builder_shared::utils::EventServiceStream;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
@@ -90,7 +91,7 @@ impl BuilderConfig {
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
-        buffered_view_num_count: usize,
+        max_block_size_increment_period: Duration,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
     ) -> anyhow::Result<Self> {
@@ -100,7 +101,7 @@ impl BuilderConfig {
             %tx_channel_capacity,
             %event_channel_capacity,
             ?max_api_timeout_duration,
-            buffered_view_num_count,
+            ?instance_state.chain_config.max_block_size,
             ?maximize_txns_count_timeout_duration,
             "initializing builder",
         );
@@ -145,7 +146,8 @@ impl BuilderConfig {
             vid_commitment,
             bootstrapped_view,
             bootstrapped_view,
-            buffered_view_num_count as u64,
+            max_block_size_increment_period,
+            instance_state.chain_config.max_block_size.into(),
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -194,12 +196,17 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
+
+        let event_stream =
+            EventServiceStream::<SeqTypes, SequencerApiVersion>::connect(events_url).await?;
+
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion>(
+            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion, _>(
                 da_sender,
                 qc_sender,
                 decide_sender,
-                events_url,
+                event_stream,
+                node_count,
                 global_state_clone,
             )
             .await;
@@ -236,10 +243,7 @@ mod test {
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
-    };
+    use hotshot_builder_core::service::run_non_permissioned_standalone_builder_service;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},

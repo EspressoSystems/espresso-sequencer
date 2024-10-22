@@ -19,13 +19,13 @@ use futures::{
 use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
-use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
     light_client::StateSignatureRequestBody,
+    network::NetworkConfig,
     traits::{network::ConnectedNetwork, node_implementation::Versions, ValidatedState as _},
     utils::{View, ViewInner},
 };

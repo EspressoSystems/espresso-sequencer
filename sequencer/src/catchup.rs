@@ -11,9 +11,9 @@ use espresso_types::{
     FeeMerkleTree, Leaf, NodeState,
 };
 use futures::future::{Future, FutureExt};
-use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_types::{
-    data::ViewNumber, traits::node_implementation::ConsensusTime as _, ValidatorConfig,
+    data::ViewNumber, network::NetworkConfig, traits::node_implementation::ConsensusTime as _,
+    ValidatorConfig,
 };
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;

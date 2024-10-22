@@ -676,13 +676,20 @@ impl HotShotState<SeqTypes> for ValidatedState {
                 system_time,
                 diff
             );
-            return Err(BlockError::InvalidBlockHeader);
+            return Err(BlockError::InvalidBlockHeader(format!(
+                "Timestamp drift too high proposed={} system={} diff={}",
+                proposed_header.timestamp(),
+                system_time,
+                diff
+            )));
         }
 
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
             tracing::error!("invalid builder fee: {err:#}");
-            return Err(BlockError::InvalidBlockHeader);
+            return Err(BlockError::InvalidBlockHeader(format!(
+                "invalid builder fee: {err:#}"
+            )));
         }
 
         // Unwrapping here is okay as we retry in a loop
@@ -722,14 +729,18 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
             if finalized != proposed_finalized {
                 tracing::error!("Invalid proposal: l1_finalized mismatch");
-                return Err(BlockError::InvalidBlockHeader);
+                return Err(BlockError::InvalidBlockHeader(
+                    "l1_finalized mismatch".to_string(),
+                ));
             }
         }
         // Validate `l1_head`.
         // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
         if proposed_header.l1_head() < parent_leaf.block_header().l1_head() {
             tracing::error!("Invalid proposal: l1_head decreasing");
-            return Err(BlockError::InvalidBlockHeader);
+            return Err(BlockError::InvalidBlockHeader(
+                "l1_head decreasing".to_string(),
+            ));
         }
 
         let _ = instance
@@ -746,7 +757,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             &vid_common,
         ) {
             tracing::error!("Invalid proposal: {err:#}");
-            return Err(BlockError::InvalidBlockHeader);
+            return Err(BlockError::InvalidBlockHeader(format!("{err:#}")));
         }
 
         // log successful progress about once in 10 - 20 seconds,

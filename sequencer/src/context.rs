@@ -23,11 +23,12 @@ use hotshot::{
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
+    network::NetworkConfig,
     traits::{
         election::Membership,
         metrics::Metrics,
@@ -390,11 +391,8 @@ async fn handle_events<V: Versions>(
         state_signer.handle_event(&event).await;
 
         // Handle external messages
-        if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
-            if let Err(err) = external_event_handler
-                .handle_event(external_message_bytes)
-                .await
-            {
+        if let EventType::ExternalMessageReceived { data, .. } = &event.event {
+            if let Err(err) = external_event_handler.handle_event(data).await {
                 tracing::warn!("Failed to handle external message: {:?}", err);
             };
         }
@@ -463,14 +461,19 @@ async fn fetch_proposal_chain<N, P, V>(
             }
         }
 
-        let future = match consensus.read().await.request_proposal(view, leaf) {
-            Ok(future) => future,
-            Err(err) => {
-                tracing::warn!(?view, %leaf, "failed to request proposal: {err:#}");
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
+        let future =
+            match consensus
+                .read()
+                .await
+                .request_proposal(view, EpochNumber::genesis(), leaf)
+            {
+                Ok(future) => future,
+                Err(err) => {
+                    tracing::warn!(?view, %leaf, "failed to request proposal: {err:#}");
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
         let proposal = match async_timeout(Duration::from_secs(30), future).await {
             Ok(Ok(proposal)) => proposal,
             Ok(Err(err)) => {

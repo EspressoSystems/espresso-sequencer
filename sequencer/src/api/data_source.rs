@@ -9,9 +9,6 @@ use espresso_types::{
     FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
 };
 use futures::future::Future;
-use hotshot_orchestrator::config::{
-    BuilderType, CombinedNetworkConfig, Libp2pConfig, NetworkConfig, RandomBuilderConfig,
-};
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::VersionedDataSource,
@@ -19,9 +16,13 @@ use hotshot_query_service::{
     node::NodeDataSource,
     status::StatusDataSource,
 };
+use hotshot_types::network::{
+    BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig,
+};
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
+    network::NetworkConfig,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -237,6 +238,7 @@ pub struct PublicHotShotConfig {
     stop_proposing_time: u64,
     start_voting_time: u64,
     stop_voting_time: u64,
+    epoch_height: u64,
 }
 
 impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
@@ -271,6 +273,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             stop_proposing_time,
             start_voting_time,
             stop_voting_time,
+            epoch_height,
         } = v;
 
         Self {
@@ -300,6 +303,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             stop_proposing_time,
             start_voting_time,
             stop_voting_time,
+            epoch_height,
         }
     }
 }
@@ -336,6 +340,7 @@ impl PublicHotShotConfig {
             stop_proposing_time: self.stop_proposing_time,
             start_voting_time: self.start_voting_time,
             stop_voting_time: self.stop_voting_time,
+            epoch_height: self.epoch_height,
         }
     }
 }
