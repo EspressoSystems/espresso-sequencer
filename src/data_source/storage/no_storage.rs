@@ -22,7 +22,9 @@ use crate::{
         TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::{update, VersionedDataSource},
+    metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
+    status::HasMetrics,
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
@@ -42,6 +44,7 @@ pub struct NoStorage {
     // A storage implementation must at a minimum keep track of the block height. All other
     // functionality, such as fetching of missing data, stems from that.
     height: Arc<RwLock<u64>>,
+    metrics: PrometheusMetrics,
 }
 
 pub struct Transaction<'a> {
@@ -92,6 +95,12 @@ impl PruneStorage for NoStorage {
     type Pruner = ();
 }
 impl<'a> PrunedHeightStorage for Transaction<'a> {}
+
+impl HasMetrics for NoStorage {
+    fn metrics(&self) -> &PrometheusMetrics {
+        &self.metrics
+    }
+}
 
 #[async_trait]
 impl<'a, Types: NodeType> AvailabilityStorage<Types> for Transaction<'a>
@@ -246,7 +255,7 @@ pub mod testing {
         fetching::provider::{NoFetching, QueryServiceProvider},
         metrics::PrometheusMetrics,
         node::NodeDataSource,
-        status::StatusDataSource,
+        status::{HasMetrics, StatusDataSource},
         testing::{
             consensus::{DataSourceLifeCycle, MockNetwork},
             mocks::{MockBase, MockTypes},
@@ -634,19 +643,21 @@ pub mod testing {
         }
     }
 
+    impl HasMetrics for DataSource {
+        fn metrics(&self) -> &PrometheusMetrics {
+            match self {
+                Self::Sql(data_source) => data_source.metrics(),
+                Self::NoStorage(data_source) => data_source.metrics(),
+            }
+        }
+    }
+
     #[async_trait]
     impl StatusDataSource for DataSource {
         async fn block_height(&self) -> QueryResult<usize> {
             match self {
                 Self::Sql(data_source) => StatusDataSource::block_height(data_source).await,
                 Self::NoStorage(data_source) => StatusDataSource::block_height(data_source).await,
-            }
-        }
-
-        fn metrics(&self) -> &PrometheusMetrics {
-            match self {
-                Self::Sql(data_source) => data_source.metrics(),
-                Self::NoStorage(data_source) => data_source.metrics(),
             }
         }
     }

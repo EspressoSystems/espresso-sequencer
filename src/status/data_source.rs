@@ -19,11 +19,13 @@ use async_trait::async_trait;
 use chrono::Utc;
 use hotshot_types::traits::metrics::Metrics;
 
-#[async_trait]
-pub trait StatusDataSource {
-    async fn block_height(&self) -> QueryResult<usize>;
-
+pub trait HasMetrics {
     fn metrics(&self) -> &PrometheusMetrics;
+}
+
+#[async_trait]
+pub trait StatusDataSource: HasMetrics {
+    async fn block_height(&self) -> QueryResult<usize>;
 
     fn consensus_metrics(&self) -> QueryResult<PrometheusMetrics> {
         self.metrics()

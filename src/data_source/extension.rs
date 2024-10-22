@@ -24,7 +24,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-    status::StatusDataSource,
+    status::{HasMetrics, StatusDataSource},
     Header, Payload, QueryResult, Transaction, VidShare,
 };
 use async_trait::async_trait;
@@ -270,6 +270,15 @@ where
     }
 }
 
+impl<D, U> HasMetrics for ExtensibleDataSource<D, U>
+where
+    D: HasMetrics,
+{
+    fn metrics(&self) -> &PrometheusMetrics {
+        self.data_source.metrics()
+    }
+}
+
 #[async_trait]
 impl<D, U> StatusDataSource for ExtensibleDataSource<D, U>
 where
@@ -278,10 +287,6 @@ where
 {
     async fn block_height(&self) -> QueryResult<usize> {
         self.data_source.block_height().await
-    }
-
-    fn metrics(&self) -> &PrometheusMetrics {
-        self.data_source.metrics()
     }
 }
 

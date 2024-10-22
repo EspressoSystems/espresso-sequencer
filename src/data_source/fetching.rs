@@ -94,7 +94,7 @@ use crate::{
     },
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-    status::StatusDataSource,
+    status::{HasMetrics, StatusDataSource},
     task::BackgroundTask,
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
@@ -330,8 +330,6 @@ where
     // implements the asynchronous fetching of a particular object. This is why it gets its own
     // type, wrapped in an [`Arc`] for easy, efficient cloning.
     fetcher: Arc<Fetcher<Types, S, P>>,
-    // The rest of the data we need for implementing data source traits but not for fetching.
-    metrics: PrometheusMetrics,
     // The proactive scanner task. This is only saved here so that we can cancel it on drop.
     scanner: Option<BackgroundTask>,
     pruner: Pruner<Types, S, P>,
@@ -424,7 +422,6 @@ where
             fetcher,
             scanner,
             pruner,
-            metrics: Default::default(),
         };
 
         Ok(ds)
@@ -440,11 +437,21 @@ where
     }
 }
 
+impl<Types, S, P> HasMetrics for FetchingDataSource<Types, S, P>
+where
+    Types: NodeType,
+    S: HasMetrics,
+{
+    fn metrics(&self) -> &PrometheusMetrics {
+        self.as_ref().metrics()
+    }
+}
+
 #[async_trait]
 impl<Types, S, P> StatusDataSource for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    S: VersionedDataSource + Send + Sync + 'static,
+    S: VersionedDataSource + HasMetrics + Send + Sync + 'static,
     for<'a> S::ReadOnly<'a>: NodeStorage<Types>,
     P: Send + Sync,
 {
@@ -453,10 +460,6 @@ where
             message: err.to_string(),
         })?;
         tx.block_height().await
-    }
-
-    fn metrics(&self) -> &PrometheusMetrics {
-        &self.metrics
     }
 }
 

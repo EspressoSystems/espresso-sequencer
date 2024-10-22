@@ -269,7 +269,7 @@
 //! # use hotshot_query_service::node::{
 //! #   NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart,
 //! # };
-//! # use hotshot_query_service::status::StatusDataSource;
+//! # use hotshot_query_service::status::{HasMetrics, StatusDataSource};
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use std::ops::RangeBounds;
 //! # type AppQueryData = ();
@@ -366,14 +366,15 @@
 //! }
 //!
 //! // Implement data source trait for status API by delegating to the underlying data source.
+//! impl<D: HasMetrics> HasMetrics for AppState<D> {
+//!     fn metrics(&self) -> &PrometheusMetrics {
+//!         self.hotshot_qs.metrics()
+//!     }
+//! }
 //! #[async_trait]
 //! impl<D: StatusDataSource + Send + Sync> StatusDataSource for AppState<D> {
 //!     async fn block_height(&self) -> QueryResult<usize> {
 //!         self.hotshot_qs.block_height().await
-//!     }
-//!
-//!     fn metrics(&self) -> &PrometheusMetrics {
-//!         self.hotshot_qs.metrics()
 //!     }
 //! }
 //!
@@ -577,7 +578,7 @@ mod test {
         data_source::VersionedDataSource,
         metrics::PrometheusMetrics,
         node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-        status::StatusDataSource,
+        status::{HasMetrics, StatusDataSource},
         testing::{
             consensus::MockDataSource,
             mocks::{MockHeader, MockPayload, MockTypes},
@@ -717,13 +718,15 @@ mod test {
     }
 
     // Implement data source trait for status API.
+    impl HasMetrics for CompositeState {
+        fn metrics(&self) -> &PrometheusMetrics {
+            self.hotshot_qs.metrics()
+        }
+    }
     #[async_trait]
     impl StatusDataSource for CompositeState {
         async fn block_height(&self) -> QueryResult<usize> {
             StatusDataSource::block_height(&self.hotshot_qs).await
-        }
-        fn metrics(&self) -> &PrometheusMetrics {
-            self.hotshot_qs.metrics()
         }
     }
 

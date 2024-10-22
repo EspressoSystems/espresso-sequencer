@@ -43,7 +43,10 @@ use committable::Committable;
 use derive_more::{Deref, DerefMut};
 use futures::{future::Future, stream::TryStreamExt};
 use hotshot_types::traits::{
-    block_contents::BlockHeader, node_implementation::NodeType, EncodeBytes,
+    block_contents::BlockHeader,
+    metrics::{Counter, Gauge, Histogram, Metrics},
+    node_implementation::NodeType,
+    EncodeBytes,
 };
 use itertools::Itertools;
 use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};
@@ -51,7 +54,7 @@ use sqlx::{pool::Pool, types::BitVec, Encode, Execute, FromRow, Type};
 use std::{
     collections::{HashMap, HashSet},
     marker::PhantomData,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub use sqlx::Executor;
@@ -83,6 +86,8 @@ pub trait TransactionMode: Send + Sync {
     fn begin(
         conn: &mut <Db as Database>::Connection,
     ) -> impl Future<Output = anyhow::Result<()>> + Send;
+
+    fn display() -> &'static str;
 }
 
 impl TransactionMode for Write {
@@ -90,6 +95,10 @@ impl TransactionMode for Write {
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             .await?;
         Ok(())
+    }
+
+    fn display() -> &'static str {
+        "write"
     }
 }
 
@@ -99,6 +108,59 @@ impl TransactionMode for Read {
             .await?;
         Ok(())
     }
+
+    fn display() -> &'static str {
+        "read-only"
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum CloseType {
+    Commit,
+    Revert,
+    Drop,
+}
+
+#[derive(Debug)]
+struct TransactionMetricsGuard<Mode> {
+    started_at: Instant,
+    metrics: PoolMetrics,
+    close_type: CloseType,
+    _mode: PhantomData<Mode>,
+}
+
+impl<Mode: TransactionMode> TransactionMetricsGuard<Mode> {
+    fn begin(metrics: PoolMetrics) -> Self {
+        let started_at = Instant::now();
+        tracing::trace!(mode = Mode::display(), ?started_at, "begin");
+        metrics.open_transactions.update(1);
+
+        Self {
+            started_at,
+            metrics,
+            close_type: CloseType::Drop,
+            _mode: Default::default(),
+        }
+    }
+
+    fn close(&mut self, t: CloseType) {
+        self.close_type = t;
+    }
+}
+
+impl<Mode> Drop for TransactionMetricsGuard<Mode> {
+    fn drop(&mut self) {
+        self.metrics
+            .transaction_durations
+            .add_point((self.started_at.elapsed().as_millis() as f64) / 1000.);
+        self.metrics.open_transactions.update(-1);
+        match self.close_type {
+            CloseType::Commit => self.metrics.commits.add(1),
+            CloseType::Revert => self.metrics.reverts.add(1),
+            CloseType::Drop => self.metrics.drops.add(1),
+        }
+        tracing::trace!(started_at = ?self.started_at, reason = ?self.close_type, "close");
+    }
 }
 
 /// An atomic SQL transaction.
@@ -107,28 +169,28 @@ pub struct Transaction<Mode> {
     #[deref]
     #[deref_mut]
     inner: sqlx::Transaction<'static, Db>,
-    _mode: PhantomData<Mode>,
+    metrics: TransactionMetricsGuard<Mode>,
 }
 
 impl<Mode: TransactionMode> Transaction<Mode> {
-    pub(super) async fn new(pool: &Pool<Db>) -> anyhow::Result<Self> {
-        let mut tx = pool.begin().await?;
-        Mode::begin(tx.as_mut()).await?;
-        Ok(Self {
-            inner: tx,
-            _mode: Default::default(),
-        })
+    pub(super) async fn new(pool: &Pool<Db>, metrics: PoolMetrics) -> anyhow::Result<Self> {
+        let mut inner = pool.begin().await?;
+        let metrics = TransactionMetricsGuard::begin(metrics);
+        Mode::begin(inner.as_mut()).await?;
+        Ok(Self { inner, metrics })
     }
 }
 
 impl<Mode: TransactionMode> update::Transaction for Transaction<Mode> {
-    async fn commit(self) -> anyhow::Result<()> {
+    async fn commit(mut self) -> anyhow::Result<()> {
         self.inner.commit().await?;
+        self.metrics.close(CloseType::Commit);
         Ok(())
     }
-    fn revert(self) -> impl Future + Send {
+    fn revert(mut self) -> impl Future + Send {
         async move {
             self.inner.rollback().await.unwrap();
+            self.metrics.close(CloseType::Revert);
         }
     }
 }
@@ -701,5 +763,27 @@ impl<Mode: TransactionMode> PrunedHeightStorage for Transaction<Mode> {
             return Ok(None);
         };
         Ok(Some(height as u64))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct PoolMetrics {
+    open_transactions: Box<dyn Gauge>,
+    transaction_durations: Box<dyn Histogram>,
+    commits: Box<dyn Counter>,
+    reverts: Box<dyn Counter>,
+    drops: Box<dyn Counter>,
+}
+
+impl PoolMetrics {
+    pub(super) fn new(metrics: &(impl Metrics + ?Sized)) -> Self {
+        Self {
+            open_transactions: metrics.create_gauge("open_transactions".into(), None),
+            transaction_durations: metrics
+                .create_histogram("transaction_duration".into(), Some("s".into())),
+            commits: metrics.create_counter("committed_transactions".into(), None),
+            reverts: metrics.create_counter("reverted_transactions".into(), None),
+            drops: metrics.create_counter("dropped_transactions".into(), None),
+        }
     }
 }
