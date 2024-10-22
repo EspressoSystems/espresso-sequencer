@@ -134,6 +134,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Invalid Max Block States
     error InvalidMaxStateHistory();
 
+    error NonZeroBlockThresholdRequired();
+
     /// @notice Constructor disables initializers to prevent the implementation contract from being
     /// initialized
     /// @dev This is standard practice for OpenZeppelin upgradeable contracts. Storage is on the
@@ -349,6 +351,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice checks if the state updates lag behind the specified block threshold based on the
     /// provided block number.
+    /// @dev Reverts if there isn't enough state history to make an accurate comparison.
+    /// Reverts if the blockThreshold is zero
     /// @param blockNumber The block number to compare against the latest state updates.
     /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind.
     /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false.
@@ -358,33 +362,36 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         virtual
         returns (bool)
     {
+        // the block threshold needs to be more than 0
+        if (blockThreshold == 0) {
+            revert NonZeroBlockThresholdRequired();
+        }
         uint256 updatesCount = stateHistoryCommitments.length;
 
-        // Handling Edge Cases
-        // Edgecase 1: blockNumber is greater than current block.number or
-        // less than 3 updates exist which means the history is insufficient to determine a lag.
-        if (blockNumber > block.number || updatesCount < 3) {
+        // Edge Case Handling:
+        // 1. Provided block number is greater than the current block (invalid)
+        // 2. No updates have occurred (i.e., state history is empty)
+        // 3. Provided block number is earlier than the first recorded state update
+        // the stateHistoryFirstIndex is used to check for the first nonZero element
+        if (
+            blockNumber > block.number || updatesCount == 0
+                || blockNumber < stateHistoryCommitments[stateHistoryFirstIndex].l1BlockHeight
+        ) {
             revert InsufficientSnapshotHistory();
         }
 
         uint256 prevBlock;
         bool prevUpdateFound;
 
-        // Start searching from the latest update
+        // Search from the most recent state update back to find the first update <= blockNumber
         uint256 i = updatesCount - 1;
         while (!prevUpdateFound) {
-            // Skip the first two updates as per logic mentioned above.
-            if (i < 2) {
-                break;
-            }
-
-            // Stop if we've already assessed the first recorded state in the history.
+            // Stop searching if we've exhausted the recorded state history
             if (i < stateHistoryFirstIndex) {
                 break;
             }
 
-            // Find the first update where the block height is less than or equal to the given
-            // blockNumber.
+            // Find the first update with a block height <= blockNumber
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
                 prevUpdateFound = true;
                 prevBlock = stateHistoryCommitments[i].l1BlockHeight;

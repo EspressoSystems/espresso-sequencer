@@ -833,6 +833,13 @@ pub mod light_client {
                     },],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("NonZeroBlockThresholdRequired"),
+                    ::std::vec![::ethers::core::abi::ethabi::AbiError {
+                        name: ::std::borrow::ToOwned::to_owned("NonZeroBlockThresholdRequired",),
+                        inputs: ::std::vec![],
+                    },],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("NotInitializing"),
                     ::std::vec![::ethers::core::abi::ethabi::AbiError {
                         name: ::std::borrow::ToOwned::to_owned("NotInitializing"),
@@ -1425,6 +1432,24 @@ pub mod light_client {
     )]
     #[etherror(name = "NoChangeRequired", abi = "NoChangeRequired()")]
     pub struct NoChangeRequired;
+    ///Custom Error type `NonZeroBlockThresholdRequired` with signature `NonZeroBlockThresholdRequired()` and selector `0xd5b42b64`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[etherror(
+        name = "NonZeroBlockThresholdRequired",
+        abi = "NonZeroBlockThresholdRequired()"
+    )]
+    pub struct NonZeroBlockThresholdRequired;
     ///Custom Error type `NotInitializing` with signature `NotInitializing()` and selector `0xd7e6bcf8`
     #[derive(
         Clone,
@@ -1584,6 +1609,7 @@ pub mod light_client {
         InvalidMaxStateHistory(InvalidMaxStateHistory),
         InvalidProof(InvalidProof),
         NoChangeRequired(NoChangeRequired),
+        NonZeroBlockThresholdRequired(NonZeroBlockThresholdRequired),
         NotInitializing(NotInitializing),
         OutdatedState(OutdatedState),
         OwnableInvalidOwner(OwnableInvalidOwner),
@@ -1657,6 +1683,11 @@ pub mod light_client {
             {
                 return Ok(Self::NoChangeRequired(decoded));
             }
+            if let Ok(decoded) =
+                <NonZeroBlockThresholdRequired as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::NonZeroBlockThresholdRequired(decoded));
+            }
             if let Ok(decoded) = <NotInitializing as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::NotInitializing(decoded));
             }
@@ -1721,6 +1752,9 @@ pub mod light_client {
                 }
                 Self::InvalidProof(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::NoChangeRequired(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::NonZeroBlockThresholdRequired(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::NotInitializing(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::OutdatedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::OwnableInvalidOwner(element) => {
@@ -1794,6 +1828,10 @@ pub mod light_client {
                     true
                 }
                 _ if selector
+                    == <NonZeroBlockThresholdRequired as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
                     == <NotInitializing as ::ethers::contract::EthError>::selector() => {
                     true
                 }
@@ -1848,6 +1886,9 @@ pub mod light_client {
                 Self::InvalidMaxStateHistory(element) => ::core::fmt::Display::fmt(element, f),
                 Self::InvalidProof(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NoChangeRequired(element) => ::core::fmt::Display::fmt(element, f),
+                Self::NonZeroBlockThresholdRequired(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
                 Self::NotInitializing(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OutdatedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OwnableInvalidOwner(element) => ::core::fmt::Display::fmt(element, f),
@@ -1925,6 +1966,11 @@ pub mod light_client {
     impl ::core::convert::From<NoChangeRequired> for LightClientErrors {
         fn from(value: NoChangeRequired) -> Self {
             Self::NoChangeRequired(value)
+        }
+    }
+    impl ::core::convert::From<NonZeroBlockThresholdRequired> for LightClientErrors {
+        fn from(value: NonZeroBlockThresholdRequired) -> Self {
+            Self::NonZeroBlockThresholdRequired(value)
         }
     }
     impl ::core::convert::From<NotInitializing> for LightClientErrors {
