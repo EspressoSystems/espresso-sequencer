@@ -415,24 +415,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
         .get(&leaf_commitment)
         .context("Failed to find high QC of parent")?;
 
-    let reached_decided = leaf.view_number() == consensus_reader.last_decided_view();
-    let parent_leaf = leaf.clone();
-    let original_parent_hash = parent_leaf.commit(upgrade_lock).await;
-    let mut next_parent_hash = original_parent_hash;
-
-    // Walk back until we find a decide
-    if !reached_decided {
-        debug!("We have not reached decide");
-        while let Some(next_parent_leaf) = consensus_reader.saved_leaves().get(&next_parent_hash) {
-            if next_parent_leaf.view_number() <= consensus_reader.last_decided_view() {
-                break;
-            }
-            next_parent_hash = next_parent_leaf.parent_commitment();
-        }
-        // TODO do some sort of sanity check on the view number that it matches decided
-    }
-
-    Ok((parent_leaf, Arc::clone(state)))
+    Ok((leaf.clone(), Arc::clone(state)))
 }
 
 /// Validate the state and safety and liveness of a proposal then emit
