@@ -703,6 +703,18 @@ impl SequencerPersistence for Persistence {
         Ok(map)
     }
 
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+        let inner = self.inner.read().await;
+        let dir_path = inner.quorum_proposals_dir_path();
+        let file_path = dir_path.join(view.to_string()).with_extension("txt");
+        let bytes = fs::read(file_path)?;
+        let proposal = bincode::deserialize(&bytes)?;
+        Ok(proposal)
+    }
+
     async fn load_upgrade_certificate(
         &self,
     ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {

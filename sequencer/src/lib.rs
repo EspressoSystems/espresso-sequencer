@@ -309,7 +309,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
             tracing::info!(?peers, "loading network config from peers");
             let peers =
                 StatePeers::<SequencerApiVersion>::from_urls(peers, network_params.catchup_backoff);
-            let config = peers.fetch_config(my_config.clone()).await;
+            let config = peers.fetch_config(my_config.clone()).await?;
 
             tracing::info!(
                 node_id = config.node_index,
