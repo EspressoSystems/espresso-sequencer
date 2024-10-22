@@ -1,7 +1,10 @@
 //! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
 use anyhow::{Context, Result};
-use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config};
+use cdn_broker::{
+    reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
+    Broker, Config,
+};
 use clap::Parser;
 use espresso_types::{parse_size, SeqTypes};
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
@@ -124,6 +127,9 @@ async fn main() -> Result<()> {
             public_key: WrappedSignatureKey(public_key),
             private_key,
         },
+
+        user_message_hook: NoMessageHook,
+        broker_message_hook: NoMessageHook,
 
         public_bind_endpoint: args.public_bind_endpoint,
         public_advertise_endpoint: args.public_advertise_endpoint,
