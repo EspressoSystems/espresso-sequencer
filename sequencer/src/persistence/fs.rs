@@ -806,6 +806,12 @@ fn migrate_network_config(
         config.insert("stop_voting_time".into(), 0.into());
     }
 
+    // HotShotConfig was upgraded to include an `epoch_height` parameter. Initialize with a default
+    // if missing.
+    if !config.contains_key("epoch_height") {
+        config.insert("epoch_height".into(), 0.into());
+    }
+
     Ok(network_config)
 }
 
@@ -870,7 +876,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
@@ -889,7 +896,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
@@ -913,7 +921,8 @@ mod test {
                 "start_proposing_time": 9007199254740991u64,
                 "stop_proposing_time": 0,
                 "start_voting_time": 9007199254740991u64,
-                "stop_voting_time": 0
+                "stop_voting_time": 0,
+                "epoch_height": 0
             }
         });
 
@@ -932,7 +941,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
