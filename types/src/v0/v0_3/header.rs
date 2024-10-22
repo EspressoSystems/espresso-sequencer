@@ -51,11 +51,15 @@ impl Committable for Header {
             .field("ns_table", self.ns_table.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-            .var_size_field("fee_info", &bincode::serialize(&self.fee_info).unwrap())
-            .var_size_field(
-                "auction_results",
-                &bincode::serialize(&self.auction_results).unwrap(),
+            .array_field(
+                "fee_info",
+                &self
+                    .fee_info
+                    .iter()
+                    .map(Committable::commit)
+                    .collect::<Vec<_>>(),
             )
+            .field("auction_results", self.auction_results.commit())
             .finalize()
     }
 
