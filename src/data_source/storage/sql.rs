@@ -18,11 +18,14 @@ use crate::{
         update::Transaction as _,
         VersionedDataSource,
     },
+    metrics::PrometheusMetrics,
+    status::HasMetrics,
     QueryError, QueryResult,
 };
 use async_trait::async_trait;
 use chrono::Utc;
 use futures::future::FutureExt;
+use hotshot_types::traits::metrics::Metrics;
 use itertools::Itertools;
 use sqlx::{
     pool::{Pool, PoolOptions},
@@ -50,7 +53,7 @@ pub use queries::QueryBuilder;
 pub use refinery::Migration;
 pub use transaction::*;
 
-use self::migrate::Migrator;
+use self::{migrate::Migrator, transaction::PoolMetrics};
 
 /// Embed migrations from the given directory into the current binary.
 ///
@@ -367,6 +370,8 @@ impl<DB: Database> Config<DB> {
 #[derive(Debug)]
 pub struct SqlStorage {
     pool: Pool<Db>,
+    metrics: PrometheusMetrics,
+    pool_metrics: PoolMetrics,
     pruner_cfg: Option<PrunerCfg>,
 }
 
@@ -449,8 +454,11 @@ impl SqlStorage {
                 .await?;
         }
 
+        let metrics = PrometheusMetrics::default();
         Ok(Self {
             pool,
+            pool_metrics: PoolMetrics::new(&*metrics.subgroup("sql".into())),
+            metrics,
             pruner_cfg: config.pruner_cfg,
         })
     }
@@ -463,6 +471,12 @@ impl PrunerConfig for SqlStorage {
 
     fn get_pruning_config(&self) -> Option<PrunerCfg> {
         self.pruner_cfg.clone()
+    }
+}
+
+impl HasMetrics for SqlStorage {
+    fn metrics(&self) -> &PrometheusMetrics {
+        &self.metrics
     }
 }
 
@@ -630,11 +644,11 @@ impl VersionedDataSource for SqlStorage {
         Self: 'a;
 
     async fn write(&self) -> anyhow::Result<Transaction<Write>> {
-        Transaction::new(&self.pool).await
+        Transaction::new(&self.pool, self.pool_metrics.clone()).await
     }
 
     async fn read(&self) -> anyhow::Result<Transaction<Read>> {
-        Transaction::new(&self.pool).await
+        Transaction::new(&self.pool, self.pool_metrics.clone()).await
     }
 }
 

@@ -12,7 +12,11 @@
 
 #![cfg(feature = "metrics-data-source")]
 
-use crate::{metrics::PrometheusMetrics, status::StatusDataSource, QueryError, QueryResult};
+use crate::{
+    metrics::PrometheusMetrics,
+    status::{HasMetrics, StatusDataSource},
+    QueryError, QueryResult,
+};
 use async_trait::async_trait;
 
 /// A minimal data source for the status API provided in this crate, with no persistent storage.
@@ -56,6 +60,12 @@ pub struct MetricsDataSource {
     metrics: PrometheusMetrics,
 }
 
+impl HasMetrics for MetricsDataSource {
+    fn metrics(&self) -> &PrometheusMetrics {
+        &self.metrics
+    }
+}
+
 #[async_trait]
 impl StatusDataSource for MetricsDataSource {
     async fn block_height(&self) -> QueryResult<usize> {
@@ -67,10 +77,6 @@ impl StatusDataSource for MetricsDataSource {
             })?
             .get();
         Ok(last_synced_height)
-    }
-
-    fn metrics(&self) -> &PrometheusMetrics {
-        &self.metrics
     }
 }
 

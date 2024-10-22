@@ -27,7 +27,9 @@ use crate::{
         },
     },
     data_source::{update, VersionedDataSource},
+    metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
+    status::HasMetrics,
     types::HeightIndexed,
     ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
@@ -115,6 +117,7 @@ where
     Payload<Types>: QueryablePayload<Types>,
 {
     inner: RwLock<FileSystemStorageInner<Types>>,
+    metrics: PrometheusMetrics,
 }
 
 impl<Types: NodeType> PrunerConfig for FileSystemStorage<Types> where
@@ -184,6 +187,7 @@ where
                 block_storage: LedgerLog::create(loader, "blocks", CACHED_BLOCKS_COUNT)?,
                 vid_storage: LedgerLog::create(loader, "vid_common", CACHED_VID_COMMON_COUNT)?,
             }),
+            metrics: Default::default(),
         })
     }
 
@@ -254,6 +258,7 @@ where
                 vid_storage,
                 top_storage: None,
             }),
+            metrics: Default::default(),
         })
     }
 
@@ -713,3 +718,13 @@ where
 }
 
 impl<T: Revert> PrunedHeightStorage for Transaction<T> {}
+
+impl<Types> HasMetrics for FileSystemStorage<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    fn metrics(&self) -> &PrometheusMetrics {
+        &self.metrics
+    }
+}
