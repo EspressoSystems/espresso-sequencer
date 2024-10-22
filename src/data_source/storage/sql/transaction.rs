@@ -143,7 +143,7 @@ impl<Mode: TransactionMode> TransactionMetricsGuard<Mode> {
         }
     }
 
-    fn close(&mut self, t: CloseType) {
+    fn set_closed(&mut self, t: CloseType) {
         self.close_type = t;
     }
 }
@@ -184,13 +184,13 @@ impl<Mode: TransactionMode> Transaction<Mode> {
 impl<Mode: TransactionMode> update::Transaction for Transaction<Mode> {
     async fn commit(mut self) -> anyhow::Result<()> {
         self.inner.commit().await?;
-        self.metrics.close(CloseType::Commit);
+        self.metrics.set_closed(CloseType::Commit);
         Ok(())
     }
     fn revert(mut self) -> impl Future + Send {
         async move {
             self.inner.rollback().await.unwrap();
-            self.metrics.close(CloseType::Revert);
+            self.metrics.set_closed(CloseType::Revert);
         }
     }
 }
