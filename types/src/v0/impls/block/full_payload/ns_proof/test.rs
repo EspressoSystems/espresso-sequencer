@@ -6,8 +6,13 @@ use hotshot_types::{
     vid::{vid_scheme, VidSchemeType},
 };
 use jf_vid::{VidDisperse, VidScheme};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
-use crate::{v0::impls::block::test::ValidTest, NsProof, Payload};
+use crate::{
+    v0::impls::block::{full_payload::ns_table, test::ValidTest},
+    NsProof, Payload, Transaction,
+};
 
 #[async_std::test]
 async fn ns_proof() {
@@ -88,6 +93,20 @@ async fn ns_proof() {
                 .verify(block.ns_table(), &vid.commit, &vid.common)
                 .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
+            println!(
+                "ns_proof: {:?}",
+                serde_json::to_string(&ns_proof).unwrap().as_bytes()
+            );
+            println!("vid_commit: {:?}", vid.commit.to_string().as_bytes(),);
+            println!(
+                "vid_common: {:?}",
+                serde_json::to_string(&vid.common).unwrap().as_bytes()
+            );
+            println!("namespace: {:?}", ns_id);
+            println!("ns_table: {:?}", block.ns_table().bytes);
+            println!("tx_commit: {:?}", hash_txns(ns_id.into(), &txs).as_bytes());
+            println!("==============================");
+
             assert_eq!(ns_proof_ns_id, ns_id);
             assert_eq!(ns_proof_txs, txs);
         }
@@ -156,4 +175,24 @@ async fn ns_proof() {
             .verify(ns_table_0, vid_commit_0, vid_common_0)
             .is_none());
     }
+}
+
+fn hash_txns(namespace: u32, txns: &[Transaction]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(namespace.to_le_bytes());
+    for txn in txns {
+        hasher.update(&txn.payload);
+    }
+    let hash_result = hasher.finalize();
+    format!("{:x}", hash_result)
+}
+
+#[derive(Serialize, Deserialize)]
+struct TestData {
+    ns_proof: Vec<u8>,
+    vid_commit: Vec<u8>,
+    vid_common: Vec<u8>,
+    namespace: u64,
+    tx_commit: Vec<u8>,
+    ns_table: Vec<u8>,
 }
