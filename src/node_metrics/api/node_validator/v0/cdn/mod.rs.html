@@ -893,7 +893,7 @@
         <span class="kw">match </span>result {
             <span class="prelude-val">Ok</span>(messages) =&gt; <span class="prelude-val">Ok</span>(messages.clone()),
             <span class="prelude-val">Err</span>(err) =&gt; <span class="kw">match </span>err {
-                NetworkError::ChannelSend =&gt; <span class="prelude-val">Err</span>(NetworkError::ChannelSend),
+                NetworkError::ChannelSendError(e) =&gt; <span class="prelude-val">Err</span>(NetworkError::ChannelSendError(e.clone())),
                 <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"unexpected network error"</span>),
             },
         }
@@ -957,7 +957,7 @@
     </span><span class="kw">async fn </span>test_cdn_receive_messages_task_fails_receiving_message() {
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
         <span class="kw">let </span>task = CdnReceiveMessagesTask::new(
-            TestConnectedNetworkConsumer(<span class="prelude-val">Err</span>(NetworkError::ChannelSend)),
+            TestConnectedNetworkConsumer(<span class="prelude-val">Err</span>(NetworkError::ChannelSendError(<span class="string">""</span>.to_string()))),
             url_sender,
         );
 
@@ -1108,7 +1108,7 @@
         ) -&gt; <span class="prelude-ty">Result</span>&lt;(), NetworkError&gt; {
             <span class="kw">let </span><span class="kw-2">mut </span>sender = <span class="self">self</span>.<span class="number">0</span>.clone();
             <span class="kw">let </span>send_result = sender.send(message).<span class="kw">await</span>;
-            send_result.map_err(|<span class="kw">_</span>| NetworkError::ChannelSend)
+            send_result.map_err(|<span class="kw">_</span>| NetworkError::ChannelSendError(<span class="string">""</span>.to_string()))
         }
     }
 

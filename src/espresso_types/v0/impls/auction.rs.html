@@ -666,7 +666,7 @@
     <span class="doccomment">/// Fetch the auction results from the solver.
     </span><span class="kw">async fn </span>fetch_auction_result(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
     ) -&gt; anyhow::Result&lt;TYPES::AuctionResult&gt; {
         <span class="kw">let </span>resp = SurfClient::new(
             <span class="self">self</span>.url

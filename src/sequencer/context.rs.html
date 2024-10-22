@@ -439,8 +439,6 @@
 <a href="#439" id="439">439</a>
 <a href="#440" id="440">440</a>
 <a href="#441" id="441">441</a>
-<a href="#442" id="442">442</a>
-<a href="#443" id="443">443</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Display;
 
 <span class="kw">use </span>anyhow::Context;
@@ -464,11 +462,12 @@
 };
 <span class="kw">use </span>hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 
-<span class="kw">use </span>hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+<span class="kw">use </span>hotshot_orchestrator::client::OrchestratorClient;
 <span class="kw">use </span>hotshot_query_service::Leaf;
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
+    network::NetworkConfig,
     traits::{
         election::Membership,
         metrics::Metrics,
@@ -825,11 +824,8 @@
         </span>state_signer.handle_event(<span class="kw-2">&amp;</span>event).<span class="kw">await</span>;
 
         <span class="comment">// Handle external messages
-        </span><span class="kw">if let </span>EventType::ExternalMessageReceived(external_message_bytes) = <span class="kw-2">&amp;</span>event.event {
-            <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = external_event_handler
-                .handle_event(external_message_bytes)
-                .<span class="kw">await
-            </span>{
+        </span><span class="kw">if let </span>EventType::ExternalMessageReceived { data, .. } = <span class="kw-2">&amp;</span>event.event {
+            <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = external_event_handler.handle_event(data).<span class="kw">await </span>{
                 <span class="macro">tracing::warn!</span>(<span class="string">"Failed to handle external message: {:?}"</span>, err);
             };
         }

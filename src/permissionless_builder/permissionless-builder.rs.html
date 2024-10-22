@@ -250,13 +250,15 @@
     )]
     </span>max_api_timeout_duration: Duration,
 
-    <span class="doccomment">/// The number of views to buffer before a builder garbage collects its state
+    <span class="doccomment">/// The amount of time a builder can wait before incrementing the max block size.
     </span><span class="attr">#[clap(
+        short,
         long,
-        env = <span class="string">"ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT"</span>,
-        default_value = <span class="string">"15"
-    </span>)]
-    </span>buffer_view_num_count: usize,
+        env = <span class="string">"ESPRESSO_BUILDER_MAX_BLOCK_SIZE_INCREMENT_PERIOD"</span>,
+        default_value = <span class="string">"3600s"</span>,
+        value_parser = parse_duration
+    )]
+    </span>max_block_size_increment_period: Duration,
 
     <span class="doccomment">/// Path to TOML file containing genesis state.
     </span><span class="attr">#[clap(long, name = <span class="string">"GENESIS_FILE"</span>, env = <span class="string">"ESPRESSO_BUILDER_GENESIS_FILE"</span>)]
@@ -322,20 +324,18 @@
     <span class="comment">// make the txn timeout as 1/4 of the api_response_timeout_duration
     </span><span class="kw">let </span>txn_timeout_duration = api_response_timeout_duration / <span class="number">4</span>;
 
-    <span class="kw">let </span>buffer_view_num_count = opt.buffer_view_num_count;
-
     <span class="kw">let </span>_builder_config = BuilderConfig::init::&lt;V&gt;(
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
         opt.node_count,
-        instance_state,
+        instance_state.clone(),
         validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
-        buffer_view_num_count,
+        opt.max_block_size_increment_period,
         txn_timeout_duration,
         base_fee,
     )

@@ -441,6 +441,11 @@
 <a href="#441" id="441">441</a>
 <a href="#442" id="442">442</a>
 <a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -453,9 +458,6 @@
 };
 <span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::future::Future;
-<span class="kw">use </span>hotshot_orchestrator::config::{
-    BuilderType, CombinedNetworkConfig, Libp2pConfig, NetworkConfig, RandomBuilderConfig,
-};
 <span class="kw">use </span>hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{MetricsDataSource, VersionedDataSource},
@@ -463,9 +465,13 @@
     node::NodeDataSource,
     status::StatusDataSource,
 };
+<span class="kw">use </span>hotshot_types::network::{
+    BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig,
+};
 <span class="kw">use </span>hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
+    network::NetworkConfig,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -673,6 +679,7 @@
     stop_proposing_time: u64,
     start_voting_time: u64,
     stop_voting_time: u64,
+    epoch_height: u64,
 }
 
 <span class="kw">impl </span>From&lt;HotShotConfig&lt;PubKey&gt;&gt; <span class="kw">for </span>PublicHotShotConfig {
@@ -707,6 +714,7 @@
             stop_proposing_time,
             start_voting_time,
             stop_voting_time,
+            epoch_height,
         } = v;
 
         <span class="self">Self </span>{
@@ -736,6 +744,7 @@
             stop_proposing_time,
             start_voting_time,
             stop_voting_time,
+            epoch_height,
         }
     }
 }
@@ -772,6 +781,7 @@
             stop_proposing_time: <span class="self">self</span>.stop_proposing_time,
             start_voting_time: <span class="self">self</span>.start_voting_time,
             stop_voting_time: <span class="self">self</span>.stop_voting_time,
+            epoch_height: <span class="self">self</span>.epoch_height,
         }
     }
 }

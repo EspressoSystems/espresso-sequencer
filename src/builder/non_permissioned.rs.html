@@ -343,6 +343,10 @@
 <a href="#343" id="343">343</a>
 <a href="#344" id="344">344</a>
 <a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -373,7 +377,6 @@
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
-    ParentBlockReferences,
 };
 <span class="kw">use </span>hotshot_events_service::{
     events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
@@ -388,6 +391,8 @@
     },
     utils::BuilderCommitment,
 };
+<span class="kw">use </span>marketplace_builder_shared::block::ParentBlockReferences;
+<span class="kw">use </span>marketplace_builder_shared::utils::EventServiceStream;
 <span class="kw">use </span>sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 <span class="kw">use </span>surf::http::headers::ACCEPT;
 <span class="kw">use </span>surf_disco::Client;
@@ -435,7 +440,7 @@
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
-        buffered_view_num_count: usize,
+        max_block_size_increment_period: Duration,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
@@ -445,7 +450,7 @@
             %tx_channel_capacity,
             %event_channel_capacity,
             <span class="question-mark">?</span>max_api_timeout_duration,
-            buffered_view_num_count,
+            <span class="question-mark">?</span>instance_state.chain_config.max_block_size,
             <span class="question-mark">?</span>maximize_txns_count_timeout_duration,
             <span class="string">"initializing builder"</span>,
         );
@@ -490,7 +495,8 @@
             vid_commitment,
             bootstrapped_view,
             bootstrapped_view,
-            buffered_view_num_count <span class="kw">as </span>u64,
+            max_block_size_increment_period,
+            instance_state.chain_config.max_block_size.into(),
         );
 
         <span class="kw">let </span>global_state = Arc::new(RwLock::new(global_state));
@@ -539,12 +545,17 @@
         </span><span class="kw">let </span>events_url = hotshot_events_api_url.clone();
         <span class="kw">let </span>global_state_clone = global_state.clone();
         <span class="macro">tracing::info!</span>(<span class="string">"Running permissionless builder against hotshot events API at {events_url}"</span>,);
+
+        <span class="kw">let </span>event_stream =
+            EventServiceStream::&lt;SeqTypes, SequencerApiVersion&gt;::connect(events_url).<span class="kw">await</span><span class="question-mark">?</span>;
+
         async_spawn(<span class="kw">async move </span>{
-            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerApiVersion&gt;(
+            <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;<span class="kw">_</span>, SequencerApiVersion, <span class="kw">_</span>&gt;(
                 da_sender,
                 qc_sender,
                 decide_sender,
-                events_url,
+                event_stream,
+                node_count,
                 global_state_clone,
             )
             .<span class="kw">await</span>;
@@ -581,10 +592,7 @@
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    <span class="kw">use </span>hotshot_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
-    };
+    <span class="kw">use </span>hotshot_builder_core::service::run_non_permissioned_standalone_builder_service;
     <span class="kw">use </span>hotshot_events_service::{
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},

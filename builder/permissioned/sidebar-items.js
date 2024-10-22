@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["init_hotshot","init_node"],"struct":["BuilderContext"]};

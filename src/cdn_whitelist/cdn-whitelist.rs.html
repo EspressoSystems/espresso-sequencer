@@ -81,6 +81,7 @@
 <a href="#81" id="81">81</a>
 <a href="#82" id="82">82</a>
 <a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! The whitelist is an adaptor that is able to update the allowed public keys for
 //! all brokers. Right now, we do this by asking the orchestrator for the list of
 //! allowed public keys. In the future, we will pull the stake table from the L1.
@@ -91,7 +92,8 @@
 <span class="kw">use </span>cdn_broker::reexports::discovery::{DiscoveryClient, Embedded, Redis};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>espresso_types::SeqTypes;
-<span class="kw">use </span>hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+<span class="kw">use </span>hotshot_orchestrator::client::OrchestratorClient;
+<span class="kw">use </span>hotshot_types::network::NetworkConfig;
 <span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 <span class="kw">use </span>surf_disco::Url;
 

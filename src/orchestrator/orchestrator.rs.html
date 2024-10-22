@@ -149,18 +149,14 @@
 <a href="#149" id="149">149</a>
 <a href="#150" id="150">150</a>
 <a href="#151" id="151">151</a>
-<a href="#152" id="152">152</a>
-<a href="#153" id="153">153</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>derive_more::From;
 <span class="kw">use </span>espresso_types::{parse_duration, PubKey, Ratio};
 <span class="kw">use </span>ethers::utils::hex::{<span class="self">self</span>, FromHexError};
-<span class="kw">use </span>hotshot_orchestrator::{
-    config::{Libp2pConfig, NetworkConfig},
-    run_orchestrator,
-};
+<span class="kw">use </span>hotshot_orchestrator::run_orchestrator;
+<span class="kw">use </span>hotshot_types::network::{Libp2pConfig, NetworkConfig};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>url::Url;

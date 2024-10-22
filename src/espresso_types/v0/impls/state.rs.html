@@ -1249,6 +1249,17 @@
 <a href="#1249" id="1249">1249</a>
 <a href="#1250" id="1250">1250</a>
 <a href="#1251" id="1251">1251</a>
+<a href="#1252" id="1252">1252</a>
+<a href="#1253" id="1253">1253</a>
+<a href="#1254" id="1254">1254</a>
+<a href="#1255" id="1255">1255</a>
+<a href="#1256" id="1256">1256</a>
+<a href="#1257" id="1257">1257</a>
+<a href="#1258" id="1258">1258</a>
+<a href="#1259" id="1259">1259</a>
+<a href="#1260" id="1260">1260</a>
+<a href="#1261" id="1261">1261</a>
+<a href="#1262" id="1262">1262</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
@@ -1933,13 +1944,20 @@
                 system_time,
                 diff
             );
-            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader);
+            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader(<span class="macro">format!</span>(
+                <span class="string">"Timestamp drift too high proposed={} system={} diff={}"</span>,
+                proposed_header.timestamp(),
+                system_time,
+                diff
+            )));
         }
 
         <span class="comment">//validate builder fee
         </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = validate_builder_fee(proposed_header) {
             <span class="macro">tracing::error!</span>(<span class="string">"invalid builder fee: {err:#}"</span>);
-            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader);
+            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader(<span class="macro">format!</span>(
+                <span class="string">"invalid builder fee: {err:#}"
+            </span>)));
         }
 
         <span class="comment">// Unwrapping here is okay as we retry in a loop
@@ -1973,14 +1991,18 @@
 
             <span class="kw">if </span>finalized != proposed_finalized {
                 <span class="macro">tracing::error!</span>(<span class="string">"Invalid proposal: l1_finalized mismatch"</span>);
-                <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader);
+                <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader(
+                    <span class="string">"l1_finalized mismatch"</span>.to_string(),
+                ));
             }
         }
         <span class="comment">// Validate `l1_head`.
         // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
         </span><span class="kw">if </span>proposed_header.l1_head() &lt; parent_leaf.block_header().l1_head() {
             <span class="macro">tracing::error!</span>(<span class="string">"Invalid proposal: l1_head decreasing"</span>);
-            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader);
+            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader(
+                <span class="string">"l1_head decreasing"</span>.to_string(),
+            ));
         }
 
         <span class="kw">let _ </span>= instance
@@ -1997,7 +2019,7 @@
             <span class="kw-2">&amp;</span>vid_common,
         ) {
             <span class="macro">tracing::error!</span>(<span class="string">"Invalid proposal: {err:#}"</span>);
-            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader);
+            <span class="kw">return </span><span class="prelude-val">Err</span>(BlockError::InvalidBlockHeader(<span class="macro">format!</span>(<span class="string">"{err:#}"</span>)));
         }
 
         <span class="comment">// log successful progress about once in 10 - 20 seconds,

@@ -184,11 +184,12 @@
 <a href="#184" id="184">184</a>
 <a href="#185" id="185">185</a>
 <a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::marker::PhantomData;
 
 <span class="kw">use </span>hotshot::traits::election::static_committee::StaticCommittee;
 <span class="kw">use </span>hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
     traits::{
         node_implementation::{NodeType, Versions},
@@ -312,7 +313,8 @@
 </span><span class="kw">pub struct </span>SeqTypes;
 
 <span class="kw">impl </span>NodeType <span class="kw">for </span>SeqTypes {
-    <span class="kw">type </span>Time = ViewNumber;
+    <span class="kw">type </span>View = ViewNumber;
+    <span class="kw">type </span>Epoch = EpochNumber;
     <span class="kw">type </span>BlockHeader = Header;
     <span class="kw">type </span>BlockPayload = Payload;
     <span class="kw">type </span>SignatureKey = PubKey;
@@ -362,7 +364,7 @@
 <span class="kw">pub type </span>PubKey = BLSPubKey;
 <span class="kw">pub type </span>PrivKey = &lt;PubKey <span class="kw">as </span>SignatureKey&gt;::PrivateKey;
 
-<span class="kw">pub type </span>NetworkConfig = hotshot_orchestrator::config::NetworkConfig&lt;PubKey&gt;;
+<span class="kw">pub type </span>NetworkConfig = hotshot_types::network::NetworkConfig&lt;PubKey&gt;;
 
 <span class="kw">pub use </span><span class="self">self</span>::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};
 <span class="kw">pub use </span><span class="kw">crate</span>::v0_1::{

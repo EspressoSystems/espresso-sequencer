@@ -76,8 +76,6 @@
 <a href="#76" id="76">76</a>
 <a href="#77" id="77">77</a>
 <a href="#78" id="78">78</a>
-<a href="#79" id="79">79</a>
-<a href="#80" id="80">80</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -118,10 +116,8 @@
 <span class="kw">use </span>hotshot_builder_api::v0_3::builder::{
     BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
-<span class="kw">use </span>hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::NetworkConfig,
-};
+<span class="kw">use </span>hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
+<span class="kw">use </span>hotshot_types::network::NetworkConfig;
 <span class="kw">use </span>marketplace_builder_core::service::{BuilderHooks, GlobalState, ProxyGlobalState};
 <span class="comment">// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 </span><span class="kw">use </span>hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
