@@ -927,6 +927,18 @@
 <a href="#927" id="927">927</a>
 <a href="#928" id="928">928</a>
 <a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
+<a href="#938" id="938">938</a>
+<a href="#939" id="939">939</a>
+<a href="#940" id="940">940</a>
+<a href="#941" id="941">941</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{anyhow, Context};
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>async_trait::async_trait;
@@ -1630,6 +1642,18 @@
         }
 
         <span class="prelude-val">Ok</span>(map)
+    }
+
+    <span class="kw">async fn </span>load_quorum_proposal(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        view: ViewNumber,
+    ) -&gt; anyhow::Result&lt;Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt; {
+        <span class="kw">let </span>inner = <span class="self">self</span>.inner.read().<span class="kw">await</span>;
+        <span class="kw">let </span>dir_path = inner.quorum_proposals_dir_path();
+        <span class="kw">let </span>file_path = dir_path.join(view.to_string()).with_extension(<span class="string">"txt"</span>);
+        <span class="kw">let </span>bytes = fs::read(file_path)<span class="question-mark">?</span>;
+        <span class="kw">let </span>proposal = bincode::deserialize(<span class="kw-2">&amp;</span>bytes)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(proposal)
     }
 
     <span class="kw">async fn </span>load_upgrade_certificate(

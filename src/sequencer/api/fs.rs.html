@@ -67,8 +67,8 @@
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>hotshot_query_service::data_source::FileSystemDataSource;
 
-<span class="kw">use </span><span class="kw">super</span>::data_source::{CatchupDataSource, Provider, SequencerDataSource};
-<span class="kw">use crate</span>::{persistence::fs::Options, SeqTypes};
+<span class="kw">use </span><span class="kw">super</span>::data_source::{Provider, SequencerDataSource};
+<span class="kw">use crate</span>::{catchup::CatchupStorage, persistence::fs::Options, SeqTypes};
 
 <span class="kw">pub type </span>DataSource = FileSystemDataSource&lt;SeqTypes, Provider&gt;;
 
@@ -90,7 +90,7 @@
     }
 }
 
-<span class="kw">impl </span>CatchupDataSource <span class="kw">for </span>DataSource {}
+<span class="kw">impl </span>CatchupStorage <span class="kw">for </span>DataSource {}
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>impl_testable_data_source {

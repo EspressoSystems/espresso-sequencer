@@ -2004,20 +2004,117 @@
 <a href="#2004" id="2004">2004</a>
 <a href="#2005" id="2005">2005</a>
 <a href="#2006" id="2006">2006</a>
+<a href="#2007" id="2007">2007</a>
+<a href="#2008" id="2008">2008</a>
+<a href="#2009" id="2009">2009</a>
+<a href="#2010" id="2010">2010</a>
+<a href="#2011" id="2011">2011</a>
+<a href="#2012" id="2012">2012</a>
+<a href="#2013" id="2013">2013</a>
+<a href="#2014" id="2014">2014</a>
+<a href="#2015" id="2015">2015</a>
+<a href="#2016" id="2016">2016</a>
+<a href="#2017" id="2017">2017</a>
+<a href="#2018" id="2018">2018</a>
+<a href="#2019" id="2019">2019</a>
+<a href="#2020" id="2020">2020</a>
+<a href="#2021" id="2021">2021</a>
+<a href="#2022" id="2022">2022</a>
+<a href="#2023" id="2023">2023</a>
+<a href="#2024" id="2024">2024</a>
+<a href="#2025" id="2025">2025</a>
+<a href="#2026" id="2026">2026</a>
+<a href="#2027" id="2027">2027</a>
+<a href="#2028" id="2028">2028</a>
+<a href="#2029" id="2029">2029</a>
+<a href="#2030" id="2030">2030</a>
+<a href="#2031" id="2031">2031</a>
+<a href="#2032" id="2032">2032</a>
+<a href="#2033" id="2033">2033</a>
+<a href="#2034" id="2034">2034</a>
+<a href="#2035" id="2035">2035</a>
+<a href="#2036" id="2036">2036</a>
+<a href="#2037" id="2037">2037</a>
+<a href="#2038" id="2038">2038</a>
+<a href="#2039" id="2039">2039</a>
+<a href="#2040" id="2040">2040</a>
+<a href="#2041" id="2041">2041</a>
+<a href="#2042" id="2042">2042</a>
+<a href="#2043" id="2043">2043</a>
+<a href="#2044" id="2044">2044</a>
+<a href="#2045" id="2045">2045</a>
+<a href="#2046" id="2046">2046</a>
+<a href="#2047" id="2047">2047</a>
+<a href="#2048" id="2048">2048</a>
+<a href="#2049" id="2049">2049</a>
+<a href="#2050" id="2050">2050</a>
+<a href="#2051" id="2051">2051</a>
+<a href="#2052" id="2052">2052</a>
+<a href="#2053" id="2053">2053</a>
+<a href="#2054" id="2054">2054</a>
+<a href="#2055" id="2055">2055</a>
+<a href="#2056" id="2056">2056</a>
+<a href="#2057" id="2057">2057</a>
+<a href="#2058" id="2058">2058</a>
+<a href="#2059" id="2059">2059</a>
+<a href="#2060" id="2060">2060</a>
+<a href="#2061" id="2061">2061</a>
+<a href="#2062" id="2062">2062</a>
+<a href="#2063" id="2063">2063</a>
+<a href="#2064" id="2064">2064</a>
+<a href="#2065" id="2065">2065</a>
+<a href="#2066" id="2066">2066</a>
+<a href="#2067" id="2067">2067</a>
+<a href="#2068" id="2068">2068</a>
+<a href="#2069" id="2069">2069</a>
+<a href="#2070" id="2070">2070</a>
+<a href="#2071" id="2071">2071</a>
+<a href="#2072" id="2072">2072</a>
+<a href="#2073" id="2073">2073</a>
+<a href="#2074" id="2074">2074</a>
+<a href="#2075" id="2075">2075</a>
+<a href="#2076" id="2076">2076</a>
+<a href="#2077" id="2077">2077</a>
+<a href="#2078" id="2078">2078</a>
+<a href="#2079" id="2079">2079</a>
+<a href="#2080" id="2080">2080</a>
+<a href="#2081" id="2081">2081</a>
+<a href="#2082" id="2082">2082</a>
+<a href="#2083" id="2083">2083</a>
+<a href="#2084" id="2084">2084</a>
+<a href="#2085" id="2085">2085</a>
+<a href="#2086" id="2086">2086</a>
+<a href="#2087" id="2087">2087</a>
+<a href="#2088" id="2088">2088</a>
+<a href="#2089" id="2089">2089</a>
+<a href="#2090" id="2090">2090</a>
+<a href="#2091" id="2091">2091</a>
+<a href="#2092" id="2092">2092</a>
+<a href="#2093" id="2093">2093</a>
+<a href="#2094" id="2094">2094</a>
+<a href="#2095" id="2095">2095</a>
+<a href="#2096" id="2096">2096</a>
+<a href="#2097" id="2097">2097</a>
+<a href="#2098" id="2098">2098</a>
+<a href="#2099" id="2099">2099</a>
+<a href="#2100" id="2100">2100</a>
+<a href="#2101" id="2101">2101</a>
+<a href="#2102" id="2102">2102</a>
+<a href="#2103" id="2103">2103</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_once_cell::Lazy;
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>async_trait::async_trait;
-<span class="kw">use </span>committable::Commitment;
+<span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>data_source::{CatchupDataSource, SubmitDataSource};
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
-    v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, MockSequencerVersions, NodeState, PubKey, Transaction,
+    retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
+    PubKey, Transaction, ValidatedState,
 };
-<span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::BoxStream,
@@ -2032,14 +2129,17 @@
     event::Event,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
-    traits::{network::ConnectedNetwork, node_implementation::Versions},
+    traits::{network::ConnectedNetwork, node_implementation::Versions, ValidatedState <span class="kw">as _</span>},
+    utils::{View, ViewInner},
 };
 <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
 
-<span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
+<span class="kw">use </span><span class="self">self</span>::data_source::{
+    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
+};
 <span class="kw">use crate</span>::{
-    context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
-    SequencerContext,
+    catchup::CatchupStorage, context::Consensus, network, state_signature::StateSigner, SeqTypes,
+    SequencerApiVersion, SequencerContext,
 };
 
 <span class="kw">pub mod </span>data_source;
@@ -2109,10 +2209,6 @@
 
     <span class="kw">async fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;RwLock&lt;Consensus&lt;N, P, V&gt;&gt;&gt; {
         Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().handle)
-    }
-
-    <span class="kw">async fn </span>node_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>NodeState {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().node_state
     }
 
     <span class="kw">async fn </span>network_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; NetworkConfig&lt;PubKey&gt; {
@@ -2195,36 +2291,120 @@
     }
 }
 
+<span class="kw">impl</span>&lt;N, P, D, V&gt; NodeStateDataSource <span class="kw">for </span>StorageState&lt;N, P, D, V&gt;
+<span class="kw">where
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
+    V: Versions,
+    P: SequencerPersistence,
+    D: Sync,
+{
+    <span class="kw">async fn </span>node_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>NodeState {
+        <span class="self">self</span>.as_ref().node_state().<span class="kw">await
+    </span>}
+}
+
 <span class="kw">impl</span>&lt;
         N: ConnectedNetwork&lt;PubKey&gt;,
         V: Versions,
         P: SequencerPersistence,
-        D: CatchupDataSource + Send + Sync,
+        D: CatchupStorage + Send + Sync,
     &gt; CatchupDataSource <span class="kw">for </span>StorageState&lt;N, P, D, V&gt;
 {
-    <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
-    </span><span class="kw">async fn </span>get_account(
+    <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>, instance))]
+    </span><span class="kw">async fn </span>get_accounts(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
+        instance: <span class="kw-2">&amp;</span>NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
+        accounts: <span class="kw-2">&amp;</span>[FeeAccount],
+    ) -&gt; anyhow::Result&lt;FeeMerkleTree&gt; {
         <span class="comment">// Check if we have the desired state in memory.
-        </span><span class="kw">match </span><span class="self">self</span>.as_ref().get_account(height, view, account).<span class="kw">await </span>{
-            <span class="prelude-val">Ok</span>(account) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(account),
+        </span><span class="kw">match </span><span class="self">self
+            </span>.as_ref()
+            .get_accounts(instance, height, view, accounts)
+            .<span class="kw">await
+        </span>{
+            <span class="prelude-val">Ok</span>(accounts) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(accounts),
             <span class="prelude-val">Err</span>(err) =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"account is not in memory, trying storage: {err:#}"</span>);
+                <span class="macro">tracing::info!</span>(<span class="string">"accounts not in memory, trying storage: {err:#}"</span>);
             }
         }
 
         <span class="comment">// Try storage.
-        </span><span class="self">self</span>.inner().get_account(height, view, account).<span class="kw">await
-    </span>}
+        </span><span class="kw">let </span>(tree, leaf) = <span class="self">self
+            </span>.inner()
+            .get_accounts(instance, height, view, accounts)
+            .<span class="kw">await
+            </span>.context(<span class="string">"accounts not in memory, and could not fetch from storage"</span>)<span class="question-mark">?</span>;
+        <span class="comment">// If we successfully fetched accounts from storage, try to add them back into the in-memory
+        // state.
+        </span><span class="kw">let </span>handle = <span class="self">self</span>.as_ref().consensus().<span class="kw">await</span>;
+        <span class="kw">let </span>handle = handle.read().<span class="kw">await</span>;
+        <span class="kw">let </span>consensus = handle.consensus();
+        <span class="kw">let </span><span class="kw-2">mut </span>consensus = consensus.write().<span class="kw">await</span>;
+        <span class="kw">let </span>(state, delta, leaf_commit) = <span class="kw">match </span>consensus.validated_state_map().get(<span class="kw-2">&amp;</span>view) {
+            <span class="prelude-val">Some</span>(View {
+                view_inner: ViewInner::Leaf { state, delta, leaf },
+            }) =&gt; {
+                <span class="kw">let </span><span class="kw-2">mut </span>state = (<span class="kw-2">**</span>state).clone();
+
+                <span class="comment">// Add the fetched accounts to the state.
+                </span><span class="kw">for </span>account <span class="kw">in </span>accounts {
+                    <span class="kw">if let </span><span class="prelude-val">Some</span>((proof, <span class="kw">_</span>)) = FeeAccountProof::prove(<span class="kw-2">&amp;</span>tree, (<span class="kw-2">*</span>account).into()) {
+                        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = proof.remember(<span class="kw-2">&amp;mut </span>state.fee_merkle_tree) {
+                            <span class="macro">tracing::warn!</span>(
+                                <span class="question-mark">?</span>view,
+                                %account,
+                                <span class="string">"cannot update fetched account state: {err:#}"
+                            </span>);
+                        }
+                    } <span class="kw">else </span>{
+                        <span class="macro">tracing::warn!</span>(<span class="question-mark">?</span>view, %account, <span class="string">"cannot update fetched account state because account is not in the merkle tree"</span>);
+                    };
+                }
+
+                (Arc::new(state), delta.clone(), <span class="kw-2">*</span>leaf)
+            }
+            <span class="kw">_ </span>=&gt; {
+                <span class="comment">// If we don't already have a leaf for this view, or if we don't have the view
+                // at all, we can create a new view based on the recovered leaf and add it to
+                // our state map. In this case, we must also add the leaf to the saved leaves
+                // map to ensure consistency.
+                </span><span class="kw">let </span><span class="kw-2">mut </span>state = ValidatedState::from_header(leaf.block_header());
+                state.fee_merkle_tree = tree.clone();
+                <span class="kw">let </span>res = (Arc::new(state), <span class="prelude-val">None</span>, Committable::commit(<span class="kw-2">&amp;</span>leaf));
+                consensus
+                    .update_saved_leaves(leaf, <span class="kw-2">&amp;</span>handle.hotshot.upgrade_lock)
+                    .<span class="kw">await</span>;
+                res
+            }
+        };
+        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = consensus.update_validated_state_map(
+            view,
+            View {
+                view_inner: ViewInner::Leaf {
+                    state,
+                    delta,
+                    leaf: leaf_commit,
+                },
+            },
+        ) {
+            <span class="macro">tracing::warn!</span>(<span class="question-mark">?</span>view, <span class="string">"cannot update fetched account state: {err:#}"</span>);
+        }
+        <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>view, <span class="string">"updated with fetched account state"</span>);
+
+        <span class="prelude-val">Ok</span>(tree)
+    }
 
     <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
-    </span><span class="kw">async fn </span>get_frontier(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64, view: ViewNumber) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
+    </span><span class="kw">async fn </span>get_frontier(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        instance: <span class="kw-2">&amp;</span>NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
         <span class="comment">// Check if we have the desired state in memory.
-        </span><span class="kw">match </span><span class="self">self</span>.as_ref().get_frontier(height, view).<span class="kw">await </span>{
+        </span><span class="kw">match </span><span class="self">self</span>.as_ref().get_frontier(instance, height, view).<span class="kw">await </span>{
             <span class="prelude-val">Ok</span>(frontier) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(frontier),
             <span class="prelude-val">Err</span>(err) =&gt; {
                 <span class="macro">tracing::info!</span>(<span class="string">"frontier is not in memory, trying storage: {err:#}"</span>);
@@ -2232,7 +2412,7 @@
         }
 
         <span class="comment">// Try storage.
-        </span><span class="self">self</span>.inner().get_frontier(height, view).<span class="kw">await
+        </span><span class="self">self</span>.inner().get_frontier(instance, height, view).<span class="kw">await
     </span>}
 
     <span class="kw">async fn </span>get_chain_config(
@@ -2271,16 +2451,28 @@
 //     }
 // }
 
-</span><span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, V: Versions, P: SequencerPersistence&gt; CatchupDataSource
+</span><span class="kw">impl</span>&lt;N, V, P&gt; NodeStateDataSource <span class="kw">for </span>ApiState&lt;N, P, V&gt;
+<span class="kw">where
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
+    V: Versions,
+    P: SequencerPersistence,
+{
+    <span class="kw">async fn </span>node_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>NodeState {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().node_state
+    }
+}
+
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, V: Versions, P: SequencerPersistence&gt; CatchupDataSource
     <span class="kw">for </span>ApiState&lt;N, P, V&gt;
 {
-    <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
-    </span><span class="kw">async fn </span>get_account(
+    <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>, _instance))]
+    </span><span class="kw">async fn </span>get_accounts(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
+        _instance: <span class="kw-2">&amp;</span>NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
+        accounts: <span class="kw-2">&amp;</span>[FeeAccount],
+    ) -&gt; anyhow::Result&lt;FeeMerkleTree&gt; {
         <span class="kw">let </span>state = <span class="self">self
             </span>.consensus()
             .<span class="kw">await
@@ -2291,14 +2483,16 @@
             </span>.context(<span class="macro">format!</span>(
                 <span class="string">"state not available for height {height}, view {view:?}"
             </span>))<span class="question-mark">?</span>;
-        <span class="kw">let </span>(proof, balance) = FeeAccountProof::prove(<span class="kw-2">&amp;</span>state.fee_merkle_tree, account).context(
-            <span class="macro">format!</span>(<span class="string">"account {account} not available for height {height}, view {view:?}"</span>),
-        )<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(AccountQueryData { balance, proof })
+        retain_accounts(<span class="kw-2">&amp;</span>state.fee_merkle_tree, accounts.iter().copied())
     }
 
     <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
-    </span><span class="kw">async fn </span>get_frontier(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64, view: ViewNumber) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
+    </span><span class="kw">async fn </span>get_frontier(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        _instance: <span class="kw-2">&amp;</span>NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
         <span class="kw">let </span>state = <span class="self">self
             </span>.consensus()
             .<span class="kw">await
@@ -3931,7 +4125,7 @@
 
         <span class="comment">// Fetch the config from node 1, a different node than the one running the service.
         </span><span class="kw">let </span>validator = ValidatorConfig::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>, <span class="number">1</span>, <span class="bool-val">false</span>);
-        <span class="kw">let </span><span class="kw-2">mut </span>config = peers.fetch_config(validator.clone()).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>config = peers.fetch_config(validator.clone()).<span class="kw">await</span>.unwrap();
 
         <span class="comment">// Check the node-specific information in the recovered config is correct.
         </span><span class="macro">assert_eq!</span>(config.node_index, <span class="number">1</span>);

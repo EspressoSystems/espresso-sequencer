@@ -551,6 +551,8 @@
 <a href="#551" id="551">551</a>
 <a href="#552" id="552">552</a>
 <a href="#553" id="553">553</a>
+<a href="#554" id="554">554</a>
+<a href="#555" id="555">555</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API options and initialization.
 
 </span><span class="kw">use </span>anyhow::{bail, Context};
@@ -580,14 +582,15 @@
 
 <span class="kw">use super</span>::{
     data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource,
+        SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
     update::ApiEventConsumer,
     ApiState, StorageState,
 };
 <span class="kw">use crate</span>::{
+    catchup::CatchupStorage,
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
@@ -818,7 +821,7 @@
     <span class="kw">where
         </span>N: ConnectedNetwork&lt;PubKey&gt;,
         P: SequencerPersistence,
-        D: SequencerDataSource + CatchupDataSource + Send + Sync + <span class="lifetime">'static</span>,
+        D: SequencerDataSource + CatchupStorage + Send + Sync + <span class="lifetime">'static</span>,
         <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; D::Transaction&lt;<span class="lifetime">'a</span>&gt;: UpdateDataSource&lt;SeqTypes&gt;,
     {
         <span class="kw">let </span>metrics = ds.populate_metrics();
@@ -944,6 +947,7 @@
             + Sync
             + SubmitDataSource&lt;N, P&gt;
             + StateSignatureDataSource&lt;N&gt;
+            + NodeStateDataSource
             + CatchupDataSource
             + HotShotConfigDataSource,
         N: ConnectedNetwork&lt;PubKey&gt;,

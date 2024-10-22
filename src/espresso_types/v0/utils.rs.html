@@ -268,6 +268,20 @@
 <a href="#268" id="268">268</a>
 <a href="#269" id="269">269</a>
 <a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::task::sleep;
 <span class="kw">use </span>bytesize::ByteSize;
@@ -486,6 +500,10 @@
         default_value = <span class="string">"1:10"
     </span>)]
     </span>jitter: Ratio,
+
+    <span class="doccomment">/// Disable retries and just fail after one failed attempt.
+    </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_DISABLE"</span>)]
+    </span>disable: bool,
 }
 
 <span class="kw">impl </span>Default <span class="kw">for </span>BackoffParams {
@@ -495,15 +513,25 @@
 }
 
 <span class="kw">impl </span>BackoffParams {
+    <span class="kw">pub fn </span>disabled() -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            disable: <span class="bool-val">true</span>,
+            ..Default::default()
+        }
+    }
+
     <span class="kw">pub async fn </span>retry&lt;S, T&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         <span class="kw-2">mut </span>state: S,
         f: <span class="kw">impl for</span>&lt;<span class="lifetime">'a</span>&gt; Fn(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>S) -&gt; BoxFuture&lt;<span class="lifetime">'a</span>, anyhow::Result&lt;T&gt;&gt;,
-    ) -&gt; T {
+    ) -&gt; anyhow::Result&lt;T&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>delay = <span class="self">self</span>.base;
         <span class="kw">loop </span>{
             <span class="kw">match </span>f(<span class="kw-2">&amp;mut </span>state).<span class="kw">await </span>{
-                <span class="prelude-val">Ok</span>(res) =&gt; <span class="kw">break </span>res,
+                <span class="prelude-val">Ok</span>(res) =&gt; <span class="kw">break </span><span class="prelude-val">Ok</span>(res),
+                <span class="prelude-val">Err</span>(err) <span class="kw">if </span><span class="self">self</span>.disable =&gt; {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(err.context(<span class="string">"Retryable operation failed; retries disabled"</span>));
+                }
                 <span class="prelude-val">Err</span>(err) =&gt; {
                     <span class="macro">tracing::warn!</span>(
                         <span class="string">"Retryable operation failed, will retry after {delay:?}: {err:#}"

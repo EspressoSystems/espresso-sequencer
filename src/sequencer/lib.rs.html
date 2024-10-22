@@ -1506,7 +1506,7 @@
             <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>peers, <span class="string">"loading network config from peers"</span>);
             <span class="kw">let </span>peers =
                 StatePeers::&lt;SequencerApiVersion&gt;::from_urls(peers, network_params.catchup_backoff);
-            <span class="kw">let </span>config = peers.fetch_config(my_config.clone()).<span class="kw">await</span>;
+            <span class="kw">let </span>config = peers.fetch_config(my_config.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
 
             <span class="macro">tracing::info!</span>(
                 node_id = config.node_index,

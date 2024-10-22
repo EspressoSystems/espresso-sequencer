@@ -446,21 +446,27 @@
 <a href="#446" id="446">446</a>
 <a href="#447" id="447">447</a>
 <a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
-<span class="kw">use </span>anyhow::{bail, Context};
+<span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
     v0_3::ChainConfig,
-    PubKey, Transaction,
+    FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
 };
-<span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::future::Future;
 <span class="kw">use </span>hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::{MetricsDataSource, VersionedDataSource},
+    data_source::VersionedDataSource,
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
@@ -558,7 +564,11 @@
     <span class="kw">async fn </span>get_state_signature(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64) -&gt; <span class="prelude-ty">Option</span>&lt;StateSignatureRequestBody&gt;;
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>CatchupDataSource {
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>NodeStateDataSource {
+    <span class="kw">fn </span>node_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = <span class="kw-2">&amp;</span>NodeState&gt;;
+}
+
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>CatchupDataSource: Sync {
     <span class="doccomment">/// Get the state of the requested `account`.
     ///
     /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
@@ -567,18 +577,35 @@
     /// decided view.
     </span><span class="kw">fn </span>get_account(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        _height: u64,
-        _view: ViewNumber,
-        _account: Address,
+        instance: <span class="kw-2">&amp;</span>NodeState,
+        height: u64,
+        view: ViewNumber,
+        account: FeeAccount,
     ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;AccountQueryData&gt;&gt; {
-        <span class="comment">// Merklized state catchup is only supported by persistence backends that provide merklized
-        // state storage. This default implementation is overridden for those that do. Otherwise,
-        // catchup can still be provided by fetching undecided merklized state from consensus
-        // memory.
-        </span><span class="kw">async </span>{
-            <span class="macro">bail!</span>(<span class="string">"merklized state catchup is not supported for this data source"</span>);
+        <span class="kw">async move </span>{
+            <span class="kw">let </span>tree = <span class="self">self
+                </span>.get_accounts(instance, height, view, <span class="kw-2">&amp;</span>[account])
+                .<span class="kw">await</span><span class="question-mark">?</span>;
+            <span class="kw">let </span>(proof, balance) = FeeAccountProof::prove(<span class="kw-2">&amp;</span>tree, account.into()).context(
+                <span class="macro">format!</span>(<span class="string">"account {account} not available for height {height}, view {view:?}"</span>),
+            )<span class="question-mark">?</span>;
+            <span class="prelude-val">Ok</span>(AccountQueryData { balance, proof })
         }
     }
+
+    <span class="doccomment">/// Get the state of the requested `accounts`.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    </span><span class="kw">fn </span>get_accounts(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        instance: <span class="kw-2">&amp;</span>NodeState,
+        height: u64,
+        view: ViewNumber,
+        accounts: <span class="kw-2">&amp;</span>[FeeAccount],
+    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;FeeMerkleTree&gt;&gt;;
 
     <span class="doccomment">/// Get the blocks Merkle tree frontier.
     ///
@@ -588,29 +615,16 @@
     /// decided view.
     </span><span class="kw">fn </span>get_frontier(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        _height: u64,
-        _view: ViewNumber,
-    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;BlocksFrontier&gt;&gt; {
-        <span class="comment">// Merklized state catchup is only supported by persistence backends that provide merklized
-        // state storage. This default implementation is overridden for those that do. Otherwise,
-        // catchup can still be provided by fetching undecided merklized state from consensus
-        // memory.
-        </span><span class="kw">async </span>{
-            <span class="macro">bail!</span>(<span class="string">"merklized state catchup is not supported for this data source"</span>);
-        }
-    }
+        instance: <span class="kw-2">&amp;</span>NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;BlocksFrontier&gt;&gt;;
 
     <span class="kw">fn </span>get_chain_config(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        _commitment: Commitment&lt;ChainConfig&gt;,
-    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;ChainConfig&gt;&gt; {
-        <span class="kw">async </span>{
-            <span class="macro">bail!</span>(<span class="string">"chain config catchup is not supported for this data source"</span>);
-        }
-    }
+        commitment: Commitment&lt;ChainConfig&gt;,
+    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;ChainConfig&gt;&gt;;
 }
-
-<span class="kw">impl </span>CatchupDataSource <span class="kw">for </span>MetricsDataSource {}
 
 <span class="doccomment">/// This struct defines the public Hotshot validator configuration.
 /// Private key and state key pairs are excluded for security reasons.

@@ -305,13 +305,45 @@
 <a href="#305" id="305">305</a>
 <a href="#306" id="306">306</a>
 <a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt::Debug;
 <span class="kw">use </span>std::{sync::Arc, time::Duration};
 
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>async_std::stream::StreamExt;
 <span class="kw">use </span>espresso_types::{
-    v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
+    traits::StateCatchup, v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
+    Leaf, ValidatedState,
 };
 <span class="kw">use </span>futures::future::Future;
 <span class="kw">use </span>hotshot::traits::ValidatedState <span class="kw">as </span>HotShotState;
@@ -325,18 +357,18 @@
 <span class="kw">use </span>jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
 
 <span class="kw">use crate</span>::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    persistence::ChainConfigPersistence, NodeState, SeqTypes,
+    catchup::{CatchupStorage, SqlStateCatchup},
+    persistence::ChainConfigPersistence,
+    NodeState, SeqTypes,
 };
 
-<span class="kw">async fn </span>compute_state_update(
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>compute_state_update(
     state: <span class="kw-2">&amp;</span>ValidatedState,
     instance: <span class="kw-2">&amp;</span>NodeState,
-    parent_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
-    proposed_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
+    peers: <span class="kw-2">&amp;</span><span class="kw">impl </span>StateCatchup,
+    parent_leaf: <span class="kw-2">&amp;</span>Leaf,
+    proposed_leaf: <span class="kw-2">&amp;</span>Leaf,
 ) -&gt; anyhow::Result&lt;(ValidatedState, Delta)&gt; {
-    <span class="kw">let </span>proposed_leaf = proposed_leaf.leaf();
-    <span class="kw">let </span>parent_leaf = parent_leaf.leaf();
     <span class="kw">let </span>header = proposed_leaf.block_header();
 
     <span class="comment">// Check internal consistency.
@@ -361,7 +393,7 @@
     );
 
     state
-        .apply_header(instance, parent_leaf, header, header.version())
+        .apply_header(instance, peers, parent_leaf, header, header.version())
         .<span class="kw">await
 </span>}
 
@@ -391,6 +423,7 @@
                 fee_merkle_tree.height(),
             );
 
+        <span class="macro">tracing::debug!</span>(%delta, <span class="string">"inserting fee account"</span>);
         UpdateStateData::&lt;SeqTypes, <span class="kw">_</span>, { FeeMerkleTree::ARITY }&gt;::insert_merkle_nodes(
             tx,
             proof,
@@ -412,6 +445,7 @@
     );
 
     {
+        <span class="macro">tracing::debug!</span>(<span class="string">"inserting blocks frontier"</span>);
         UpdateStateData::&lt;SeqTypes, <span class="kw">_</span>, { BlockMerkleTree::ARITY }&gt;::insert_merkle_nodes(
             tx,
             proof,
@@ -422,6 +456,7 @@
         </span>.context(<span class="string">"failed to store block merkle nodes"</span>)<span class="question-mark">?</span>;
     }
 
+    <span class="macro">tracing::debug!</span>(block_number, <span class="string">"updating state height"</span>);
     UpdateStateData::&lt;SeqTypes, <span class="kw">_</span>, { BlockMerkleTree::ARITY }&gt;::set_last_state_height(
         tx,
         block_number <span class="kw">as </span>usize,
@@ -443,6 +478,7 @@
     parent_state: <span class="kw-2">&amp;</span>ValidatedState,
     storage: <span class="kw-2">&amp;</span>Arc&lt;T&gt;,
     instance: <span class="kw-2">&amp;</span>NodeState,
+    peers: <span class="kw-2">&amp;</span><span class="kw">impl </span>StateCatchup,
     parent_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
     proposed_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
 ) -&gt; anyhow::Result&lt;ValidatedState&gt;
@@ -452,10 +488,17 @@
 {
     <span class="kw">let </span>parent_chain_config = parent_state.chain_config;
 
-    <span class="kw">let </span>(state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
-        .<span class="kw">await
-        </span>.context(<span class="string">"computing state update"</span>)<span class="question-mark">?</span>;
+    <span class="kw">let </span>(state, delta) = compute_state_update(
+        parent_state,
+        instance,
+        peers,
+        parent_leaf.leaf(),
+        proposed_leaf.leaf(),
+    )
+    .<span class="kw">await
+    </span>.context(<span class="string">"computing state update"</span>)<span class="question-mark">?</span>;
 
+    <span class="macro">tracing::debug!</span>(<span class="string">"storing state update"</span>);
     <span class="kw">let </span><span class="kw-2">mut </span>tx = storage
         .write()
         .<span class="kw">await
@@ -514,7 +557,8 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>update_state_storage_loop&lt;T&gt;(
+<span class="attr">#[tracing::instrument(skip_all)]
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>update_state_storage_loop&lt;T&gt;(
     storage: Arc&lt;T&gt;,
     instance: <span class="kw">impl </span>Future&lt;Output = NodeState&gt;,
 ) -&gt; anyhow::Result&lt;()&gt;
@@ -522,14 +566,19 @@
     </span>T: SequencerStateDataSource,
     <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; T::Transaction&lt;<span class="lifetime">'a</span>&gt;: SequencerStateUpdate,
 {
-    <span class="kw">let </span><span class="kw-2">mut </span>instance = instance.<span class="kw">await</span>;
-    instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
+    <span class="kw">let </span>instance = instance.<span class="kw">await</span>;
+    <span class="kw">let </span>peers = SqlStateCatchup::new(storage.clone(), Default::default());
 
     <span class="comment">// get last saved merklized state
     </span><span class="kw">let </span>(last_height, parent_leaf, <span class="kw-2">mut </span>leaves) = {
         <span class="kw">let </span>last_height = storage.get_last_state_height().<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="kw">let </span>current_height = storage.block_height().<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="macro">tracing::info!</span>(last_height, current_height, <span class="string">"updating state storage"</span>);
+        <span class="macro">tracing::info!</span>(
+            node_id = instance.node_id,
+            last_height,
+            current_height,
+            <span class="string">"updating state storage"
+        </span>);
 
         <span class="kw">let </span>parent_leaf = storage.get_leaf(last_height).<span class="kw">await</span>;
         <span class="kw">let </span>leaves = storage.subscribe_leaves(last_height + <span class="number">1</span>).<span class="kw">await</span>;
@@ -555,8 +604,21 @@
 
     <span class="kw">while let </span><span class="prelude-val">Some</span>(leaf) = leaves.next().<span class="kw">await </span>{
         <span class="kw">loop </span>{
-            <span class="kw">match </span>update_state_storage(<span class="kw-2">&amp;</span>parent_state, <span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span>instance, <span class="kw-2">&amp;</span>parent_leaf, <span class="kw-2">&amp;</span>leaf)
-                .<span class="kw">await
+            <span class="macro">tracing::debug!</span>(
+                height = leaf.height(),
+                node_id = instance.node_id,
+                <span class="question-mark">?</span>leaf,
+                <span class="string">"updating persistent merklized state"
+            </span>);
+            <span class="kw">match </span>update_state_storage(
+                <span class="kw-2">&amp;</span>parent_state,
+                <span class="kw-2">&amp;</span>storage,
+                <span class="kw-2">&amp;</span>instance,
+                <span class="kw-2">&amp;</span>peers,
+                <span class="kw-2">&amp;</span>parent_leaf,
+                <span class="kw-2">&amp;</span>leaf,
+            )
+            .<span class="kw">await
             </span>{
                 <span class="prelude-val">Ok</span>(state) =&gt; {
                     parent_leaf = leaf;
@@ -581,7 +643,7 @@
     + AvailabilityDataSource&lt;SeqTypes&gt;
     + StatusDataSource
     + VersionedDataSource
-    + CatchupDataSource
+    + CatchupStorage
     + MerklizedStateHeightPersistence
 {
 }
@@ -592,7 +654,7 @@
         + AvailabilityDataSource&lt;SeqTypes&gt;
         + StatusDataSource
         + VersionedDataSource
-        + CatchupDataSource
+        + CatchupStorage
         + MerklizedStateHeightPersistence
 {
 }

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["local_and_remote"],"struct":["Client","SqlStateCatchup","StatePeers"]};
+window.SIDEBAR_ITEMS = {"fn":["local_and_remote"],"struct":["Client","NullStateCatchup","SqlStateCatchup","StatePeers"],"trait":["CatchupStorage"]};

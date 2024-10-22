@@ -243,12 +243,9 @@
 <a href="#243" id="243">243</a>
 <a href="#244" id="244">244</a>
 <a href="#245" id="245">245</a>
-<a href="#246" id="246">246</a>
-<a href="#247" id="247">247</a>
-<a href="#248" id="248">248</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
-    v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
-    Timestamp, Upgrade, UpgradeMode,
+</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::v0::{
+    retain_accounts, traits::StateCatchup, v0_3::ChainConfig, FeeMerkleTree, GenesisHeader,
+    L1BlockInfo, L1Client, PubKey, Timestamp, Upgrade, UpgradeMode,
 };
 <span class="kw">use </span>hotshot_types::traits::states::InstanceState;
 <span class="kw">use </span>hotshot_types::HotShotConfig;
@@ -421,10 +418,7 @@
     <span class="kw">use </span>jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{
-        v0_1::{AccountQueryData, FeeAccountProof},
-        BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
-    };
+    <span class="kw">use crate</span>::{BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment};
 
     <span class="attr">#[derive(Debug, Clone, Default)]
     </span><span class="kw">pub struct </span>MockStateCatchup {
@@ -443,24 +437,24 @@
 
     <span class="attr">#[async_trait]
     </span><span class="kw">impl </span>StateCatchup <span class="kw">for </span>MockStateCatchup {
-        <span class="kw">async fn </span>try_fetch_account(
+        <span class="kw">async fn </span>try_fetch_accounts(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
+            _instance: <span class="kw-2">&amp;</span>NodeState,
             _height: u64,
             view: ViewNumber,
             fee_merkle_tree_root: FeeMerkleCommitment,
-            account: FeeAccount,
-        ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
+            accounts: <span class="kw-2">&amp;</span>[FeeAccount],
+        ) -&gt; anyhow::Result&lt;FeeMerkleTree&gt; {
             <span class="kw">let </span>src = <span class="kw-2">&amp;</span><span class="self">self</span>.state[<span class="kw-2">&amp;</span>view].fee_merkle_tree;
             <span class="macro">assert_eq!</span>(src.commitment(), fee_merkle_tree_root);
 
-            <span class="macro">tracing::info!</span>(<span class="string">"catchup: fetching account {account:?} for view {view:?}"</span>);
-            <span class="prelude-val">Ok</span>(FeeAccountProof::prove(src, account.into())
-                .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"Account {account:?} not in memory"</span>))
-                .into())
+            <span class="macro">tracing::info!</span>(<span class="string">"catchup: fetching accounts {accounts:?} for view {view:?}"</span>);
+            retain_accounts(src, accounts.iter().copied())
         }
 
         <span class="kw">async fn </span>try_remember_blocks_merkle_tree(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
+            _instance: <span class="kw-2">&amp;</span>NodeState,
             _height: u64,
             view: ViewNumber,
             mt: <span class="kw-2">&amp;mut </span>BlockMerkleTree,

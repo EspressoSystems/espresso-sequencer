@@ -1681,6 +1681,61 @@
 <a href="#1681" id="1681">1681</a>
 <a href="#1682" id="1682">1682</a>
 <a href="#1683" id="1683">1683</a>
+<a href="#1684" id="1684">1684</a>
+<a href="#1685" id="1685">1685</a>
+<a href="#1686" id="1686">1686</a>
+<a href="#1687" id="1687">1687</a>
+<a href="#1688" id="1688">1688</a>
+<a href="#1689" id="1689">1689</a>
+<a href="#1690" id="1690">1690</a>
+<a href="#1691" id="1691">1691</a>
+<a href="#1692" id="1692">1692</a>
+<a href="#1693" id="1693">1693</a>
+<a href="#1694" id="1694">1694</a>
+<a href="#1695" id="1695">1695</a>
+<a href="#1696" id="1696">1696</a>
+<a href="#1697" id="1697">1697</a>
+<a href="#1698" id="1698">1698</a>
+<a href="#1699" id="1699">1699</a>
+<a href="#1700" id="1700">1700</a>
+<a href="#1701" id="1701">1701</a>
+<a href="#1702" id="1702">1702</a>
+<a href="#1703" id="1703">1703</a>
+<a href="#1704" id="1704">1704</a>
+<a href="#1705" id="1705">1705</a>
+<a href="#1706" id="1706">1706</a>
+<a href="#1707" id="1707">1707</a>
+<a href="#1708" id="1708">1708</a>
+<a href="#1709" id="1709">1709</a>
+<a href="#1710" id="1710">1710</a>
+<a href="#1711" id="1711">1711</a>
+<a href="#1712" id="1712">1712</a>
+<a href="#1713" id="1713">1713</a>
+<a href="#1714" id="1714">1714</a>
+<a href="#1715" id="1715">1715</a>
+<a href="#1716" id="1716">1716</a>
+<a href="#1717" id="1717">1717</a>
+<a href="#1718" id="1718">1718</a>
+<a href="#1719" id="1719">1719</a>
+<a href="#1720" id="1720">1720</a>
+<a href="#1721" id="1721">1721</a>
+<a href="#1722" id="1722">1722</a>
+<a href="#1723" id="1723">1723</a>
+<a href="#1724" id="1724">1724</a>
+<a href="#1725" id="1725">1725</a>
+<a href="#1726" id="1726">1726</a>
+<a href="#1727" id="1727">1727</a>
+<a href="#1728" id="1728">1728</a>
+<a href="#1729" id="1729">1729</a>
+<a href="#1730" id="1730">1730</a>
+<a href="#1731" id="1731">1731</a>
+<a href="#1732" id="1732">1732</a>
+<a href="#1733" id="1733">1733</a>
+<a href="#1734" id="1734">1734</a>
+<a href="#1735" id="1735">1735</a>
+<a href="#1736" id="1736">1736</a>
+<a href="#1737" id="1737">1737</a>
+<a href="#1738" id="1738">1738</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -1693,9 +1748,10 @@
         BlockPayload, ValidatedState <span class="kw">as _</span>,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidCommon},
+    vid::{VidCommitment, VidCommon, VidSchemeType},
 };
 <span class="kw">use </span>jf_merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
+<span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>serde::{
     de::{<span class="self">self</span>, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
@@ -2204,16 +2260,16 @@
     <span class="kw">async fn </span>get_chain_config(
         validated_state: <span class="kw-2">&amp;</span>ValidatedState,
         instance_state: <span class="kw-2">&amp;</span>NodeState,
-    ) -&gt; ChainConfig {
+    ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
         <span class="kw">let </span>validated_cf = validated_state.chain_config;
         <span class="kw">let </span>instance_cf = instance_state.chain_config;
 
         <span class="kw">if </span>validated_cf.commit() == instance_cf.commit() {
-            <span class="kw">return </span>instance_cf;
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(instance_cf);
         }
 
         <span class="kw">match </span>validated_cf.resolve() {
-            <span class="prelude-val">Some</span>(cf) =&gt; cf,
+            <span class="prelude-val">Some</span>(cf) =&gt; <span class="prelude-val">Ok</span>(cf),
             <span class="prelude-val">None </span>=&gt; {
                 <span class="macro">tracing::info!</span>(<span class="string">"fetching chain config {} from peers"</span>, validated_cf.commit());
 
@@ -2415,6 +2471,17 @@
 
     </span><span class="doccomment">/// Build a header with the parent validate state, instance-level state, parent leaf, payload
     /// commitment, metadata, and auction results. This is only used in post-marketplace versions
+    </span><span class="attr">#[tracing::instrument(
+        skip_all,
+        fields(
+            height = parent_leaf.block_header().block_number() + <span class="number">1</span>,
+            parent_view = <span class="question-mark">?</span>parent_leaf.view_number(),
+            payload_commitment,
+            payload_size = VidSchemeType::get_payload_byte_len(<span class="kw-2">&amp;</span>_vid_common),
+            <span class="question-mark">?</span>auction_results,
+            version,
+        )
+    )]
     </span><span class="kw">async fn </span>new_marketplace(
         parent_state: <span class="kw-2">&amp;</span>&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::ValidatedState,
         instance_state: <span class="kw-2">&amp;</span>&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::ValidatedState <span class="kw">as </span>hotshot_types::traits::ValidatedState&lt;SeqTypes&gt;&gt;::Instance,
@@ -2427,6 +2494,8 @@
         auction_results: <span class="prelude-ty">Option</span>&lt;SolverAuctionResults&gt;,
         version: Version,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
+        <span class="macro">tracing::info!</span>(<span class="string">"preparing to propose marketplace header"</span>);
+
         <span class="kw">let </span>height = parent_leaf.height();
         <span class="kw">let </span>view = parent_leaf.view_number();
 
@@ -2438,10 +2507,10 @@
                     UpgradeType::Marketplace { chain_config } =&gt; chain_config,
                     UpgradeType::Fee { chain_config } =&gt; chain_config,
                 },
-                <span class="prelude-val">None </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span>,
+                <span class="prelude-val">None </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span><span class="question-mark">?</span>,
             }
         } <span class="kw">else </span>{
-            Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await
+            Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span><span class="question-mark">?
         </span>};
 
         validated_state.chain_config = chain_config.into();
@@ -2490,6 +2559,7 @@
                 .peers
                 .as_ref()
                 .fetch_accounts(
+                    instance_state,
                     height,
                     view,
                     parent_state.fee_merkle_tree.commitment(),
@@ -2498,9 +2568,8 @@
                 .<span class="kw">await</span><span class="question-mark">?</span>;
 
             <span class="comment">// Insert missing fee state entries
-            </span><span class="kw">for </span>account <span class="kw">in </span>missing_account_proofs.iter() {
-                account
-                    .proof
+            </span><span class="kw">for </span>proof <span class="kw">in </span>missing_account_proofs.iter() {
+                proof
                     .remember(<span class="kw-2">&amp;mut </span>validated_state.fee_merkle_tree)
                     .context(<span class="string">"remembering fee account"</span>)<span class="question-mark">?</span>;
             }
@@ -2512,7 +2581,12 @@
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(height, view, <span class="kw-2">&amp;mut </span>validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(
+                    instance_state,
+                    height,
+                    view,
+                    <span class="kw-2">&amp;mut </span>validated_state.block_merkle_tree,
+                )
                 .<span class="kw">await
                 </span>.context(<span class="string">"remembering block proof"</span>)<span class="question-mark">?</span>;
         }
@@ -2533,7 +2607,17 @@
         )<span class="question-mark">?</span>)
     }
 
-    <span class="kw">async fn </span>new_legacy(
+    <span class="attr">#[tracing::instrument(
+        skip_all,
+        fields(
+            height = parent_leaf.block_header().block_number() + <span class="number">1</span>,
+            parent_view = <span class="question-mark">?</span>parent_leaf.view_number(),
+            payload_commitment,
+            payload_size = VidSchemeType::get_payload_byte_len(<span class="kw-2">&amp;</span>_vid_common),
+            version,
+        )
+    )]
+    </span><span class="kw">async fn </span>new_legacy(
         parent_state: <span class="kw-2">&amp;</span>ValidatedState,
         instance_state: <span class="kw-2">&amp;</span>NodeState,
         parent_leaf: <span class="kw-2">&amp;</span>Leaf,
@@ -2544,6 +2628,8 @@
         _vid_common: VidCommon,
         version: Version,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
+        <span class="macro">tracing::info!</span>(<span class="string">"preparing to propose legacy header"</span>);
+
         <span class="kw">let </span>height = parent_leaf.height();
         <span class="kw">let </span>view = parent_leaf.view_number();
 
@@ -2553,12 +2639,12 @@
             <span class="kw">match </span>instance_state.upgrades.get(<span class="kw-2">&amp;</span>version) {
                 <span class="prelude-val">Some</span>(upgrade) =&gt; <span class="kw">match </span>upgrade.upgrade_type {
                     UpgradeType::Fee { chain_config } =&gt; chain_config,
-                    <span class="kw">_ </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span>,
+                    <span class="kw">_ </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span><span class="question-mark">?</span>,
                 },
-                <span class="prelude-val">None </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span>,
+                <span class="prelude-val">None </span>=&gt; Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span><span class="question-mark">?</span>,
             }
         } <span class="kw">else </span>{
-            Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await
+            Header::get_chain_config(<span class="kw-2">&amp;</span>validated_state, instance_state).<span class="kw">await</span><span class="question-mark">?
         </span>};
 
         validated_state.chain_config = chain_config.into();
@@ -2604,6 +2690,7 @@
                 .peers
                 .as_ref()
                 .fetch_accounts(
+                    instance_state,
                     height,
                     view,
                     parent_state.fee_merkle_tree.commitment(),
@@ -2612,9 +2699,8 @@
                 .<span class="kw">await</span><span class="question-mark">?</span>;
 
             <span class="comment">// Insert missing fee state entries
-            </span><span class="kw">for </span>account <span class="kw">in </span>missing_account_proofs.iter() {
-                account
-                    .proof
+            </span><span class="kw">for </span>proof <span class="kw">in </span>missing_account_proofs.iter() {
+                proof
                     .remember(<span class="kw-2">&amp;mut </span>validated_state.fee_merkle_tree)
                     .context(<span class="string">"remembering fee account"</span>)<span class="question-mark">?</span>;
             }
@@ -2626,7 +2712,12 @@
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(height, view, <span class="kw-2">&amp;mut </span>validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(
+                    instance_state,
+                    height,
+                    view,
+                    <span class="kw-2">&amp;mut </span>validated_state.block_merkle_tree,
+                )
                 .<span class="kw">await
                 </span>.context(<span class="string">"remembering block proof"</span>)<span class="question-mark">?</span>;
         }
@@ -3081,7 +3172,13 @@
 
         <span class="comment">// Pass a different chain config to trigger a chain config validation error.
         </span><span class="kw">let </span>state = validated_state
-            .apply_header(<span class="kw-2">&amp;</span>genesis.instance_state, <span class="kw-2">&amp;</span>parent_leaf, <span class="kw-2">&amp;</span>proposal, ver)
+            .apply_header(
+                <span class="kw-2">&amp;</span>genesis.instance_state,
+                <span class="kw-2">&amp;</span>genesis.instance_state.peers,
+                <span class="kw-2">&amp;</span>parent_leaf,
+                <span class="kw-2">&amp;</span>proposal,
+                ver,
+            )
             .<span class="kw">await
             </span>.unwrap()
             .<span class="number">0</span>;
@@ -3104,7 +3201,13 @@
         <span class="comment">// Advance `proposal.height` to trigger validation error.
 
         </span><span class="kw">let </span>validated_state = validated_state
-            .apply_header(<span class="kw-2">&amp;</span>genesis.instance_state, <span class="kw-2">&amp;</span>parent_leaf, <span class="kw-2">&amp;</span>proposal, ver)
+            .apply_header(
+                <span class="kw-2">&amp;</span>genesis.instance_state,
+                <span class="kw-2">&amp;</span>genesis.instance_state.peers,
+                <span class="kw-2">&amp;</span>parent_leaf,
+                <span class="kw-2">&amp;</span>proposal,
+                ver,
+            )
             .<span class="kw">await
             </span>.unwrap()
             .<span class="number">0</span>;
@@ -3128,7 +3231,13 @@
         </span><span class="kw-2">*</span>proposal.height_mut() += <span class="number">1</span>;
 
         <span class="kw">let </span>validated_state = validated_state
-            .apply_header(<span class="kw-2">&amp;</span>genesis.instance_state, <span class="kw-2">&amp;</span>parent_leaf, <span class="kw-2">&amp;</span>proposal, ver)
+            .apply_header(
+                <span class="kw-2">&amp;</span>genesis.instance_state,
+                <span class="kw-2">&amp;</span>genesis.instance_state.peers,
+                <span class="kw-2">&amp;</span>parent_leaf,
+                <span class="kw-2">&amp;</span>proposal,
+                ver,
+            )
             .<span class="kw">await
             </span>.unwrap()
             .<span class="number">0</span>;
@@ -3233,6 +3342,7 @@
         <span class="kw">let </span>proposal_state = proposal_state
             .apply_header(
                 <span class="kw-2">&amp;</span>genesis_state,
+                <span class="kw-2">&amp;</span>genesis_state.peers,
                 <span class="kw-2">&amp;</span>parent_leaf,
                 <span class="kw-2">&amp;</span>proposal,
                 StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version(),
