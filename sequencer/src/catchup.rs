@@ -10,7 +10,7 @@ use espresso_types::{
     AccountQueryData, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
 };
 use futures::future::FutureExt;
-use hotshot_orchestrator::config::NetworkConfig;
+use hotshot_types::network::NetworkConfig;
 use hotshot_types::{
     data::ViewNumber, traits::node_implementation::ConsensusTime as _, ValidatorConfig,
 };

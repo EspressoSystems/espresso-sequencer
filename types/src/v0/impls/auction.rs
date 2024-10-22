@@ -304,7 +304,7 @@ impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProv
     /// Fetch the auction results from the solver.
     async fn fetch_auction_result(
         &self,
-        view_number: TYPES::Time,
+        view_number: TYPES::View,
     ) -> anyhow::Result<TYPES::AuctionResult> {
         let resp = SurfClient::new(
             self.url
