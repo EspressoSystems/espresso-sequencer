@@ -939,6 +939,16 @@
 <a href="#939" id="939">939</a>
 <a href="#940" id="940">940</a>
 <a href="#941" id="941">941</a>
+<a href="#942" id="942">942</a>
+<a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{anyhow, Context};
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>async_trait::async_trait;
@@ -1747,6 +1757,12 @@
         config.insert(<span class="string">"stop_voting_time"</span>.into(), <span class="number">0</span>.into());
     }
 
+    <span class="comment">// HotShotConfig was upgraded to include an `epoch_height` parameter. Initialize with a default
+    // if missing.
+    </span><span class="kw">if </span>!config.contains_key(<span class="string">"epoch_height"</span>) {
+        config.insert(<span class="string">"epoch_height"</span>.into(), <span class="number">0</span>.into());
+    }
+
     <span class="prelude-val">Ok</span>(network_config)
 }
 
@@ -1811,7 +1827,8 @@
                 <span class="string">"start_proposing_time"</span>: <span class="number">1</span>,
                 <span class="string">"stop_proposing_time"</span>: <span class="number">2</span>,
                 <span class="string">"start_voting_time"</span>: <span class="number">1</span>,
-                <span class="string">"stop_voting_time"</span>: <span class="number">2
+                <span class="string">"stop_voting_time"</span>: <span class="number">2</span>,
+                <span class="string">"epoch_height"</span>: <span class="number">0
             </span>}
         });
 
@@ -1830,7 +1847,8 @@
                 <span class="string">"start_proposing_time"</span>: <span class="number">1</span>,
                 <span class="string">"stop_proposing_time"</span>: <span class="number">2</span>,
                 <span class="string">"start_voting_time"</span>: <span class="number">1</span>,
-                <span class="string">"stop_voting_time"</span>: <span class="number">2
+                <span class="string">"stop_voting_time"</span>: <span class="number">2</span>,
+                <span class="string">"epoch_height"</span>: <span class="number">0
             </span>}
         });
 
@@ -1854,7 +1872,8 @@
                 <span class="string">"start_proposing_time"</span>: <span class="number">9007199254740991u64</span>,
                 <span class="string">"stop_proposing_time"</span>: <span class="number">0</span>,
                 <span class="string">"start_voting_time"</span>: <span class="number">9007199254740991u64</span>,
-                <span class="string">"stop_voting_time"</span>: <span class="number">0
+                <span class="string">"stop_voting_time"</span>: <span class="number">0</span>,
+                <span class="string">"epoch_height"</span>: <span class="number">0
             </span>}
         });
 
@@ -1873,7 +1892,8 @@
                 <span class="string">"start_proposing_time"</span>: <span class="number">1</span>,
                 <span class="string">"stop_proposing_time"</span>: <span class="number">2</span>,
                 <span class="string">"start_voting_time"</span>: <span class="number">1</span>,
-                <span class="string">"stop_voting_time"</span>: <span class="number">2
+                <span class="string">"stop_voting_time"</span>: <span class="number">2</span>,
+                <span class="string">"epoch_height"</span>: <span class="number">0
             </span>}
         });
 
