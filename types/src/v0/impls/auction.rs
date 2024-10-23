@@ -54,7 +54,18 @@ impl Committable for BidTxBody {
             .fixed_size_field("bid_amount", &self.bid_amount.to_fixed_bytes())
             .var_size_field("url", self.url.as_str().as_ref())
             .u64_field("view", self.view.u64())
-            .var_size_field("namespaces", &bincode::serialize(&self.namespaces).unwrap());
+            .array_field(
+                "namespaces",
+                &self
+                    .namespaces
+                    .iter()
+                    .map(|e| {
+                        committable::RawCommitmentBuilder::<BidTxBody>::new("namespace")
+                            .u64(e.0)
+                            .finalize()
+                    })
+                    .collect::<Vec<_>>(),
+            );
         comm.finalize()
     }
 }
