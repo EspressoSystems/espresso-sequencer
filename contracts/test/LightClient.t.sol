@@ -843,15 +843,17 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
     function test_checkLagWhenDelayThresholdIsOne() public {
         // DELAY_THRESHOLD = 6
+        uint64 blockBuffer = 6;
+        uint64 delayThreshold = 1;
         uint8 numUpdates = 6;
 
         uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
         blockNumberUpdates[0] = 1;
-        blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
-        blockNumberUpdates[2] = blockNumberUpdates[1] + DELAY_THRESHOLD / 2; // 7
-        blockNumberUpdates[3] = blockNumberUpdates[2] + DELAY_THRESHOLD + 5; // 18
-        blockNumberUpdates[4] = blockNumberUpdates[3] + DELAY_THRESHOLD / 2; // 21
-        blockNumberUpdates[5] += 1; //22
+        blockNumberUpdates[1] = blockNumberUpdates[0] + blockBuffer / 2; // 4
+        blockNumberUpdates[2] = blockNumberUpdates[1] + blockBuffer / 2; // 7
+        blockNumberUpdates[3] = blockNumberUpdates[2] + blockBuffer + 5; // 18
+        blockNumberUpdates[4] = blockNumberUpdates[3] + blockBuffer / 2; // 21
+        blockNumberUpdates[5] = blockNumberUpdates[4] + delayThreshold; //22
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
@@ -877,11 +879,11 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         assertEq(lc.getStateHistoryCount(), numUpdates);
 
-        // Hotshot should be down because the previous block update would have been 3 blocks ago
-        assertTrue(lc.lagOverEscapeHatchThreshold(blockNumberUpdates[2], 1));
+        // Hotshot should be down because the previous block update would have been 2 blocks ago
+        assertTrue(lc.lagOverEscapeHatchThreshold(blockNumberUpdates[2] - 1, delayThreshold));
 
         // Hotshot should be up because the previous block update would have been 1 block ago
-        assertFalse(lc.lagOverEscapeHatchThreshold(blockNumberUpdates[5], 1));
+        assertFalse(lc.lagOverEscapeHatchThreshold(blockNumberUpdates[5], delayThreshold));
     }
 
     function test_checkLagWhenThereIsOnlyOneUpdate() public {

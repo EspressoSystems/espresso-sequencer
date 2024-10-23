@@ -374,8 +374,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InsufficientSnapshotHistory();
         }
 
-        uint256 eligibleBlock; // the eligible block is <= blockNumber
-        bool stateUpdateFound; // if an eligible block is found then this variable is set to true
+        uint256 eligibleStateUpdateBlockNumber; // the eligibleStateUpdateBlockNumber is <=
+            // blockNumber
+        bool stateUpdateFound; // if an eligible block number is found in the state update history,
+            // then this variable is set to true
 
         // Search from the most recent state update back to find the first update <= blockNumber
         uint256 i = updatesCount - 1;
@@ -388,7 +390,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             // Find the first update with a block height <= blockNumber
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
                 stateUpdateFound = true;
-                eligibleBlock = stateHistoryCommitments[i].l1BlockHeight;
+                eligibleStateUpdateBlockNumber = stateHistoryCommitments[i].l1BlockHeight;
                 break;
             }
 
@@ -401,7 +403,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InsufficientSnapshotHistory();
         }
 
-        return blockNumber - eligibleBlock > blockThreshold;
+        return blockNumber - eligibleStateUpdateBlockNumber > blockThreshold;
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
