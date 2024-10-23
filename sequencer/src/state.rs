@@ -4,7 +4,8 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{bail, ensure, Context};
 use async_std::stream::StreamExt;
 use espresso_types::{
-    v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
+    traits::StateCatchup, v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
+    Leaf, ValidatedState,
 };
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
@@ -18,18 +19,18 @@ use hotshot_query_service::{
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
 
 use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    persistence::ChainConfigPersistence, NodeState, SeqTypes,
+    catchup::{CatchupStorage, SqlStateCatchup},
+    persistence::ChainConfigPersistence,
+    NodeState, SeqTypes,
 };
 
-async fn compute_state_update(
+pub(crate) async fn compute_state_update(
     state: &ValidatedState,
     instance: &NodeState,
-    parent_leaf: &LeafQueryData<SeqTypes>,
-    proposed_leaf: &LeafQueryData<SeqTypes>,
+    peers: &impl StateCatchup,
+    parent_leaf: &Leaf,
+    proposed_leaf: &Leaf,
 ) -> anyhow::Result<(ValidatedState, Delta)> {
-    let proposed_leaf = proposed_leaf.leaf();
-    let parent_leaf = parent_leaf.leaf();
     let header = proposed_leaf.block_header();
 
     // Check internal consistency.
@@ -54,7 +55,7 @@ async fn compute_state_update(
     );
 
     state
-        .apply_header(instance, parent_leaf, header, header.version())
+        .apply_header(instance, peers, parent_leaf, header, header.version())
         .await
 }
 
@@ -84,6 +85,7 @@ async fn store_state_update(
                 fee_merkle_tree.height(),
             );
 
+        tracing::debug!(%delta, "inserting fee account");
         UpdateStateData::<SeqTypes, _, { FeeMerkleTree::ARITY }>::insert_merkle_nodes(
             tx,
             proof,
@@ -105,6 +107,7 @@ async fn store_state_update(
     );
 
     {
+        tracing::debug!("inserting blocks frontier");
         UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::insert_merkle_nodes(
             tx,
             proof,
@@ -115,6 +118,7 @@ async fn store_state_update(
         .context("failed to store block merkle nodes")?;
     }
 
+    tracing::debug!(block_number, "updating state height");
     UpdateStateData::<SeqTypes, _, { BlockMerkleTree::ARITY }>::set_last_state_height(
         tx,
         block_number as usize,
@@ -136,6 +140,7 @@ async fn update_state_storage<T>(
     parent_state: &ValidatedState,
     storage: &Arc<T>,
     instance: &NodeState,
+    peers: &impl StateCatchup,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
 ) -> anyhow::Result<ValidatedState>
@@ -145,10 +150,17 @@ where
 {
     let parent_chain_config = parent_state.chain_config;
 
-    let (state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
-        .await
-        .context("computing state update")?;
+    let (state, delta) = compute_state_update(
+        parent_state,
+        instance,
+        peers,
+        parent_leaf.leaf(),
+        proposed_leaf.leaf(),
+    )
+    .await
+    .context("computing state update")?;
 
+    tracing::debug!("storing state update");
     let mut tx = storage
         .write()
         .await
@@ -207,6 +219,7 @@ where
     Ok(())
 }
 
+#[tracing::instrument(skip_all)]
 pub(crate) async fn update_state_storage_loop<T>(
     storage: Arc<T>,
     instance: impl Future<Output = NodeState>,
@@ -215,14 +228,19 @@ where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
 {
-    let mut instance = instance.await;
-    instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
+    let instance = instance.await;
+    let peers = SqlStateCatchup::new(storage.clone(), Default::default());
 
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
         let last_height = storage.get_last_state_height().await?;
         let current_height = storage.block_height().await?;
-        tracing::info!(last_height, current_height, "updating state storage");
+        tracing::info!(
+            node_id = instance.node_id,
+            last_height,
+            current_height,
+            "updating state storage"
+        );
 
         let parent_leaf = storage.get_leaf(last_height).await;
         let leaves = storage.subscribe_leaves(last_height + 1).await;
@@ -248,8 +266,21 @@ where
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            match update_state_storage(&parent_state, &storage, &instance, &parent_leaf, &leaf)
-                .await
+            tracing::debug!(
+                height = leaf.height(),
+                node_id = instance.node_id,
+                ?leaf,
+                "updating persistent merklized state"
+            );
+            match update_state_storage(
+                &parent_state,
+                &storage,
+                &instance,
+                &peers,
+                &parent_leaf,
+                &leaf,
+            )
+            .await
             {
                 Ok(state) => {
                     parent_leaf = leaf;
@@ -274,7 +305,7 @@ pub(crate) trait SequencerStateDataSource:
     + AvailabilityDataSource<SeqTypes>
     + StatusDataSource
     + VersionedDataSource
-    + CatchupDataSource
+    + CatchupStorage
     + MerklizedStateHeightPersistence
 {
 }
@@ -285,7 +316,7 @@ impl<T> SequencerStateDataSource for T where
         + AvailabilityDataSource<SeqTypes>
         + StatusDataSource
         + VersionedDataSource
-        + CatchupDataSource
+        + CatchupStorage
         + MerklizedStateHeightPersistence
 {
 }
