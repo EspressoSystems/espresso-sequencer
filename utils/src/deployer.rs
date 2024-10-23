@@ -9,6 +9,7 @@ use contract_bindings::{
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
+    ownable_upgradeable::OwnableUpgradeable,
     plonk_verifier::PlonkVerifier,
 };
 use derive_more::Display;
@@ -403,7 +404,7 @@ pub async fn deploy(
             proxy.transfer_ownership(owner).send().await?.await?;
 
             // Confirm that the multisig address has been set as the owner
-            if !is_valid_admin_light_client_proxy(l1.clone(), light_client_proxy_address, owner)
+            if !is_valid_admin_for_proxy(l1.clone(), light_client_proxy_address, owner)
                 .await
                 .expect("Failed to find the expected admin on the proxy")
             {
@@ -450,7 +451,7 @@ pub async fn deploy(
             proxy.transfer_ownership(owner).send().await?.await?;
 
             // Confirm that the multisig address has been set as the owner
-            if !is_valid_admin_fee_contract_proxy(l1.clone(), fee_contract_proxy_address, owner)
+            if !is_valid_admin_for_proxy(l1.clone(), fee_contract_proxy_address, owner)
                 .await
                 .expect("Failed to find the expected admin on the proxy")
             {
@@ -488,25 +489,13 @@ pub async fn is_proxy_contract(
     Ok(implementation_address != H160::zero())
 }
 
-pub async fn is_valid_admin_light_client_proxy<M: Middleware + 'static>(
+pub async fn is_valid_admin_for_proxy<M: Middleware + 'static>(
     client: Arc<M>,
     proxy_address: H160,
     admin: H160,
 ) -> anyhow::Result<bool> {
-    let proxy_contract = LightClient::new(proxy_address, client);
-    let proxy_contract_admin = proxy_contract.owner().await?;
-
-    // we expect the admin_address to be equal to the one passed in
-    Ok(proxy_contract_admin == admin)
-}
-
-pub async fn is_valid_admin_fee_contract_proxy<M: Middleware + 'static>(
-    client: Arc<M>,
-    proxy_address: H160,
-    admin: H160,
-) -> anyhow::Result<bool> {
-    let proxy_contract = FeeContract::new(proxy_address, client);
-    let proxy_contract_admin = proxy_contract.owner().await?;
+    let ownable_proxy_contract = OwnableUpgradeable::new(proxy_address, client);
+    let proxy_contract_admin = ownable_proxy_contract.owner().await?;
 
     // we expect the admin_address to be equal to the one passed in
     Ok(proxy_contract_admin == admin)

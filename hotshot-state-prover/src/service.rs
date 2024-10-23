@@ -564,7 +564,7 @@ mod test {
     use jf_utils::test_rng;
     use sequencer_utils::{
         deployer::{
-            self, is_valid_admin_light_client_proxy,
+            self, is_valid_admin_for_proxy,
             test_helpers::deploy_light_client_contract_as_proxy_for_test,
         },
         test_utils::setup_test,
@@ -794,7 +794,7 @@ mod test {
         // validate that the admin is the deployer account
         let admin = wallet.clone().address();
         let admin_result =
-            is_valid_admin_light_client_proxy(wallet, contract.clone().address(), admin).await?;
+            is_valid_admin_for_proxy(wallet, contract.clone().address(), admin).await?;
         assert!(
             admin_result,
             "Testing whether the admin on the contract is {}",
@@ -847,7 +847,7 @@ mod test {
         // validate that there is no owner set
         let admin = wallet.clone().address();
         let admin_result =
-            is_valid_admin_light_client_proxy(wallet, contract.clone().address(), admin).await?;
+            is_valid_admin_for_proxy(wallet, contract.clone().address(), admin).await?;
         assert!(
             !admin_result,
             "Testing whether the admin on the contract is the zero address"
