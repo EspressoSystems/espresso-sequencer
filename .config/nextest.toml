@@ -22,3 +22,8 @@ retries = 2
 slow-timeout = "2m"
 default-filter = 'package(tests)'
 retries = 2
+
+[profile.exclude-sql]
+slow-timeout = "2m"
+default-filter = 'not (test(slow_) | test(/sql/) | package(tests))'
+retries = 2

@@ -16,10 +16,15 @@ Just is not available in the official ubuntu repos.
     sudo apt-get update
     sudo apt-get install -y just
 
-## Install rustup
+## Install rust dependencies
 
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
     source $HOME/.cargo/env
+
+## Install nextest test runner
+
+    curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+    cargo binstall cargo-nextest --secure --no-confirm
 
 ## Install foundry
 
@@ -43,7 +48,7 @@ To run the SQL tests docker needs to be installed and running.
     export RUSTFLAGS='--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
     export "PATH=$PWD/target/release:$PATH"
     cargo build --release --bin diff-test
-    cargo test --release --all-features -- --skip sql
+    just test --profile exclude-sql
 
 ## Run the foundry tests
 
