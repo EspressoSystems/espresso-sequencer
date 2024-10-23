@@ -295,109 +295,37 @@
 <a href="#295" id="295">295</a>
 <a href="#296" id="296">296</a>
 <a href="#297" id="297">297</a>
-<a href="#298" id="298">298</a>
-<a href="#299" id="299">299</a>
-<a href="#300" id="300">300</a>
-<a href="#301" id="301">301</a>
-<a href="#302" id="302">302</a>
-<a href="#303" id="303">303</a>
-<a href="#304" id="304">304</a>
-<a href="#305" id="305">305</a>
-<a href="#306" id="306">306</a>
-<a href="#307" id="307">307</a>
-<a href="#308" id="308">308</a>
-<a href="#309" id="309">309</a>
-<a href="#310" id="310">310</a>
-<a href="#311" id="311">311</a>
-<a href="#312" id="312">312</a>
-<a href="#313" id="313">313</a>
-<a href="#314" id="314">314</a>
-<a href="#315" id="315">315</a>
-<a href="#316" id="316">316</a>
-<a href="#317" id="317">317</a>
-<a href="#318" id="318">318</a>
-<a href="#319" id="319">319</a>
-<a href="#320" id="320">320</a>
-<a href="#321" id="321">321</a>
-<a href="#322" id="322">322</a>
-<a href="#323" id="323">323</a>
-<a href="#324" id="324">324</a>
-<a href="#325" id="325">325</a>
-<a href="#326" id="326">326</a>
-<a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a>
-<a href="#329" id="329">329</a>
-<a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
-<a href="#332" id="332">332</a>
-<a href="#333" id="333">333</a>
-<a href="#334" id="334">334</a>
-<a href="#335" id="335">335</a>
-<a href="#336" id="336">336</a>
-<a href="#337" id="337">337</a>
-<a href="#338" id="338">338</a>
-<a href="#339" id="339">339</a>
-<a href="#340" id="340">340</a>
-<a href="#341" id="341">341</a>
-<a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
-<a href="#344" id="344">344</a>
-<a href="#345" id="345">345</a>
-<a href="#346" id="346">346</a>
-<a href="#347" id="347">347</a>
-<a href="#348" id="348">348</a>
-<a href="#349" id="349">349</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
-<span class="kw">use </span>async_broadcast::{
-    broadcast, Receiver <span class="kw">as </span>BroadcastReceiver, RecvError, Sender <span class="kw">as </span>BroadcastSender, TryRecvError,
-};
-<span class="kw">use </span>async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
-};
+<span class="kw">use </span>async_broadcast::broadcast;
+<span class="kw">use </span>async_compatibility_layer::art::async_spawn;
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
-    NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
-};
-<span class="kw">use </span>ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer <span class="kw">as _</span>, Wallet},
-    types::{Address, U256},
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
+    SeqTypes, ValidatedState,
 };
 <span class="kw">use </span>hotshot::traits::BlockPayload;
-<span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
-    BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
-};
 <span class="kw">use </span>hotshot_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
+    builder_state::{BuilderState, MessageType},
     service::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
 };
-<span class="kw">use </span>hotshot_events_service::{
-    events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
-    events_source::{EventConsumer, EventsStreamer},
-};
 <span class="kw">use </span>hotshot_types::{
-    data::{fake_commitment, Leaf, ViewNumber},
+    data::{fake_commitment, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::Versions,
         EncodeBytes,
     },
-    utils::BuilderCommitment,
 };
 <span class="kw">use </span>marketplace_builder_shared::block::ParentBlockReferences;
 <span class="kw">use </span>marketplace_builder_shared::utils::EventServiceStream;
-<span class="kw">use </span>sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
-<span class="kw">use </span>surf::http::headers::ACCEPT;
-<span class="kw">use </span>surf_disco::Client;
-<span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
-<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType, Version};
+<span class="kw">use </span>sequencer::{catchup::StatePeers, L1Params, SequencerApiVersion};
+<span class="kw">use </span>tide_disco::Url;
+<span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="kw">use </span><span class="kw">crate</span>::run_builder_api_service;
 
@@ -576,35 +504,9 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>std::time::{Duration, Instant};
-
-    <span class="kw">use </span>async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        logging::{setup_backtrace, setup_logging},
-    };
-    <span class="kw">use </span>async_lock::RwLock;
-    <span class="kw">use </span>async_std::{stream::StreamExt, task};
-    <span class="kw">use </span>espresso_types::{Event, FeeAccount, NamespaceId, Transaction};
+    <span class="kw">use </span>async_std::stream::StreamExt;
+    <span class="kw">use </span>espresso_types::MockSequencerVersions;
     <span class="kw">use </span>ethers::utils::Anvil;
-    <span class="kw">use </span>futures::Stream;
-    <span class="kw">use </span>hotshot::types::EventType;
-    <span class="kw">use </span>hotshot_builder_api::v0_1::{
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-        builder::BuildError,
-    };
-    <span class="kw">use </span>hotshot_builder_core::service::run_non_permissioned_standalone_builder_service;
-    <span class="kw">use </span>hotshot_events_service::{
-        events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
-        events_source::{EventConsumer, EventsStreamer},
-    };
-    <span class="kw">use </span>hotshot_types::{
-        signature_key::BLSPubKey,
-        traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
-            signature_key::SignatureKey,
-        },
-    };
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>sequencer::{
         api::{
@@ -612,21 +514,15 @@
             test_helpers::{TestNetwork, TestNetworkConfigBuilder},
             Options,
         },
-        persistence::{
-            <span class="self">self</span>,
-            no_storage::{<span class="self">self</span>, NoStorage},
-        },
+        persistence::{<span class="self">self</span>},
         testing::TestConfigBuilder,
     };
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tempfile::TempDir;
-    <span class="kw">use </span>vbs::version::StaticVersion;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use </span><span class="kw">crate</span>::testing::{
-        hotshot_builder_url, test_builder_impl, HotShotTestConfig, NonPermissionedBuilderTestConfig,
-    };
+    <span class="kw">use </span><span class="kw">crate</span>::testing::{test_builder_impl, NonPermissionedBuilderTestConfig};
 
     <span class="doccomment">/// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api

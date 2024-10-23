@@ -531,164 +531,14 @@
 <a href="#531" id="531">531</a>
 <a href="#532" id="532">532</a>
 <a href="#533" id="533">533</a>
-<a href="#534" id="534">534</a>
-<a href="#535" id="535">535</a>
-<a href="#536" id="536">536</a>
-<a href="#537" id="537">537</a>
-<a href="#538" id="538">538</a>
-<a href="#539" id="539">539</a>
-<a href="#540" id="540">540</a>
-<a href="#541" id="541">541</a>
-<a href="#542" id="542">542</a>
-<a href="#543" id="543">543</a>
-<a href="#544" id="544">544</a>
-<a href="#545" id="545">545</a>
-<a href="#546" id="546">546</a>
-<a href="#547" id="547">547</a>
-<a href="#548" id="548">548</a>
-<a href="#549" id="549">549</a>
-<a href="#550" id="550">550</a>
-<a href="#551" id="551">551</a>
-<a href="#552" id="552">552</a>
-<a href="#553" id="553">553</a>
-<a href="#554" id="554">554</a>
-<a href="#555" id="555">555</a>
-<a href="#556" id="556">556</a>
-<a href="#557" id="557">557</a>
-<a href="#558" id="558">558</a>
-<a href="#559" id="559">559</a>
-<a href="#560" id="560">560</a>
-<a href="#561" id="561">561</a>
-<a href="#562" id="562">562</a>
-<a href="#563" id="563">563</a>
-<a href="#564" id="564">564</a>
-<a href="#565" id="565">565</a>
-<a href="#566" id="566">566</a>
-<a href="#567" id="567">567</a>
-<a href="#568" id="568">568</a>
-<a href="#569" id="569">569</a>
-<a href="#570" id="570">570</a>
-<a href="#571" id="571">571</a>
-<a href="#572" id="572">572</a>
-<a href="#573" id="573">573</a>
-<a href="#574" id="574">574</a>
-<a href="#575" id="575">575</a>
-<a href="#576" id="576">576</a>
-<a href="#577" id="577">577</a>
-<a href="#578" id="578">578</a>
-<a href="#579" id="579">579</a>
-<a href="#580" id="580">580</a>
-<a href="#581" id="581">581</a>
-<a href="#582" id="582">582</a>
-<a href="#583" id="583">583</a>
-<a href="#584" id="584">584</a>
-<a href="#585" id="585">585</a>
-<a href="#586" id="586">586</a>
-<a href="#587" id="587">587</a>
-<a href="#588" id="588">588</a>
-<a href="#589" id="589">589</a>
-<a href="#590" id="590">590</a>
-<a href="#591" id="591">591</a>
-<a href="#592" id="592">592</a>
-<a href="#593" id="593">593</a>
-<a href="#594" id="594">594</a>
-<a href="#595" id="595">595</a>
-<a href="#596" id="596">596</a>
-<a href="#597" id="597">597</a>
-<a href="#598" id="598">598</a>
-<a href="#599" id="599">599</a>
-<a href="#600" id="600">600</a>
-<a href="#601" id="601">601</a>
-<a href="#602" id="602">602</a>
-<a href="#603" id="603">603</a>
-<a href="#604" id="604">604</a>
-<a href="#605" id="605">605</a>
-<a href="#606" id="606">606</a>
-<a href="#607" id="607">607</a>
-<a href="#608" id="608">608</a>
-<a href="#609" id="609">609</a>
-<a href="#610" id="610">610</a>
-<a href="#611" id="611">611</a>
-<a href="#612" id="612">612</a>
-<a href="#613" id="613">613</a>
-<a href="#614" id="614">614</a>
-<a href="#615" id="615">615</a>
-<a href="#616" id="616">616</a>
-<a href="#617" id="617">617</a>
-<a href="#618" id="618">618</a>
-<a href="#619" id="619">619</a>
-<a href="#620" id="620">620</a>
-<a href="#621" id="621">621</a>
-<a href="#622" id="622">622</a>
-<a href="#623" id="623">623</a>
-</pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
-</span><span class="kw">use </span>std::{
-    alloc::System,
-    any,
-    fmt::{Debug, Display},
-    marker::PhantomData,
-    mem,
-    net::{IpAddr, Ipv4Addr},
-    thread::Builder,
-};
-
-<span class="kw">use </span>async_compatibility_layer::art::{async_sleep, async_spawn};
-<span class="kw">use </span>async_std::{
-    sync::{Arc, RwLock},
-    task::{spawn, JoinHandle},
-};
-<span class="kw">use </span>espresso_types::{
-    v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    SeqTypes,
-};
-<span class="kw">use </span>ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer <span class="kw">as _</span>, Wallet},
-    types::{Address, U256},
-};
-<span class="kw">use </span>futures::{
-    future::{join_all, Future},
-    stream::{Stream, StreamExt},
-};
-<span class="kw">use </span>hotshot::{
-    traits::election::static_committee::StaticCommittee,
-    types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, SystemContext,
-};
+</pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::art::async_spawn;
+<span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
-    BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
+    Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
-<span class="kw">use </span>hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
-<span class="kw">use </span>hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
-<span class="kw">use </span>hotshot_types::network::NetworkConfig;
-<span class="comment">// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-</span><span class="kw">use </span>hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-<span class="kw">use </span>hotshot_types::{
-    consensus::ConsensusMetricsValue,
-    event::LeafInfo,
-    light_client::StateKeyPair,
-    signature_key::{BLSPrivKey, BLSPubKey},
-    traits::{
-        block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
-        },
-        election::Membership,
-        metrics::Metrics,
-        node_implementation::NodeType,
-    },
-    utils::BuilderCommitment,
-    HotShotConfig, PeerConfig, ValidatorConfig,
-};
-<span class="kw">use </span>jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
-<span class="kw">use </span>jf_signature::bls_over_bn254::VerKey;
-<span class="kw">use </span>sequencer::{
-    catchup::StatePeers,
-    context::{Consensus, SequencerContext},
-    network,
-    state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node, SequencerApiVersion,
-};
-<span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
+<span class="kw">use </span>hotshot_builder_core::service::ProxyGlobalState;
+<span class="kw">use </span>sequencer::SequencerApiVersion;
+<span class="kw">use </span>tide_disco::{App, Url};
 <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 
 <span class="kw">pub mod </span>non_permissioned;
@@ -723,83 +573,53 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">pub mod </span>testing {
-    <span class="kw">use </span>core::num;
-    <span class="kw">use </span>std::{
-        collections::HashSet,
-        num::NonZeroUsize,
-        time::{Duration, Instant},
-    };
-
-    <span class="comment">//use sequencer::persistence::NoStorage;
-    </span><span class="kw">use </span>async_broadcast::{
-        broadcast, Receiver <span class="kw">as </span>BroadcastReceiver, RecvError, Sender <span class="kw">as </span>BroadcastSender,
-        TryRecvError,
-    };
-    <span class="kw">use </span>async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        channel::{unbounded, UnboundedReceiver, UnboundedSender},
-    };
+    <span class="kw">use </span>async_compatibility_layer::art::async_spawn;
     <span class="kw">use </span>async_lock::RwLock;
-    <span class="kw">use </span>async_trait::async_trait;
     <span class="kw">use </span>committable::Committable;
-
     <span class="kw">use </span>espresso_types::{
-        mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NamespaceId,
-        NodeState, PrivKey, PubKey, Transaction, ValidatedState,
+        traits::SequencerPersistence, v0_3::ChainConfig, Event, FeeAccount, NamespaceId, NodeState,
+        PrivKey, PubKey, Transaction, ValidatedState,
     };
-    <span class="kw">use </span>ethers::{
-        types::spoof::State,
-        utils::{Anvil, AnvilInstance},
-    };
-    <span class="kw">use </span>futures::{
-        future::join_all,
-        stream::{Stream, StreamExt},
-    };
+    <span class="kw">use </span>ethers::utils::{Anvil, AnvilInstance};
+    <span class="kw">use </span>futures::stream::{Stream, StreamExt};
     <span class="kw">use </span>hotshot::{
-        traits::{
-            implementations::{MasterMap, MemoryNetwork},
-            BlockPayload,
-        },
+        traits::BlockPayload,
         types::{
+            BLSPrivKey, BLSPubKey,
             EventType::{<span class="self">self</span>, Decide},
-            Message,
+            SignatureKey,
         },
     };
-    <span class="kw">use </span>hotshot_builder_api::{
-        v0_1::builder::{
-            BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
-        },
-        v0_2::block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    };
-    <span class="kw">use </span>hotshot_builder_core::{
-        builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
-        service::GlobalState,
+    <span class="kw">use </span>hotshot_builder_api::v0_2::block_info::{
+        AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo,
     };
     <span class="kw">use </span>hotshot_events_service::{
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
     <span class="kw">use </span>hotshot_types::{
-        data::{fake_commitment, Leaf, ViewNumber},
+        data::{Leaf, ViewNumber},
         event::LeafInfo,
         light_client::StateKeyPair,
         traits::{
-            block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
-            metrics::NoMetrics,
-            network::Topic,
-            node_implementation::{ConsensusTime, Versions},
+            block_contents::BlockHeader,
+            node_implementation::{ConsensusTime, NodeType, Versions},
             signature_key::BuilderSignatureKey <span class="kw">as _</span>,
         },
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
-    <span class="kw">use </span>portpicker::pick_unused_port;
-    <span class="kw">use </span>sequencer::{state_signature::StateSignatureMemStorage, SequencerApiVersion};
-    <span class="kw">use </span>serde::{Deserialize, Serialize};
+    <span class="kw">use </span>sequencer::{context::Consensus, network, SequencerApiVersion};
+    <span class="kw">use </span>std::{
+        num::NonZeroUsize,
+        sync::Arc,
+        time::{Duration, Instant},
+    };
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>vbs::version::StaticVersion;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::non_permissioned::BuilderConfig;
+    <span class="kw">use </span>jf_signature::bls_over_bn254::VerKey;
 
     <span class="attr">#[derive(Clone)]
     </span><span class="kw">pub struct </span>HotShotTestConfig {
