@@ -4,7 +4,6 @@ pub mod context;
 pub mod genesis;
 
 mod external_event_handler;
-pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
