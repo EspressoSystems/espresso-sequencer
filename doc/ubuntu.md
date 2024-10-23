@@ -7,6 +7,10 @@
     sudo apt-get update
     sudo apt-get install -y curl cmake pkg-config libssl-dev protobuf-compiler git postgresql-client lsb-release gpg
 
+## Install docker
+
+Refer to https://docs.docker.com/engine/install/ubuntu
+
 ## Install just
 
 Just is not available in the official ubuntu repos.
@@ -23,7 +27,7 @@ Just is not available in the official ubuntu repos.
 
 ## Install nextest test runner
 
-    curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+    curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.s /th | bash
     cargo binstall cargo-nextest --secure --no-confirm
 
 ## Install foundry
@@ -48,7 +52,7 @@ To run the SQL tests docker needs to be installed and running.
     export RUSTFLAGS='--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
     export "PATH=$PWD/target/release:$PATH"
     cargo build --release --bin diff-test
-    just test --profile exclude-sql
+    just test --no-fail-fast
 
 ## Run the foundry tests
 
