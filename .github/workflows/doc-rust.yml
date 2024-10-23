@@ -1,4 +1,4 @@
-name: Rust Documentation
+name: Rust Docs
 on:
   push:
     branches:
