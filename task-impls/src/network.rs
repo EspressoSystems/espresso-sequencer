@@ -6,7 +6,6 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
@@ -31,7 +30,8 @@ use hotshot_types::{
     },
     vote::{HasViewNumber, Vote},
 };
-use tracing::{error, instrument, warn};
+use tracing::instrument;
+use utils::anytrace::*;
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
@@ -104,7 +104,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                             HotShotEvent::UpgradeProposalRecv(message, sender)
                         }
                         GeneralConsensusMessage::UpgradeVote(message) => {
-                            error!("Received upgrade vote!");
+                            tracing::error!("Received upgrade vote!");
                             HotShotEvent::UpgradeVoteRecv(message)
                         }
                     },
@@ -270,7 +270,7 @@ impl<
             let serialized_message = match self.upgrade_lock.serialize(&message).await {
                 Ok(serialized) => serialized,
                 Err(e) => {
-                    error!("Failed to serialize message: {}", e);
+                    tracing::error!("Failed to serialize message: {}", e);
                     continue;
                 }
             };
@@ -295,7 +295,7 @@ impl<
             }
             match net.vid_broadcast_message(messages).await {
                 Ok(()) => {}
-                Err(e) => warn!("Failed to send message from network task: {:?}", e),
+                Err(e) => tracing::warn!("Failed to send message from network task: {:?}", e),
             }
         });
 
@@ -308,16 +308,16 @@ impl<
         storage: Arc<RwLock<S>>,
         state: Arc<RwLock<Consensus<TYPES>>>,
         view: <TYPES as NodeType>::View,
-    ) -> Result<(), ()> {
+    ) -> std::result::Result<(), ()> {
         if let Some(action) = maybe_action {
             if !state.write().await.update_action(action, view) {
-                warn!("Already actioned {:?} in view {:?}", action, view);
+                tracing::warn!("Already actioned {:?} in view {:?}", action, view);
                 return Err(());
             }
             match storage.write().await.record_action(view, action).await {
                 Ok(()) => Ok(()),
                 Err(e) => {
-                    warn!("Not Sending {:?} because of storage error: {:?}", action, e);
+                    tracing::warn!("Not Sending {:?} because of storage error: {:?}", action, e);
                     Err(())
                 }
             }
@@ -355,15 +355,25 @@ impl<
             // ED Each network task is subscribed to all these message types.  Need filters per network task
             HotShotEvent::QuorumVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::Vote);
+                let view_number = vote.view_number() + 1;
+                let leader = match self.quorum_membership.leader(view_number, self.epoch) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to calculate leader for view number {:?}. Error: {:?}",
+                            view_number,
+                            e
+                        );
+                        return None;
+                    }
+                };
+
                 Some((
                     vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::Vote(vote.clone()),
                     )),
-                    TransmitType::Direct(
-                        self.quorum_membership
-                            .leader(vote.view_number() + 1, self.epoch),
-                    ),
+                    TransmitType::Direct(leader),
                 ))
             }
             HotShotEvent::QuorumProposalRequestSend(req, signature) => Some((
@@ -396,15 +406,25 @@ impl<
             }
             HotShotEvent::DaVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::DaVote);
+                let view_number = vote.view_number();
+                let leader = match self.quorum_membership.leader(view_number, self.epoch) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to calculate leader for view number {:?}. Error: {:?}",
+                            view_number,
+                            e
+                        );
+                        return None;
+                    }
+                };
+
                 Some((
                     vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
                         DaConsensusMessage::DaVote(vote.clone()),
                     )),
-                    TransmitType::Direct(
-                        self.quorum_membership
-                            .leader(vote.view_number(), self.epoch),
-                    ),
+                    TransmitType::Direct(leader),
                 ))
             }
             HotShotEvent::DacSend(certificate, sender) => {
@@ -417,36 +437,72 @@ impl<
                     TransmitType::Broadcast,
                 ))
             }
-            HotShotEvent::ViewSyncPreCommitVoteSend(vote) => Some((
-                vote.signing_key(),
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                    GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
-                )),
-                TransmitType::Direct(
-                    self.quorum_membership
-                        .leader(vote.view_number() + vote.date().relay, self.epoch),
-                ),
-            )),
-            HotShotEvent::ViewSyncCommitVoteSend(vote) => Some((
-                vote.signing_key(),
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                    GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
-                )),
-                TransmitType::Direct(
-                    self.quorum_membership
-                        .leader(vote.view_number() + vote.date().relay, self.epoch),
-                ),
-            )),
-            HotShotEvent::ViewSyncFinalizeVoteSend(vote) => Some((
-                vote.signing_key(),
-                MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
-                    GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
-                )),
-                TransmitType::Direct(
-                    self.quorum_membership
-                        .leader(vote.view_number() + vote.date().relay, self.epoch),
-                ),
-            )),
+            HotShotEvent::ViewSyncPreCommitVoteSend(vote) => {
+                let view_number = vote.view_number() + vote.date().relay;
+                let leader = match self.quorum_membership.leader(view_number, self.epoch) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to calculate leader for view number {:?}. Error: {:?}",
+                            view_number,
+                            e
+                        );
+                        return None;
+                    }
+                };
+
+                Some((
+                    vote.signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
+                    )),
+                    TransmitType::Direct(leader),
+                ))
+            }
+            HotShotEvent::ViewSyncCommitVoteSend(vote) => {
+                let view_number = vote.view_number() + vote.date().relay;
+                let leader = match self.quorum_membership.leader(view_number, self.epoch) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to calculate leader for view number {:?}. Error: {:?}",
+                            view_number,
+                            e
+                        );
+                        return None;
+                    }
+                };
+
+                Some((
+                    vote.signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
+                    )),
+                    TransmitType::Direct(leader),
+                ))
+            }
+            HotShotEvent::ViewSyncFinalizeVoteSend(vote) => {
+                let view_number = vote.view_number() + vote.date().relay;
+                let leader = match self.quorum_membership.leader(view_number, self.epoch) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to calculate leader for view number {:?}. Error: {:?}",
+                            view_number,
+                            e
+                        );
+                        return None;
+                    }
+                };
+
+                Some((
+                    vote.signing_key(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
+                    )),
+                    TransmitType::Direct(leader),
+                ))
+            }
             HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => Some((
                 sender,
                 MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
@@ -470,15 +526,24 @@ impl<
             )),
             HotShotEvent::TimeoutVoteSend(vote) => {
                 *maybe_action = Some(HotShotAction::Vote);
+                let view_number = vote.view_number() + 1;
+                let leader = match self.quorum_membership.leader(view_number, self.epoch) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to calculate leader for view number {:?}. Error: {:?}",
+                            view_number,
+                            e
+                        );
+                        return None;
+                    }
+                };
                 Some((
                     vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::TimeoutVote(vote.clone()),
                     )),
-                    TransmitType::Direct(
-                        self.quorum_membership
-                            .leader(vote.view_number() + 1, self.epoch),
-                    ),
+                    TransmitType::Direct(leader),
                 ))
             }
             HotShotEvent::UpgradeProposalSend(proposal, sender) => Some((
@@ -489,16 +554,25 @@ impl<
                 TransmitType::Broadcast,
             )),
             HotShotEvent::UpgradeVoteSend(vote) => {
-                error!("Sending upgrade vote!");
+                tracing::error!("Sending upgrade vote!");
+                let view_number = vote.view_number();
+                let leader = match self.quorum_membership.leader(view_number, self.epoch) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to calculate leader for view number {:?}. Error: {:?}",
+                            view_number,
+                            e
+                        );
+                        return None;
+                    }
+                };
                 Some((
                     vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::UpgradeVote(vote.clone()),
                     )),
-                    TransmitType::Direct(
-                        self.quorum_membership
-                            .leader(vote.view_number(), self.epoch),
-                    ),
+                    TransmitType::Direct(leader),
                 ))
             }
             HotShotEvent::ViewChange(view) => {
@@ -581,7 +655,7 @@ impl<
             let serialized_message = match upgrade_lock.serialize(&message).await {
                 Ok(serialized) => serialized,
                 Err(e) => {
-                    error!("Failed to serialize message: {}", e);
+                    tracing::error!("Failed to serialize message: {}", e);
                     return;
                 }
             };
@@ -606,7 +680,7 @@ impl<
 
             match transmit_result {
                 Ok(()) => {}
-                Err(e) => warn!("Failed to send message task: {:?}", e),
+                Err(e) => tracing::warn!("Failed to send message task: {:?}", e),
             }
         });
     }

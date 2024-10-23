@@ -6,7 +6,6 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
@@ -21,6 +20,7 @@ use hotshot_types::{
     },
 };
 use tracing::{debug, error, info, instrument};
+use utils::anytrace::Result;
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},

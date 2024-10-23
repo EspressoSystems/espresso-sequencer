@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -27,6 +26,7 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
+use utils::anytrace::Result;
 
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
@@ -106,7 +106,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: Sender<Arc<HotShotEvent<TYPES>>>,
-    ) {
+    ) -> Result<()> {
         match event.as_ref() {
             HotShotEvent::QuorumVoteRecv(ref vote) => {
                 if let Err(e) =
@@ -149,6 +149,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
             }
             _ => {}
         }
+
+        Ok(())
     }
 }
 
@@ -164,9 +166,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
         sender: &Sender<Arc<Self::Event>>,
         _receiver: &Receiver<Arc<Self::Event>>,
     ) -> Result<()> {
-        self.handle(event, sender.clone()).await;
-
-        Ok(())
+        self.handle(event, sender.clone()).await
     }
 
     /// Joins all subtasks.

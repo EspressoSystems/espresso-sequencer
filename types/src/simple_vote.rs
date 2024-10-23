@@ -8,9 +8,9 @@
 
 use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
-use anyhow::Result;
 use committable::{Commitment, Committable};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use utils::anytrace::*;
 use vbs::version::Version;
 
 use crate::{
@@ -169,7 +169,9 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> SimpleVote<TYPES, DATA> {
 
         let signature = (
             pub_key.clone(),
-            TYPES::SignatureKey::sign(private_key, commit.as_ref())?,
+            TYPES::SignatureKey::sign(private_key, commit.as_ref())
+                .wrap()
+                .context(error!("Failed to sign vote"))?,
         );
 
         Ok(Self {

@@ -20,9 +20,8 @@ use hotshot_testing::{
     script::{Expectations, InputOrder, TaskScript},
     serial,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::{null_block, DaProposal, PackedBundle, VidDisperse, ViewNumber},
+    data::{null_block, DaProposal, EpochNumber, PackedBundle, VidDisperse, ViewNumber},
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,

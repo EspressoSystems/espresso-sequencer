@@ -12,9 +12,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::helpers::{
-    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
-};
 use futures::{FutureExt, Stream};
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 use hotshot_example_types::{
@@ -22,11 +19,10 @@ use hotshot_example_types::{
     node_types::{MemoryImpl, TestTypes, TestVersions},
     state_types::{TestInstanceState, TestValidatedState},
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     data::{
-        DaProposal, Leaf, QuorumProposal, VidDisperse, VidDisperseShare, ViewChangeEvidence,
-        ViewNumber,
+        DaProposal, EpochNumber, Leaf, QuorumProposal, VidDisperse, VidDisperseShare,
+        ViewChangeEvidence, ViewNumber,
     },
     message::{Proposal, UpgradeLock},
     simple_certificate::{
@@ -45,6 +41,10 @@ use hotshot_types::{
 };
 use rand::{thread_rng, Rng};
 use sha2::{Digest, Sha256};
+
+use crate::helpers::{
+    build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
+};
 
 #[derive(Clone)]
 pub struct TestView {

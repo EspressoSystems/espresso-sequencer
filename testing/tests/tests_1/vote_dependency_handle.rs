@@ -11,10 +11,9 @@ use hotshot_testing::{
     predicates::{event::*, Predicate, PredicateResult},
     view_generator::TestViewGenerator,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
     vote::HasViewNumber,
 };

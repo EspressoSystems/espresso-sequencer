@@ -8,7 +8,6 @@
 
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLockUpgradableReadGuard;
 use committable::Committable;
@@ -26,7 +25,8 @@ use hotshot_types::{
     utils::{View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-use tracing::{debug, error, instrument, warn};
+use tracing::instrument;
+use utils::anytrace::*;
 
 use super::QuorumProposalRecvTaskState;
 use crate::{
@@ -78,7 +78,7 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
         )
         .await
     {
-        warn!("Couldn't store undecided state.  Error: {:?}", e);
+        tracing::warn!("Couldn't store undecided state.  Error: {:?}", e);
     }
 
     let liveness_check =
@@ -94,7 +94,7 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
     .await;
 
     if let Err(e) = update_view::<TYPES, I, V>(view_number, event_sender, task_state).await {
-        debug!("Liveness Branch - Failed to update view; error = {e:#}");
+        tracing::debug!("Liveness Branch - Failed to update view; error = {e:#}");
     }
 
     if !liveness_check {
@@ -128,7 +128,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
 
     validate_proposal_view_and_certs(proposal, task_state)
         .await
-        .context("Failed to validate proposal view or attached certs")?;
+        .context(warn!("Failed to validate proposal view or attached certs"))?;
 
     let view_number = proposal.data.view_number();
     let justify_qc = proposal.data.justify_qc.clone();
@@ -220,7 +220,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
     .await;
 
     let Some((parent_leaf, _parent_state)) = parent else {
-        warn!(
+        tracing::warn!(
             "Proposal's parent missing from storage with commitment: {:?}",
             justify_qc.data.leaf_commit
         );
@@ -239,7 +239,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
 
     // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
     if let Err(e) = update_view::<TYPES, I, V>(view_number, event_sender, task_state).await {
-        debug!("Full Branch - Failed to update view; error = {e:#}");
+        tracing::debug!("Full Branch - Failed to update view; error = {e:#}");
     }
 
     Ok(())

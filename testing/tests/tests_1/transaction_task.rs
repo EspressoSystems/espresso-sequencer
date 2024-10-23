@@ -7,9 +7,8 @@ use hotshot_task_impls::{
     events::HotShotEvent, harness::run_harness, transactions::TransactionTaskState,
 };
 use hotshot_testing::helpers::build_system_handle;
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::{null_block, PackedBundle, ViewNumber},
+    data::{null_block, EpochNumber, PackedBundle, ViewNumber},
     traits::{
         block_contents::precompute_vid_commitment,
         election::Membership,

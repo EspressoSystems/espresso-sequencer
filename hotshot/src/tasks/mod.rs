@@ -11,8 +11,7 @@ pub mod task_state;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use async_broadcast::{broadcast, RecvError};
-use async_compatibility_layer::art::async_sleep;
-use async_compatibility_layer::art::async_spawn;
+use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{

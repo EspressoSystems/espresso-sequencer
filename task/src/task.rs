@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
 use async_broadcast::{Receiver, RecvError, Sender};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::{spawn, JoinHandle};
@@ -17,6 +16,7 @@ use futures::future::join_all;
 use futures::future::try_join_all;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::{spawn, JoinHandle};
+use utils::anytrace::Result;
 
 /// Trait for events that long-running tasks handle
 pub trait TaskEvent: PartialEq {

@@ -13,7 +13,6 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
 #[cfg(async_executor_impl = "async-std")]
@@ -38,6 +37,7 @@ use sha2::{Digest, Sha256};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
+use utils::anytrace::Result;
 
 use crate::{events::HotShotEvent, helpers::broadcast_event};
 

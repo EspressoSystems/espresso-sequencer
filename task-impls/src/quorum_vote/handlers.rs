@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-use anyhow::Result;
 use async_broadcast::Sender;
 use chrono::Utc;
 use hotshot_types::{
@@ -19,7 +18,8 @@ use hotshot_types::{
     },
     vote::HasViewNumber,
 };
-use tracing::{debug, instrument};
+use tracing::instrument;
+use utils::anytrace::*;
 
 use super::QuorumVoteTaskState;
 use crate::{
@@ -115,7 +115,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
             .number_of_views_per_decide_event
             .add_point(cur_number_of_views_per_decide_event as f64);
 
-        debug!(
+        tracing::debug!(
             "Sending Decide for view {:?}",
             consensus_writer.last_decided_view()
         );
@@ -139,7 +139,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
         .await;
 
         broadcast_event(Arc::new(HotShotEvent::LeafDecided(leaves_decided)), sender).await;
-        debug!("Successfully sent decide event");
+        tracing::debug!("Successfully sent decide event");
     }
 
     Ok(())

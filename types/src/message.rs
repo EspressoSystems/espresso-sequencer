@@ -15,11 +15,11 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{bail, ensure, Context, Result};
 use async_lock::RwLock;
 use cdn_proto::util::mnemonic;
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use utils::anytrace::*;
 use vbs::{
     version::{StaticVersionType, Version},
     BinarySerializer, Serializer,
@@ -377,7 +377,7 @@ where
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         let view_number = self.data.view_number();
-        let view_leader_key = quorum_membership.leader(view_number, epoch);
+        let view_leader_key = quorum_membership.leader(view_number, epoch)?;
         let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
 
         ensure!(
@@ -486,7 +486,9 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
             }
         };
 
-        serialized_message.context("Failed to serialize message!")
+        serialized_message
+            .wrap()
+            .context(info!("Failed to serialize message!"))
     }
 
     /// Deserialize a message with a version number, using `message.view_number()` to determine the message's version. This function will fail on improperly versioned messages.
@@ -499,7 +501,8 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
         message: &[u8],
     ) -> Result<M> {
         let actual_version = Version::deserialize(message)
-            .context("Failed to read message version!")?
+            .wrap()
+            .context(info!("Failed to read message version!"))?
             .0;
 
         let deserialized_message: M = match actual_version {
@@ -509,7 +512,8 @@ impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
                 bail!("Cannot deserialize message with stated version {}", v);
             }
         }
-        .context("Failed to deserialize message!")?;
+        .wrap()
+        .context(info!("Failed to deserialize message!"))?;
 
         let view = deserialized_message.view_number();
 

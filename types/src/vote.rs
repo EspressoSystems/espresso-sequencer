@@ -11,12 +11,12 @@ use std::{
     marker::PhantomData,
 };
 
-use anyhow::Result;
 use bitvec::{bitvec, vec::BitVec};
 use committable::{Commitment, Committable};
 use either::Either;
 use ethereum_types::U256;
 use tracing::error;
+use utils::anytrace::Result;
 
 use crate::{
     message::UpgradeLock,

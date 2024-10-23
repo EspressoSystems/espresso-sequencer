@@ -8,7 +8,6 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use anyhow::{bail, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -31,6 +30,7 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
+use utils::anytrace::{bail, Result};
 use vbs::version::Version;
 
 use self::handlers::handle_quorum_proposal_recv;

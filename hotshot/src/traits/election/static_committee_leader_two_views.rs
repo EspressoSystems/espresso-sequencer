@@ -16,6 +16,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
+use utils::anytrace::Result;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 
@@ -140,11 +141,12 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
         &self,
         view_number: TYPES::View,
         _epoch: <TYPES as NodeType>::Epoch,
-    ) -> TYPES::SignatureKey {
+    ) -> Result<TYPES::SignatureKey> {
         let index =
             usize::try_from((*view_number / 2) % self.eligible_leaders.len() as u64).unwrap();
         let res = self.eligible_leaders[index].clone();
-        TYPES::SignatureKey::public_key(&res)
+
+        Ok(TYPES::SignatureKey::public_key(&res))
     }
 
     /// Get the total number of nodes in the committee

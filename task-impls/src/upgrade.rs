@@ -6,7 +6,6 @@
 
 use std::{marker::PhantomData, sync::Arc, time::SystemTime};
 
-use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_trait::async_trait;
 use committable::Committable;
@@ -28,11 +27,12 @@ use hotshot_types::{
     },
     vote::HasViewNumber,
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::instrument;
+use utils::anytrace::*;
 use vbs::version::StaticVersionType;
 
 use crate::{
-    events::{HotShotEvent, HotShotTaskCompleted},
+    events::HotShotEvent,
     helpers::broadcast_event,
     vote_collection::{handle_vote, VoteCollectorsMap},
 };
@@ -109,45 +109,47 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         tx: Sender<Arc<HotShotEvent<TYPES>>>,
-    ) -> Option<HotShotTaskCompleted> {
+    ) -> Result<()> {
         match event.as_ref() {
             HotShotEvent::UpgradeProposalRecv(proposal, sender) => {
-                info!("Received upgrade proposal: {:?}", proposal);
+                tracing::info!("Received upgrade proposal: {:?}", proposal);
 
                 let view = *proposal.data.view_number();
 
                 // Skip voting if the version has already been upgraded.
-                if self.upgraded().await {
-                    info!(
-                        "Already upgraded to {:?}, skip voting.",
-                        V::Upgrade::VERSION
-                    );
-                    return None;
-                }
+                ensure!(
+                    !self.upgraded().await,
+                    info!("Already upgraded to {:?}; not voting.", V::Upgrade::VERSION)
+                );
 
                 let time = SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
-                    .ok()?
+                    .wrap()
+                    .context(error!(
+                        "Failed to calculate duration. This should never happen."
+                    ))?
                     .as_secs();
 
-                if time < self.start_voting_time || time >= self.stop_voting_time {
-                    return None;
-                }
+                ensure!(
+                    time >= self.start_voting_time && time < self.stop_voting_time,
+                    "Refusing to vote because we are no longer in the configured vote time window."
+                );
 
-                if view < self.start_voting_view || view >= self.stop_voting_view {
-                    return None;
-                }
+                ensure!(
+                    view >= self.start_voting_view && view < self.stop_voting_view,
+                    "Refusing to vote because we are no longer in the configured vote view window."
+                );
 
                 // If the proposal does not match our upgrade target, we immediately exit.
-                if proposal.data.upgrade_proposal.new_version_hash != V::UPGRADE_HASH
-                    || proposal.data.upgrade_proposal.old_version != V::Base::VERSION
-                    || proposal.data.upgrade_proposal.new_version != V::Upgrade::VERSION
-                {
-                    return None;
-                }
+                ensure!(
+                    proposal.data.upgrade_proposal.new_version_hash == V::UPGRADE_HASH
+                        && proposal.data.upgrade_proposal.old_version == V::Base::VERSION
+                        && proposal.data.upgrade_proposal.new_version == V::Upgrade::VERSION,
+                    "Proposal does not match our upgrade target"
+                );
 
                 // If we have an upgrade target, we validate that the proposal is relevant for the current view.
-                info!(
+                tracing::info!(
                     "Upgrade proposal received for view: {:?}",
                     proposal.data.view_number()
                 );
@@ -169,20 +171,23 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                 // the `UpgradeProposalRecv` event. Otherwise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO Come back to this - we probably don't need this, but we should also never receive a UpgradeCertificate where this fails, investigate block ready so it doesn't make one for the genesis block
-                if self.cur_view != TYPES::View::genesis() && view < self.cur_view - 1 {
-                    warn!("Discarding old upgrade proposal; the proposal is for view {:?}, but the current view is {:?}.",
+                ensure!(
+                    self.cur_view != TYPES::View::genesis() && *view >= self.cur_view.saturating_sub(1),
+                    warn!(
+                      "Discarding old upgrade proposal; the proposal is for view {:?}, but the current view is {:?}.",
                       view,
                       self.cur_view
-                    );
-                    return None;
-                }
+                    )
+                );
 
                 // We then validate that the proposal was issued by the leader for the view.
-                let view_leader_key = self.quorum_membership.leader(view, self.cur_epoch);
-                if &view_leader_key != sender {
-                    error!("Upgrade proposal doesn't have expected leader key for view {} \n Upgrade proposal is: {:?}", *view, proposal.data.clone());
-                    return None;
-                }
+                let view_leader_key = self.quorum_membership.leader(view, self.cur_epoch)?;
+                ensure!(
+                    view_leader_key == *sender,
+                    info!(
+                        "Upgrade proposal doesn't have expected leader key for view {} \n Upgrade proposal is: {:?}", *view, proposal.data.clone()
+                    )
+                );
 
                 // At this point, we've checked that:
                 //   * the proposal was expected,
@@ -201,36 +206,33 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                 .await;
 
                 // If everything is fine up to here, we generate and send a vote on the proposal.
-                let Ok(vote) = UpgradeVote::create_signed_vote(
+                let vote = UpgradeVote::create_signed_vote(
                     proposal.data.upgrade_proposal.clone(),
                     view,
                     &self.public_key,
                     &self.private_key,
                     &self.upgrade_lock,
                 )
-                .await
-                else {
-                    error!("Failed to sign UpgradeVote!");
-                    return None;
-                };
-                debug!("Sending upgrade vote {:?}", vote.view_number());
+                .await?;
+
+                tracing::debug!("Sending upgrade vote {:?}", vote.view_number());
                 broadcast_event(Arc::new(HotShotEvent::UpgradeVoteSend(vote)), &tx).await;
             }
             HotShotEvent::UpgradeVoteRecv(ref vote) => {
-                debug!("Upgrade vote recv, Main Task {:?}", vote.view_number());
+                tracing::debug!("Upgrade vote recv, Main Task {:?}", vote.view_number());
 
                 // Check if we are the leader.
                 {
                     let view = vote.view_number();
-                    if self.quorum_membership.leader(view, self.cur_epoch) != self.public_key {
-                        error!(
+                    ensure!(
+                        self.quorum_membership.leader(view, self.cur_epoch)? == self.public_key,
+                        debug!(
                             "We are not the leader for view {} are we leader for next view? {}",
                             *view,
-                            self.quorum_membership.leader(view + 1, self.cur_epoch)
+                            self.quorum_membership.leader(view + 1, self.cur_epoch)?
                                 == self.public_key
-                        );
-                        return None;
-                    }
+                        )
+                    );
                 }
 
                 handle_vote(
@@ -244,19 +246,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     &tx,
                     &self.upgrade_lock,
                 )
-                .await;
+                .await?;
             }
             HotShotEvent::ViewChange(new_view) => {
-                if self.cur_view >= *new_view {
-                    return None;
-                }
+                ensure!(self.cur_view < *new_view || *self.cur_view == 0);
 
                 self.cur_view = *new_view;
 
                 let view: u64 = *self.cur_view;
                 let time = SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
-                    .ok()?
+                    .wrap()
+                    .context(error!(
+                        "Failed to calculate duration. This should never happen."
+                    ))?
                     .as_secs();
 
                 // We try to form a certificate 5 views before we're leader.
@@ -268,7 +271,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     && self.quorum_membership.leader(
                         TYPES::View::new(view + UPGRADE_PROPOSE_OFFSET),
                         self.cur_epoch,
-                    ) == self.public_key
+                    )? == self.public_key
                 {
                     let upgrade_proposal_data = UpgradeProposalData {
                         old_version: V::Base::VERSION,
@@ -290,7 +293,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     )
                     .expect("Failed to sign upgrade proposal commitment!");
 
-                    warn!("Sending upgrade proposal:\n\n {:?}", upgrade_proposal);
+                    tracing::warn!("Sending upgrade proposal:\n\n {:?}", upgrade_proposal);
 
                     let message = Proposal {
                         data: upgrade_proposal,
@@ -307,16 +310,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     )
                     .await;
                 }
-
-                return None;
-            }
-            HotShotEvent::Shutdown => {
-                error!("Shutting down because of shutdown signal!");
-                return Some(HotShotTaskCompleted);
             }
             _ => {}
         }
-        None
+        Ok(())
     }
 }
 
@@ -333,7 +330,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
         sender: &Sender<Arc<Self::Event>>,
         _receiver: &Receiver<Arc<Self::Event>>,
     ) -> Result<()> {
-        self.handle(event, sender.clone()).await;
+        self.handle(event, sender.clone()).await?;
 
         Ok(())
     }

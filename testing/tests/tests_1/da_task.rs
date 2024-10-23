@@ -21,9 +21,8 @@ use hotshot_testing::{
     serial,
     view_generator::TestViewGenerator,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::{null_block, PackedBundle, ViewNumber},
+    data::{null_block, EpochNumber, PackedBundle, ViewNumber},
     simple_vote::DaData,
     traits::{
         block_contents::precompute_vid_commitment,

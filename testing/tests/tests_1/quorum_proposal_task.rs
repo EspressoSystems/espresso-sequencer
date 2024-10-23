@@ -24,9 +24,8 @@ use hotshot_testing::{
     serial,
     view_generator::TestViewGenerator,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::{null_block, Leaf, ViewChangeEvidence, ViewNumber},
+    data::{null_block, EpochNumber, Leaf, ViewChangeEvidence, ViewNumber},
     simple_vote::{TimeoutData, ViewSyncFinalizeData},
     traits::{
         election::Membership,

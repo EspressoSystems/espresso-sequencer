@@ -1,0 +1,11 @@
+[package]
+name = "utils"
+version = { workspace = true }
+edition = { workspace = true }
+description = "Utils"
+
+[dependencies]
+tracing = { workspace = true }
+
+[lints]
+workspace = true

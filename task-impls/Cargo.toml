@@ -38,6 +38,7 @@ tagged-base64 = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+utils = { path = "../utils" }
 vbs = { workspace = true }
 vec1 = { workspace = true }
 

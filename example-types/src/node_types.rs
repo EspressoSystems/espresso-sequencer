@@ -4,12 +4,6 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use crate::{
-    auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
-    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
-    state_types::{TestInstanceState, TestValidatedState},
-    storage_types::TestStorage,
-};
 use hotshot::traits::{
     election::{
         randomized_committee::RandomizedCommittee, static_committee::StaticCommittee,
@@ -18,14 +12,20 @@ use hotshot::traits::{
     implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork},
     NodeImplementation,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     signature_key::{BLSPubKey, BuilderKey},
     traits::node_implementation::{NodeType, Versions},
 };
 use serde::{Deserialize, Serialize};
 use vbs::version::StaticVersion;
+
+use crate::{
+    auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
+    block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    state_types::{TestInstanceState, TestValidatedState},
+    storage_types::TestStorage,
+};
 
 #[derive(
     Copy,

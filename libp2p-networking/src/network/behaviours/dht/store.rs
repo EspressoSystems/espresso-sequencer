@@ -37,8 +37,16 @@ impl<R: RecordStore, K: SignatureKey> RecordStore for ValidatedStore<R, K>
 where
     K: 'static,
 {
-    type ProvidedIter<'a> = R::ProvidedIter<'a> where R: 'a, K: 'a;
-    type RecordsIter<'a> = R::RecordsIter<'a> where R: 'a, K: 'a;
+    type ProvidedIter<'a>
+        = R::ProvidedIter<'a>
+    where
+        R: 'a,
+        K: 'a;
+    type RecordsIter<'a>
+        = R::RecordsIter<'a>
+    where
+        R: 'a,
+        K: 'a;
 
     // Delegate all `RecordStore` methods except `put` to the inner store
     delegate! {

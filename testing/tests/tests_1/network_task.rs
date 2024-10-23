@@ -17,9 +17,8 @@ use hotshot_testing::{
     helpers::build_system_handle, test_builder::TestDescription,
     test_task::add_network_message_test_task, view_generator::TestViewGenerator,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     message::UpgradeLock,
     traits::{
         election::Membership,

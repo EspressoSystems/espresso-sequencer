@@ -23,9 +23,8 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     message::{DataMessage, Message, MessageKind, UpgradeLock},
     signature_key::{BLSPubKey, BuilderKey},
     traits::{

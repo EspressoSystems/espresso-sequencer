@@ -13,10 +13,10 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{bail, ensure, Result};
 use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use committable::Commitment;
-use tracing::{debug, error, instrument, trace};
+use tracing::instrument;
+use utils::anytrace::*;
 use vec1::Vec1;
 
 pub use crate::utils::{View, ViewInner};
@@ -68,31 +68,31 @@ impl<TYPES: NodeType> OuterConsensus<TYPES> {
     /// Locks inner consensus for reading and leaves debug traces
     #[instrument(skip_all, target = "OuterConsensus")]
     pub async fn read(&self) -> ConsensusReadLockGuard<'_, TYPES> {
-        trace!("Trying to acquire read lock on consensus");
+        tracing::trace!("Trying to acquire read lock on consensus");
         let ret = self.inner_consensus.read().await;
-        trace!("Acquired read lock on consensus");
+        tracing::trace!("Acquired read lock on consensus");
         ConsensusReadLockGuard::new(ret)
     }
 
     /// Locks inner consensus for writing and leaves debug traces
     #[instrument(skip_all, target = "OuterConsensus")]
     pub async fn write(&self) -> ConsensusWriteLockGuard<'_, TYPES> {
-        trace!("Trying to acquire write lock on consensus");
+        tracing::trace!("Trying to acquire write lock on consensus");
         let ret = self.inner_consensus.write().await;
-        trace!("Acquired write lock on consensus");
+        tracing::trace!("Acquired write lock on consensus");
         ConsensusWriteLockGuard::new(ret)
     }
 
     /// Tries to acquire write lock on inner consensus and leaves debug traces
     #[instrument(skip_all, target = "OuterConsensus")]
     pub fn try_write(&self) -> Option<ConsensusWriteLockGuard<'_, TYPES>> {
-        trace!("Trying to acquire write lock on consensus");
+        tracing::trace!("Trying to acquire write lock on consensus");
         let ret = self.inner_consensus.try_write();
         if let Some(guard) = ret {
-            trace!("Acquired write lock on consensus");
+            tracing::trace!("Acquired write lock on consensus");
             Some(ConsensusWriteLockGuard::new(guard))
         } else {
-            trace!("Failed to acquire write lock");
+            tracing::trace!("Failed to acquire write lock");
             None
         }
     }
@@ -100,22 +100,22 @@ impl<TYPES: NodeType> OuterConsensus<TYPES> {
     /// Acquires upgradable read lock on inner consensus and leaves debug traces
     #[instrument(skip_all, target = "OuterConsensus")]
     pub async fn upgradable_read(&self) -> ConsensusUpgradableReadLockGuard<'_, TYPES> {
-        trace!("Trying to acquire upgradable read lock on consensus");
+        tracing::trace!("Trying to acquire upgradable read lock on consensus");
         let ret = self.inner_consensus.upgradable_read().await;
-        trace!("Acquired upgradable read lock on consensus");
+        tracing::trace!("Acquired upgradable read lock on consensus");
         ConsensusUpgradableReadLockGuard::new(ret)
     }
 
     /// Tries to acquire read lock on inner consensus and leaves debug traces
     #[instrument(skip_all, target = "OuterConsensus")]
     pub fn try_read(&self) -> Option<ConsensusReadLockGuard<'_, TYPES>> {
-        trace!("Trying to acquire read lock on consensus");
+        tracing::trace!("Trying to acquire read lock on consensus");
         let ret = self.inner_consensus.try_read();
         if let Some(guard) = ret {
-            trace!("Acquired read lock on consensus");
+            tracing::trace!("Acquired read lock on consensus");
             Some(ConsensusReadLockGuard::new(guard))
         } else {
-            trace!("Failed to acquire read lock");
+            tracing::trace!("Failed to acquire read lock");
             None
         }
     }
@@ -145,7 +145,7 @@ impl<'a, TYPES: NodeType> Deref for ConsensusReadLockGuard<'a, TYPES> {
 impl<'a, TYPES: NodeType> Drop for ConsensusReadLockGuard<'a, TYPES> {
     #[instrument(skip_all, target = "ConsensusReadLockGuard")]
     fn drop(&mut self) {
-        trace!("Read lock on consensus dropped");
+        tracing::trace!("Read lock on consensus dropped");
     }
 }
 
@@ -179,7 +179,7 @@ impl<'a, TYPES: NodeType> DerefMut for ConsensusWriteLockGuard<'a, TYPES> {
 impl<'a, TYPES: NodeType> Drop for ConsensusWriteLockGuard<'a, TYPES> {
     #[instrument(skip_all, target = "ConsensusWriteLockGuard")]
     fn drop(&mut self) {
-        debug!("Write lock on consensus dropped");
+        tracing::debug!("Write lock on consensus dropped");
     }
 }
 
@@ -206,9 +206,9 @@ impl<'a, TYPES: NodeType> ConsensusUpgradableReadLockGuard<'a, TYPES> {
     pub async fn upgrade(mut guard: Self) -> ConsensusWriteLockGuard<'a, TYPES> {
         let inner_guard = unsafe { ManuallyDrop::take(&mut guard.lock_guard) };
         guard.taken = true;
-        debug!("Trying to upgrade upgradable read lock on consensus");
+        tracing::debug!("Trying to upgrade upgradable read lock on consensus");
         let ret = RwLockUpgradableReadGuard::upgrade(inner_guard).await;
-        debug!("Upgraded upgradable read lock on consensus");
+        tracing::debug!("Upgraded upgradable read lock on consensus");
         ConsensusWriteLockGuard::new(ret)
     }
 }
@@ -226,7 +226,7 @@ impl<'a, TYPES: NodeType> Drop for ConsensusUpgradableReadLockGuard<'a, TYPES> {
     fn drop(&mut self) {
         if !self.taken {
             unsafe { ManuallyDrop::drop(&mut self.lock_guard) }
-            debug!("Upgradable read lock on consensus dropped");
+            tracing::debug!("Upgradable read lock on consensus dropped");
         }
     }
 }
@@ -597,19 +597,17 @@ impl<TYPES: NodeType> Consensus<TYPES> {
                 ..
             } = existing_view.view_inner
             {
-                match new_view.view_inner {
-                    ViewInner::Leaf {
-                        delta: ref new_delta,
-                        ..
-                    } => {
-                        ensure!(
-                            new_delta.is_some() || existing_delta.is_none(),
-                            "Skipping the state update to not override a `Leaf` view with `Some` state delta."
-                        );
-                    }
-                    _ => {
-                        bail!("Skipping the state update to not override a `Leaf` view with a non-`Leaf` view.");
-                    }
+                if let ViewInner::Leaf {
+                    delta: ref new_delta,
+                    ..
+                } = new_view.view_inner
+                {
+                    ensure!(
+                         new_delta.is_some() || existing_delta.is_none(),
+                         "Skipping the state update to not override a `Leaf` view with `Some` state delta."
+                     );
+                } else {
+                    bail!("Skipping the state update to not override a `Leaf` view with a non-`Leaf` view.");
                 }
             }
         }
@@ -649,10 +647,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Can return an error when the provided high_qc is not newer than the existing entry.
     pub fn update_high_qc(&mut self, high_qc: QuorumCertificate<TYPES>) -> Result<()> {
         ensure!(
-            high_qc.view_number > self.high_qc.view_number,
+            high_qc.view_number > self.high_qc.view_number || high_qc == self.high_qc,
             "High QC with an equal or higher view exists."
         );
-        debug!("Updating high QC");
+        tracing::debug!("Updating high QC");
         self.high_qc = high_qc;
 
         Ok(())
@@ -684,7 +682,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         terminator: Terminator<TYPES::View>,
         ok_when_finished: bool,
         mut f: F,
-    ) -> Result<(), HotShotError<TYPES>>
+    ) -> std::result::Result<(), HotShotError<TYPES>>
     where
         F: FnMut(
             &Leaf<TYPES>,
@@ -748,7 +746,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .next()
             .expect("INCONSISTENT STATE: anchor leaf not in state map!");
         if *anchor_entry.0 != old_anchor_view {
-            error!(
+            tracing::error!(
                 "Something about GC has failed. Older leaf exists than the previous anchor leaf."
             );
         }

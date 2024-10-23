@@ -58,6 +58,7 @@ sha2 = { workspace = true }
 url = { workspace = true }
 num_enum = "0.7"
 parking_lot = "0.12"
+utils = { path = "../utils" }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
