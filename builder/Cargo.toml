@@ -31,8 +31,6 @@ hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
 hotshot-types = { workspace = true }
-jf-merkle-tree = { workspace = true }
-jf-signature = { workspace = true, features = ["bls"] }
 libp2p = { workspace = true }
 libp2p-networking = { workspace = true }
 marketplace-builder-shared = { workspace = true }
@@ -52,3 +50,4 @@ vec1 = { workspace = true }
 [dev-dependencies]
 sequencer = { path = "../sequencer", features = ["testing"] }
 tempfile = { workspace = true }
+jf-signature = { workspace = true, features = ["bls"] }
