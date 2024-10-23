@@ -48,6 +48,6 @@ vbs = { workspace = true }
 vec1 = { workspace = true }
 
 [dev-dependencies]
+jf-signature = { workspace = true, features = ["bls"] }
 sequencer = { path = "../sequencer", features = ["testing"] }
 tempfile = { workspace = true }
-jf-signature = { workspace = true, features = ["bls"] }
