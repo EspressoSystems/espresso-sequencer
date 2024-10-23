@@ -1,54 +1,34 @@
 use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use anyhow::Context;
-use async_broadcast::{
-    broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
-};
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
-};
+use async_broadcast::broadcast;
+use async_compatibility_layer::art::async_spawn;
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
-    NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
-};
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
-    types::{Address, U256},
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
+    SeqTypes, ValidatedState,
 };
 use hotshot::traits::BlockPayload;
-use hotshot_builder_api::v0_1::builder::{
-    BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
-};
 use hotshot_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
+    builder_state::{BuilderState, MessageType},
     service::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
 };
-use hotshot_events_service::{
-    events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-    events_source::{EventConsumer, EventsStreamer},
-};
 use hotshot_types::{
-    data::{fake_commitment, Leaf, ViewNumber},
+    data::{fake_commitment, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::Versions,
         EncodeBytes,
     },
-    utils::BuilderCommitment,
 };
 use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_builder_shared::utils::EventServiceStream;
-use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
-use surf::http::headers::ACCEPT;
-use surf_disco::Client;
-use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::{StaticVersion, StaticVersionType, Version};
+use sequencer::{catchup::StatePeers, L1Params, SequencerApiVersion};
+use tide_disco::Url;
+use vbs::version::StaticVersionType;
 
 use crate::run_builder_api_service;
 
@@ -227,35 +207,9 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use std::time::{Duration, Instant};
-
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        logging::{setup_backtrace, setup_logging},
-    };
-    use async_lock::RwLock;
-    use async_std::{stream::StreamExt, task};
-    use espresso_types::{Event, FeeAccount, NamespaceId, Transaction};
+    use async_std::stream::StreamExt;
+    use espresso_types::MockSequencerVersions;
     use ethers::utils::Anvil;
-    use futures::Stream;
-    use hotshot::types::EventType;
-    use hotshot_builder_api::v0_1::{
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-        builder::BuildError,
-    };
-    use hotshot_builder_core::service::run_non_permissioned_standalone_builder_service;
-    use hotshot_events_service::{
-        events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-        events_source::{EventConsumer, EventsStreamer},
-    };
-    use hotshot_types::{
-        signature_key::BLSPubKey,
-        traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
-            signature_key::SignatureKey,
-        },
-    };
     use portpicker::pick_unused_port;
     use sequencer::{
         api::{
@@ -263,21 +217,15 @@ mod test {
             test_helpers::{TestNetwork, TestNetworkConfigBuilder},
             Options,
         },
-        persistence::{
-            self,
-            no_storage::{self, NoStorage},
-        },
+        persistence::{self},
         testing::TestConfigBuilder,
     };
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use tempfile::TempDir;
-    use vbs::version::StaticVersion;
 
     use super::*;
-    use crate::testing::{
-        hotshot_builder_url, test_builder_impl, HotShotTestConfig, NonPermissionedBuilderTestConfig,
-    };
+    use crate::testing::{test_builder_impl, NonPermissionedBuilderTestConfig};
 
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api

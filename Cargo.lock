@@ -1316,7 +1316,6 @@ dependencies = [
  "hotshot-stake-table",
  "hotshot-state-prover",
  "hotshot-types 0.1.11 (git+https://www.github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch2)",
- "jf-merkle-tree",
  "jf-signature",
  "libp2p",
  "libp2p-networking 0.5.78 (git+https://github.com/EspressoSystems//HotShot.git?tag=0.5.78-patch2)",
