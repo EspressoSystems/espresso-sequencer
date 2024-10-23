@@ -134,8 +134,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Invalid Max Block States
     error InvalidMaxStateHistory();
 
-    error NonZeroBlockThresholdRequired();
-
     /// @notice Constructor disables initializers to prevent the implementation contract from being
     /// initialized
     /// @dev This is standard practice for OpenZeppelin upgradeable contracts. Storage is on the
@@ -362,10 +360,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         virtual
         returns (bool)
     {
-        // the block threshold needs to be more than 0
-        if (blockThreshold == 0) {
-            revert NonZeroBlockThresholdRequired();
-        }
         uint256 updatesCount = stateHistoryCommitments.length;
 
         // Edge Case Handling:
