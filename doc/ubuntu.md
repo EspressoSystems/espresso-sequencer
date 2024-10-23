@@ -27,7 +27,7 @@ Just is not available in the official ubuntu repos.
 
 ## Install nextest test runner
 
-    curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.s /th | bash
+    curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
     cargo binstall cargo-nextest --secure --no-confirm
 
 ## Install foundry
