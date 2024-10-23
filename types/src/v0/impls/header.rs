@@ -1104,22 +1104,14 @@ mod test_headers {
 
     use std::sync::Arc;
 
-    use ethers::{
-        types::{Address, U256},
-        utils::Anvil,
-    };
+    use ethers::{types::Address, utils::Anvil};
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
 
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
     use vbs::{bincode_serializer::BincodeSerializer, version::StaticVersion, BinarySerializer};
 
-    use crate::{
-        eth_signature_key::EthKeyPair,
-        mock::MockStateCatchup,
-        v0::impls::state::{Proposal, ValidatedTransition},
-        ProposalValidationError,
-    };
+    use crate::{eth_signature_key::EthKeyPair, mock::MockStateCatchup};
 
     use super::*;
 
@@ -1487,7 +1479,7 @@ mod test_headers {
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
 
-        let proposal_state = proposal_state
+        let _proposal_state = proposal_state
             .apply_header(
                 &genesis_state,
                 &genesis_state.peers,

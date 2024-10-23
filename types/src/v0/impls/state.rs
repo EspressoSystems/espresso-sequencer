@@ -1040,47 +1040,25 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 #[cfg(test)]
 mod test {
 
-    use std::sync::Arc;
-
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use ethers::{types::U256, utils::Anvil};
+    use ethers::types::U256;
     use hotshot::traits::BlockPayload;
     use hotshot_query_service::Resolvable;
-    use hotshot_types::{
-        traits::{
-            block_contents::{vid_commitment, BuilderFee, GENESIS_VID_NUM_STORAGE_NODES},
-            signature_key::BuilderSignatureKey,
-            EncodeBytes,
-        },
-        vid::vid_scheme,
+    use hotshot_types::traits::{
+        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+        signature_key::BuilderSignatureKey,
+        EncodeBytes,
     };
-
     use sequencer_utils::ser::FromStringOrInteger;
-
     use tracing::debug;
-    use vbs::version::StaticVersionType;
 
     use super::*;
     use crate::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
-        mock::MockStateCatchup,
         v0_1, v0_2,
         v0_3::{self, BidTx},
         BlockSize, FeeAccountProof, FeeMerkleProof, Payload, Transaction,
     };
-
-    impl ChainConfig {
-        fn mock() -> Self {
-            Self {
-                chain_id: U256::from(10).into(), // arbitrarily chosen chain ID
-                max_block_size: 10.into(),
-                base_fee: 0.into(),
-                fee_contract: None,
-                fee_recipient: Default::default(),
-                bid_recipient: None,
-            }
-        }
-    }
 
     impl Transaction {
         async fn into_mock_header(self) -> (Header, u32) {
@@ -1140,20 +1118,6 @@ mod test {
             }
         }
 
-        fn with_timestamp(self, timestamp: u64) -> Self {
-            match self {
-                Header::V1(_) => {
-                    panic!("You called `Header.with_timestamp()` on unimplemented version (v1)")
-                }
-                Header::V2(header) => Header::V2(v0_2::Header {
-                    timestamp,
-                    ..header.clone()
-                }),
-                Header::V3(_) => {
-                    panic!("You called `Header.with_timestamp()` on unimplemented version (v3)")
-                }
-            }
-        }
         /// Replaces builder signature w/ invalid one.
         fn invalid_builder_signature(&self) -> Self {
             let key_pair = EthKeyPair::random();
@@ -1415,7 +1379,7 @@ mod test {
             ..state.chain_config.resolve().unwrap()
         });
 
-        let proposal = Proposal::new(&header, 1);
+        let proposal = Proposal::new(&header, block_size);
         let err = ValidatedTransition::mock(instance.clone(), &header, proposal)
             .await
             .validate_fee()
@@ -1442,7 +1406,6 @@ mod test {
         let instance = NodeState::mock_v2();
         let tx = Transaction::of_size(10);
         let (parent, block_size) = tx.into_mock_header().await;
-        let state = ValidatedState::default();
 
         let proposal = Proposal::new(&parent, block_size);
         let err = ValidatedTransition::mock(instance.clone(), &parent, proposal)
