@@ -348,11 +348,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice checks if the state updates lag behind the specified block threshold based on the
-    /// provided
-    /// block number.
-    /// @param blockNumber The block number to compare against the latest state updates
-    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind
-    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false
+    /// provided block number.
+    /// @dev Reverts if there isn't enough state history to make an accurate comparison.
+    /// Reverts if the blockThreshold is zero
+    /// @param blockNumber The block number to compare against the latest state updates.
+    /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind.
+    /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false.
     function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 blockThreshold)
         public
         view
@@ -361,42 +362,48 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     {
         uint256 updatesCount = stateHistoryCommitments.length;
 
-        // Handling Edge Cases
-        // Edgecase 1: The block is in the future or
-        // before HotShot was live, allow for at least two updates before considering HotShot live
-        if (blockNumber > block.number || updatesCount < 3) {
+        // Edge Case Handling:
+        // 1. Provided block number is greater than the current block (invalid)
+        // 2. No updates have occurred (i.e., state history is empty)
+        // 3. Provided block number is earlier than the first recorded state update
+        // the stateHistoryFirstIndex is used to check for the first nonZero element
+        if (
+            blockNumber > block.number || updatesCount == 0
+                || blockNumber < stateHistoryCommitments[stateHistoryFirstIndex].l1BlockHeight
+        ) {
             revert InsufficientSnapshotHistory();
         }
 
-        uint256 prevBlock;
-        bool prevUpdateFound;
+        uint256 eligibleStateUpdateBlockNumber; // the eligibleStateUpdateBlockNumber is <=
+            // blockNumber
+        bool stateUpdateFound; // if an eligible block number is found in the state update history,
+            // then this variable is set to true
 
+        // Search from the most recent state update back to find the first update <= blockNumber
         uint256 i = updatesCount - 1;
-        while (!prevUpdateFound) {
+        while (!stateUpdateFound) {
+            // Stop searching if we've exhausted the recorded state history
+            if (i < stateHistoryFirstIndex) {
+                break;
+            }
+
+            // Find the first update with a block height <= blockNumber
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
-                prevUpdateFound = true;
-                prevBlock = stateHistoryCommitments[i].l1BlockHeight;
-            }
-
-            // We don't consider the lag time for the first two updates
-            if (i < 2) {
+                stateUpdateFound = true;
+                eligibleStateUpdateBlockNumber = stateHistoryCommitments[i].l1BlockHeight;
                 break;
             }
 
-            // We've reached the first recorded block
-            if (i == stateHistoryFirstIndex) {
-                break;
-            }
             i--;
         }
 
         // If no snapshot is found, we don't have enough history stored
         // to tell whether HotShot was down.
-        if (!prevUpdateFound) {
+        if (!stateUpdateFound) {
             revert InsufficientSnapshotHistory();
         }
 
-        return blockNumber - prevBlock > blockThreshold;
+        return blockNumber - eligibleStateUpdateBlockNumber > blockThreshold;
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
