@@ -1,9 +1,9 @@
 (function() {
-    var implementors = Object.fromEntries([["contract_bindings",[["impl EthLogDecode for <a class=\"enum\" href=\"contract_bindings/fee_contract/fee_contract/enum.FeeContractEvents.html\" title=\"enum contract_bindings::fee_contract::fee_contract::FeeContractEvents\">FeeContractEvents</a>"],["impl EthLogDecode for <a class=\"enum\" href=\"contract_bindings/hot_shot/hot_shot/enum.HotShotEvents.html\" title=\"enum contract_bindings::hot_shot::hot_shot::HotShotEvents\">HotShotEvents</a>"],["impl EthLogDecode for <a class=\"enum\" href=\"contract_bindings/light_client/light_client/enum.LightClientEvents.html\" title=\"enum contract_bindings::light_client::light_client::LightClientEvents\">LightClientEvents</a>"],["impl EthLogDecode for <a class=\"enum\" href=\"contract_bindings/light_client_mock/light_client_mock/enum.LightClientMockEvents.html\" title=\"enum contract_bindings::light_client_mock::light_client_mock::LightClientMockEvents\">LightClientMockEvents</a>"]]]]);
+    var implementors = Object.fromEntries([["contract_bindings",[["impl EthLogDecode for <a class=\"enum\" href=\"contract_bindings/fee_contract/fee_contract/enum.FeeContractEvents.html\" title=\"enum contract_bindings::fee_contract::fee_contract::FeeContractEvents\">FeeContractEvents</a>"],["impl EthLogDecode for <a class=\"enum\" href=\"contract_bindings/light_client/light_client/enum.LightClientEvents.html\" title=\"enum contract_bindings::light_client::light_client::LightClientEvents\">LightClientEvents</a>"],["impl EthLogDecode for <a class=\"enum\" href=\"contract_bindings/light_client_mock/light_client_mock/enum.LightClientMockEvents.html\" title=\"enum contract_bindings::light_client_mock::light_client_mock::LightClientMockEvents\">LightClientMockEvents</a>"]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":57,"fragment_lengths":[935]}
+//{"start":57,"fragment_lengths":[736]}
