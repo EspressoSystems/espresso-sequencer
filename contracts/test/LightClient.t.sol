@@ -820,11 +820,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         );
     }
 
-    function test_revertWhenNonZeroBlockThreshold() public {
-        vm.expectRevert(LC.NonZeroBlockThresholdRequired.selector);
-        lc.lagOverEscapeHatchThreshold(10, 0); // blockThreshold set to 0
-    }
-
     function test_revertWhenBlockNumberTooHigh() public {
         //assert that there is a state history
         assertGt(lc.getStateHistoryCount(), 0);

@@ -393,12 +393,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
             // Find the first update with a block height <= blockNumber
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
+                prevUpdateFound = true;
                 prevBlock = stateHistoryCommitments[i].l1BlockHeight;
-                break;
-            }
-
-            // We don't consider the lag time for the first two updates
-            if (i < 2) {
                 break;
             }
 
