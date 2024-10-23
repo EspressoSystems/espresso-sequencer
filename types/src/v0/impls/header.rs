@@ -1401,7 +1401,7 @@ mod test_headers {
     }
 
     #[async_std::test]
-    async fn test_validate_proposal_success() {
+    async fn test_proposal_validation_success() {
         setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
