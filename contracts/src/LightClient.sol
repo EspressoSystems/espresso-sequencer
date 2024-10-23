@@ -393,20 +393,24 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
             // Find the first update with a block height <= blockNumber
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
-                prevUpdateFound = true;
                 prevBlock = stateHistoryCommitments[i].l1BlockHeight;
+                break;
+            }
+
+            // We don't consider the lag time for the first two updates
+            if (i < 2) {
                 break;
             }
 
             i--;
         }
 
-        // If no snapshot is found, there is insufficient history to determine the lag.
+        // If no snapshot is found, we don't have enough history stored
+        // to tell whether HotShot was down.
         if (!prevUpdateFound) {
             revert InsufficientSnapshotHistory();
         }
 
-        // If the lag exceeds the user specified, blockThreshold, return true.
         return blockNumber - prevBlock > blockThreshold;
     }
 
