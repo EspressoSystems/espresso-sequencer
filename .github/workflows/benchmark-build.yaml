@@ -63,7 +63,6 @@ jobs:
             target/release/state-prover
             target/release/sequencer
             target/release/cli
-            target/release/commitment-task
             target/release/submit-transactions
             target/release/utils
             target/release/reset-storage
@@ -115,7 +114,6 @@ jobs:
             target/release/state-prover
             target/release/sequencer
             target/release/cli
-            target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
             target/release/utils
@@ -138,7 +136,6 @@ jobs:
       state-relay-server-tag: ${{ steps.state-relay-server.outputs.tags }}
       prover-service-tag: ${{ steps.prover-service.outputs.tags }}
       orchestrator-tag: ${{ steps.orchestrator.outputs.tags }}
-      commitment-task-tag: ${{ steps.commitment-task.outputs.tags }}
       submit-transactions-tag: ${{ steps.submit-transactions.outputs.tags }}
       deploy-tag: ${{ steps.deploy.outputs.tags }}
       builder-tag: ${{ steps.builder.outputs.tags }}
@@ -221,13 +218,6 @@ jobs:
         id: orchestrator
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
-          flavor: suffix=bench
-
-      - name: Generate commitment task docker metadata
-        uses: docker/metadata-action@v5
-        id: commitment-task
-        with:
-          images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
           flavor: suffix=bench
 
       - name: Generate submit-transactions docker metadata
@@ -342,16 +332,6 @@ jobs:
           tags: ${{ steps.orchestrator.outputs.tags }}
           labels: ${{ steps.orchestrator.outputs.labels }}
 
-      - name: Build and push commitment-task docker
-        uses: docker/build-push-action@v6
-        with:
-          context: ./
-          file: ./docker/commitment-task.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.commitment-task.outputs.tags }}
-          labels: ${{ steps.commitment-task.outputs.labels }}
-
       - name: Build and push submit-transactions docker
         uses: docker/build-push-action@v6
         with:
@@ -433,7 +413,6 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.state-relay-server-tag }}
           docker pull ${{ needs.build-dockers.outputs.prover-service-tag }}
           docker pull ${{ needs.build-dockers.outputs.orchestrator-tag }}
-          docker pull ${{ needs.build-dockers.outputs.commitment-task-tag }}
           docker pull ${{ needs.build-dockers.outputs.submit-transactions-tag }}
           docker pull ${{ needs.build-dockers.outputs.deploy-tag }}
           docker pull ${{ needs.build-dockers.outputs.builder-tag }}
@@ -448,7 +427,6 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.state-relay-server-tag }} ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
           docker tag ${{ needs.build-dockers.outputs.prover-service-tag }} ghcr.io/espressosystems/espresso-sequencer/prover-service:main
           docker tag ${{ needs.build-dockers.outputs.orchestrator-tag }} ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
-          docker tag ${{ needs.build-dockers.outputs.commitment-task-tag }} ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
           docker tag ${{ needs.build-dockers.outputs.submit-transactions-tag }} ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
           docker tag ${{ needs.build-dockers.outputs.deploy-tag }} ghcr.io/espressosystems/espresso-sequencer/deploy:main
           docker tag ${{ needs.build-dockers.outputs.builder-tag }} ghcr.io/espressosystems/espresso-sequencer/builder:main

@@ -83,7 +83,6 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/state-prover
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/sequencer
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/cli
-            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/commitment-task
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/submit-transactions
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/reset-storage
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/deploy
@@ -175,13 +174,6 @@ jobs:
         id: orchestrator
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
-          flavor: suffix=musl
-
-      - name: Generate commitment task docker metadata
-        uses: docker/metadata-action@v5
-        id: commitment-task
-        with:
-          images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
           flavor: suffix=musl
 
       - name: Generate submit-transactions docker metadata
@@ -308,16 +300,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.orchestrator.outputs.tags }}
           labels: ${{ steps.orchestrator.outputs.labels }}
-
-      - name: Build and push commitment-task docker
-        uses: docker/build-push-action@v6
-        with:
-          context: ./
-          file: ./docker/commitment-task.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.commitment-task.outputs.tags }}
-          labels: ${{ steps.commitment-task.outputs.labels }}
 
       - name: Build and push submit-transactions docker
         uses: docker/build-push-action@v6
