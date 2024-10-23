@@ -304,13 +304,14 @@ impl ValidatedState {
     }
 }
 /// Block Proposal to be verified and applied.
-struct Proposal<'a> {
+#[derive(Debug)]
+pub(crate) struct Proposal<'a> {
     header: &'a Header,
     block_size: u32,
 }
 
 impl<'a> Proposal<'a> {
-    fn new(header: &'a Header, block_size: u32) -> Self {
+    pub(crate) fn new(header: &'a Header, block_size: u32) -> Self {
         Self { header, block_size }
     }
     /// Ensure that L1 Head on proposal is not decreasing.
@@ -385,7 +386,8 @@ impl<'a> Proposal<'a> {
     }
 }
 /// Type to hold cloned validated state and provide validation methods.
-struct ValidatedTransition<'a> {
+#[derive(Debug)]
+pub(crate) struct ValidatedTransition<'a> {
     state: ValidatedState,
     expected_chain_config: ChainConfig,
     parent: &'a Header,
@@ -393,7 +395,7 @@ struct ValidatedTransition<'a> {
 }
 
 impl<'a> ValidatedTransition<'a> {
-    fn new(state: ValidatedState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
+    pub(crate) fn new(state: ValidatedState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
         let expected_chain_config = state
             .chain_config
             .resolve()
@@ -469,7 +471,7 @@ impl<'a> ValidatedTransition<'a> {
     /// self.validate_l1_head()?;
     /// self.validate_namespace_table()?;
     /// ```
-    fn validate(self) -> Result<Self, ProposalValidationError> {
+    pub(crate) fn validate(self) -> Result<Self, ProposalValidationError> {
         self.validate_timestamp()?;
         self.validate_builder_fee()?;
         self.validate_height()?;
@@ -1038,23 +1040,30 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 #[cfg(test)]
 mod test {
 
+    use std::sync::Arc;
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use ethers::types::U256;
+    use ethers::{types::U256, utils::Anvil};
     use hotshot::traits::BlockPayload;
     use hotshot_query_service::Resolvable;
-    use hotshot_types::traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        signature_key::BuilderSignatureKey,
-        EncodeBytes,
+    use hotshot_types::{
+        traits::{
+            block_contents::{vid_commitment, BuilderFee, GENESIS_VID_NUM_STORAGE_NODES},
+            signature_key::BuilderSignatureKey,
+            EncodeBytes,
+        },
+        vid::vid_scheme,
     };
 
     use sequencer_utils::ser::FromStringOrInteger;
 
     use tracing::debug;
+    use vbs::version::StaticVersionType;
 
     use super::*;
     use crate::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
+        mock::MockStateCatchup,
         v0_1, v0_2,
         v0_3::{self, BidTx},
         BlockSize, FeeAccountProof, FeeMerkleProof, Payload, Transaction,
@@ -1883,4 +1892,112 @@ mod test {
 
         validate_builder_fee(&header).unwrap();
     }
+
+    // #[async_std::test]
+    // async fn test_validate_proposal_success() {
+    //     use vbs::{
+    //         bincode_serializer::BincodeSerializer, version::StaticVersion, BinarySerializer,
+    //     };
+    //     setup_logging();
+    //     setup_backtrace();
+
+    //     let anvil = Anvil::new().block_time(1u32).spawn();
+    //     let mut genesis_state = NodeState::mock_v2()
+    //         .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
+    //         .with_current_version(StaticVersion::<0, 1>::version());
+    //     let vid_common = vid_scheme(1).disperse([]).unwrap().common;
+    //     let mut parent_state = ValidatedState::default();
+
+    //     let (genesis_header, block_size) = Transaction::of_size(10).into_mock_header().await;
+
+    //     let mut block_merkle_tree = parent_state.block_merkle_tree.clone();
+    //     let fee_merkle_tree = parent_state.fee_merkle_tree.clone();
+
+    //     // Populate the tree with an initial `push`.
+    //     block_merkle_tree.push(genesis_header.commit()).unwrap();
+    //     let block_merkle_tree_root = block_merkle_tree.commitment();
+    //     let fee_merkle_tree_root = fee_merkle_tree.commitment();
+    //     parent_state.block_merkle_tree = block_merkle_tree.clone();
+    //     parent_state.fee_merkle_tree = fee_merkle_tree.clone();
+
+    //     let mut parent_header = genesis_header.clone();
+    //     *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
+    //     *parent_header.fee_merkle_tree_root_mut() = fee_merkle_tree_root;
+
+    //     let mut parent_leaf = genesis.leaf.clone();
+    //     *parent_leaf.block_header_mut() = parent_header.clone();
+
+    //     // Forget the state to trigger lookups in Header::new
+    //     let forgotten_state = parent_state.forget();
+    //     genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
+    //         parent_leaf.view_number(),
+    //         Arc::new(parent_state.clone()),
+    //     )]));
+    //     // Get a proposal from a parent
+
+    //     // TODO this currently fails because after fetching the blocks frontier
+    //     // the element (header commitment) does not match the one in the proof.
+    //     let key_pair = EthKeyPair::for_test();
+    //     let fee_amount = 0u64;
+    //     let payload_commitment = parent_header.payload_commitment();
+    //     let builder_commitment = parent_header.builder_commitment();
+    //     let ns_table = genesis.ns_table;
+    //     let fee_signature =
+    //         FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table, &payload_commitment).unwrap();
+    //     let builder_fee = BuilderFee {
+    //         fee_amount,
+    //         fee_account: key_pair.fee_account(),
+    //         fee_signature,
+    //     };
+    //     let proposal = Header::new_legacy(
+    //         &forgotten_state,
+    //         &genesis_state,
+    //         &parent_leaf,
+    //         payload_commitment,
+    //         builder_commitment.clone(),
+    //         ns_table,
+    //         builder_fee,
+    //         vid_common.clone(),
+    //         StaticVersion::<0, 1>::version(),
+    //     )
+    //     .await
+    //     .unwrap();
+
+    //     let mut proposal_state = parent_state.clone();
+    //     for fee_info in genesis_state
+    //         .l1_client
+    //         .get_finalized_deposits(Address::default(), None, 0)
+    //         .await
+    //     {
+    //         proposal_state.insert_fee_deposit(fee_info).unwrap();
+    //     }
+
+    //     let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
+    //     block_merkle_tree.push(proposal.commit()).unwrap();
+
+    //     let proposal_state = proposal_state
+    //         .apply_header(
+    //             &genesis_state,
+    //             &genesis_state.peers,
+    //             &parent_leaf,
+    //             &proposal,
+    //             StaticVersion::<0, 1>::version(),
+    //         )
+    //         .await
+    //         .unwrap()
+    //         .0;
+
+    //     ValidatedTransition::new(
+    //         &proposal_state,
+    //         &parent_leaf.block_header(),
+    //         Proposal::new(&proposal, VidSchemeType::get_payload_byte_len(&vid_common)),
+    //     )
+    //     .validate()
+    //     .unwrap();
+
+    //     assert_eq!(
+    //         proposal_state.block_merkle_tree.commitment(),
+    //         proposal.block_merkle_tree_root()
+    //     );
+    // }
 }
