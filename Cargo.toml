@@ -157,13 +157,13 @@ strip = "debuginfo"
 opt-level = 3
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
-libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", tag = "0.5.78-patch2" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch2" }
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
+libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", tag = "0.5.78-patch3" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch3" }
