@@ -26,10 +26,9 @@ pub use anyhow::Error;
 use hotshot_types::traits::node_implementation::NodeType;
 pub use refinery::Migration;
 
-pub use sql::{Postgres, Transaction};
+pub use sql::{Config, Transaction};
 
 pub type Builder<Types, Provider> = fetching::Builder<Types, SqlStorage, Provider>;
-pub type Config = sql::Config<Postgres>;
 
 impl Config {
     /// Connect to the database with this config.
