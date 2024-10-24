@@ -29,9 +29,22 @@ impl FullNetworkTx {
     }
 }
 
-impl Committable for BidTxBody {
+impl Committable for BidTx {
     fn tag() -> String {
         "BID_TX".to_string()
+    }
+
+    fn commit(&self) -> Commitment<Self> {
+        let comm = committable::RawCommitmentBuilder::new(&Self::tag())
+            .field("body", self.body.commit())
+            .fixed_size_field("signature", &self.signature.into());
+        comm.finalize()
+    }
+}
+
+impl Committable for BidTxBody {
+    fn tag() -> String {
+        "BID_TX_BODY".to_string()
     }
 
     fn commit(&self) -> Commitment<Self> {
@@ -41,7 +54,18 @@ impl Committable for BidTxBody {
             .fixed_size_field("bid_amount", &self.bid_amount.to_fixed_bytes())
             .var_size_field("url", self.url.as_str().as_ref())
             .u64_field("view", self.view.u64())
-            .var_size_field("namespaces", &bincode::serialize(&self.namespaces).unwrap());
+            .array_field(
+                "namespaces",
+                &self
+                    .namespaces
+                    .iter()
+                    .map(|e| {
+                        committable::RawCommitmentBuilder::<BidTxBody>::new("namespace")
+                            .u64(e.0)
+                            .finalize()
+                    })
+                    .collect::<Vec<_>>(),
+            );
         comm.finalize()
     }
 }
@@ -224,6 +248,42 @@ impl BidTx {
     /// Get the `url` field from the body.
     pub fn url(&self) -> Url {
         self.body.url()
+    }
+}
+
+impl Committable for SolverAuctionResults {
+    fn tag() -> String {
+        "SOLVER_AUCTION_RESULTS".to_string()
+    }
+
+    fn commit(&self) -> Commitment<Self> {
+        let comm = committable::RawCommitmentBuilder::new(&Self::tag())
+            .fixed_size_field("view_number", &self.view_number.commit().into())
+            .array_field(
+                "winning_bids",
+                &self
+                    .winning_bids
+                    .iter()
+                    .map(Committable::commit)
+                    .collect::<Vec<_>>(),
+            )
+            .array_field(
+                "reserve_bids",
+                &self
+                    .reserve_bids
+                    .iter()
+                    .map(|(nsid, url)| {
+                        // Set a phantom type to make the compiler happy
+                        committable::RawCommitmentBuilder::<SolverAuctionResults>::new(
+                            "RESERVE_BID",
+                        )
+                        .u64(nsid.0)
+                        .constant_str(url.as_str())
+                        .finalize()
+                    })
+                    .collect::<Vec<_>>(),
+            );
+        comm.finalize()
     }
 }
 
