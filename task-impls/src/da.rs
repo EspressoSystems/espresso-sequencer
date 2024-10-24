@@ -24,7 +24,7 @@ use hotshot_types::{
         block_contents::vid_commitment,
         election::Membership,
         network::ConnectedNetwork,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
+        node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
         storage::Storage,
     },
@@ -107,12 +107,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
 
                 // Allow a DA proposal that is one view older, in case we have voted on a quorum
                 // proposal and updated the view.
-                // `self.cur_view` should be at least 1 since there is a view change before getting
-                // the `DaProposalRecv` event. Otherwise, the view number subtraction below will
-                // cause an overflow error.
-                // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
+                //
+                // Anything older is discarded because it is no longer relevant.
                 ensure!(
-                    self.cur_view == TYPES::View::genesis() || view >= self.cur_view - 1,
+                    self.cur_view <= view + 1,
                     "Throwing away DA proposal that is more than one view older"
                 );
 
