@@ -1552,7 +1552,7 @@ mod test {
         HandleQuorumEventError, HandleReceivedTxns, ProxyGlobalState,
     };
 
-    /// A const number on max_tx_len to be used consistently spanning all the tests
+    /// A const number on `max_tx_len` to be used consistently spanning all the tests
     const TEST_MAX_TX_LEN: u64 = 20;
 
     // GlobalState Tests
