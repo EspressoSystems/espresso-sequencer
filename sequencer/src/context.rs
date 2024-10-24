@@ -533,9 +533,8 @@ async fn fetch_proposal_chain<N, P, V>(
 
 async fn load_anchor_view(persistence: &impl SequencerPersistence) -> ViewNumber {
     loop {
-        match persistence.load_anchor_leaf().await {
-            Ok(Some((leaf, _))) => break leaf.view_number(),
-            Ok(None) => break ViewNumber::genesis(),
+        match persistence.load_anchor_view().await {
+            Ok(view) => break view,
             Err(err) => {
                 tracing::warn!("error loading anchor view: {err:#}");
                 sleep(Duration::from_secs(1)).await;
