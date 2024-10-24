@@ -314,15 +314,17 @@ impl<'a> Proposal<'a> {
     pub(crate) fn new(header: &'a Header, block_size: u32) -> Self {
         Self { header, block_size }
     }
-    /// Ensure that L1 Head on proposal is not decreasing.
+    /// The L1 head block number in the proposal must be non-decreasing relative
+    /// to the parent.
     fn validate_l1_head(&self, parent_l1_head: u64) -> Result<(), ProposalValidationError> {
         if self.header.l1_head() < parent_l1_head {
             return Err(ProposalValidationError::DecrementingL1Head);
         }
         Ok(())
     }
-    /// Validates [`ChainConfig`] of proposal against that stored in
-    /// state by comparing commitments.
+    /// The [`ChainConfig`] of proposal must be equal to the one stored in state.
+    ///
+    /// Equality is checked by comparing commitments.
     fn validate_chain_config(
         &self,
         expected_chain_config: &ChainConfig,
@@ -337,7 +339,7 @@ impl<'a> Proposal<'a> {
         Ok(())
     }
 
-    /// Validate timestamp is not decreasing relative to parent.
+    /// The timestamp must be non-decreasing relative to parent.
     fn validate_timestamp_non_dec(
         &self,
         parent_timestamp: u64,
@@ -352,9 +354,10 @@ impl<'a> Proposal<'a> {
         Ok(())
     }
 
-    /// Validate timestamp is within a given tolerance of system
-    /// time. Tolerance is currently `12` seconds. This value may be
-    /// moved to configuration in the future.
+    /// The timestamp must not drift too much from local system time.
+    ///
+    /// The tolerance is currently `12` seconds. This value may be moved to
+    /// configuration in the future.
     fn validate_timestamp_drift(&self, system_time: u64) -> Result<(), ProposalValidationError> {
         // TODO 12 seconds of tolerance should be enough for reasonably
         // configured nodes, but we should make this configurable.
@@ -370,7 +373,7 @@ impl<'a> Proposal<'a> {
         Ok(())
     }
 
-    /// Validate Block Merkle Tree by comparing proposed commitment against expectation.
+    /// The proposed ['BlockMerkleTree'] must match the one in ['ValidatedState'].
     fn validate_block_merkle_tree(
         &self,
         block_merkle_tree_root: BlockMerkleCommitment,
@@ -386,6 +389,8 @@ impl<'a> Proposal<'a> {
     }
 }
 /// Type to hold cloned validated state and provide validation methods.
+///
+/// The [Self::validate] method must be called to validate the proposal.
 #[derive(Debug)]
 pub(crate) struct ValidatedTransition<'a> {
     state: ValidatedState,
@@ -407,55 +412,7 @@ impl<'a> ValidatedTransition<'a> {
             proposal,
         }
     }
-    /// Validate that proposal l1_finalized is `Some` and is incrementing relative to parent.
-    fn validate_proposed_finalized(&self) -> Result<(), ProposalValidationError> {
-        let proposed_finalized = self.proposal.header.l1_finalized();
-        let parent_finalized = self.parent.l1_finalized();
 
-        if proposed_finalized < parent_finalized {
-            // We are keeping the `Option` in the error b/c its the
-            // cleanest way to represent all the different error
-            // cases. The hash seems less useful and explodes the size
-            // of the error, so we strip it out.
-            return Err(ProposalValidationError::L1FinalizedDecrementing {
-                parent: parent_finalized.map(|block| (block.number, block.timestamp.as_u64())),
-                proposed: proposed_finalized.map(|block| (block.number, block.timestamp.as_u64())),
-            });
-        }
-        Ok(())
-    }
-    /// Wait for l1.
-    async fn wait_for_l1(self, l1_client: &L1Client) -> Result<Self, ProposalValidationError> {
-        self.wait_for_l1_head(l1_client).await;
-        self.wait_for_finalized_block(l1_client).await?;
-        Ok(self)
-    }
-
-    /// Wait for l1_head. Poll until we succeed.
-    async fn wait_for_l1_head(&self, l1_client: &L1Client) {
-        let _ = l1_client
-            .wait_for_block(self.proposal.header.l1_head())
-            .await;
-    }
-    /// Wait for blocks to finalize.
-    async fn wait_for_finalized_block(
-        &self,
-        l1_client: &L1Client,
-    ) -> Result<(), ProposalValidationError> {
-        let proposed_finalized = self.proposal.header.l1_finalized();
-
-        if let Some(proposed_finalized) = proposed_finalized {
-            let finalized = l1_client
-                .wait_for_finalized_block(proposed_finalized.number())
-                .await;
-
-            if finalized != proposed_finalized {
-                return Err(ProposalValidationError::InvalidL1Finalized);
-            }
-        }
-
-        Ok(())
-    }
     /// Top level validation routine. Performs all validation units in
     /// the given order.
     /// ```
@@ -485,6 +442,61 @@ impl<'a> ValidatedTransition<'a> {
         self.validate_namespace_table()?;
 
         Ok(self)
+    }
+
+    /// The proposal [Header::l1_finalized] must be `Some` and non-decreasing relative to parent.
+    fn validate_proposed_finalized(&self) -> Result<(), ProposalValidationError> {
+        let proposed_finalized = self.proposal.header.l1_finalized();
+        let parent_finalized = self.parent.l1_finalized();
+
+        if proposed_finalized < parent_finalized {
+            // We are keeping the `Option` in the error b/c its the
+            // cleanest way to represent all the different error
+            // cases. The hash seems less useful and explodes the size
+            // of the error, so we strip it out.
+            return Err(ProposalValidationError::L1FinalizedDecrementing {
+                parent: parent_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+                proposed: proposed_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+            });
+        }
+        Ok(())
+    }
+    /// Wait for our view of the L1 chain to catch up to the proposal.
+    ///
+    /// The finalized [L1BlockInfo](super::L1BlockInfo) in the proposal must match the one fetched
+    /// from L1.
+    async fn wait_for_l1(self, l1_client: &L1Client) -> Result<Self, ProposalValidationError> {
+        self.wait_for_l1_head(l1_client).await;
+        self.wait_for_finalized_block(l1_client).await?;
+        Ok(self)
+    }
+
+    /// Wait for our view of the latest L1 block number to catch up to the
+    /// proposal.
+    async fn wait_for_l1_head(&self, l1_client: &L1Client) {
+        let _ = l1_client
+            .wait_for_block(self.proposal.header.l1_head())
+            .await;
+    }
+    /// Wait for our view of the finalized L1 block number to catch up to the
+    /// proposal.
+    async fn wait_for_finalized_block(
+        &self,
+        l1_client: &L1Client,
+    ) -> Result<(), ProposalValidationError> {
+        let proposed_finalized = self.proposal.header.l1_finalized();
+
+        if let Some(proposed_finalized) = proposed_finalized {
+            let finalized = l1_client
+                .wait_for_finalized_block(proposed_finalized.number())
+                .await;
+
+            if finalized != proposed_finalized {
+                return Err(ProposalValidationError::InvalidL1Finalized);
+            }
+        }
+
+        Ok(())
     }
 
     /// Ensure that L1 Head on proposal is not decreasing.
