@@ -9,7 +9,7 @@ use hotshot_types::{
     event::EventType,
     message::Proposal,
     traits::{
-        block_contents::BlockPayload,
+        block_contents::{BlockPayload, BuilderTransaction},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
@@ -1446,7 +1446,9 @@ impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> {
         // encoded transaction length. Luckily, this being roughly proportional
         // to encoded length is enough, because we only use this value to estimate
         // our limitations on computing the VID in time.
-        let len = bincode::serialized_size(&tx).unwrap_or_default();
+        // let len = bincode::serialized_size(&tx).unwrap_or_default();
+        let len = tx.minimum_block_size();
+        tracing::error!("Transaction size: {:?}, old transaction size = {:?}", len, bincode::serialized_size(&tx).unwrap_or_default());
         let max_txn_len = self.max_txn_len;
         if len > max_txn_len {
             tracing::warn!(%commit, %len, %max_txn_len, "Transaction too big");
