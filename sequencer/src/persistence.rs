@@ -365,6 +365,11 @@ mod persistence_tests {
             final_qc,
         ];
 
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::genesis()
+        );
+
         let consumer = EventCollector::default();
         let leaf_chain = leaves
             .iter()
@@ -381,6 +386,10 @@ mod persistence_tests {
             )
             .await
             .unwrap();
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::new(2)
+        );
 
         for i in 0..=2 {
             assert_eq!(
@@ -430,6 +439,10 @@ mod persistence_tests {
             storage.load_anchor_leaf().await.unwrap(),
             Some((leaves[2].clone(), qcs[2].clone()))
         );
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            leaves[2].view_number()
+        );
 
         // Process a second decide event.
         let consumer = EventCollector::default();
@@ -442,6 +455,10 @@ mod persistence_tests {
             )
             .await
             .unwrap();
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::new(3)
+        );
 
         // A decide event should have been processed.
         let events = consumer.events.read().await;
@@ -643,6 +660,10 @@ mod persistence_tests {
                 .view_number(),
             ViewNumber::new(1)
         );
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
+            ViewNumber::new(1)
+        );
 
         // Now decide remaining leaves successfully. We should now garbage collect and process a
         // decide event for all the leaves.
@@ -684,6 +705,10 @@ mod persistence_tests {
                 .unwrap()
                 .0
                 .view_number(),
+            ViewNumber::new(3)
+        );
+        assert_eq!(
+            storage.load_anchor_view().await.unwrap(),
             ViewNumber::new(3)
         );
 

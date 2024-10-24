@@ -401,6 +401,14 @@ impl SequencerPersistence for Persistence {
         Ok(Some((leaf, qc)))
     }
 
+    async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
+        let mut tx = self.db.read().await?;
+        let (view,) = query_as::<(i64,)>("SELECT coalesce(max(view), 0) FROM anchor_leaf")
+            .fetch_one(tx.as_mut())
+            .await?;
+        Ok(ViewNumber::new(view as u64))
+    }
+
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
