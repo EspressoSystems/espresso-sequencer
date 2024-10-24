@@ -824,13 +824,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
         epoch: TYPES::Epoch,
     ) -> Option<()> {
-        let consensus = consensus.upgradable_read().await;
-        let txns = consensus.saved_payloads().get(&view)?;
-        let vid =
-            VidDisperse::calculate_vid_disperse(Arc::clone(txns), &membership, view, epoch, None)
-                .await;
+        let txns = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);
+        let vid = VidDisperse::calculate_vid_disperse(txns, &membership, view, epoch, None).await;
         let shares = VidDisperseShare::from_vid_disperse(vid);
-        let mut consensus = ConsensusUpgradableReadLockGuard::upgrade(consensus).await;
+        let mut consensus = consensus.write().await;
         for share in shares {
             if let Some(prop) = share.to_proposal(private_key) {
                 consensus.update_vid_shares(view, prop);
