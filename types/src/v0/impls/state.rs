@@ -630,7 +630,7 @@ impl From<NsTableValidationError> for ProposalValidationError {
 impl From<ProposalValidationError> for BlockError {
     fn from(err: ProposalValidationError) -> Self {
         tracing::error!("Invalid Block Header: {err:#}");
-        BlockError::InvalidBlockHeader(format!("Invalid Block Header: {err:#}"))
+        BlockError::InvalidBlockHeader(err.to_string())
     }
 }
 
