@@ -1446,9 +1446,7 @@ impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> {
         // encoded transaction length. Luckily, this being roughly proportional
         // to encoded length is enough, because we only use this value to estimate
         // our limitations on computing the VID in time.
-        // let len = bincode::serialized_size(&tx).unwrap_or_default();
         let len = tx.minimum_block_size();
-        tracing::error!("Transaction size: {:?}, old transaction size = {:?}", len, bincode::serialized_size(&tx).unwrap_or_default());
         let max_txn_len = self.max_txn_len;
         if len > max_txn_len {
             tracing::warn!(%commit, %len, %max_txn_len, "Transaction too big");
@@ -1541,6 +1539,9 @@ mod test {
         BlockInfo, ClaimBlockError, ClaimBlockHeaderInputError, GlobalState, HandleDaEventError,
         HandleQuorumEventError, HandleReceivedTxns, ProxyGlobalState,
     };
+
+    /// A const number on max_tx_len to be used consistently spanning all the tests
+    const TEST_MAX_TX_LEN: u64 = 20;
 
     // GlobalState Tests
 
@@ -4292,7 +4293,7 @@ mod test {
                 tx_sender,
                 txns.clone(),
                 TransactionSource::HotShot,
-                10,
+                TEST_MAX_TX_LEN,
             );
 
             assert!(handle_received_txns_iter.next().is_some());
@@ -4340,7 +4341,7 @@ mod test {
                 tx_sender,
                 txns.clone(),
                 TransactionSource::HotShot,
-                10,
+                TEST_MAX_TX_LEN,
             );
 
             assert!(handle_received_txns_iter.next().is_some());
@@ -4352,7 +4353,7 @@ mod test {
                 })) => {
                     // This is expected,
                     assert!(estimated_length >= 256);
-                    assert_eq!(max_txn_len, 10);
+                    assert_eq!(max_txn_len, TEST_MAX_TX_LEN);
                 }
                 Some(Err(err)) => {
                     panic!("Unexpected error: {:?}", err);
@@ -4398,7 +4399,7 @@ mod test {
                 tx_sender,
                 txns.clone(),
                 TransactionSource::HotShot,
-                10,
+                TEST_MAX_TX_LEN,
             );
 
             match handle_received_txns_iter.next() {
@@ -4443,7 +4444,7 @@ mod test {
             tx_sender,
             txns.clone(),
             TransactionSource::HotShot,
-            10,
+            TEST_MAX_TX_LEN,
         );
 
         for iteration in handle_received_txns_iter {
