@@ -563,13 +563,12 @@ impl<'a> ValidatedTransition<'a> {
     /// Validate timestamp is not decreasing relative to parent and is
     /// within a given tolerance of system time. Tolerance is
     /// currently 12 seconds. This value may be moved to configuration
-    /// in the future.
+    /// in the future. Do this check first so we don't add unnecessary drift.
     fn validate_timestamp(&self) -> Result<(), ProposalValidationError> {
         self.proposal
             .validate_timestamp_non_dec(self.parent.timestamp())?;
 
         // Validate timestamp hasn't drifted too much from system time.
-        // Do this check first so we don't add unnecessary drift.
         let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
         self.proposal.validate_timestamp_drift(system_time)?;
 
