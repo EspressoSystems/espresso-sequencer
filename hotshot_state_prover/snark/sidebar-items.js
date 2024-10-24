@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["generate_state_update_proof","preprocess"],"struct":["QCVerKey"],"type":["Proof","ProvingKey","UniversalSrs","VerifyingKey"]};
