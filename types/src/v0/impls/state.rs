@@ -424,7 +424,7 @@ impl<'a> ValidatedTransition<'a> {
     /// self.validate_fee()?;
     /// self.validate_fee_merkle_tree()?;
     /// self.validate_block_merkle_tree()?;
-    /// self.validate_proposed_finalized()?;
+    /// self.validate_l1_finalized()?;
     /// self.validate_l1_head()?;
     /// self.validate_namespace_table()?;
     /// ```
@@ -437,7 +437,7 @@ impl<'a> ValidatedTransition<'a> {
         self.validate_fee()?;
         self.validate_fee_merkle_tree()?;
         self.validate_block_merkle_tree()?;
-        self.validate_proposed_finalized()?;
+        self.validate_l1_finalized()?;
         self.validate_l1_head()?;
         self.validate_namespace_table()?;
 
@@ -445,7 +445,7 @@ impl<'a> ValidatedTransition<'a> {
     }
 
     /// The proposal [Header::l1_finalized] must be `Some` and non-decreasing relative to parent.
-    fn validate_proposed_finalized(&self) -> Result<(), ProposalValidationError> {
+    fn validate_l1_finalized(&self) -> Result<(), ProposalValidationError> {
         let proposed_finalized = self.proposal.header.l1_finalized();
         let parent_finalized = self.parent.l1_finalized();
 
