@@ -1161,7 +1161,7 @@ mod test {
     }
 
     impl<'a> ValidatedTransition<'a> {
-        async fn mock(instance: NodeState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
+        fn mock(instance: NodeState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
             let expected_chain_config = instance.chain_config;
 
             Self {
@@ -1254,7 +1254,6 @@ mod test {
         // Note we are using the same header for parent and proposal,
         // this may be OK depending on what we are testing.
         ValidatedTransition::mock(NodeState::mock_v2(), &header, proposal)
-            .await
             .validate_l1_head()
             .unwrap();
 
@@ -1277,7 +1276,6 @@ mod test {
         // Success Case
         let proposal = Proposal::new(&header, block_size);
         ValidatedTransition::mock(instance.clone(), &header, proposal)
-            .await
             .validate_builder_fee()
             .unwrap();
 
@@ -1285,7 +1283,6 @@ mod test {
         let header = header.invalid_builder_signature();
         let proposal = Proposal::new(&header, block_size);
         let err = ValidatedTransition::mock(instance, &header, proposal)
-            .await
             .validate_builder_fee()
             .unwrap_err();
 
@@ -1311,7 +1308,6 @@ mod test {
         // Success Case
         let proposal = Proposal::new(&header, block_size);
         ValidatedTransition::mock(instance.clone(), &header, proposal)
-            .await
             .validate_chain_config()
             .unwrap();
 
@@ -1356,7 +1352,6 @@ mod test {
         // Error Case
         let proposal = Proposal::new(&header, block_size);
         let err = ValidatedTransition::mock(instance.clone(), &header, proposal)
-            .await
             .validate_block_size()
             .unwrap_err();
 
@@ -1372,7 +1367,6 @@ mod test {
         // Success Case
         let proposal = Proposal::new(&header, 1);
         ValidatedTransition::mock(instance, &header, proposal)
-            .await
             .validate_block_size()
             .unwrap()
     }
@@ -1393,7 +1387,6 @@ mod test {
 
         let proposal = Proposal::new(&header, block_size);
         let err = ValidatedTransition::mock(instance.clone(), &header, proposal)
-            .await
             .validate_fee()
             .unwrap_err();
 
@@ -1421,7 +1414,6 @@ mod test {
 
         let proposal = Proposal::new(&parent, block_size);
         let err = ValidatedTransition::mock(instance.clone(), &parent, proposal)
-            .await
             .validate_height()
             .unwrap_err();
 
@@ -1441,7 +1433,6 @@ mod test {
         let proposal = Proposal::new(&header, block_size);
 
         ValidatedTransition::mock(instance, &parent, proposal)
-            .await
             .validate_height()
             .unwrap();
     }
@@ -1491,7 +1482,6 @@ mod test {
         let mock_time = OffsetDateTime::now_utc().unix_timestamp() as u64;
         // TODO
         let err = ValidatedTransition::mock(instance.clone(), &parent, proposal)
-            .await
             .validate_timestamp()
             .unwrap_err();
 
@@ -1548,7 +1538,6 @@ mod test {
         // Success case.
         let proposal = Proposal::new(&header, block_size);
         ValidatedTransition::mock(instance.clone(), &header, proposal)
-            .await
             .validate_fee_merkle_tree()
             .unwrap();
 
@@ -1586,7 +1575,6 @@ mod test {
         // Success case.
         let proposal = Proposal::new(&header, block_size);
         ValidatedTransition::mock(instance.clone(), &header, proposal)
-            .await
             .validate_block_merkle_tree()
             .unwrap();
 
@@ -1626,14 +1614,12 @@ mod test {
         // Success case.
         let proposal = Proposal::new(&header, block_size);
         ValidatedTransition::mock(NodeState::mock_v2(), &header, proposal)
-            .await
             .validate_namespace_table()
             .unwrap();
 
         // Error case
         let proposal = Proposal::new(&header, 40);
         let err = ValidatedTransition::mock(NodeState::mock_v2(), &header, proposal)
-            .await
             .validate_namespace_table()
             .unwrap_err();
         tracing::info!(%err, "task failed successfully");
