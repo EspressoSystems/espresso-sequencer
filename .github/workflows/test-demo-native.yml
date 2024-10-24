@@ -44,11 +44,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --locked --release
+        run: cargo build --locked --profile test
 
       - name: Test Demo
         run: |
-          export PATH="$PWD/target/release:$PATH"
+          export PATH="$PWD/target/debug:$PATH"
           set -o pipefail
           scripts/demo-native --tui=false &
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'

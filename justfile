@@ -8,7 +8,7 @@ demo *args:
     docker compose up {{args}}
 
 demo-native:
-    cargo build --release
+    cargo build --profile test
     scripts/demo-native
 
 demo-native-mp:
@@ -39,7 +39,7 @@ anvil *args:
 
 test *args:
 	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --verbose {{args}}
+	cargo nextest run --locked --workspace --all-features --verbose {{args}}
 
 test-slow:
 	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
