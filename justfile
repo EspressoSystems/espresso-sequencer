@@ -37,9 +37,9 @@ docker-stop-rm:
 anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
-test:
+test *args:
 	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --verbose 
+	cargo nextest run --locked --release --workspace --all-features --verbose {{args}}
 
 test-slow:
 	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'

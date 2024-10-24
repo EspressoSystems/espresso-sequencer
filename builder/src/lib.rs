@@ -1,71 +1,11 @@
-#![allow(unused_imports)]
-use std::{
-    alloc::System,
-    any,
-    fmt::{Debug, Display},
-    marker::PhantomData,
-    mem,
-    net::{IpAddr, Ipv4Addr},
-    thread::Builder,
-};
-
-use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_std::{
-    sync::{Arc, RwLock},
-    task::{spawn, JoinHandle},
-};
-use espresso_types::{
-    v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    SeqTypes,
-};
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
-    types::{Address, U256},
-};
-use futures::{
-    future::{join_all, Future},
-    stream::{Stream, StreamExt},
-};
-use hotshot::{
-    traits::election::static_committee::StaticCommittee,
-    types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, SystemContext,
-};
+use async_compatibility_layer::art::async_spawn;
+use espresso_types::SeqTypes;
 use hotshot_builder_api::v0_1::builder::{
-    BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
+    Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
-use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
-use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
-use hotshot_types::network::NetworkConfig;
-// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use hotshot_types::{
-    consensus::ConsensusMetricsValue,
-    event::LeafInfo,
-    light_client::StateKeyPair,
-    signature_key::{BLSPrivKey, BLSPubKey},
-    traits::{
-        block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
-        },
-        election::Membership,
-        metrics::Metrics,
-        node_implementation::NodeType,
-    },
-    utils::BuilderCommitment,
-    HotShotConfig, PeerConfig, ValidatorConfig,
-};
-use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
-use jf_signature::bls_over_bn254::VerKey;
-use sequencer::{
-    catchup::StatePeers,
-    context::{Consensus, SequencerContext},
-    network,
-    state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node, SequencerApiVersion,
-};
-use tide_disco::{app, method::ReadState, App, Url};
+use hotshot_builder_core::service::ProxyGlobalState;
+use sequencer::SequencerApiVersion;
+use tide_disco::{App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
 
 pub mod non_permissioned;
@@ -100,83 +40,53 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
 
 #[cfg(test)]
 pub mod testing {
-    use core::num;
-    use std::{
-        collections::HashSet,
-        num::NonZeroUsize,
-        time::{Duration, Instant},
-    };
-
-    //use sequencer::persistence::NoStorage;
-    use async_broadcast::{
-        broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
-        TryRecvError,
-    };
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        channel::{unbounded, UnboundedReceiver, UnboundedSender},
-    };
+    use async_compatibility_layer::art::async_spawn;
     use async_lock::RwLock;
-    use async_trait::async_trait;
     use committable::Committable;
-
     use espresso_types::{
-        mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NamespaceId,
-        NodeState, PrivKey, PubKey, Transaction, ValidatedState,
+        traits::SequencerPersistence, v0_3::ChainConfig, Event, FeeAccount, NamespaceId, NodeState,
+        PrivKey, PubKey, Transaction, ValidatedState,
     };
-    use ethers::{
-        types::spoof::State,
-        utils::{Anvil, AnvilInstance},
-    };
-    use futures::{
-        future::join_all,
-        stream::{Stream, StreamExt},
-    };
+    use ethers::utils::{Anvil, AnvilInstance};
+    use futures::stream::{Stream, StreamExt};
     use hotshot::{
-        traits::{
-            implementations::{MasterMap, MemoryNetwork},
-            BlockPayload,
-        },
+        traits::BlockPayload,
         types::{
+            BLSPrivKey, BLSPubKey,
             EventType::{self, Decide},
-            Message,
+            SignatureKey,
         },
     };
-    use hotshot_builder_api::{
-        v0_1::builder::{
-            BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
-        },
-        v0_2::block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    };
-    use hotshot_builder_core::{
-        builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
-        service::GlobalState,
+    use hotshot_builder_api::v0_2::block_info::{
+        AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo,
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
     use hotshot_types::{
-        data::{fake_commitment, Leaf, ViewNumber},
+        data::{Leaf, ViewNumber},
         event::LeafInfo,
         light_client::StateKeyPair,
         traits::{
-            block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
-            metrics::NoMetrics,
-            network::Topic,
-            node_implementation::{ConsensusTime, Versions},
+            block_contents::BlockHeader,
+            node_implementation::{ConsensusTime, NodeType, Versions},
             signature_key::BuilderSignatureKey as _,
         },
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
-    use portpicker::pick_unused_port;
-    use sequencer::{state_signature::StateSignatureMemStorage, SequencerApiVersion};
-    use serde::{Deserialize, Serialize};
+    use sequencer::{context::Consensus, network, SequencerApiVersion};
+    use std::{
+        num::NonZeroUsize,
+        sync::Arc,
+        time::{Duration, Instant},
+    };
     use surf_disco::Client;
     use vbs::version::StaticVersion;
 
     use super::*;
     use crate::non_permissioned::BuilderConfig;
+    use jf_signature::bls_over_bn254::VerKey;
 
     #[derive(Clone)]
     pub struct HotShotTestConfig {
