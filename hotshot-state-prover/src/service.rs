@@ -590,7 +590,10 @@ mod test {
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::{
-        deployer::{self, test_helpers::deploy_light_client_contract_as_proxy_for_test},
+        deployer::{
+            self, is_valid_admin_for_proxy,
+            test_helpers::deploy_light_client_contract_as_proxy_for_test,
+        },
         test_utils::setup_test,
     };
 
@@ -772,14 +775,19 @@ mod test {
         }
     }
 
+    // Test light client proxy validation by checking
+    // if it's a proxy by checking if the implementation address is found on the proxy
+    // if the admin was set as expected
     #[async_std::test]
-    async fn test_validate_light_contract_is_proxy() -> Result<()> {
+    async fn test_validate_light_contract_proxy() -> Result<()> {
         setup_test();
 
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
-        let (_wallet, contract) = deploy_contract_as_proxy_for_test(
+
+        // deploy contract as a proxy
+        let (wallet, contract) = deploy_contract_as_proxy_for_test(
             &anvil,
             dummy_genesis.clone(),
             dummy_stake_genesis.clone(),
@@ -801,6 +809,7 @@ mod test {
             ..Default::default()
         };
 
+        // validate whether the light client contract is a proxy
         let result = config.validate_light_client_contract().await;
 
         // check if the result was ok
@@ -808,6 +817,69 @@ mod test {
             result.is_ok(),
             "Expected Light Client contract to be a proxy, but it was not"
         );
+
+        // validate that the admin is the deployer account
+        let admin = wallet.clone().address();
+        let admin_result =
+            is_valid_admin_for_proxy(wallet, contract.clone().address(), admin).await?;
+        assert!(
+            admin_result,
+            "Testing whether the admin on the contract is {}",
+            admin
+        );
+
+        Ok(())
+    }
+
+    // Test the unhappy path for light client proxy validation by checking
+    // if it's a proxy, which should fail
+    // if the admin was set as expected, which should fail
+    #[async_std::test]
+    async fn test_fail_validate_light_contract_proxy() -> Result<()> {
+        setup_test();
+
+        let anvil = Anvil::new().spawn();
+        let dummy_genesis = ParsedLightClientState::dummy_genesis();
+        let dummy_stake_genesis = ParsedStakeTableState::dummy_genesis();
+
+        //deploy as a regular contract and not a proxy so that the validation fails as we expect
+        let (wallet, contract) =
+            deploy_contract_for_test(&anvil, dummy_genesis.clone(), dummy_stake_genesis.clone())
+                .await?;
+
+        // now test if we can read from the contract
+        let genesis: ParsedLightClientState = contract.genesis_state().await?.into();
+        assert_eq!(genesis, dummy_genesis);
+
+        let stake_genesis: ParsedStakeTableState =
+            contract.genesis_stake_table_state().await?.into();
+        assert_eq!(stake_genesis, dummy_stake_genesis);
+
+        let config = StateProverConfig {
+            provider: Url::parse(anvil.endpoint().as_str())
+                .expect("Cannot parse anvil endpoint to URL."),
+            light_client_address: contract.clone().address(),
+            ..Default::default()
+        };
+
+        // validate whether the light client contract is a proxy
+        let result = config.validate_light_client_contract().await;
+
+        // we expect the result to be an error because the contract is not a proxy
+        assert!(
+            result.is_err(),
+            "Expected Light Client contract not to be a proxy, but it was"
+        );
+
+        // validate that there is no owner set
+        let admin = wallet.clone().address();
+        let admin_result =
+            is_valid_admin_for_proxy(wallet, contract.clone().address(), admin).await?;
+        assert!(
+            !admin_result,
+            "Testing whether the admin on the contract is the zero address"
+        );
+
         Ok(())
     }
 

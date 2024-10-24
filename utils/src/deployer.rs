@@ -8,6 +8,7 @@ use contract_bindings::{
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
+    ownable_upgradeable::OwnableUpgradeable,
     plonk_verifier::PlonkVerifier,
 };
 use derive_more::Display;
@@ -370,7 +371,7 @@ pub async fn deploy(
         // Instantiate a wrapper with the proxy address and light client ABI.
         let proxy = LightClient::new(light_client_proxy_address, l1.clone());
 
-        // Perission the light client prover.
+        // Permission the light client prover.
         if let Some(prover) = permissioned_prover {
             tracing::info!(%light_client_proxy_address, %prover, "setting permissioned prover");
             proxy.set_permissioned_prover(prover).send().await?.await?;
@@ -384,6 +385,14 @@ pub async fn deploy(
                 "transferring light client proxy ownership to multisig",
             );
             proxy.transfer_ownership(owner).send().await?.await?;
+
+            // Confirm that the multisig address has been set as the owner
+            if !is_valid_admin_for_proxy(l1.clone(), light_client_proxy_address, owner)
+                .await
+                .expect("Failed to find the expected admin on the proxy")
+            {
+                panic!("Light Client Contract's proxy admin not set to the multisig");
+            }
         }
     }
 
@@ -404,7 +413,7 @@ pub async fn deploy(
             )
             .await?;
 
-        // confirm that the implementation address is the address of the fee contract deployed above
+        // Confirm that the implementation address is the address of the fee contract deployed above
         if !is_proxy_contract(provider.clone(), fee_contract_proxy_address)
             .await
             .expect("Failed to determine if fee contract is a proxy")
@@ -423,6 +432,14 @@ pub async fn deploy(
                 "transferring fee contract proxy ownership to multisig",
             );
             proxy.transfer_ownership(owner).send().await?.await?;
+
+            // Confirm that the multisig address has been set as the owner
+            if !is_valid_admin_for_proxy(l1.clone(), fee_contract_proxy_address, owner)
+                .await
+                .expect("Failed to find the expected admin on the proxy")
+            {
+                panic!("Fee Contract's proxy admin not set to the multisig");
+            }
         }
     }
 
@@ -453,6 +470,18 @@ pub async fn is_proxy_contract(
 
     // when the implementation address is not equal to zero, it's a proxy
     Ok(implementation_address != H160::zero())
+}
+
+pub async fn is_valid_admin_for_proxy<M: Middleware + 'static>(
+    client: Arc<M>,
+    proxy_address: H160,
+    admin: H160,
+) -> anyhow::Result<bool> {
+    let ownable_proxy_contract = OwnableUpgradeable::new(proxy_address, client);
+    let proxy_contract_admin = ownable_proxy_contract.owner().await?;
+
+    // we expect the admin_address to be equal to the one passed in
+    Ok(proxy_contract_admin == admin)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
