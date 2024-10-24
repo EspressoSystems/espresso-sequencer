@@ -100,16 +100,23 @@ where
     async fn fetch(&self, req: LeafRequest) -> Option<LeafQueryData<Types>> {
         match self
             .client
-            .get(&format!("availability/leaf/{}", usize::from(req)))
+            .get::<LeafQueryData<Types>>(&format!("availability/leaf/{}", usize::from(req)))
             .send()
             .await
         {
-            Ok(leaf) => {
+            Ok(mut leaf) => {
                 // TODO we should also download a chain of QCs justifying the inclusion of `leaf` in
                 // the chain at the requested height. However, HotShot currently lacks a good light
                 // client API to verify this chain, so for now we just trust the other server.
                 // https://github.com/EspressoSystems/HotShot/issues/2137
                 // https://github.com/EspressoSystems/hotshot-query-service/issues/354
+
+                // There is a potential DOS attack where the peer sends us a leaf with the full
+                // payload in it, which uses redundant resources in the database, since we fetch and
+                // store payloads separately. We can defend ourselves by simply dropping the payload
+                // if present.
+                leaf.leaf.unfill_block_payload();
+
                 Some(leaf)
             }
             Err(err) => {

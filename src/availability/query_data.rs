@@ -210,7 +210,7 @@ impl<Types: NodeType> LeafQueryData<Types> {
     ///
     /// Fails with an [`InconsistentLeafError`] if `qc` does not reference `leaf`.
     pub fn new(
-        leaf: Leaf<Types>,
+        mut leaf: Leaf<Types>,
         qc: QuorumCertificate<Types>,
     ) -> Result<Self, InconsistentLeafError<Types>> {
         // TODO: Replace with the new `commit` function in HotShot. Add an `upgrade_lock` parameter
@@ -224,6 +224,11 @@ impl<Types: NodeType> LeafQueryData<Types> {
                 qc_leaf: qc.data.leaf_commit
             }
         );
+
+        // We only want the leaf for the block header and consensus metadata. The payload will be
+        // stored separately.
+        leaf.unfill_block_payload();
+
         Ok(Self { leaf, qc })
     }
 

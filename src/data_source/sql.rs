@@ -150,7 +150,7 @@ impl Config {
 ///
 /// Custom migrations can be inserted using [`Config::migrations`]. Each custom migration will be
 /// inserted into the overall sequence of migrations in order of version number. The migrations
-/// provided by this crate only use version numbers which are multiples of 10, so the non-multiples
+/// provided by this crate only use version numbers which are multiples of 100, so the non-multiples
 /// can be used to insert custom migrations between the default migrations. You can also replace a
 /// default migration completely by providing a custom migration with the same version number. This
 /// may be useful when an earlier custom migration has altered the schema in such a way that a later
