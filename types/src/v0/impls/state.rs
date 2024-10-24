@@ -228,17 +228,13 @@ impl ValidatedState {
         parent_leaf: &Leaf,
         l1_deposits: Vec<FeeInfo>,
     ) {
-        // TODO avoid this clone (it was just copied from original pure fn)
-        let mut validated_state = self.clone();
         // pushing a block into merkle tree shouldn't fail
-        validated_state
-            .block_merkle_tree
+        self.block_merkle_tree
             .push(parent_leaf.block_header().commit())
             .unwrap();
 
         for FeeInfo { account, amount } in l1_deposits.iter() {
-            validated_state
-                .fee_merkle_tree
+            self.fee_merkle_tree
                 .update_with(account, |balance| {
                     Some(balance.cloned().unwrap_or_default().add(*amount))
                 })
