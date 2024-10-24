@@ -992,6 +992,12 @@ where
                         block_height,
                         "starting major scan"
                     );
+
+                    // If we're starting a major scan, reset the major scan counts of missing data
+                    // as we're about to recompute them.
+                    metrics.major_missing_blocks.set(0);
+                    metrics.major_missing_vid.set(0);
+
                     minimum_block_height
                 } else {
                     tracing::info!(start = prev_height, block_height, "starting minor scan");
@@ -1014,18 +1020,21 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while let Some(fut) = blocks.next().await {
-                    // Wait for the block to be fetched. This slows down the scanner so that we
-                    // don't waste memory generating more active fetch tasks then we can handle at a
-                    // given time. Note that even with this await, all blocks within a chunk are
-                    // fetched in parallel, so this does not block the next block in the chunk, only
-                    // the next chunk until the current chunk completes. Also, this `await` resolves
-                    // immediately if the block was already available and did not need to be
-                    // fetched, so doing this on every block costs us nothing unless we are actually
-                    // fetching missing data.
-                    fut.await;
+                let mut missing_blocks = 0;
+                while let Some(fetch) = blocks.next().await {
+                    if fetch.is_pending() {
+                        missing_blocks += 1;
+                        // Wait for the block to be fetched. This slows down the scanner so that we
+                        // don't waste memory generating more active fetch tasks then we can handle
+                        // at a given time. Note that even with this await, all blocks within a
+                        // chunk are fetched in parallel, so this does not block the next block in
+                        // the chunk, only the next chunk until the current chunk completes.
+                        fetch.await;
+                    }
                     metrics.scanned_blocks.update(1);
                 }
+                metrics.add_missing_blocks(major, missing_blocks);
+
                 // We have to trigger a separate fetch of the VID data, since this is fetched
                 // independently of the block payload.
                 let mut vid = self
@@ -1034,15 +1043,30 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while let Some(fut) = vid.next().await {
-                    // As above, limit the speed at which we spawn new fetches to the speed at which
-                    // we can process them.
-                    fut.await;
+                let mut missing_vid = 0;
+                while let Some(fetch) = vid.next().await {
+                    if fetch.is_pending() {
+                        missing_vid += 1;
+                        // As above, limit the speed at which we spawn new fetches to the speed at
+                        // which we can process them.
+                        fetch.await;
+                    }
                     metrics.scanned_vid.update(1);
                 }
+                metrics.add_missing_vid(major, missing_vid);
 
                 tracing::info!("completed proactive scan, will scan again in {minor_interval:?}");
+
+                // Reset metrics.
                 metrics.running.set(0);
+                if major {
+                    // If we just completed a major scan, reset the incremental counts of missing
+                    // data from minor scans, so the next round of minor scans can recompute/update
+                    // them.
+                    metrics.minor_missing_blocks.set(0);
+                    metrics.minor_missing_vid.set(0);
+                }
+
                 sleep(minor_interval).await;
             }
             .instrument(span)
@@ -1413,6 +1437,16 @@ struct ScannerMetrics {
     scanned_blocks: Box<dyn Gauge>,
     /// Number of VID entries processed in the current scan.
     scanned_vid: Box<dyn Gauge>,
+    /// The number of missing blocks encountered in the last major scan.
+    major_missing_blocks: Box<dyn Gauge>,
+    /// The number of missing VID entries encountered in the last major scan.
+    major_missing_vid: Box<dyn Gauge>,
+    /// The number of missing blocks encountered _cumulatively_ in minor scans since the last major
+    /// scan.
+    minor_missing_blocks: Box<dyn Gauge>,
+    /// The number of missing VID entries encountered _cumulatively_ in minor scans since the last
+    /// major scan.
+    minor_missing_vid: Box<dyn Gauge>,
 }
 
 impl ScannerMetrics {
@@ -1428,6 +1462,26 @@ impl ScannerMetrics {
             current_end: group.create_gauge("end".into(), None),
             scanned_blocks: group.create_gauge("scanned_blocks".into(), None),
             scanned_vid: group.create_gauge("scanned_vid".into(), None),
+            major_missing_blocks: group.create_gauge("major_missing_blocks".into(), None),
+            major_missing_vid: group.create_gauge("major_missing_vid".into(), None),
+            minor_missing_blocks: group.create_gauge("minor_missing_blocks".into(), None),
+            minor_missing_vid: group.create_gauge("minor_missing_vid".into(), None),
+        }
+    }
+
+    fn add_missing_blocks(&self, major: bool, missing: usize) {
+        if major {
+            self.major_missing_blocks.set(missing);
+        } else {
+            self.minor_missing_blocks.update(missing as i64);
+        }
+    }
+
+    fn add_missing_vid(&self, major: bool, missing: usize) {
+        if major {
+            self.major_missing_vid.set(missing);
+        } else {
+            self.minor_missing_vid.update(missing as i64);
         }
     }
 }
