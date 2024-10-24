@@ -78,7 +78,7 @@ struct NonPermissionedBuilderOptions {
 
     /// The amount of time a builder can wait before incrementing the max block size.
     #[clap(
-        short,
+        short = 'M',
         long,
         env = "ESPRESSO_BUILDER_MAX_BLOCK_SIZE_INCREMENT_PERIOD",
         default_value = "3600s",

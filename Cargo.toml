@@ -151,9 +151,19 @@ trait-set = "0.3.0"
 opt-level = 0
 # Skip compiling the debug information.
 debug = false
-# Skip linking debug information.
-strip = "debuginfo"
-[profile.dev.package."*"]
+# Skip linking symbols.
+strip = true
+[profile.test]
+opt-level = 1
+[profile.test.package.tests]
+opt-level = 0
+[profile.test.package.client]
+opt-level = 0
+[profile.test.package.hotshot-state-prover]
+opt-level = 3
+[profile.test.package.gen-vk-contract]
+opt-level = 3
+[profile.test.package.diff-test-hotshot]
 opt-level = 3
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
