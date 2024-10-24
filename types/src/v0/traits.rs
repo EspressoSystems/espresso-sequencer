@@ -603,6 +603,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
     ) -> anyhow::Result<()>;
+
+    async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
+        match self.load_anchor_leaf().await? {
+            Some((leaf, _)) => Ok(leaf.view_number()),
+            None => Ok(ViewNumber::genesis()),
+        }
+    }
 }
 
 #[async_trait]
