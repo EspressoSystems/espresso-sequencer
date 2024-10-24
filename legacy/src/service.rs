@@ -1446,7 +1446,19 @@ impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> {
         // encoded transaction length. Luckily, this being roughly proportional
         // to encoded length is enough, because we only use this value to estimate
         // our limitations on computing the VID in time.
-        let len = tx.minimum_block_size();
+        // In sequencer we account for block byte length limit with:
+        // let len = tx.payload().len() + NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len() + NsPayloadBuilder::tx_table_entry_byte_len();
+        // where
+        // pub const fn entry_byte_len() -> usize {NS_ID_BYTE_LEN (4) + NS_OFFSET_BYTE_LEN (4)}
+        // pub const fn tx_table_header_byte_len() -> usize {NUM_TXS_BYTE_LEN (4)}
+        // pub const fn tx_table_entry_byte_len() -> usize {TX_OFFSET_BYTE_LEN (4)}
+        const NS_ID_BYTE_LEN: usize = 4;
+        const NS_OFFSET_BYTE_LEN: usize = 4;
+        const NUM_TXS_BYTE_LEN: usize = 4;
+        const TX_OFFSET_BYTE_LEN: usize = 4;
+        let len = tx.minimum_block_size(
+            ((NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_TXS_BYTE_LEN + TX_OFFSET_BYTE_LEN) as u64,
+        );
         let max_txn_len = self.max_txn_len;
         if len > max_txn_len {
             tracing::warn!(%commit, %len, %max_txn_len, "Transaction too big");
