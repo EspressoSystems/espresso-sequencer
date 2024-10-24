@@ -450,9 +450,7 @@ where
                     &self.builder_keys.1,
                     response.offered_fee,
                 )
-                .map_err(|e| BuildError::Error(
-                    e.to_string()
-                ))?;
+                .map_err(|e| BuildError::Error(e.to_string()))?;
 
             let sequencing_fee: BuilderFee<Types> = BuilderFee {
                 fee_amount: response.offered_fee,

@@ -21,10 +21,13 @@ hex = { workspace = true }
 hotshot = { workspace = true }
 hotshot-builder-api = { workspace = true }
 hotshot-events-service = { workspace = true }
+hotshot-macros = { workspace = true }
 hotshot-task-impls = { workspace = true }
+hotshot-testing = { workspace = true }
 hotshot-types = { workspace = true }
 lru = { workspace = true }
 multimap = { workspace = true }
+num_cpus = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

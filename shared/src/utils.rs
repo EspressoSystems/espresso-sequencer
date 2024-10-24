@@ -86,15 +86,16 @@ where
     }
 }
 
-type EventServiceConnection<Types, V> = surf_disco::socket::Connection<
+type EventServiceConnection<Types, ApiVer> = surf_disco::socket::Connection<
     Event<Types>,
     surf_disco::socket::Unsupported,
     EventStreamError,
-    V,
+    ApiVer,
 >;
 
-type EventServiceReconnect<Types, V> =
-    Pin<Box<dyn Future<Output = anyhow::Result<EventServiceConnection<Types, V>>> + Send + Sync>>;
+type EventServiceReconnect<Types, ApiVer> = Pin<
+    Box<dyn Future<Output = anyhow::Result<EventServiceConnection<Types, ApiVer>>> + Send + Sync>,
+>;
 
 /// A wrapper around event streaming API that provides auto-reconnection capability
 pub struct EventServiceStream<Types: NodeType, V: StaticVersionType> {
@@ -102,7 +103,7 @@ pub struct EventServiceStream<Types: NodeType, V: StaticVersionType> {
     connection: Either<EventServiceConnection<Types, V>, EventServiceReconnect<Types, V>>,
 }
 
-impl<Types: NodeType, V: StaticVersionType> EventServiceStream<Types, V> {
+impl<Types: NodeType, ApiVer: StaticVersionType> EventServiceStream<Types, ApiVer> {
     async fn connect_inner(
         url: Url,
     ) -> anyhow::Result<
@@ -110,10 +111,10 @@ impl<Types: NodeType, V: StaticVersionType> EventServiceStream<Types, V> {
             Event<Types>,
             surf_disco::socket::Unsupported,
             EventStreamError,
-            V,
+            ApiVer,
         >,
     > {
-        let client = Client::<hotshot_events_service::events::Error, V>::new(url.clone());
+        let client = Client::<hotshot_events_service::events::Error, ApiVer>::new(url.clone());
 
         if !(client.connect(None).await) {
             anyhow::bail!("Couldn't connect to API url");

@@ -1350,15 +1350,9 @@ impl<Types: NodeType> From<HandleReceivedTxnsError<Types>> for BuildError {
             HandleReceivedTxnsError::TransactionTooBig {
                 estimated_length,
                 max_txn_len,
-            } => BuildError::Error(
-                format!("Transaction too big (estimated length {estimated_length}, currently accepting <= {max_txn_len})")
-            ),
-            HandleReceivedTxnsError::TooManyTransactions => BuildError::Error(
-                "Too many transactions".to_owned()
-            ),
-            HandleReceivedTxnsError::Internal(err) => BuildError::Error(
-                format!("Internal error when submitting transaction: {}", err)
-            ),
+            } => BuildError::Error(format!("Transaction too big (estimated length {estimated_length}, currently accepting <= {max_txn_len})")),
+            HandleReceivedTxnsError::TooManyTransactions => BuildError::Error("Too many transactions".to_owned()),
+            HandleReceivedTxnsError::Internal(err) => BuildError::Error(format!("Internal error when submitting transaction: {}", err)),
         }
     }
 }

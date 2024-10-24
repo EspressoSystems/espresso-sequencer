@@ -36,6 +36,7 @@ use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use std::sync::Arc;
 use std::time::Duration;
 pub mod basic_test;
+pub mod integration;
 pub mod order_test;
 
 pub async fn create_builder_state(
