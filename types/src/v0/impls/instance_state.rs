@@ -78,6 +78,19 @@ impl NodeState {
     }
 
     #[cfg(any(test, feature = "testing"))]
+    pub fn mock_v2() -> Self {
+        use vbs::version::StaticVersion;
+
+        Self::new(
+            0,
+            ChainConfig::default(),
+            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            mock::MockStateCatchup::default(),
+            StaticVersion::<0, 2>::version(),
+        )
+    }
+
+    #[cfg(any(test, feature = "testing"))]
     pub fn mock_v3() -> Self {
         use vbs::version::StaticVersion;
 
