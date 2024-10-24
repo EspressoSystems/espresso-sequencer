@@ -74,8 +74,9 @@ use self::{migrate::Migrator, transaction::PoolMetrics};
 ///
 /// ```
 /// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// let migrations: Vec<Migration> =
+/// let mut migrations: Vec<Migration> =
 ///     include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
+/// migrations.sort();
 /// assert_eq!(migrations[0].version(), 10);
 /// assert_eq!(migrations[0].name(), "init_schema");
 /// ```
