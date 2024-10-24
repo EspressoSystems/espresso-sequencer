@@ -638,6 +638,11 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         Ok(())
     }
 
+    /// Take the block payload from the leaf and return it if it is present
+    pub fn unfill_block_payload(&mut self) -> Option<TYPES::BlockPayload> {
+        self.block_payload.take()
+    }
+
     /// Fill this leaf with the block payload, without checking
     /// header and payload consistency
     pub fn fill_block_payload_unchecked(&mut self, block_payload: TYPES::BlockPayload) {
