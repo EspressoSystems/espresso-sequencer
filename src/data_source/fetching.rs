@@ -1348,7 +1348,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         match self {
             Ok(t) => Some(t),
             Err(err) => {
-                tracing::warn!(
+                tracing::info!(
                     "error loading resource from local storage, will try to fetch: {err:#}"
                 );
                 None

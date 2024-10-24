@@ -74,8 +74,9 @@ use self::{migrate::Migrator, transaction::PoolMetrics};
 ///
 /// ```
 /// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// let migrations: Vec<Migration> =
+/// let mut migrations: Vec<Migration> =
 ///     include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
+/// migrations.sort();
 /// assert_eq!(migrations[0].version(), 10);
 /// assert_eq!(migrations[0].name(), "init_schema");
 /// ```
@@ -120,12 +121,22 @@ pub fn default_migrations() -> Vec<Migration> {
     // Check version uniqueness and sort by version.
     validate_migrations(&mut migrations).expect("default migrations are invalid");
 
-    // Check that all migration versions are multiples of 10, so that custom migrations can be
+    // Check that all migration versions are multiples of 100, so that custom migrations can be
     // inserted in between.
     for m in &migrations {
-        if m.version() == 0 || m.version() % 10 != 0 {
-            panic!(
-                "default migration version {} is not a positive multiple of 10",
+        if m.version() <= 30 {
+            // An older version of this software used intervals of 10 instead of 100. This was
+            // changed to allow more custom migrations between each default migration, but we must
+            // still accept older migrations that followed the older rule.
+            assert!(
+                m.version() > 0 && m.version() % 10 == 0,
+                "legacy default migration version {} is not a positive multiple of 10",
+                m.version()
+            );
+        } else {
+            assert!(
+                m.version() % 100 == 0,
+                "default migration version {} is not a multiple of 100",
                 m.version()
             );
         }
@@ -946,11 +957,11 @@ mod test {
         // The SQL commands used here will fail if not run in order.
         let migrations = vec![
             Migration::unapplied(
-                "V33__create_test_table.sql",
+                "V103__create_test_table.sql",
                 "ALTER TABLE test ADD COLUMN data INTEGER;",
             )
             .unwrap(),
-            Migration::unapplied("V32__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
+            Migration::unapplied("V102__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
         ];
         connect(true, migrations.clone()).await.unwrap();
 
