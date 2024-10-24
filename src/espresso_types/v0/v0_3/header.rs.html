@@ -63,6 +63,10 @@
 <a href="#63" id="63">63</a>
 <a href="#64" id="64">64</a>
 <a href="#65" id="65">65</a>
+<a href="#66" id="66">66</a>
+<a href="#67" id="67">67</a>
+<a href="#68" id="68">68</a>
+<a href="#69" id="69">69</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
     ResolvableChainConfig, SolverAuctionResults,
@@ -116,11 +120,15 @@
             .field(<span class="string">"ns_table"</span>, <span class="self">self</span>.ns_table.commit())
             .var_size_field(<span class="string">"block_merkle_tree_root"</span>, <span class="kw-2">&amp;</span>bmt_bytes)
             .var_size_field(<span class="string">"fee_merkle_tree_root"</span>, <span class="kw-2">&amp;</span>fmt_bytes)
-            .var_size_field(<span class="string">"fee_info"</span>, <span class="kw-2">&amp;</span>bincode::serialize(<span class="kw-2">&amp;</span><span class="self">self</span>.fee_info).unwrap())
-            .var_size_field(
-                <span class="string">"auction_results"</span>,
-                <span class="kw-2">&amp;</span>bincode::serialize(<span class="kw-2">&amp;</span><span class="self">self</span>.auction_results).unwrap(),
+            .array_field(
+                <span class="string">"fee_info"</span>,
+                <span class="kw-2">&amp;</span><span class="self">self
+                    </span>.fee_info
+                    .iter()
+                    .map(Committable::commit)
+                    .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(),
             )
+            .field(<span class="string">"auction_results"</span>, <span class="self">self</span>.auction_results.commit())
             .finalize()
     }
 
