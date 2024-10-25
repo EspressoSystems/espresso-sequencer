@@ -38,6 +38,7 @@ time = { workspace = true }
 tracing = { workspace = true }
 typenum = { workspace = true }
 derivative = "2"
+derive_more = { workspace = true, features = ["display"] } # TODO promote display feature to workspace?
 jf-vid = { workspace = true }
 jf-pcs = { workspace = true }
 jf-signature = { workspace = true, features = ["schnorr"] }

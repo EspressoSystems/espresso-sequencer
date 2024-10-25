@@ -69,8 +69,13 @@ async fn test_da_task() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData {
+                    payload_commit: payload_commit.clone(),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -82,8 +87,13 @@ async fn test_da_task() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData {
+                    payload_commit: payload_commit.clone(),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -170,8 +180,13 @@ async fn test_da_task_storage_failure() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData {
+                    payload_commit: payload_commit.clone(),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -183,8 +198,13 @@ async fn test_da_task_storage_failure() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData {
+                    payload_commit: payload_commit.clone(),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());

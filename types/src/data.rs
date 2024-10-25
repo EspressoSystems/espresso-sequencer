@@ -282,7 +282,7 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
                 recipient_key,
                 view_number: vid_disperse.view_number,
                 common: vid_disperse.common.clone(),
-                payload_commitment: vid_disperse.payload_commitment,
+                payload_commitment: vid_disperse.payload_commitment.clone(),
             })
             .collect()
     }
@@ -345,7 +345,7 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
                     recipient_key,
                     view_number: vid_disperse_proposal.data.view_number,
                     common: vid_disperse_proposal.data.common.clone(),
-                    payload_commitment: vid_disperse_proposal.data.payload_commitment,
+                    payload_commitment: vid_disperse_proposal.data.payload_commitment.clone(),
                 },
                 signature: vid_disperse_proposal.signature.clone(),
                 _pd: vid_disperse_proposal._pd,

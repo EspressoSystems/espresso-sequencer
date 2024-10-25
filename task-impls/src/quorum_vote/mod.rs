@@ -286,8 +286,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                 #[allow(unused_assignments)]
                 HotShotEvent::QuorumProposalValidated(proposal, parent_leaf) => {
                     let proposal_payload_comm = proposal.block_header.payload_commitment();
-                    if let Some(comm) = payload_commitment {
-                        if proposal_payload_comm != comm {
+                    if let Some(ref comm) = payload_commitment {
+                        if proposal_payload_comm != *comm {
                             tracing::error!("Quorum proposal has inconsistent payload commitment with DAC or VID.");
                             return;
                         }
@@ -303,26 +303,26 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                     leaf = Some(proposed_leaf);
                 }
                 HotShotEvent::DaCertificateValidated(cert) => {
-                    let cert_payload_comm = cert.data().payload_commit;
-                    if let Some(comm) = payload_commitment {
+                    let cert_payload_comm = &cert.data().payload_commit;
+                    if let Some(ref comm) = payload_commitment {
                         if cert_payload_comm != comm {
                             tracing::error!("DAC has inconsistent payload commitment with quorum proposal or VID.");
                             return;
                         }
                     } else {
-                        payload_commitment = Some(cert_payload_comm);
+                        payload_commitment = Some(cert_payload_comm.clone());
                     }
                 }
                 HotShotEvent::VidShareValidated(share) => {
-                    let vid_payload_commitment = share.data.payload_commitment;
+                    let vid_payload_commitment = &share.data.payload_commitment;
                     vid_share = Some(share.clone());
-                    if let Some(comm) = payload_commitment {
+                    if let Some(ref comm) = payload_commitment {
                         if vid_payload_commitment != comm {
                             tracing::error!("VID has inconsistent payload commitment with quorum proposal or DAC.");
                             return;
                         }
                     } else {
-                        payload_commitment = Some(vid_payload_commitment);
+                        payload_commitment = Some(vid_payload_commitment.clone());
                     }
                 }
                 _ => {}
@@ -620,7 +620,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 );
 
                 // Validate the VID share.
-                let payload_commitment = disperse.data.payload_commitment;
+                let payload_commitment = &disperse.data.payload_commitment;
                 let current_epoch = self.consensus.read().await.cur_epoch();
 
                 // Check that the signature is valid
@@ -643,7 +643,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 match vid_scheme(self.quorum_membership.total_nodes(current_epoch)).verify_share(
                     &disperse.data.share,
                     &disperse.data.common,
-                    &payload_commitment,
+                    payload_commitment,
                 ) {
                     Ok(Err(())) | Err(_) => {
                         bail!("Failed to verify VID share");
