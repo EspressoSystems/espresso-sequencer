@@ -1,14 +1,18 @@
 //! Sequencer-specific API endpoint handlers.
 
+use std::{
+    collections::{BTreeSet, HashMap},
+    env,
+};
+
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::merklized_state::Snapshot;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
-    data_source::storage::ExplorerStorage,
-    explorer::{self},
+    explorer::{self, ExplorerDataSource},
     merklized_state::{
         self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
     },
@@ -23,18 +27,14 @@ use hotshot_types::{
 };
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
-use std::{
-    collections::{BTreeSet, HashMap},
-    env,
-};
 use tagged_base64::TaggedBase64;
 use tide_disco::{method::ReadState, Api, Error as _, StatusCode};
 use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
-        SubmitDataSource,
+        CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource, SequencerDataSource,
+        StateSignatureDataSource, SubmitDataSource,
     },
     StorageState,
 };
@@ -165,7 +165,7 @@ pub(super) fn explorer<N, P, D, V: Versions>(
 ) -> Result<ExplorerApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
-    D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
+    D: ExplorerDataSource<SeqTypes> + Send + Sync + 'static,
     P: SequencerPersistence,
 {
     let api = explorer::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(
@@ -252,7 +252,7 @@ pub(super) fn catchup<S, ApiVer: StaticVersionType + 'static>(
 ) -> Result<Api<S, Error, ApiVer>>
 where
     S: 'static + Send + Sync + ReadState,
-    S::State: Send + Sync + CatchupDataSource,
+    S::State: Send + Sync + NodeStateDataSource + CatchupDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/catchup.toml"))?;
     let mut api = Api::<S, Error, ApiVer>::new(toml)?;
@@ -276,9 +276,47 @@ where
             })?;
 
             state
-                .get_account(height, ViewNumber::new(view), account)
+                .get_account(
+                    state.node_state().await,
+                    height,
+                    ViewNumber::new(view),
+                    account,
+                )
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+        }
+        .boxed()
+    })?
+    .at("accounts", |req, state| {
+        async move {
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
+            let accounts = req
+                .body_auto::<Vec<FeeAccount>, ApiVer>(ApiVer::instance())
+                .map_err(Error::from_request_error)?;
+
+            state
+                .read(|state| {
+                    async move {
+                        state
+                            .get_accounts(
+                                state.node_state().await,
+                                height,
+                                ViewNumber::new(view),
+                                &accounts,
+                            )
+                            .await
+                            .map_err(|err| {
+                                Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}"))
+                            })
+                    }
+                    .boxed()
+                })
+                .await
         }
         .boxed()
     })?
@@ -292,7 +330,7 @@ where
                 .map_err(Error::from_request_error)?;
 
             state
-                .get_frontier(height, ViewNumber::new(view))
+                .get_frontier(state.node_state().await, height, ViewNumber::new(view))
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }

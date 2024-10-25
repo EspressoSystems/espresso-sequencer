@@ -10,7 +10,6 @@ use hotshot_types::{
     },
     vid::{VidCommon, VidSchemeType},
 };
-
 use itertools::Itertools;
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
@@ -28,9 +27,10 @@ use vbs::version::Version;
 
 use super::{
     auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
-    BlockSize, FeeMerkleCommitment,
+    BlockSize, FeeMerkleCommitment, L1Client,
 };
 use crate::{
+    traits::StateCatchup,
     v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
     BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
@@ -60,9 +60,11 @@ pub enum BuilderValidationError {
 /// Possible proposal validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ProposalValidationError {
-    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
-    InvalidChainConfig { expected: String, proposal: String },
-
+    #[error("Invalid ChainConfig: expected={expected:?}, proposal={proposal:?}")]
+    InvalidChainConfig {
+        expected: Box<ChainConfig>,
+        proposal: Box<ResolvableChainConfig>,
+    },
     #[error(
         "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
     )]
@@ -91,34 +93,46 @@ pub enum ProposalValidationError {
         expected_root: FeeMerkleCommitment,
         proposal_root: FeeMerkleCommitment,
     },
-    #[error("Invalid namespace table: {err}")]
-    InvalidNsTable { err: NsTableValidationError },
+    #[error("Invalid namespace table: {0}")]
+    InvalidNsTable(NsTableValidationError),
     #[error("Some fee amount or their sum total out of range")]
     SomeFeeAmountOutOfRange,
     #[error("Invalid timestamp: proposal={proposal_timestamp}, parent={parent_timestamp}")]
-    InvalidTimestampNonIncrementing {
+    DecrementingTimestamp {
         proposal_timestamp: u64,
         parent_timestamp: u64,
     },
-    #[error("Invalid timestamp: local:={local_timestamp}, proposal={proposal_timestamp}")]
+    #[error("Timestamp drift too high: proposed:={proposal}, system={proposal}, diff={diff}")]
     InvalidTimestampDrift {
-        proposal_timestamp: u64,
-        local_timestamp: u64,
+        proposal: u64,
+        system: u64,
+        diff: u64,
     },
     #[error("l1_finalized has `None` value")]
     L1FinalizedNotFound,
-    #[error("Invalid timestamp: parent:={parent}, proposal={proposal}")]
-    NonIncrementingL1Head { parent: u64, proposal: u64 },
+    #[error("l1_finalized height is decreasing: parent={parent:?} proposed={proposed:?}")]
+    L1FinalizedDecrementing {
+        parent: Option<(u64, u64)>,
+        proposed: Option<(u64, u64)>,
+    },
+    #[error("Invalid proposal: l1_head height is decreasing")]
+    DecrementingL1Head,
+    #[error("Builder Validation Error: {0}")]
+    BuilderValidationError(BuilderValidationError),
+    #[error("Invalid proposal: l1 finalized does not match the proposal")]
+    InvalidL1Finalized,
 }
 
 impl StateDelta for Delta {}
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+/// State to be validated by replicas.
 pub struct ValidatedState {
-    /// Frontier of Block Merkle Tree
+    /// Frontier of [`BlockMerkleTree`]
     pub block_merkle_tree: BlockMerkleTree,
-    /// Fee Merkle Tree
+    /// Frontier of [`FeeMerkleTree`]
     pub fee_merkle_tree: FeeMerkleTree,
+    /// Configuration [`Header`] proposals will be validated against.
     pub chain_config: ResolvableChainConfig,
 }
 
@@ -208,6 +222,39 @@ impl ValidatedState {
             })?)
     }
 
+    pub fn apply_proposal(
+        &mut self,
+        delta: &mut Delta,
+        parent_leaf: &Leaf,
+        l1_deposits: Vec<FeeInfo>,
+    ) {
+        // pushing a block into merkle tree shouldn't fail
+        self.block_merkle_tree
+            .push(parent_leaf.block_header().commit())
+            .unwrap();
+
+        for FeeInfo { account, amount } in l1_deposits.iter() {
+            self.fee_merkle_tree
+                .update_with(account, |balance| {
+                    Some(balance.cloned().unwrap_or_default().add(*amount))
+                })
+                .expect("update_with succeeds");
+            delta.fees_delta.insert(*account);
+        }
+    }
+
+    pub fn charge_fees(
+        &mut self,
+        delta: &mut Delta,
+        fee_info: Vec<FeeInfo>,
+        recipient: FeeAccount,
+    ) -> Result<(), FeeError> {
+        for fee_info in fee_info {
+            self.charge_fee(fee_info, recipient)?;
+            delta.fees_delta.extend([fee_info.account, recipient]);
+        }
+        Ok(())
+    }
     /// Charge a fee to an account, transferring the funds to the fee recipient account.
     pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> Result<(), FeeError> {
         if fee_info.amount == 0.into() {
@@ -252,6 +299,309 @@ impl ValidatedState {
         Ok(())
     }
 }
+/// Block Proposal to be verified and applied.
+#[derive(Debug)]
+pub(crate) struct Proposal<'a> {
+    header: &'a Header,
+    block_size: u32,
+}
+
+impl<'a> Proposal<'a> {
+    pub(crate) fn new(header: &'a Header, block_size: u32) -> Self {
+        Self { header, block_size }
+    }
+    /// The L1 head block number in the proposal must be non-decreasing relative
+    /// to the parent.
+    fn validate_l1_head(&self, parent_l1_head: u64) -> Result<(), ProposalValidationError> {
+        if self.header.l1_head() < parent_l1_head {
+            return Err(ProposalValidationError::DecrementingL1Head);
+        }
+        Ok(())
+    }
+    /// The [`ChainConfig`] of proposal must be equal to the one stored in state.
+    ///
+    /// Equality is checked by comparing commitments.
+    fn validate_chain_config(
+        &self,
+        expected_chain_config: &ChainConfig,
+    ) -> Result<(), ProposalValidationError> {
+        let proposed_chain_config = self.header.chain_config();
+        if proposed_chain_config.commit() != expected_chain_config.commit() {
+            return Err(ProposalValidationError::InvalidChainConfig {
+                expected: Box::new(*expected_chain_config),
+                proposal: Box::new(proposed_chain_config),
+            });
+        }
+        Ok(())
+    }
+
+    /// The timestamp must be non-decreasing relative to parent.
+    fn validate_timestamp_non_dec(
+        &self,
+        parent_timestamp: u64,
+    ) -> Result<(), ProposalValidationError> {
+        if self.header.timestamp() < parent_timestamp {
+            return Err(ProposalValidationError::DecrementingTimestamp {
+                proposal_timestamp: self.header.timestamp(),
+                parent_timestamp,
+            });
+        }
+
+        Ok(())
+    }
+
+    /// The timestamp must not drift too much from local system time.
+    ///
+    /// The tolerance is currently `12` seconds. This value may be moved to
+    /// configuration in the future.
+    fn validate_timestamp_drift(&self, system_time: u64) -> Result<(), ProposalValidationError> {
+        // TODO 12 seconds of tolerance should be enough for reasonably
+        // configured nodes, but we should make this configurable.
+        let diff = self.header.timestamp().abs_diff(system_time);
+        if diff > 12 {
+            return Err(ProposalValidationError::InvalidTimestampDrift {
+                proposal: self.header.timestamp(),
+                system: system_time,
+                diff,
+            });
+        }
+
+        Ok(())
+    }
+
+    /// The proposed ['BlockMerkleTree'] must match the one in ['ValidatedState'].
+    fn validate_block_merkle_tree(
+        &self,
+        block_merkle_tree_root: BlockMerkleCommitment,
+    ) -> Result<(), ProposalValidationError> {
+        if self.header.block_merkle_tree_root() != block_merkle_tree_root {
+            return Err(ProposalValidationError::InvalidBlockRoot {
+                expected_root: block_merkle_tree_root,
+                proposal_root: self.header.block_merkle_tree_root(),
+            });
+        }
+
+        Ok(())
+    }
+}
+/// Type to hold cloned validated state and provide validation methods.
+///
+/// The [Self::validate] method must be called to validate the proposal.
+#[derive(Debug)]
+pub(crate) struct ValidatedTransition<'a> {
+    state: ValidatedState,
+    expected_chain_config: ChainConfig,
+    parent: &'a Header,
+    proposal: Proposal<'a>,
+}
+
+impl<'a> ValidatedTransition<'a> {
+    pub(crate) fn new(state: ValidatedState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
+        let expected_chain_config = state
+            .chain_config
+            .resolve()
+            .expect("Chain Config not found in validated state");
+        Self {
+            state,
+            expected_chain_config,
+            parent,
+            proposal,
+        }
+    }
+
+    /// Top level validation routine. Performs all validation units in
+    /// the given order.
+    /// ```
+    /// self.validate_timestamp()?;
+    /// self.validate_builder_fee()?;
+    /// self.validate_height()?;
+    /// self.validate_chain_config()?;
+    /// self.validate_block_size()?;
+    /// self.validate_fee()?;
+    /// self.validate_fee_merkle_tree()?;
+    /// self.validate_block_merkle_tree()?;
+    /// self.validate_l1_finalized()?;
+    /// self.validate_l1_head()?;
+    /// self.validate_namespace_table()?;
+    /// ```
+    pub(crate) fn validate(self) -> Result<Self, ProposalValidationError> {
+        self.validate_timestamp()?;
+        self.validate_builder_fee()?;
+        self.validate_height()?;
+        self.validate_chain_config()?;
+        self.validate_block_size()?;
+        self.validate_fee()?;
+        self.validate_fee_merkle_tree()?;
+        self.validate_block_merkle_tree()?;
+        self.validate_l1_finalized()?;
+        self.validate_l1_head()?;
+        self.validate_namespace_table()?;
+
+        Ok(self)
+    }
+
+    /// The proposal [Header::l1_finalized] must be `Some` and non-decreasing relative to parent.
+    fn validate_l1_finalized(&self) -> Result<(), ProposalValidationError> {
+        let proposed_finalized = self.proposal.header.l1_finalized();
+        let parent_finalized = self.parent.l1_finalized();
+
+        if proposed_finalized < parent_finalized {
+            // We are keeping the `Option` in the error b/c its the
+            // cleanest way to represent all the different error
+            // cases. The hash seems less useful and explodes the size
+            // of the error, so we strip it out.
+            return Err(ProposalValidationError::L1FinalizedDecrementing {
+                parent: parent_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+                proposed: proposed_finalized.map(|block| (block.number, block.timestamp.as_u64())),
+            });
+        }
+        Ok(())
+    }
+    /// Wait for our view of the L1 chain to catch up to the proposal.
+    ///
+    /// The finalized [L1BlockInfo](super::L1BlockInfo) in the proposal must match the one fetched
+    /// from L1.
+    async fn wait_for_l1(self, l1_client: &L1Client) -> Result<Self, ProposalValidationError> {
+        self.wait_for_l1_head(l1_client).await;
+        self.wait_for_finalized_block(l1_client).await?;
+        Ok(self)
+    }
+
+    /// Wait for our view of the latest L1 block number to catch up to the
+    /// proposal.
+    async fn wait_for_l1_head(&self, l1_client: &L1Client) {
+        let _ = l1_client
+            .wait_for_block(self.proposal.header.l1_head())
+            .await;
+    }
+    /// Wait for our view of the finalized L1 block number to catch up to the
+    /// proposal.
+    async fn wait_for_finalized_block(
+        &self,
+        l1_client: &L1Client,
+    ) -> Result<(), ProposalValidationError> {
+        let proposed_finalized = self.proposal.header.l1_finalized();
+
+        if let Some(proposed_finalized) = proposed_finalized {
+            let finalized = l1_client
+                .wait_for_finalized_block(proposed_finalized.number())
+                .await;
+
+            if finalized != proposed_finalized {
+                return Err(ProposalValidationError::InvalidL1Finalized);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Ensure that L1 Head on proposal is not decreasing.
+    fn validate_l1_head(&self) -> Result<(), ProposalValidationError> {
+        self.proposal.validate_l1_head(self.parent.l1_head())?;
+        Ok(())
+    }
+    /// Validate basic numerical soundness and builder accounts by
+    /// verifying signatures. Signatures are identified by index of fee `Vec`.
+    fn validate_builder_fee(&self) -> Result<(), ProposalValidationError> {
+        // TODO move logic from stand alone fn to here.
+        if let Err(err) = validate_builder_fee(self.proposal.header) {
+            return Err(ProposalValidationError::BuilderValidationError(err));
+        }
+        Ok(())
+    }
+    /// Validates proposals [`ChainConfig`] against expectation by comparing commitments.
+    fn validate_chain_config(&self) -> Result<(), ProposalValidationError> {
+        self.proposal
+            .validate_chain_config(&self.expected_chain_config)?;
+        Ok(())
+    }
+    /// Validate that proposal block size does not exceed configured
+    /// `ChainConfig.max_block_size`.
+    fn validate_block_size(&self) -> Result<(), ProposalValidationError> {
+        let block_size = self.proposal.block_size as u64;
+        if block_size > *self.expected_chain_config.max_block_size {
+            return Err(ProposalValidationError::MaxBlockSizeExceeded {
+                max_block_size: self.expected_chain_config.max_block_size,
+                block_size: block_size.into(),
+            });
+        }
+        Ok(())
+    }
+    /// Validate that [`FeeAmount`] (or sum of fees for Marketplace Version) is
+    /// sufficient for block size.
+    fn validate_fee(&self) -> Result<(), ProposalValidationError> {
+        // TODO this should be updated to `base_fee * bundle_size` when we have
+        // VID per bundle or namespace.
+        let Some(amount) = self.proposal.header.fee_info().amount() else {
+            return Err(ProposalValidationError::SomeFeeAmountOutOfRange);
+        };
+
+        if amount < self.expected_chain_config.base_fee * self.proposal.block_size {
+            return Err(ProposalValidationError::InsufficientFee {
+                max_block_size: self.expected_chain_config.max_block_size,
+                base_fee: self.expected_chain_config.base_fee,
+                proposed_fee: amount,
+            });
+        }
+        Ok(())
+    }
+    /// Validate that proposal height is `parent_height + 1`.
+    fn validate_height(&self) -> Result<(), ProposalValidationError> {
+        let parent_header = self.parent;
+        if self.proposal.header.height() != parent_header.height() + 1 {
+            return Err(ProposalValidationError::InvalidHeight {
+                parent_height: parent_header.height(),
+                proposal_height: self.proposal.header.height(),
+            });
+        }
+        Ok(())
+    }
+    /// Validate timestamp is not decreasing relative to parent and is
+    /// within a given tolerance of system time. Tolerance is
+    /// currently 12 seconds. This value may be moved to configuration
+    /// in the future. Do this check first so we don't add unnecessary drift.
+    fn validate_timestamp(&self) -> Result<(), ProposalValidationError> {
+        self.proposal
+            .validate_timestamp_non_dec(self.parent.timestamp())?;
+
+        // Validate timestamp hasn't drifted too much from system time.
+        let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        self.proposal.validate_timestamp_drift(system_time)?;
+
+        Ok(())
+    }
+    /// Validate [`BlockMerkleTree`] by comparing proposed commitment
+    /// that stored in [`ValidatedState`].
+    fn validate_block_merkle_tree(&self) -> Result<(), ProposalValidationError> {
+        let block_merkle_tree_root = self.state.block_merkle_tree.commitment();
+        self.proposal
+            .validate_block_merkle_tree(block_merkle_tree_root)?;
+
+        Ok(())
+    }
+    /// Validate [`FeeMerkleTree`] by comparing proposed commitment
+    /// against that stored in [`ValidatedState`].
+    fn validate_fee_merkle_tree(&self) -> Result<(), ProposalValidationError> {
+        let fee_merkle_tree_root = self.state.fee_merkle_tree.commitment();
+        if self.proposal.header.fee_merkle_tree_root() != fee_merkle_tree_root {
+            return Err(ProposalValidationError::InvalidFeeRoot {
+                expected_root: fee_merkle_tree_root,
+                proposal_root: self.proposal.header.fee_merkle_tree_root(),
+            });
+        }
+
+        Ok(())
+    }
+    /// Proxy to [`super::NsTable::validate()`].
+    fn validate_namespace_table(&self) -> Result<(), ProposalValidationError> {
+        self.proposal
+            .header
+            .ns_table()
+            // Should be safe since `u32` will always fit in a `usize`.
+            .validate(&PayloadByteLen(self.proposal.block_size as usize))
+            .map_err(ProposalValidationError::from)
+    }
+}
 
 #[cfg(any(test, feature = "testing"))]
 impl ValidatedState {
@@ -268,114 +618,21 @@ impl ValidatedState {
 
 impl From<NsTableValidationError> for ProposalValidationError {
     fn from(err: NsTableValidationError) -> Self {
-        Self::InvalidNsTable { err }
+        Self::InvalidNsTable(err)
     }
 }
 
-pub fn validate_proposal(
-    state: &ValidatedState,
-    expected_chain_config: ChainConfig,
-    parent_leaf: &Leaf,
-    proposal: &Header,
-    vid_common: &VidCommon,
-) -> Result<(), ProposalValidationError> {
-    let parent_header = parent_leaf.block_header();
-
-    // validate `ChainConfig`
-    if proposal.chain_config().commit() != expected_chain_config.commit() {
-        return Err(ProposalValidationError::InvalidChainConfig {
-            expected: format!("{:?}", expected_chain_config),
-            proposal: format!("{:?}", proposal.chain_config()),
-        });
+impl From<ProposalValidationError> for BlockError {
+    fn from(err: ProposalValidationError) -> Self {
+        tracing::error!("Invalid Block Header: {err:#}");
+        BlockError::InvalidBlockHeader(err.to_string())
     }
-
-    // validate block size and fee
-    let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
-    if block_size > *expected_chain_config.max_block_size {
-        return Err(ProposalValidationError::MaxBlockSizeExceeded {
-            max_block_size: expected_chain_config.max_block_size,
-            block_size: block_size.into(),
-        });
-    }
-
-    // Validate that sum of fees is at least `base_fee * blocksize`.
-    // TODO this should be updated to `base_fee * bundle_size` when we have
-    // VID per bundle or namespace.
-    let Some(amount) = proposal.fee_info().amount() else {
-        return Err(ProposalValidationError::SomeFeeAmountOutOfRange);
-    };
-
-    if amount < expected_chain_config.base_fee * block_size {
-        return Err(ProposalValidationError::InsufficientFee {
-            max_block_size: expected_chain_config.max_block_size,
-            base_fee: expected_chain_config.base_fee,
-            proposed_fee: amount,
-        });
-    }
-
-    // validate height
-    if proposal.height() != parent_header.height() + 1 {
-        return Err(ProposalValidationError::InvalidHeight {
-            parent_height: parent_header.height(),
-            proposal_height: proposal.height(),
-        });
-    }
-
-    // Validate timestamp increasing.
-    // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
-    if proposal.timestamp() < parent_header.timestamp() {
-        return Err(ProposalValidationError::InvalidTimestampNonIncrementing {
-            proposal_timestamp: proposal.timestamp(),
-            parent_timestamp: parent_header.timestamp(),
-        });
-    }
-
-    let ValidatedState {
-        block_merkle_tree,
-        fee_merkle_tree,
-        ..
-    } = state;
-
-    let block_merkle_tree_root = block_merkle_tree.commitment();
-    if proposal.block_merkle_tree_root() != block_merkle_tree_root {
-        return Err(ProposalValidationError::InvalidBlockRoot {
-            expected_root: block_merkle_tree_root,
-            proposal_root: proposal.block_merkle_tree_root(),
-        });
-    }
-
-    let fee_merkle_tree_root = fee_merkle_tree.commitment();
-    if proposal.fee_merkle_tree_root() != fee_merkle_tree_root {
-        return Err(ProposalValidationError::InvalidFeeRoot {
-            expected_root: fee_merkle_tree_root,
-            proposal_root: proposal.fee_merkle_tree_root(),
-        });
-    }
-
-    proposal
-        .ns_table()
-        .validate(&PayloadByteLen::from_vid_common(vid_common))?;
-
-    Ok(())
 }
 
 impl From<MerkleTreeError> for FeeError {
     fn from(item: MerkleTreeError) -> Self {
         Self::MerkleTreeError(item)
     }
-}
-
-fn charge_fee(
-    state: &mut ValidatedState,
-    delta: &mut Delta,
-    fee_info: Vec<FeeInfo>,
-    recipient: FeeAccount,
-) -> Result<(), FeeError> {
-    for fee_info in fee_info {
-        state.charge_fee(fee_info, recipient)?;
-        delta.fees_delta.extend([fee_info.account, recipient]);
-    }
-    Ok(())
 }
 
 /// Validate builder accounts by verifying signatures. All fees are
@@ -427,21 +684,28 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
 }
 
 impl ValidatedState {
+    /// Updates state with [`Header`] proposal.
+    ///   * Clones and updates [`ValidatedState`] (avoiding mutation).
+    ///   * Resolves [`ChainConfig`].
+    ///   * Performs catchup.
+    ///   * Charges fees.
     pub async fn apply_header(
         &self,
         instance: &NodeState,
+        peers: &impl StateCatchup,
         parent_leaf: &Leaf,
         proposed_header: &Header,
         version: Version,
     ) -> anyhow::Result<(Self, Delta)> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
-
         let mut validated_state = self.clone();
         validated_state.apply_upgrade(instance, version);
 
+        // TODO double check there is not some possibility we are
+        // validating proposal values against ChainConfig of the proposal.
         let chain_config = validated_state
-            .get_chain_config(instance, &proposed_header.chain_config())
+            .get_chain_config(instance, peers, &proposed_header.chain_config())
             .await?;
 
         if Some(chain_config) != validated_state.chain_config.resolve() {
@@ -476,10 +740,9 @@ impl ValidatedState {
                 ?parent_view,
                 "fetching block frontier from peers"
             );
-            instance
-                .peers
-                .as_ref()
+            peers
                 .remember_blocks_merkle_tree(
+                    instance,
                     parent_height,
                     parent_view,
                     &mut validated_state.block_merkle_tree,
@@ -496,10 +759,9 @@ impl ValidatedState {
                 "fetching missing accounts from peers"
             );
 
-            let missing_account_proofs = instance
-                .peers
-                .as_ref()
+            let missing_account_proofs = peers
                 .fetch_accounts(
+                    instance,
                     parent_height,
                     parent_view,
                     validated_state.fee_merkle_tree.commitment(),
@@ -508,21 +770,17 @@ impl ValidatedState {
                 .await?;
 
             // Remember the fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
+            for proof in missing_account_proofs.iter() {
+                proof
                     .remember(&mut validated_state.fee_merkle_tree)
                     .expect("proof previously verified");
             }
         }
 
         let mut delta = Delta::default();
+        validated_state.apply_proposal(&mut delta, parent_leaf, l1_deposits);
 
-        let mut validated_state =
-            apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
-
-        charge_fee(
-            &mut validated_state,
+        validated_state.charge_fees(
             &mut delta,
             proposed_header.fee_info(),
             chain_config.fee_recipient,
@@ -560,6 +818,7 @@ impl ValidatedState {
     pub(crate) async fn get_chain_config(
         &self,
         instance: &NodeState,
+        peers: &impl StateCatchup,
         header_cf: &ResolvableChainConfig,
     ) -> anyhow::Result<ChainConfig> {
         let state_cf = self.chain_config;
@@ -571,13 +830,7 @@ impl ValidatedState {
         let cf = match (state_cf.resolve(), header_cf.resolve()) {
             (Some(cf), _) => cf,
             (_, Some(cf)) if cf.commit() == state_cf.commit() => cf,
-            (_, Some(_)) | (None, None) => {
-                instance
-                    .peers
-                    .as_ref()
-                    .fetch_chain_config(state_cf.commit())
-                    .await
-            }
+            (_, Some(_)) | (None, None) => peers.fetch_chain_config(state_cf.commit()).await?,
         };
 
         Ok(cf)
@@ -616,33 +869,6 @@ pub async fn get_l1_deposits(
     }
 }
 
-#[must_use]
-fn apply_proposal(
-    validated_state: &ValidatedState,
-    delta: &mut Delta,
-    parent_leaf: &Leaf,
-    l1_deposits: Vec<FeeInfo>,
-) -> ValidatedState {
-    let mut validated_state = validated_state.clone();
-    // pushing a block into merkle tree shouldn't fail
-    validated_state
-        .block_merkle_tree
-        .push(parent_leaf.block_header().commit())
-        .unwrap();
-
-    for FeeInfo { account, amount } in l1_deposits.iter() {
-        validated_state
-            .fee_merkle_tree
-            .update_with(account, |balance| {
-                Some(balance.cloned().unwrap_or_default().add(*amount))
-            })
-            .expect("update_with succeeds");
-        delta.fees_delta.insert(*account);
-    }
-
-    validated_state
-}
-
 impl HotShotState<SeqTypes> for ValidatedState {
     type Error = BlockError;
     type Instance = NodeState;
@@ -669,85 +895,33 @@ impl HotShotState<SeqTypes> for ValidatedState {
         vid_common: VidCommon,
         version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
-        // Validate timestamp hasn't drifted too much from system time.
-        // Do this check first so we don't add unnecessary drift.
-        let system_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        // TODO 12 seconds of tolerance should be enough for reasonably
-        // configured nodes, but we should make this configurable.
-        let diff = proposed_header.timestamp().abs_diff(system_time);
-        if diff > 12 {
-            tracing::warn!(
-                "Timestamp drift too high proposed={} system={} diff={}",
-                proposed_header.timestamp(),
-                system_time,
-                diff
-            );
-            return Err(BlockError::InvalidBlockHeader);
-        }
-
-        //validate builder fee
-        if let Err(err) = validate_builder_fee(proposed_header) {
-            tracing::error!("invalid builder fee: {err:#}");
-            return Err(BlockError::InvalidBlockHeader);
-        }
-
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
-            .apply_header(instance, parent_leaf, proposed_header, version)
+            // TODO We can add this logic to `ValidatedTransition` or do something similar to that here.
+            .apply_header(
+                instance,
+                &instance.peers,
+                parent_leaf,
+                proposed_header,
+                version,
+            )
             .await
             .unwrap();
 
-        let chain_config = validated_state
-            .chain_config
-            .resolve()
-            .expect("Chain Config not found in validated state");
-
-        // Validate l1_finalized.
-        // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
-        let proposed_finalized = proposed_header.l1_finalized();
-        let parent_finalized = parent_leaf.block_header().l1_finalized();
-        if proposed_finalized < parent_finalized {
-            tracing::error!(
-                "L1 finalized not incrementing. parent: {:?}, proposal: {:?}",
-                parent_finalized,
-                proposed_finalized,
-            );
-        }
-        if let Some(proposed_finalized) = proposed_finalized {
-            let finalized = instance
-                .l1_client
-                .wait_for_finalized_block(proposed_finalized.number())
-                .await;
-
-            if finalized != proposed_finalized {
-                tracing::error!("Invalid proposal: l1_finalized mismatch");
-                return Err(BlockError::InvalidBlockHeader);
-            }
-        }
-        // Validate `l1_head`.
-        // TODO add test https://github.com/EspressoSystems/espresso-sequencer/issues/2100
-        if proposed_header.l1_head() < parent_leaf.block_header().l1_head() {
-            tracing::error!("Invalid proposal: l1_head decreasing");
-            return Err(BlockError::InvalidBlockHeader);
-        }
-
-        let _ = instance
-            .l1_client
-            .wait_for_block(proposed_header.l1_head())
-            .await;
-
-        // validate the proposal
-        if let Err(err) = validate_proposal(
-            &validated_state,
-            chain_config,
-            parent_leaf,
-            proposed_header,
-            &vid_common,
-        ) {
-            tracing::error!("Invalid proposal: {err:#}");
-            return Err(BlockError::InvalidBlockHeader);
-        }
+        // Validate the proposal.
+        let validated_state = ValidatedTransition::new(
+            validated_state,
+            parent_leaf.block_header(),
+            Proposal::new(
+                proposed_header,
+                VidSchemeType::get_payload_byte_len(&vid_common),
+            ),
+        )
+        .validate()?
+        .wait_for_l1(&instance.l1_client)
+        .await?
+        .state;
 
         // log successful progress about once in 10 - 20 seconds,
         // TODO: we may want to make this configurable
@@ -872,10 +1046,16 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 
 #[cfg(test)]
 mod test {
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
-    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
-    use jf_vid::VidScheme;
+    use hotshot::traits::BlockPayload;
+    use hotshot_query_service::Resolvable;
+    use hotshot_types::traits::{
+        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+        signature_key::BuilderSignatureKey,
+        EncodeBytes,
+    };
     use sequencer_utils::ser::FromStringOrInteger;
     use tracing::debug;
 
@@ -884,8 +1064,109 @@ mod test {
         eth_signature_key::{BuilderSignature, EthKeyPair},
         v0_1, v0_2,
         v0_3::{self, BidTx},
-        BlockSize, FeeAccountProof, FeeMerkleProof,
+        BlockSize, FeeAccountProof, FeeMerkleProof, Payload, Transaction,
     };
+
+    impl Transaction {
+        async fn into_mock_header(self) -> (Header, u32) {
+            let instance = NodeState::mock_v2();
+            let (payload, metadata) =
+                Payload::from_transactions([self], &instance.genesis_state, &instance)
+                    .await
+                    .unwrap();
+
+            let builder_commitment = payload.builder_commitment(&metadata);
+            let payload_bytes = payload.encode();
+
+            let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
+
+            let header =
+                Header::genesis(&instance, payload_commitment, builder_commitment, metadata);
+
+            let header = header.sign();
+
+            (header, payload.byte_len().0 as u32)
+        }
+    }
+    impl Header {
+        /// Build a new header from parent.
+        fn next(self) -> Self {
+            match self {
+                Header::V1(_) => panic!("You called `Header.next()` on unimplemented version (v1)"),
+                Header::V2(parent) => Header::V2(v0_2::Header {
+                    height: parent.height + 1,
+                    timestamp: OffsetDateTime::now_utc().unix_timestamp() as u64,
+                    ..parent.clone()
+                }),
+                Header::V3(_) => panic!("You called `Header.next()` on unimplemented version (v3)"),
+            }
+        }
+        /// Replaces builder signature w/ invalid one.
+        fn sign(&self) -> Self {
+            let key_pair = EthKeyPair::random();
+            let fee_info = FeeInfo::new(key_pair.fee_account(), 1);
+
+            let sig = FeeAccount::sign_fee(
+                &key_pair,
+                fee_info.amount().as_u64().unwrap(),
+                self.metadata(),
+                &self.payload_commitment(),
+            )
+            .unwrap();
+
+            match self {
+                Header::V1(_) => panic!("You called `Header.sign()` on unimplemented version (v1)"),
+                Header::V2(header) => Header::V2(v0_2::Header {
+                    fee_info,
+                    builder_signature: Some(sig),
+                    ..header.clone()
+                }),
+                Header::V3(_) => panic!("You called `Header.sign()` on unimplemented version (v3)"),
+            }
+        }
+
+        /// Replaces builder signature w/ invalid one.
+        fn invalid_builder_signature(&self) -> Self {
+            let key_pair = EthKeyPair::random();
+            let key_pair2 = EthKeyPair::random();
+            let fee_info = FeeInfo::new(key_pair.fee_account(), 1);
+
+            let sig = FeeAccount::sign_fee(
+                &key_pair2,
+                fee_info.amount().as_u64().unwrap(),
+                self.metadata(),
+                &self.payload_commitment(),
+            )
+            .unwrap();
+
+            match self {
+                Header::V1(_) => panic!(
+                    "You called `Header.invalid_builder_signature()` on unimplemented version (v1)"
+                ),
+                Header::V2(parent) => Header::V2(v0_2::Header {
+                    fee_info,
+                    builder_signature: Some(sig),
+                    ..parent.clone()
+                }),
+                Header::V3(_) => panic!(
+                    "You called `Header.invalid_builder_signature()` on unimplemented version (v3)"
+                ),
+            }
+        }
+    }
+
+    impl<'a> ValidatedTransition<'a> {
+        fn mock(instance: NodeState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
+            let expected_chain_config = instance.chain_config;
+
+            Self {
+                state: instance.genesis_state,
+                expected_chain_config,
+                parent,
+                proposal,
+            }
+        }
+    }
 
     pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
         // if no key is supplied, use `test_key_pair`. Since default `BidTxBody` is
@@ -955,40 +1236,134 @@ mod test {
     }
 
     #[async_std::test]
+    async fn test_validation_l1_head() {
+        setup_logging();
+        setup_backtrace();
+
+        // Setup.
+        let tx = Transaction::of_size(10);
+        let (header, block_size) = tx.into_mock_header().await;
+
+        // Success Case
+        let proposal = Proposal::new(&header, block_size);
+        // Note we are using the same header for parent and proposal,
+        // this may be OK depending on what we are testing.
+        ValidatedTransition::mock(NodeState::mock_v2(), &header, proposal)
+            .validate_l1_head()
+            .unwrap();
+
+        // Error Case
+        let proposal = Proposal::new(&header, block_size);
+        let err = proposal.validate_l1_head(u64::MAX).unwrap_err();
+        assert_eq!(ProposalValidationError::DecrementingL1Head, err);
+    }
+
+    #[async_std::test]
+    async fn test_validation_builder_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        // Setup.
+        let instance = NodeState::mock();
+        let tx = Transaction::of_size(20);
+        let (header, block_size) = tx.into_mock_header().await;
+
+        // Success Case
+        let proposal = Proposal::new(&header, block_size);
+        ValidatedTransition::mock(instance.clone(), &header, proposal)
+            .validate_builder_fee()
+            .unwrap();
+
+        // Error Case
+        let header = header.invalid_builder_signature();
+        let proposal = Proposal::new(&header, block_size);
+        let err = ValidatedTransition::mock(instance, &header, proposal)
+            .validate_builder_fee()
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::BuilderValidationError(
+                BuilderValidationError::InvalidBuilderSignature
+            ),
+            err
+        );
+    }
+
+    #[async_std::test]
+    async fn test_validation_chain_config() {
+        setup_logging();
+        setup_backtrace();
+
+        // Setup.
+        let instance = NodeState::mock();
+        let tx = Transaction::of_size(20);
+        let (header, block_size) = tx.into_mock_header().await;
+
+        // Success Case
+        let proposal = Proposal::new(&header, block_size);
+        ValidatedTransition::mock(instance.clone(), &header, proposal)
+            .validate_chain_config()
+            .unwrap();
+
+        // Error Case
+        let proposal = Proposal::new(&header, block_size);
+        let expected_chain_config = ChainConfig {
+            max_block_size: BlockSize(3333),
+            ..instance.chain_config
+        };
+        let err = proposal
+            .validate_chain_config(&expected_chain_config)
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+
+        assert_eq!(
+            ProposalValidationError::InvalidChainConfig {
+                expected: Box::new(expected_chain_config),
+                proposal: Box::new(header.chain_config())
+            },
+            err
+        );
+    }
+
+    #[async_std::test]
     async fn test_validation_max_block_size() {
         setup_logging();
         setup_backtrace();
 
         const MAX_BLOCK_SIZE: usize = 10;
-        let payload = [0; 2 * MAX_BLOCK_SIZE];
-        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
 
+        // Setup.
         let state = ValidatedState::default();
-        let instance = NodeState::mock().with_chain_config(ChainConfig {
-            max_block_size: (MAX_BLOCK_SIZE as u64).into(),
-            base_fee: 0.into(),
+        let expected_chain_config = ChainConfig {
+            max_block_size: BlockSize::from_integer(MAX_BLOCK_SIZE as u64).unwrap(),
             ..state.chain_config.resolve().unwrap()
-        });
-        // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
-        // b/c version in `Leaf::genesis` is set to 1
-        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
-        let header = parent.block_header();
+        };
+        let instance = NodeState::mock().with_chain_config(expected_chain_config);
+        let tx = Transaction::of_size(20);
+        let (header, block_size) = tx.into_mock_header().await;
 
-        // Validation fails because the proposed block exceeds the maximum block size.
-        let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
+        // Error Case
+        let proposal = Proposal::new(&header, block_size);
+        let err = ValidatedTransition::mock(instance.clone(), &header, proposal)
+            .validate_block_size()
             .unwrap_err();
 
         tracing::info!(%err, "task failed successfully");
         assert_eq!(
             ProposalValidationError::MaxBlockSizeExceeded {
                 max_block_size: instance.chain_config.max_block_size,
-                block_size: BlockSize::from_integer(
-                    VidSchemeType::get_payload_byte_len(&vid_common).into()
-                )
-                .unwrap()
+                block_size: BlockSize::from_integer(block_size as u64).unwrap()
             },
             err
         );
+
+        // Success Case
+        let proposal = Proposal::new(&header, 1);
+        ValidatedTransition::mock(instance, &header, proposal)
+            .validate_block_size()
+            .unwrap()
     }
 
     #[async_std::test]
@@ -996,25 +1371,21 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let max_block_size = 10;
-        let payload = [0; 1];
-        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
-
+        // Setup
+        let tx = Transaction::of_size(20);
+        let (header, block_size) = tx.into_mock_header().await;
         let state = ValidatedState::default();
-        let instance = NodeState::mock().with_chain_config(ChainConfig {
-            base_fee: 1000.into(), // High base fee
-            max_block_size: max_block_size.into(),
+        let instance = NodeState::mock_v2().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High expected base fee
             ..state.chain_config.resolve().unwrap()
         });
-        // TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
-        // b/c version in `Leaf::genesis` is set to 1
-        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
-        let header = parent.block_header();
 
-        // Validation fails because the genesis fee (0) is too low.
-        let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
+        let proposal = Proposal::new(&header, block_size);
+        let err = ValidatedTransition::mock(instance.clone(), &header, proposal)
+            .validate_fee()
             .unwrap_err();
 
+        // Validation fails because the genesis fee (0) is too low.
         tracing::info!(%err, "task failed successfully");
         assert_eq!(
             ProposalValidationError::InsufficientFee {
@@ -1022,6 +1393,235 @@ mod test {
                 base_fee: instance.chain_config.base_fee,
                 proposed_fee: header.fee_info().amount().unwrap()
             },
+            err
+        );
+    }
+
+    #[async_std::test]
+    async fn test_validation_height() {
+        setup_logging();
+        setup_backtrace();
+
+        // Setup
+        let instance = NodeState::mock_v2();
+        let tx = Transaction::of_size(10);
+        let (parent, block_size) = tx.into_mock_header().await;
+
+        let proposal = Proposal::new(&parent, block_size);
+        let err = ValidatedTransition::mock(instance.clone(), &parent, proposal)
+            .validate_height()
+            .unwrap_err();
+
+        // Validation fails because the proposal is using same default.
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidHeight {
+                parent_height: parent.height(),
+                proposal_height: parent.height()
+            },
+            err
+        );
+
+        // Success case. Increment height on proposal.
+        let mut header = parent.clone();
+        *header.height_mut() += 1;
+        let proposal = Proposal::new(&header, block_size);
+
+        ValidatedTransition::mock(instance, &parent, proposal)
+            .validate_height()
+            .unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validation_timestamp_non_dec() {
+        setup_logging();
+        setup_backtrace();
+
+        let tx = Transaction::of_size(10);
+        let (parent, block_size) = tx.into_mock_header().await;
+
+        // Error case
+        let proposal = Proposal::new(&parent, block_size);
+        let proposal_timestamp = proposal.header.timestamp();
+        let err = proposal.validate_timestamp_non_dec(u64::MAX).unwrap_err();
+
+        // Validation fails because the proposal is using same default.
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::DecrementingTimestamp {
+                proposal_timestamp,
+                parent_timestamp: u64::MAX,
+            },
+            err
+        );
+
+        // Success case (genesis timestamp is `0`).
+        let proposal = Proposal::new(&parent, block_size);
+        proposal.validate_timestamp_non_dec(0).unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validation_timestamp_drift() {
+        setup_logging();
+        setup_backtrace();
+
+        // Setup
+        let instance = NodeState::mock_v2();
+        let (parent, block_size) = Transaction::of_size(10).into_mock_header().await;
+
+        let header = parent.clone();
+        // Error case.
+        let proposal = Proposal::new(&header, block_size);
+        let proposal_timestamp = header.timestamp();
+
+        let mock_time = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        // TODO
+        let err = ValidatedTransition::mock(instance.clone(), &parent, proposal)
+            .validate_timestamp()
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidTimestampDrift {
+                proposal: proposal_timestamp,
+                system: mock_time,
+                diff: mock_time
+            },
+            err
+        );
+
+        let mock_time: u64 = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        let mut header = parent.clone();
+        *header.timestamp_mut() = mock_time - 13;
+        let proposal = Proposal::new(&header, block_size);
+
+        let err = proposal.validate_timestamp_drift(mock_time).unwrap_err();
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidTimestampDrift {
+                proposal: mock_time - 13,
+                system: mock_time,
+                diff: 13
+            },
+            err
+        );
+
+        // Success cases.
+        let mut header = parent.clone();
+        *header.timestamp_mut() = mock_time;
+        let proposal = Proposal::new(&header, block_size);
+        proposal.validate_timestamp_drift(mock_time).unwrap();
+
+        *header.timestamp_mut() = mock_time - 11;
+        let proposal = Proposal::new(&header, block_size);
+        proposal.validate_timestamp_drift(mock_time).unwrap();
+
+        *header.timestamp_mut() = mock_time - 12;
+        let proposal = Proposal::new(&header, block_size);
+        proposal.validate_timestamp_drift(mock_time).unwrap();
+    }
+
+    #[async_std::test]
+    async fn test_validation_fee_root() {
+        setup_logging();
+        setup_backtrace();
+
+        // Setup
+        let instance = NodeState::mock_v2();
+        let (header, block_size) = Transaction::of_size(10).into_mock_header().await;
+
+        // Success case.
+        let proposal = Proposal::new(&header, block_size);
+        ValidatedTransition::mock(instance.clone(), &header, proposal)
+            .validate_fee_merkle_tree()
+            .unwrap();
+
+        // Error case.
+        let proposal = Proposal::new(&header, block_size);
+
+        let mut fee_merkle_tree = instance.genesis_state.fee_merkle_tree;
+        fee_merkle_tree
+            .update_with(FeeAccount::default(), |_| Some(100.into()))
+            .unwrap();
+
+        let err = proposal
+            .validate_block_merkle_tree(fee_merkle_tree.commitment())
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidBlockRoot {
+                expected_root: fee_merkle_tree.commitment(),
+                proposal_root: header.block_merkle_tree_root(),
+            },
+            err
+        );
+    }
+
+    #[async_std::test]
+    async fn test_validation_block_root() {
+        setup_logging();
+        setup_backtrace();
+
+        // Setup.
+        let instance = NodeState::mock_v2();
+        let (header, block_size) = Transaction::of_size(10).into_mock_header().await;
+
+        // Success case.
+        let proposal = Proposal::new(&header, block_size);
+        ValidatedTransition::mock(instance.clone(), &header, proposal)
+            .validate_block_merkle_tree()
+            .unwrap();
+
+        // Error case.
+        let proposal = Proposal::new(&header, block_size);
+        let mut block_merkle_tree = instance.genesis_state.block_merkle_tree;
+        block_merkle_tree.push(header.commitment()).unwrap();
+        block_merkle_tree
+            .push(header.clone().next().commitment())
+            .unwrap();
+
+        let err = proposal
+            .validate_block_merkle_tree(block_merkle_tree.commitment())
+            .unwrap_err();
+
+        tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InvalidBlockRoot {
+                expected_root: block_merkle_tree.commitment(),
+                proposal_root: proposal.header.block_merkle_tree_root(),
+            },
+            err
+        );
+    }
+
+    #[async_std::test]
+    async fn test_validation_ns_table() {
+        use NsTableValidationError::InvalidFinalOffset;
+
+        setup_logging();
+        setup_backtrace();
+
+        // Setup.
+        let tx = Transaction::of_size(10);
+        let (header, block_size) = tx.into_mock_header().await;
+
+        // Success case.
+        let proposal = Proposal::new(&header, block_size);
+        ValidatedTransition::mock(NodeState::mock_v2(), &header, proposal)
+            .validate_namespace_table()
+            .unwrap();
+
+        // Error case
+        let proposal = Proposal::new(&header, 40);
+        let err = ValidatedTransition::mock(NodeState::mock_v2(), &header, proposal)
+            .validate_namespace_table()
+            .unwrap_err();
+        tracing::info!(%err, "task failed successfully");
+        // TODO NsTable has other error variants, but these should be
+        // tested in unit tests of `NsTable.validate()`.
+        assert_eq!(
+            ProposalValidationError::InvalidNsTable(InvalidFinalOffset),
             err
         );
     }
