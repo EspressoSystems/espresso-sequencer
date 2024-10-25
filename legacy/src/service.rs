@@ -9,7 +9,7 @@ use hotshot_types::{
     event::EventType,
     message::Proposal,
     traits::{
-        block_contents::{BlockPayload, BuilderTransaction},
+        block_contents::{BlockPayload, Transaction},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
     },
@@ -1423,7 +1423,7 @@ impl<Types: NodeType> HandleReceivedTxns<Types> {
     }
 }
 
-impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> {
+impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> where Types::Transaction: Transaction {
     type Item =
         Result<Commitment<<Types as NodeType>::Transaction>, HandleReceivedTxnsError<Types>>;
 
@@ -1446,19 +1446,7 @@ impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> {
         // encoded transaction length. Luckily, this being roughly proportional
         // to encoded length is enough, because we only use this value to estimate
         // our limitations on computing the VID in time.
-        // In sequencer we account for block byte length limit with:
-        // let len = tx.payload().len() + NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len() + NsPayloadBuilder::tx_table_entry_byte_len();
-        // where
-        // pub const fn entry_byte_len() -> usize {NS_ID_BYTE_LEN (4) + NS_OFFSET_BYTE_LEN (4)}
-        // pub const fn tx_table_header_byte_len() -> usize {NUM_TXS_BYTE_LEN (4)}
-        // pub const fn tx_table_entry_byte_len() -> usize {TX_OFFSET_BYTE_LEN (4)}
-        const NS_ID_BYTE_LEN: usize = 4;
-        const NS_OFFSET_BYTE_LEN: usize = 4;
-        const NUM_TXS_BYTE_LEN: usize = 4;
-        const TX_OFFSET_BYTE_LEN: usize = 4;
-        let len = tx.minimum_block_size(
-            ((NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_TXS_BYTE_LEN + TX_OFFSET_BYTE_LEN) as u64,
-        );
+        let len = tx.minimum_block_size();
         let max_txn_len = self.max_txn_len;
         if len > max_txn_len {
             tracing::warn!(%commit, %len, %max_txn_len, "Transaction too big");
@@ -1553,7 +1541,8 @@ mod test {
     };
 
     /// A const number on `max_tx_len` to be used consistently spanning all the tests
-    const TEST_MAX_TX_LEN: u64 = 20;
+    /// It is set to 1 as current estimation on TestTransaction is 1
+    const TEST_MAX_TX_LEN: u64 = 1;
 
     // GlobalState Tests
 
