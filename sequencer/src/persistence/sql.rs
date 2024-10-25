@@ -745,60 +745,45 @@ async fn collect_garbage(
         leaves
     };
 
-    // Collate all the information by view number and construct a chain of leaves and a chain of
-    // corresponding QCs.
-    let (leaf_chain, qcs): (Vec<_>, Vec<_>) = leaves
-        .into_iter()
-        // Go in reverse chronological order, as expected by Decide events.
-        .rev()
-        .map(|(view, (mut leaf, qc))| {
-            // Include the VID share if available.
-            let vid_share = vid_shares.remove(&view);
-            if vid_share.is_none() {
-                tracing::debug!(view, "VID share not available at decide");
-            }
+    // Generate a decide event for each leaf, to be processed by the event consumer. We make a
+    // separate event for each leaf because it is possible we have non-consecutive leaves in our
+    // storage, which would not be valid as a single decide with a single leaf chain.
+    for (view, (mut leaf, qc)) in leaves {
+        // Include the VID share if available.
+        let vid_share = vid_shares.remove(&view);
+        if vid_share.is_none() {
+            tracing::debug!(view, "VID share not available at decide");
+        }
 
-            // Fill in the full block payload using the DA proposals we had persisted.
-            if let Some(proposal) = da_proposals.remove(&view) {
-                let payload =
-                    Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
-                leaf.fill_block_payload_unchecked(payload);
-            } else {
-                tracing::debug!(view, "DA proposal not available at decide");
-            }
+        // Fill in the full block payload using the DA proposals we had persisted.
+        if let Some(proposal) = da_proposals.remove(&view) {
+            let payload = Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
+            leaf.fill_block_payload_unchecked(payload);
+        } else {
+            tracing::debug!(view, "DA proposal not available at decide");
+        }
 
-            (
-                LeafInfo {
-                    leaf,
-                    vid_share,
+        let leaf_info = LeafInfo {
+            leaf,
+            vid_share,
 
-                    // Note: the following fields are not used in Decide event processing, and
-                    // should be removed. For now, we just default them.
-                    state: Default::default(),
-                    delta: Default::default(),
+            // Note: the following fields are not used in Decide event processing, and
+            // should be removed. For now, we just default them.
+            state: Default::default(),
+            delta: Default::default(),
+        };
+        tracing::debug!(?view, ?qc, ?leaf_info, "generating decide event");
+        consumer
+            .handle_event(&Event {
+                view_number: ViewNumber::new(view),
+                event: EventType::Decide {
+                    leaf_chain: Arc::new(vec![leaf_info]),
+                    qc: Arc::new(qc),
+                    block_size: None,
                 },
-                qc,
-            )
-        })
-        .unzip();
-
-    // Generate decide event for the consumer.
-    let Some(final_qc) = qcs.into_iter().next() else {
-        tracing::info!(?view, "no new leaves at decide");
-        return Ok(());
-    };
-    tracing::debug!(?view, ?final_qc, ?leaf_chain, "generating decide event");
-
-    consumer
-        .handle_event(&Event {
-            view_number: view,
-            event: EventType::Decide {
-                leaf_chain: Arc::new(leaf_chain),
-                qc: Arc::new(final_qc),
-                block_size: None,
-            },
-        })
-        .await?;
+            })
+            .await?;
+    }
 
     // Now that we have definitely processed leaves up to `view`, we can update
     // `last_processed_view` so we don't process these leaves again. We may still fail at this
