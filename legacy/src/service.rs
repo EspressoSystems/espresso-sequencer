@@ -1423,7 +1423,10 @@ impl<Types: NodeType> HandleReceivedTxns<Types> {
     }
 }
 
-impl<Types: NodeType> Iterator for HandleReceivedTxns<Types> where Types::Transaction: Transaction {
+impl<Types: NodeType> Iterator for HandleReceivedTxns<Types>
+where
+    Types::Transaction: Transaction,
+{
     type Item =
         Result<Commitment<<Types as NodeType>::Transaction>, HandleReceivedTxnsError<Types>>;
 
