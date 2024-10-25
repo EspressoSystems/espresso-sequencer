@@ -39,6 +39,8 @@ pub struct StaticCommitteeLeaderForTwoViews<T: NodeType> {
 }
 
 impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYPES> {
+    type Error = utils::anytrace::Error;
+
     /// Create a new election
     fn new(
         eligible_leaders: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>,
@@ -137,7 +139,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommitteeLeaderForTwoViews<TYP
     }
 
     /// Index the vector of public keys with the current view number
-    fn leader(
+    fn lookup_leader(
         &self,
         view_number: TYPES::View,
         _epoch: <TYPES as NodeType>::Epoch,

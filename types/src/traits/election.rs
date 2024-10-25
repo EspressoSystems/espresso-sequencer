@@ -16,6 +16,9 @@ use crate::{traits::signature_key::SignatureKey, PeerConfig};
 pub trait Membership<TYPES: NodeType>:
     Clone + Debug + Eq + PartialEq + Send + Sync + Hash + 'static
 {
+    /// The error type returned by methods like `lookup_leader`.
+    type Error: std::fmt::Display;
+
     /// Create a committee
     fn new(
         // Note: eligible_leaders is currently a hack because the DA leader == the quorum leader
@@ -58,9 +61,28 @@ pub trait Membership<TYPES: NodeType>:
 
     /// The leader of the committee for view `view_number` in `epoch`.
     ///
+    /// Note: this function uses a HotShot-internal error type.
+    /// You should implement `lookup_leader`, rather than implementing this function directly.
+    ///
+    /// # Errors
+    /// Returns an error if the leader cannot be calculated.
+    fn leader(&self, view: TYPES::View, epoch: TYPES::Epoch) -> Result<TYPES::SignatureKey> {
+        use utils::anytrace::*;
+
+        self.lookup_leader(view, epoch).wrap().context(info!(
+            "Failed to get leader for view {view} in epoch {epoch}"
+        ))
+    }
+
+    /// The leader of the committee for view `view_number` in `epoch`.
+    ///
     /// # Errors
     /// Returns an error if the leader cannot be calculated
-    fn leader(&self, view: TYPES::View, epoch: TYPES::Epoch) -> Result<TYPES::SignatureKey>;
+    fn lookup_leader(
+        &self,
+        view: TYPES::View,
+        epoch: TYPES::Epoch,
+    ) -> std::result::Result<TYPES::SignatureKey, Self::Error>;
 
     /// Get the network topic for the committee
     fn committee_topic(&self) -> Topic;
