@@ -1,0 +1,117 @@
+@startuml
+actor Client
+participant "Espresso\nConfirmation Layer" as Esp
+participant Rollup as L2
+participant "Light Client\nContract" as LC
+participant "Rollup\nContract" as L2_L1
+
+Client -> L2 : L2 transaction
+note right
+1.
+end note
+
+L2 -> L2: L2 Block
+note right
+2.
+end note
+
+Client <-- L2 : New <i>trusted</i> state
+note left
+Clients that trust a rollup server
+can get the updated state without
+waiting for the state update proof
+or confirmation from Espresso.
+end note
+
+L2 -> Esp : Espresso transaction:\nL2 Block, Rollup ID
+note right
+3.
+end note
+
+Esp -> Esp : Consensus orders\nEspresso transactions\ninto Espresso blocks
+
+par Interested parties process block
+
+Client <-- Esp : Block
+Client -> Client : Execute block
+note left
+Optionally, clients can check for
+confirmations themselves to quickly
+know about new L2 blocks confirmed
+by Espresso.
+end note
+
+else
+
+Esp -> L2 : Block
+note right
+4.
+end note
+L2 -> L2 : Execute block
+
+else
+
+Esp -> LC : Block Commitment\nQC
+note right
+5.
+end note
+LC -> LC: Validate QC\nStore commitmenet
+
+end
+
+par Interested parties process new state
+
+Client <-- Esp : Block Commitment\nQC
+Client -> Client : Validate QC
+Client <-- L2 : New State\nProof
+Client -> Client : Validate proof\nagainst commitment
+note left
+Optionally, clients can check
+proofs themselves to quickly
+get the updated state without
+trusting a full node or
+executing a whole block.
+end note
+
+
+else
+
+L2 -> L2_L1 : New state\nProof
+note right
+6.
+end note
+L2_L1 -> LC : Read sequence
+L2_L1 <-- LC: Commitments
+note right
+7.
+end note
+L2_L1 -> L2_L1 : Validate proof\nagainst sequence
+Client <-- L2_L1 : New <i>certified</i> state
+note left
+With some latency, clients receive
+the latest state with no trust <i>or</i>
+computation, from the L1.
+end note
+
+end
+
+legend top
+    1. User sends an L2 transaction to a chain's server (e.g. an RPC service).
+    2. The rollup builds a block that includes the rollup's transaction.
+    3. The rollup builds an Espress transaction containing the serialized L2 block, and an identifier
+        for that rollup, and sends it to the Espresso confirmation layer.
+    4. Clients, rollup validators and bridges are notified the L2 block is confirmed by Espresso.
+        Interested parties can now derive the new state of the rollup if desired. The zk proof
+        or fraud proofs guarantee that the rollups canonical chain will be derived from the rollup
+        block confirmed by Espresso.
+    5. A commitment to the block containing the transaction is persisted in the L1 Light Client
+        contract (along with a proof that the block has been finalized by Espresso consensus).
+    6. A rollup node which has executed the block sends the new rollup state to the L1.
+        It may include a validity proof (for ZK rollups) or open a window for fraud proofs
+        (optimistic rollups).
+    7. The L1 rollup contract verifies any proofs related to the state update, using the
+        certified block commitment from the sequencer contract to check that the state
+        update corresponds to the correct block.
+endlegend
+
+@enduml

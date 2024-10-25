@@ -5,11 +5,13 @@ actor User
 box Layer 2s / Rollups #LightYellow
     box "Optimistic Rollup O" #LightGreen
         participant "API\n(RPC)" as orrpc
+        participant Sequencer as orseq
         participant Proposer
         participant Challenger
     end box
     box "ZK Rollup Z" #LightBlue
         participant "API\n(RPC)" as zkrpc
+        participant Sequencer as zkseq
         participant "Prover" as rprover
         participant "Executor" as executor
     end box
@@ -45,20 +47,28 @@ group 1. Fee deposit
     Builder -> fee: fee deposit
 end group
 
-group 2. Transaction submisssion
+group 2. L2 transaction submisssion
     User -> orrpc: rollup O transaction
-    orrpc -> submit: transaction
     User -> zkrpc: rollup Z transaction
-    zkrpc -> submit: transaction
-    events -> Builder: transactions
 end group
 
-group 3. Leader obtains Espresso block
+group 3. L2 Block building
+    orseq -> orseq: build L2 block
+    zkseq -> zkseq: build L2 block
+end group
+
+group 4. L2 Espresso transaction submission
+    orrpc -> submit: Espresso transaction: rollup O L2 block
+    zkrpc -> submit: Espresso transaction: rollup Z L2 block
+    events -> Builder: Espresso transactions
+end group
+
+group 5. Leader obtains Espresso block
     Builder -> leader: available blocks
     leader -> Builder: claim block
 end group
 
-group 4. HotShot consensus
+group 6. HotShot consensus
     leader <-> replicas: consensus messages
     & leader <-> Libp2p:
     & Libp2p <-> replicas:
@@ -67,27 +77,27 @@ group 4. HotShot consensus
     ValidatedState -> ValidatedState: apply header\ncharge fee
 end group
 
-group 5. Rollup block production
+group 7. Rollup block production
     query -> executor: Espresso header,\ntransactions in namespace
     executor -> executor: verify\nnamespace\nproof
     executor -> rprover: rollup block
 end group
 
-group 6. HotShot proving
+group 8. HotShot proving
     signer -> relay: state, signature
     relay -> prover: state,\nsignature bundle
     prover -> "Light\nClient\nContract" as LC: proof
     LC -> LC: verify
 end group
 
-group 7. ZK Rollup proving
+group 9. ZK Rollup proving
     rprover -> RC: rollup state proof
     group verify
         LC -> "Rollup\nContract" as RC: HotShot\ncommitment
     end group
 end group
 
-group 8. Optimistic Rollup dispute
+group 10. Optimistic Rollup dispute
     Challenger -> RC: challenge
     loop until dispute resolved
     Proposer -> RC: respond
