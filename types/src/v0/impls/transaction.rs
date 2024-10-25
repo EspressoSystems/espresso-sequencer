@@ -5,6 +5,8 @@ use serde::{de::Error, Deserialize, Deserializer};
 
 use crate::{NamespaceId, Transaction};
 
+use super::{NsPayloadBuilder, NsTableBuilder};
+
 impl From<u32> for NamespaceId {
     fn from(value: u32) -> Self {
         Self(value as u64)
@@ -79,7 +81,15 @@ impl Transaction {
     }
 }
 
-impl HotShotTransaction for Transaction {}
+impl HotShotTransaction for Transaction {
+    fn minimum_block_size(&self, new_ns: bool) -> u64 {
+        let mut len = self.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
+        if new_ns {
+            len += NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
+        }
+        len as u64
+    }
+}
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {

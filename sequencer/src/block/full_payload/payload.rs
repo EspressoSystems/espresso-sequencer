@@ -103,11 +103,11 @@ impl Payload {
         let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
             // accounting for block byte length limit
-            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
             if !ns_builders.contains_key(&tx.namespace()) {
                 // each new namespace adds overhead
-                block_byte_len +=
-                    NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
+                block_byte_len += tx.minimum_block_size(true);
+            } else {
+                block_byte_len += tx.minimum_block_size(false);
             }
             if block_byte_len > max_block_byte_len {
                 tracing::warn!("transactions truncated to fit in maximum block byte length {max_block_byte_len}");
