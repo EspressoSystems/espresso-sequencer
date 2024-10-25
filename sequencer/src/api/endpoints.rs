@@ -7,7 +7,9 @@ use std::{
 
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{
+    FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction, FEE_MERKLE_TREE_ARITY,
+};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::merklized_state::Snapshot;
 use hotshot_query_service::{
@@ -52,9 +54,8 @@ where
     Ver: 'static + StaticVersionType,
     <State as ReadState>::State: Send
         + Sync
-        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, 256>
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, FEE_MERKLE_TREE_ARITY>
         + MerklizedStateHeightPersistence,
-    //for<'a> <<UniversalMerkleTree<FeeAmount,Sha3Digest,FeeAccount,256,Sha3Node> as hotshot_query_service::merklized_state::MerklizedState<Types, ARITY>>::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     let mut options = merklized_state::Options::default();
     let extension = toml::from_str(include_str!("../../api/merklized_state.toml"))?;
@@ -71,8 +72,8 @@ where
             let key = address
                 .parse()
                 .map_err(|_| merklized_state::Error::Custom {
-                    message: "failed to parse Key param".to_string(),
-                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: "failed to parse address".to_string(),
+                    status: StatusCode::BAD_REQUEST,
                 })?;
             let path = state.get_path(snapshot, key).await?;
             Ok(path.elem().copied())
