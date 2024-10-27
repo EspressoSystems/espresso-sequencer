@@ -27,10 +27,12 @@ use super::{
 };
 use crate::{
     availability::{
-        BlockQueryData, LeafQueryData, QueryableHeader, QueryablePayload, UpdateAvailabilityData,
-        VidCommonQueryData,
+        BlockQueryData, LeafQueryData, QueryableHeader, QueryablePayload, VidCommonQueryData,
     },
-    data_source::{storage::pruning::PrunedHeightStorage, update},
+    data_source::{
+        storage::{pruning::PrunedHeightStorage, UpdateAvailabilityStorage},
+        update,
+    },
     merklized_state::{MerklizedState, UpdateStateData},
     types::HeightIndexed,
     Header, Payload, QueryError, VidShare,
@@ -461,8 +463,7 @@ impl Transaction<Write> {
     }
 }
 
-#[async_trait]
-impl<Types> UpdateAvailabilityData<Types> for Transaction<Write>
+impl<Types> UpdateAvailabilityStorage<Types> for Transaction<Write>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,

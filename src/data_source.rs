@@ -454,10 +454,10 @@ pub mod availability_tests {
 #[espresso_macros::generic_tests]
 pub mod persistence_tests {
     use crate::{
-        availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+        availability::{BlockQueryData, LeafQueryData},
         data_source::{
-            storage::{AvailabilityStorage, NodeStorage},
-            Transaction, UpdateDataSource,
+            storage::{AvailabilityStorage, NodeStorage, UpdateAvailabilityStorage},
+            Transaction,
         },
         node::NodeDataSource,
         testing::{
@@ -475,8 +475,9 @@ pub mod persistence_tests {
     #[async_std::test]
     pub async fn test_revert<D: TestableDataSource>()
     where
-        for<'a> D::Transaction<'a>:
-            UpdateDataSource<MockTypes> + AvailabilityStorage<MockTypes> + NodeStorage<MockTypes>,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<MockTypes>
+            + AvailabilityStorage<MockTypes>
+            + NodeStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
 
@@ -528,7 +529,7 @@ pub mod persistence_tests {
     #[async_std::test]
     pub async fn test_reset<D: TestableDataSource>()
     where
-        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
 
@@ -588,8 +589,9 @@ pub mod persistence_tests {
     #[async_std::test]
     pub async fn test_drop_tx<D: TestableDataSource>()
     where
-        for<'a> D::Transaction<'a>:
-            UpdateDataSource<MockTypes> + AvailabilityStorage<MockTypes> + NodeStorage<MockTypes>,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<MockTypes>
+            + AvailabilityStorage<MockTypes>
+            + NodeStorage<MockTypes>,
         for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
@@ -672,10 +674,12 @@ pub mod persistence_tests {
 pub mod node_tests {
     use crate::{
         availability::{
-            BlockQueryData, LeafQueryData, QueryableHeader, UpdateAvailabilityData,
-            VidCommonQueryData,
+            BlockInfo, BlockQueryData, LeafQueryData, QueryableHeader, VidCommonQueryData,
         },
-        data_source::{storage::NodeStorage, update::Transaction, UpdateDataSource},
+        data_source::{
+            storage::{NodeStorage, UpdateAvailabilityStorage},
+            update::Transaction,
+        },
         node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
         testing::{
             consensus::{MockNetwork, TestableDataSource},
@@ -704,7 +708,7 @@ pub mod node_tests {
     #[async_std::test]
     pub async fn test_sync_status<D: TestableDataSource>()
     where
-        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
 
@@ -758,11 +762,7 @@ pub mod node_tests {
 
         // Insert a leaf without the corresponding block or VID info, make sure we detect that the
         // block and VID info are missing.
-        {
-            let mut tx = ds.write().await.unwrap();
-            tx.insert_leaf(leaves[0].clone()).await.unwrap();
-            tx.commit().await.unwrap();
-        }
+        ds.append(leaves[0].clone().into()).await.unwrap();
         assert_eq!(
             ds.sync_status().await.unwrap(),
             SyncStatus {
@@ -776,11 +776,7 @@ pub mod node_tests {
 
         // Insert a leaf whose height is not the successor of the previous leaf. We should now
         // detect that the leaf in between is missing (along with all _three_ corresponding blocks).
-        {
-            let mut tx = ds.write().await.unwrap();
-            tx.insert_leaf(leaves[2].clone()).await.unwrap();
-            tx.commit().await.unwrap();
-        }
+        ds.append(leaves[2].clone().into()).await.unwrap();
         assert_eq!(
             ds.sync_status().await.unwrap(),
             SyncStatus {
@@ -860,10 +856,7 @@ pub mod node_tests {
     }
 
     #[async_std::test]
-    pub async fn test_counters<D: TestableDataSource>()
-    where
-        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
-    {
+    pub async fn test_counters<D: TestableDataSource>() {
         use hotshot_example_types::node_types::TestVersions;
 
         setup_test();
@@ -914,12 +907,9 @@ pub mod node_tests {
             .await;
             *leaf.leaf.block_header_mut() = header.clone();
             let block = BlockQueryData::new(header, payload);
-            {
-                let mut tx = ds.write().await.unwrap();
-                tx.insert_leaf(leaf).await.unwrap();
-                tx.insert_block(block).await.unwrap();
-                tx.commit().await.unwrap();
-            }
+            ds.append(BlockInfo::new(leaf, Some(block), None, None))
+                .await
+                .unwrap();
 
             total_transactions += 1;
             total_size += encoded.len();
@@ -960,7 +950,7 @@ pub mod node_tests {
     #[async_std::test]
     pub async fn test_vid_monotonicity<D: TestableDataSource>()
     where
-        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<MockTypes>,
         for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
     {
         use hotshot_example_types::node_types::TestVersions;
@@ -981,14 +971,14 @@ pub mod node_tests {
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
-        {
-            let mut tx = ds.write().await.unwrap();
-            tx.insert_leaf(leaf).await.unwrap();
-            tx.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
-                .await
-                .unwrap();
-            tx.commit().await.unwrap();
-        }
+        ds.append(BlockInfo::new(
+            leaf,
+            None,
+            Some(common.clone()),
+            Some(disperse.shares[0].clone()),
+        ))
+        .await
+        .unwrap();
 
         {
             assert_eq!(ds.get_vid_common(0).await.await, common);

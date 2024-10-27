@@ -17,11 +17,14 @@ use super::{
         TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
 };
-use crate::{Payload, VidCommitment, VidShare};
+use crate::{types::HeightIndexed, Payload, VidCommitment, VidShare};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::{Display, From};
-use futures::stream::{BoxStream, Stream, StreamExt};
+use futures::{
+    future::Future,
+    stream::{BoxStream, Stream, StreamExt},
+};
 use hotshot_types::traits::node_implementation::NodeType;
 use std::{cmp::Ordering, ops::RangeBounds};
 
@@ -201,13 +204,51 @@ where
     }
 }
 
-#[async_trait]
+/// Information about a block.
+///
+/// This type encapsulate all the information we might have about a decided HotShot block:
+/// * The leaf, including a header and consensus metadata
+/// * The block itself, which may be missing if this node did not receive a DA proposal for this
+///   block
+/// * VID common and a unique VID share, which may be missing if this node did not receive a VID
+///   share for this block
+#[derive(Clone, Debug)]
+pub struct BlockInfo<Types: NodeType> {
+    pub leaf: LeafQueryData<Types>,
+    pub block: Option<BlockQueryData<Types>>,
+    pub vid_common: Option<VidCommonQueryData<Types>>,
+    pub vid_share: Option<VidShare>,
+}
+
+impl<Types: NodeType> From<LeafQueryData<Types>> for BlockInfo<Types> {
+    fn from(leaf: LeafQueryData<Types>) -> Self {
+        Self::new(leaf, None, None, None)
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for BlockInfo<Types> {
+    fn height(&self) -> u64 {
+        self.leaf.height()
+    }
+}
+
+impl<Types: NodeType> BlockInfo<Types> {
+    pub fn new(
+        leaf: LeafQueryData<Types>,
+        block: Option<BlockQueryData<Types>>,
+        vid_common: Option<VidCommonQueryData<Types>>,
+        vid_share: Option<VidShare>,
+    ) -> Self {
+        Self {
+            leaf,
+            block,
+            vid_common,
+            vid_share,
+        }
+    }
+}
+
 pub trait UpdateAvailabilityData<Types: NodeType> {
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()>;
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()>;
-    async fn insert_vid(
-        &mut self,
-        common: VidCommonQueryData<Types>,
-        share: Option<VidShare>,
-    ) -> anyhow::Result<()>;
+    /// Append information about a new block to the database.
+    fn append(&self, info: BlockInfo<Types>) -> impl Send + Future<Output = anyhow::Result<()>>;
 }

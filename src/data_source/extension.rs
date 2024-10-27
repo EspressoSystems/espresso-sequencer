@@ -13,7 +13,7 @@
 use super::VersionedDataSource;
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
+        AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId, LeafQueryData,
         PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
         UpdateAvailabilityData, VidCommonQueryData,
     },
@@ -212,27 +212,14 @@ where
     }
 }
 
-#[async_trait]
 impl<D, U, Types> UpdateAvailabilityData<Types> for ExtensibleDataSource<D, U>
 where
     D: UpdateAvailabilityData<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
 {
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
-        self.data_source.insert_leaf(leaf).await
-    }
-
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
-        self.data_source.insert_block(block).await
-    }
-
-    async fn insert_vid(
-        &mut self,
-        common: VidCommonQueryData<Types>,
-        share: Option<VidShare>,
-    ) -> anyhow::Result<()> {
-        self.data_source.insert_vid(common, share).await
+    async fn append(&self, info: BlockInfo<Types>) -> anyhow::Result<()> {
+        self.data_source.append(info).await
     }
 }
 
@@ -416,7 +403,7 @@ where
 mod impl_testable_data_source {
     use super::*;
     use crate::{
-        data_source::{Transaction, UpdateDataSource},
+        data_source::UpdateDataSource,
         testing::{
             consensus::{DataSourceLifeCycle, TestableDataSource},
             mocks::MockTypes,
@@ -427,8 +414,7 @@ mod impl_testable_data_source {
     #[async_trait]
     impl<D, U> DataSourceLifeCycle for ExtensibleDataSource<D, U>
     where
-        D: TestableDataSource,
-        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+        D: TestableDataSource + UpdateDataSource<MockTypes>,
         U: Clone + Default + Send + Sync + 'static,
     {
         type Storage = D::Storage;
@@ -446,9 +432,7 @@ mod impl_testable_data_source {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            let mut tx = self.write().await.unwrap();
-            tx.update(event).await.unwrap();
-            tx.commit().await.unwrap();
+            self.update(event).await;
         }
     }
 }

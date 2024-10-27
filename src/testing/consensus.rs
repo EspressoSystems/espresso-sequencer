@@ -12,7 +12,7 @@
 
 use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes, MockVersions};
 use crate::{
-    availability::AvailabilityDataSource,
+    availability::{AvailabilityDataSource, UpdateAvailabilityData},
     data_source::{FileSystemDataSource, SqlDataSource, VersionedDataSource},
     fetching::provider::NoFetching,
     node::NodeDataSource,
@@ -339,6 +339,7 @@ pub trait DataSourceLifeCycle: Clone + Send + Sync + Sized + 'static {
 pub trait TestableDataSource:
     DataSourceLifeCycle
     + AvailabilityDataSource<MockTypes>
+    + UpdateAvailabilityData<MockTypes>
     + NodeDataSource<MockTypes>
     + StatusDataSource
     + VersionedDataSource
@@ -348,6 +349,7 @@ pub trait TestableDataSource:
 impl<T> TestableDataSource for T where
     T: DataSourceLifeCycle
         + AvailabilityDataSource<MockTypes>
+        + UpdateAvailabilityData<MockTypes>
         + NodeDataSource<MockTypes>
         + StatusDataSource
         + VersionedDataSource

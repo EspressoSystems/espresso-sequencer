@@ -19,9 +19,9 @@ use super::{
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonQueryData,
+        TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::{update, VersionedDataSource},
+    data_source::{storage::UpdateAvailabilityStorage, update, VersionedDataSource},
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
@@ -178,8 +178,7 @@ where
     }
 }
 
-#[async_trait]
-impl<'a, Types: NodeType> UpdateAvailabilityData<Types> for Transaction<'a>
+impl<'a, Types: NodeType> UpdateAvailabilityStorage<Types> for Transaction<'a>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
@@ -245,11 +244,11 @@ where
 pub mod testing {
     use super::*;
     use crate::{
-        availability::{define_api, AvailabilityDataSource, Fetch},
+        availability::{
+            define_api, AvailabilityDataSource, BlockInfo, Fetch, UpdateAvailabilityData,
+        },
         data_source::{
-            fetching,
             storage::sql::{testing::TmpDb, SqlStorage},
-            update::Transaction as _,
             FetchingDataSource, SqlDataSource, UpdateDataSource,
         },
         fetching::provider::{NoFetching, QueryServiceProvider},
@@ -384,15 +383,13 @@ pub mod testing {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            let mut tx = self.write().await.unwrap();
-            tx.update(event).await.unwrap();
-            tx.commit().await.unwrap();
+            self.update(event).await;
         }
     }
 
     pub enum Transaction<'a, T> {
-        Sql(fetching::Transaction<'a, MockTypes, T>),
-        NoStorage(fetching::Transaction<'a, MockTypes, super::Transaction<'a>>),
+        Sql(T),
+        NoStorage(super::Transaction<'a>),
     }
 
     // Now a lot of boilerplate to implement all teh traits for [`DataSource`], by dispatching each
@@ -424,6 +421,15 @@ pub mod testing {
         }
     }
 
+    impl UpdateAvailabilityData<MockTypes> for DataSource {
+        async fn append(&self, info: BlockInfo<MockTypes>) -> anyhow::Result<()> {
+            match self {
+                Self::Sql(ds) => ds.append(info).await,
+                Self::NoStorage(ds) => ds.append(info).await,
+            }
+        }
+    }
+
     impl<'a, T> update::Transaction for Transaction<'a, T>
     where
         T: update::Transaction,
@@ -449,10 +455,9 @@ pub mod testing {
         }
     }
 
-    #[async_trait]
-    impl<'a, T> UpdateAvailabilityData<MockTypes> for Transaction<'a, T>
+    impl<'a, T> UpdateAvailabilityStorage<MockTypes> for Transaction<'a, T>
     where
-        T: UpdateAvailabilityData<MockTypes> + Send + Sync,
+        T: UpdateAvailabilityStorage<MockTypes> + Send + Sync,
     {
         async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> anyhow::Result<()> {
             match self {
@@ -596,21 +601,23 @@ pub mod testing {
         async fn block_height(&mut self) -> QueryResult<usize> {
             match self {
                 Transaction::Sql(tx) => tx.block_height().await,
-                Transaction::NoStorage(tx) => tx.block_height().await,
+                Transaction::NoStorage(tx) => NodeStorage::<MockTypes>::block_height(tx).await,
             }
         }
 
         async fn count_transactions(&mut self) -> QueryResult<usize> {
             match self {
                 Transaction::Sql(tx) => tx.count_transactions().await,
-                Transaction::NoStorage(tx) => tx.count_transactions().await,
+                Transaction::NoStorage(tx) => {
+                    NodeStorage::<MockTypes>::count_transactions(tx).await
+                }
             }
         }
 
         async fn payload_size(&mut self) -> QueryResult<usize> {
             match self {
                 Transaction::Sql(tx) => tx.payload_size().await,
-                Transaction::NoStorage(tx) => tx.payload_size().await,
+                Transaction::NoStorage(tx) => NodeStorage::<MockTypes>::payload_size(tx).await,
             }
         }
 
@@ -620,14 +627,14 @@ pub mod testing {
         {
             match self {
                 Transaction::Sql(tx) => tx.vid_share(id).await,
-                Transaction::NoStorage(tx) => tx.vid_share(id).await,
+                Transaction::NoStorage(tx) => NodeStorage::<MockTypes>::vid_share(tx, id).await,
             }
         }
 
         async fn sync_status(&mut self) -> QueryResult<SyncStatus> {
             match self {
                 Transaction::Sql(tx) => tx.sync_status().await,
-                Transaction::NoStorage(tx) => tx.sync_status().await,
+                Transaction::NoStorage(tx) => NodeStorage::<MockTypes>::sync_status(tx).await,
             }
         }
 

@@ -915,8 +915,8 @@ mod test {
 
     use super::{testing::TmpDb, *};
     use crate::{
-        availability::{LeafQueryData, UpdateAvailabilityData},
-        data_source::storage::pruning::PrunedHeightStorage,
+        availability::LeafQueryData,
+        data_source::storage::{pruning::PrunedHeightStorage, UpdateAvailabilityStorage},
         testing::{mocks::MockTypes, setup_test},
     };
 

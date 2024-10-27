@@ -237,7 +237,7 @@ where
 mod impl_testable_data_source {
     use super::*;
     use crate::{
-        data_source::{Transaction, UpdateDataSource, VersionedDataSource},
+        data_source::UpdateDataSource,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use async_trait::async_trait;
@@ -267,9 +267,7 @@ mod impl_testable_data_source {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            let mut tx = self.write().await.unwrap();
-            tx.update(event).await.unwrap();
-            tx.commit().await.unwrap();
+            self.update(event).await;
         }
     }
 }

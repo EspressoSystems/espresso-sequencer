@@ -315,7 +315,7 @@ where
 pub mod testing {
     use super::*;
     use crate::{
-        data_source::{Transaction, UpdateDataSource, VersionedDataSource},
+        data_source::UpdateDataSource,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use async_trait::async_trait;
@@ -347,9 +347,7 @@ pub mod testing {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            let mut tx = self.write().await.unwrap();
-            tx.update(event).await.unwrap();
-            tx.commit().await.unwrap();
+            self.update(event).await;
         }
     }
 }
@@ -372,9 +370,13 @@ mod test {
     use super::*;
     use crate::{
         availability::{
-            AvailabilityDataSource, LeafQueryData, UpdateAvailabilityData, VidCommonQueryData,
+            AvailabilityDataSource, BlockInfo, LeafQueryData, UpdateAvailabilityData,
+            VidCommonQueryData,
         },
-        data_source::{storage::NodeStorage, Transaction, VersionedDataSource},
+        data_source::{
+            storage::{NodeStorage, UpdateAvailabilityStorage},
+            Transaction, VersionedDataSource,
+        },
         fetching::provider::NoFetching,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
     };
@@ -405,13 +407,14 @@ mod test {
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
-        let mut tx = ds.write().await.unwrap();
-        tx.insert_leaf(leaf).await.unwrap();
-        tx.insert_vid(common.clone(), None).await.unwrap();
-        tx.commit().await.unwrap();
+        ds.append(BlockInfo::new(leaf, None, Some(common.clone()), None))
+            .await
+            .unwrap();
 
         assert_eq!(ds.get_vid_common(0).await.await, common);
-        ds.read().await.unwrap().vid_share(0).await.unwrap_err();
+        NodeStorage::<MockTypes>::vid_share(&mut ds.read().await.unwrap(), 0)
+            .await
+            .unwrap_err();
 
         // Re-insert the common data with the share.
         let mut tx = ds.write().await.unwrap();
@@ -421,7 +424,9 @@ mod test {
         tx.commit().await.unwrap();
         assert_eq!(ds.get_vid_common(0).await.await, common);
         assert_eq!(
-            ds.read().await.unwrap().vid_share(0).await.unwrap(),
+            NodeStorage::<MockTypes>::vid_share(&mut ds.read().await.unwrap(), 0)
+                .await
+                .unwrap(),
             disperse.shares[0]
         );
     }

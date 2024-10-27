@@ -14,10 +14,11 @@
 
 use super::{AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers};
 use crate::{
-    availability::{
-        QueryablePayload, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
+    availability::{QueryablePayload, TransactionHash, TransactionQueryData},
+    data_source::{
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        update::VersionedDataSource,
     },
-    data_source::{storage::AvailabilityStorage, update::VersionedDataSource},
     Payload, QueryResult,
 };
 use async_std::sync::Arc;
@@ -67,7 +68,7 @@ where
         req: Self::Request,
     ) where
         S: VersionedDataSource + 'static,
-        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
     {
         // We don't actively fetch transactions, because without a satisfying block payload, we have

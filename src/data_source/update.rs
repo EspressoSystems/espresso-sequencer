@@ -13,10 +13,12 @@
 //! A generic algorithm for updating a HotShot Query Service data source with new data.
 use crate::{
     availability::{
-        BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
+        BlockInfo, BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData,
+        VidCommonQueryData,
     },
-    Leaf, Payload,
+    Leaf, Payload, VidShare,
 };
+use anyhow::{ensure, Context};
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
@@ -54,17 +56,17 @@ pub trait UpdateDataSource<Types: NodeType>: UpdateAvailabilityData<Types> {
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    async fn update(&mut self, event: &Event<Types>) -> anyhow::Result<()>;
+    async fn update(&self, event: &Event<Types>);
 }
 
 #[async_trait]
 impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
-    T: UpdateAvailabilityData<Types> + Send,
+    T: UpdateAvailabilityData<Types> + Send + Sync,
     Payload<Types>: QueryablePayload<Types>,
     <Types as NodeType>::InstanceState: Default,
 {
-    async fn update(&mut self, event: &Event<Types>) -> anyhow::Result<()> {
+    async fn update(&self, event: &Event<Types>) {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             // `qc` justifies the first (most recent) leaf...
             let qcs = once((**qc).clone())
@@ -83,81 +85,79 @@ where
                 },
             ) in qcs.zip(leaf_chain.iter().rev())
             {
+                let height = leaf.block_header().block_number();
+
                 // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
                 // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
                 // guaranteed to correspond, and this should never panic.
                 let leaf_data =
                     LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
-                self.insert_leaf(leaf_data.clone()).await?;
+                let block_data = leaf
+                    .block_payload()
+                    .map(|payload| BlockQueryData::new(leaf.block_header().clone(), payload));
+                if block_data.is_none() {
+                    tracing::info!(height, "block not available at decide");
+                }
 
-                if let Some(vid_share) = vid_share {
-                    self.insert_vid(
-                        VidCommonQueryData::new(
+                let (vid_common, vid_share) = if let Some(vid_share) = vid_share {
+                    (
+                        Some(VidCommonQueryData::new(
                             leaf.block_header().clone(),
                             vid_share.common.clone(),
-                        ),
+                        )),
                         Some(vid_share.share.clone()),
                     )
-                    .await?;
                 } else if leaf.view_number().u64() == 0 {
                     // HotShot does not run VID in consensus for the genesis block. In this case,
                     // the block payload is guaranteed to always be empty, so VID isn't really
                     // necessary. But for consistency, we will still store the VID dispersal data,
                     // computing it ourselves based on the well-known genesis VID commitment.
-                    store_genesis_vid(self, leaf).await;
+                    match genesis_vid(leaf) {
+                        Ok((common, share)) => (Some(common), Some(share)),
+                        Err(err) => {
+                            tracing::warn!("failed to compute genesis VID: {err:#}");
+                            (None, None)
+                        }
+                    }
                 } else {
-                    tracing::error!(
-                        "VID info for block {} not available at decide",
-                        leaf.block_header().block_number()
-                    );
+                    (None, None)
+                };
+                if vid_common.is_none() {
+                    tracing::info!(height, "VID not available at decide");
                 }
 
-                if let Some(block) = leaf.block_payload() {
-                    self.insert_block(BlockQueryData::new(leaf.block_header().clone(), block))
-                        .await?;
-                } else {
-                    tracing::error!(
-                        "block {} not available at decide",
-                        leaf.block_header().block_number()
-                    );
+                if let Err(err) = self
+                    .append(BlockInfo::new(leaf_data, block_data, vid_common, vid_share))
+                    .await
+                {
+                    tracing::warn!(height, "failed to append leaf information: {err:#}");
                 }
             }
         }
-        Ok(())
     }
 }
 
-async fn store_genesis_vid<Types: NodeType>(
-    storage: &mut impl UpdateAvailabilityData<Types>,
+fn genesis_vid<Types: NodeType>(
     leaf: &Leaf<Types>,
-) where
+) -> anyhow::Result<(VidCommonQueryData<Types>, VidShare)>
+where
     <Types as NodeType>::InstanceState: Default,
 {
     let payload = Payload::<Types>::empty().0;
     let bytes = payload.encode();
-    match vid_scheme(GENESIS_VID_NUM_STORAGE_NODES).disperse(bytes) {
-        Ok(disperse) if disperse.commit != leaf.block_header().payload_commitment() => {
-            tracing::error!(
-                computed = %disperse.commit,
-                header = %leaf.block_header().payload_commitment(),
-                "computed VID commit for genesis block does not match header",
-            );
-        }
-        Ok(mut disperse) => {
-            if let Err(err) = storage
-                .insert_vid(
-                    VidCommonQueryData::new(leaf.block_header().clone(), disperse.common),
-                    Some(disperse.shares.remove(0)),
-                )
-                .await
-            {
-                tracing::error!(%err, "unable to store genesis VID");
-            }
-        }
-        Err(err) => {
-            tracing::error!(%err, "unable to compute VID dispersal for genesis block");
-        }
-    }
+    let mut disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
+        .disperse(bytes)
+        .context("unable to compute VID dispersal for genesis block")?;
+    ensure!(
+        disperse.commit == leaf.block_header().payload_commitment(),
+        "computed VID commit {} for genesis block does not match header commit {}",
+        disperse.commit,
+        leaf.block_header().payload_commitment()
+    );
+    Ok((
+        VidCommonQueryData::new(leaf.block_header().clone(), disperse.common),
+        disperse.shares.remove(0),
+    ))
 }
 
 /// A data source with an atomic transaction-based synchronization interface.

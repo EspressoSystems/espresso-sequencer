@@ -19,9 +19,9 @@ use super::{
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonQueryData,
+        TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::{update, VersionedDataSource},
+    data_source::{storage::UpdateAvailabilityStorage, update, VersionedDataSource},
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
@@ -61,6 +61,9 @@ impl FailureMode {
 struct Failer {
     on_read: FailureMode,
     on_write: FailureMode,
+    on_commit: FailureMode,
+    on_begin_writable: FailureMode,
+    on_begin_read_only: FailureMode,
 }
 
 /// Storage wrapper for error injection.
@@ -88,10 +91,25 @@ impl<S> FailStorage<S> {
         self.failer.lock().await.on_write = FailureMode::Always;
     }
 
+    pub async fn fail_commits(&self) {
+        self.failer.lock().await.on_commit = FailureMode::Always;
+    }
+
+    pub async fn fail_begins_writable(&self) {
+        self.failer.lock().await.on_begin_writable = FailureMode::Always;
+    }
+
+    pub async fn fail_begins_read_only(&self) {
+        self.failer.lock().await.on_begin_read_only = FailureMode::Always;
+    }
+
     pub async fn fail(&self) {
         let mut failer = self.failer.lock().await;
         failer.on_read = FailureMode::Always;
         failer.on_write = FailureMode::Always;
+        failer.on_commit = FailureMode::Always;
+        failer.on_begin_writable = FailureMode::Always;
+        failer.on_begin_read_only = FailureMode::Always;
     }
 
     pub async fn pass_reads(&self) {
@@ -102,10 +120,25 @@ impl<S> FailStorage<S> {
         self.failer.lock().await.on_write = FailureMode::Never;
     }
 
+    pub async fn pass_commits(&self) {
+        self.failer.lock().await.on_commit = FailureMode::Never;
+    }
+
+    pub async fn pass_begins_writable(&self) {
+        self.failer.lock().await.on_begin_writable = FailureMode::Never;
+    }
+
+    pub async fn pass_begins_read_only(&self) {
+        self.failer.lock().await.on_begin_read_only = FailureMode::Never;
+    }
+
     pub async fn pass(&self) {
         let mut failer = self.failer.lock().await;
         failer.on_read = FailureMode::Never;
         failer.on_write = FailureMode::Never;
+        failer.on_commit = FailureMode::Never;
+        failer.on_begin_writable = FailureMode::Never;
+        failer.on_begin_read_only = FailureMode::Never;
     }
 
     pub async fn fail_one_read(&self) {
@@ -116,10 +149,16 @@ impl<S> FailStorage<S> {
         self.failer.lock().await.on_write = FailureMode::Once;
     }
 
-    pub async fn fail_one(&self) {
-        let mut failer = self.failer.lock().await;
-        failer.on_read = FailureMode::Once;
-        failer.on_write = FailureMode::Once;
+    pub async fn fail_one_commit(&self) {
+        self.failer.lock().await.on_commit = FailureMode::Once;
+    }
+
+    pub async fn fail_one_begin_writable(&self) {
+        self.failer.lock().await.on_begin_writable = FailureMode::Once;
+    }
+
+    pub async fn fail_one_begin_read_only(&self) {
+        self.failer.lock().await.on_begin_read_only = FailureMode::Once;
     }
 }
 
@@ -135,6 +174,7 @@ where
         Self: 'a;
 
     async fn write(&self) -> anyhow::Result<<Self as VersionedDataSource>::Transaction<'_>> {
+        self.failer.lock().await.on_begin_writable.maybe_fail()?;
         Ok(Transaction {
             inner: self.inner.write().await?,
             failer: self.failer.clone(),
@@ -142,6 +182,7 @@ where
     }
 
     async fn read(&self) -> anyhow::Result<<Self as VersionedDataSource>::ReadOnly<'_>> {
+        self.failer.lock().await.on_begin_read_only.maybe_fail()?;
         Ok(Transaction {
             inner: self.inner.read().await?,
             failer: self.failer.clone(),
@@ -201,6 +242,10 @@ impl<T> Transaction<T> {
     async fn maybe_fail_write(&self) -> QueryResult<()> {
         self.failer.lock().await.on_write.maybe_fail()
     }
+
+    async fn maybe_fail_commit(&self) -> QueryResult<()> {
+        self.failer.lock().await.on_commit.maybe_fail()
+    }
 }
 
 impl<T> update::Transaction for Transaction<T>
@@ -208,6 +253,7 @@ where
     T: update::Transaction,
 {
     async fn commit(self) -> anyhow::Result<()> {
+        self.maybe_fail_commit().await?;
         self.inner.commit().await
     }
 
@@ -304,12 +350,11 @@ where
     }
 }
 
-#[async_trait]
-impl<Types, T> UpdateAvailabilityData<Types> for Transaction<T>
+impl<Types, T> UpdateAvailabilityStorage<Types> for Transaction<T>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    T: UpdateAvailabilityData<Types> + Send + Sync,
+    T: UpdateAvailabilityStorage<Types> + Send + Sync,
 {
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
         self.maybe_fail_write().await?;
