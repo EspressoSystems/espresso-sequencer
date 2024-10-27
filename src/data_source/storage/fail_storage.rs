@@ -1,0 +1,387 @@
+// Copyright (c) 2022 Espresso Systems (espressosys.com)
+// This file is part of the HotShot Query Service library.
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+// General Public License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+// even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+// General Public License for more details.
+// You should have received a copy of the GNU General Public License along with this program. If not,
+// see <https://www.gnu.org/licenses/>.
+
+#![cfg(any(test, feature = "testing"))]
+
+use super::{
+    pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg, PrunerConfig},
+    AvailabilityStorage, NodeStorage,
+};
+use crate::{
+    availability::{
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
+        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonQueryData,
+    },
+    data_source::{update, VersionedDataSource},
+    metrics::PrometheusMetrics,
+    node::{SyncStatus, TimeWindowQueryData, WindowStart},
+    status::HasMetrics,
+    Header, Payload, QueryError, QueryResult, VidShare,
+};
+use async_std::sync::{Arc, Mutex};
+use async_trait::async_trait;
+use futures::future::Future;
+use hotshot_types::traits::node_implementation::NodeType;
+use std::ops::RangeBounds;
+
+#[derive(Clone, Copy, Debug, Default)]
+enum FailureMode {
+    #[default]
+    Never,
+    Once,
+    Always,
+}
+
+impl FailureMode {
+    fn maybe_fail(&mut self) -> QueryResult<()> {
+        match self {
+            Self::Never => return Ok(()),
+            Self::Once => {
+                *self = Self::Never;
+            }
+            Self::Always => {}
+        }
+
+        Err(QueryError::Error {
+            message: "injected error".into(),
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+struct Failer {
+    on_read: FailureMode,
+    on_write: FailureMode,
+}
+
+/// Storage wrapper for error injection.
+#[derive(Clone, Debug)]
+pub struct FailStorage<S> {
+    inner: S,
+    failer: Arc<Mutex<Failer>>,
+}
+
+impl<S> From<S> for FailStorage<S> {
+    fn from(inner: S) -> Self {
+        Self {
+            inner,
+            failer: Default::default(),
+        }
+    }
+}
+
+impl<S> FailStorage<S> {
+    pub async fn fail_reads(&self) {
+        self.failer.lock().await.on_read = FailureMode::Always;
+    }
+
+    pub async fn fail_writes(&self) {
+        self.failer.lock().await.on_write = FailureMode::Always;
+    }
+
+    pub async fn fail(&self) {
+        let mut failer = self.failer.lock().await;
+        failer.on_read = FailureMode::Always;
+        failer.on_write = FailureMode::Always;
+    }
+
+    pub async fn pass_reads(&self) {
+        self.failer.lock().await.on_read = FailureMode::Never;
+    }
+
+    pub async fn pass_writes(&self) {
+        self.failer.lock().await.on_write = FailureMode::Never;
+    }
+
+    pub async fn pass(&self) {
+        let mut failer = self.failer.lock().await;
+        failer.on_read = FailureMode::Never;
+        failer.on_write = FailureMode::Never;
+    }
+
+    pub async fn fail_one_read(&self) {
+        self.failer.lock().await.on_read = FailureMode::Once;
+    }
+
+    pub async fn fail_one_write(&self) {
+        self.failer.lock().await.on_write = FailureMode::Once;
+    }
+
+    pub async fn fail_one(&self) {
+        let mut failer = self.failer.lock().await;
+        failer.on_read = FailureMode::Once;
+        failer.on_write = FailureMode::Once;
+    }
+}
+
+impl<S> VersionedDataSource for FailStorage<S>
+where
+    S: VersionedDataSource,
+{
+    type Transaction<'a> = Transaction<S::Transaction<'a>>
+    where
+        Self: 'a;
+    type ReadOnly<'a> = Transaction<S::ReadOnly<'a>>
+    where
+        Self: 'a;
+
+    async fn write(&self) -> anyhow::Result<<Self as VersionedDataSource>::Transaction<'_>> {
+        Ok(Transaction {
+            inner: self.inner.write().await?,
+            failer: self.failer.clone(),
+        })
+    }
+
+    async fn read(&self) -> anyhow::Result<<Self as VersionedDataSource>::ReadOnly<'_>> {
+        Ok(Transaction {
+            inner: self.inner.read().await?,
+            failer: self.failer.clone(),
+        })
+    }
+}
+
+impl<S> PrunerConfig for FailStorage<S>
+where
+    S: PrunerConfig,
+{
+    fn set_pruning_config(&mut self, cfg: PrunerCfg) {
+        self.inner.set_pruning_config(cfg);
+    }
+
+    fn get_pruning_config(&self) -> Option<PrunerCfg> {
+        self.inner.get_pruning_config()
+    }
+}
+
+#[async_trait]
+impl<S> PruneStorage for FailStorage<S>
+where
+    S: PruneStorage + Sync,
+{
+    type Pruner = S::Pruner;
+
+    async fn get_disk_usage(&self) -> anyhow::Result<u64> {
+        self.inner.get_disk_usage().await
+    }
+
+    async fn prune(&self, pruner: &mut Self::Pruner) -> anyhow::Result<Option<u64>> {
+        self.inner.prune(pruner).await
+    }
+}
+
+impl<S> HasMetrics for FailStorage<S>
+where
+    S: HasMetrics,
+{
+    fn metrics(&self) -> &PrometheusMetrics {
+        self.inner.metrics()
+    }
+}
+
+#[derive(Debug)]
+pub struct Transaction<T> {
+    inner: T,
+    failer: Arc<Mutex<Failer>>,
+}
+
+impl<T> Transaction<T> {
+    async fn maybe_fail_read(&self) -> QueryResult<()> {
+        self.failer.lock().await.on_read.maybe_fail()
+    }
+
+    async fn maybe_fail_write(&self) -> QueryResult<()> {
+        self.failer.lock().await.on_write.maybe_fail()
+    }
+}
+
+impl<T> update::Transaction for Transaction<T>
+where
+    T: update::Transaction,
+{
+    async fn commit(self) -> anyhow::Result<()> {
+        self.inner.commit().await
+    }
+
+    fn revert(self) -> impl Future + Send {
+        self.inner.revert()
+    }
+}
+
+#[async_trait]
+impl<Types, T> AvailabilityStorage<Types> for Transaction<T>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    T: AvailabilityStorage<Types>,
+{
+    async fn get_leaf(&mut self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_leaf(id).await
+    }
+
+    async fn get_block(&mut self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_block(id).await
+    }
+
+    async fn get_header(&mut self, id: BlockId<Types>) -> QueryResult<Header<Types>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_header(id).await
+    }
+
+    async fn get_payload(&mut self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_payload(id).await
+    }
+
+    async fn get_vid_common(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonQueryData<Types>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_vid_common(id).await
+    }
+
+    async fn get_leaf_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<LeafQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read().await?;
+        self.inner.get_leaf_range(range).await
+    }
+
+    async fn get_block_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<BlockQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read().await?;
+        self.inner.get_block_range(range).await
+    }
+
+    async fn get_payload_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read().await?;
+        self.inner.get_payload_range(range).await
+    }
+
+    async fn get_vid_common_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read().await?;
+        self.inner.get_vid_common_range(range).await
+    }
+
+    async fn get_transaction(
+        &mut self,
+        hash: TransactionHash<Types>,
+    ) -> QueryResult<TransactionQueryData<Types>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_transaction(hash).await
+    }
+}
+
+#[async_trait]
+impl<Types, T> UpdateAvailabilityData<Types> for Transaction<T>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+    T: UpdateAvailabilityData<Types> + Send + Sync,
+{
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
+        self.maybe_fail_write().await?;
+        self.inner.insert_leaf(leaf).await
+    }
+
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
+        self.maybe_fail_write().await?;
+        self.inner.insert_block(block).await
+    }
+
+    async fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> anyhow::Result<()> {
+        self.maybe_fail_write().await?;
+        self.inner.insert_vid(common, share).await
+    }
+}
+
+#[async_trait]
+impl<T> PrunedHeightStorage for Transaction<T>
+where
+    T: PrunedHeightStorage + Send + Sync,
+{
+    async fn load_pruned_height(&mut self) -> anyhow::Result<Option<u64>> {
+        self.maybe_fail_read().await?;
+        self.inner.load_pruned_height().await
+    }
+}
+
+#[async_trait]
+impl<Types, T> NodeStorage<Types> for Transaction<T>
+where
+    Types: NodeType,
+    T: NodeStorage<Types> + Send + Sync,
+{
+    async fn block_height(&mut self) -> QueryResult<usize> {
+        self.maybe_fail_read().await?;
+        self.inner.block_height().await
+    }
+
+    async fn count_transactions(&mut self) -> QueryResult<usize> {
+        self.maybe_fail_read().await?;
+        self.inner.count_transactions().await
+    }
+
+    async fn payload_size(&mut self) -> QueryResult<usize> {
+        self.maybe_fail_read().await?;
+        self.inner.payload_size().await
+    }
+
+    async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.maybe_fail_read().await?;
+        self.inner.vid_share(id).await
+    }
+
+    async fn sync_status(&mut self) -> QueryResult<SyncStatus> {
+        self.maybe_fail_read().await?;
+        self.inner.sync_status().await
+    }
+
+    async fn get_header_window(
+        &mut self,
+        start: impl Into<WindowStart<Types>> + Send + Sync,
+        end: u64,
+    ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_header_window(start, end).await
+    }
+}

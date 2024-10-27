@@ -81,12 +81,15 @@ use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 
+pub mod fail_storage;
 pub mod fs;
 mod ledger_log;
 pub mod no_storage;
 pub mod pruning;
 pub mod sql;
 
+#[cfg(any(test, feature = "testing"))]
+pub use fail_storage::FailStorage;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemStorage;
 #[cfg(feature = "no-storage")]

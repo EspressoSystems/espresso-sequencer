@@ -135,20 +135,65 @@ where
 }
 
 #[derive(Debug)]
+struct Notifications<'a, Types>
+where
+    Types: NodeType,
+{
+    notifiers: &'a Notifiers<Types>,
+
+    // Pending notifications generated during a transaction.
+    leaves: Vec<LeafQueryData<Types>>,
+    blocks: Vec<BlockQueryData<Types>>,
+    vid: Vec<VidCommonQueryData<Types>>,
+}
+
+impl<'a, Types> Notifications<'a, Types>
+where
+    Types: NodeType,
+{
+    fn new(notifiers: &'a Notifiers<Types>) -> Self {
+        Self {
+            notifiers,
+            leaves: Default::default(),
+            blocks: Default::default(),
+            vid: Default::default(),
+        }
+    }
+
+    async fn send(&mut self) {
+        // Send out queued notifications. Note that we do this regardless of whether the
+        // transaction was successful or not. This is because it is harmless to notify about an
+        // object that we have failed to persist to storage, and we might as well as long as we
+        // have said object in memory, because in some cases it might help wake up a task that
+        // otherwise would just continue waiting for the object.
+        for leaf in std::mem::take(&mut self.leaves) {
+            self.notifiers.leaf.notify(&leaf).await;
+        }
+        for block in std::mem::take(&mut self.blocks) {
+            self.notifiers.block.notify(&block).await;
+        }
+        for vid in std::mem::take(&mut self.vid) {
+            self.notifiers.vid_common.notify(&vid).await;
+        }
+    }
+}
+
+impl<'a, Types> Drop for Notifications<'a, Types>
+where
+    Types: NodeType,
+{
+    fn drop(&mut self) {
+        async_std::task::block_on(self.send());
+    }
+}
+
+#[derive(Debug)]
 pub struct Transaction<'a, Types, T>
 where
     Types: NodeType,
 {
     inner: T,
-    notifiers: &'a Notifiers<Types>,
-
-    // Pending notifications generated during this transaction. These notifications will be sent out
-    // after the transaction is committed to storage, which guarantees that anyone who subscribes to
-    // notifications and then sees that the desired object is _not_ present in storage will
-    // subsequently get a notification after the object is added to storage.
-    inserted_leaves: Vec<LeafQueryData<Types>>,
-    inserted_blocks: Vec<BlockQueryData<Types>>,
-    inserted_vid: Vec<VidCommonQueryData<Types>>,
+    pending: Notifications<'a, Types>,
 }
 
 impl<'a, Types, T> Transaction<'a, Types, T>
@@ -158,10 +203,7 @@ where
     fn new<S>(storage: &'a NotifyStorage<Types, S>, inner: T) -> Self {
         Self {
             inner,
-            notifiers: &storage.notifiers,
-            inserted_leaves: Default::default(),
-            inserted_blocks: Default::default(),
-            inserted_vid: Default::default(),
+            pending: Notifications::new(&storage.notifiers),
         }
     }
 }
@@ -190,21 +232,7 @@ where
     T: update::Transaction,
 {
     async fn commit(self) -> anyhow::Result<()> {
-        self.inner.commit().await?;
-
-        // Now that any inserted objects have been added to storage, alert any clients who were
-        // waiting on these objects.
-        for leaf in self.inserted_leaves {
-            self.notifiers.leaf.notify(&leaf).await;
-        }
-        for block in self.inserted_blocks {
-            self.notifiers.block.notify(&block).await;
-        }
-        for vid in self.inserted_vid {
-            self.notifiers.vid_common.notify(&vid).await;
-        }
-
-        Ok(())
+        self.inner.commit().await
     }
 
     fn revert(self) -> impl Future + Send {
@@ -302,19 +330,46 @@ where
     T: UpdateAvailabilityData<Types> + Send + Sync,
 {
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
-        // Store the new leaf.
-        self.inner.insert_leaf(leaf.clone()).await?;
         // Queue a notification about the newly received leaf.
-        self.inserted_leaves.push(leaf);
-        Ok(())
+        //
+        // The liveness of [`get`](Fetcher::get) and [`get_chunk`](Fetcher::get_chunk) depends on
+        // the assumption: if an object is not in storage, someone will later add it to storage, and
+        // at that time send a notification about it. We are adding this object to storage, but it
+        // will not actually be visible in storage until this transaction is committed, which means
+        // if we notify now, it is possible that later (before we commit) some observer will see
+        // this object not in storage and assume that a notification is coming, when in reality the
+        // notification has already been missed.
+        //
+        // Furthermore, since we are going to add this object to storage, it is possible that no
+        // other task will ever be triggered to fetch it, which causes that poor observer to block
+        // forever. To avoid this missed notification deadlock, we queue our notification, and do
+        // not send it out until this transaction is finalized.
+        //
+        // Still, we queue the notification regardless of whether the subsequent store actually
+        // succeeds or not. This is to avoid _another_ subtle deadlock: if we failed to notify just
+        // because we failed to store, some fetches might not resolve, even though the object in
+        // question has actually been fetched. By the above logic, this should actually be ok,
+        // because as long as the object is not in storage, eventually some other task will come
+        // along and fetch, store, and notify about it. However, this is certainly not ideal, since
+        // we could resolve those pending fetches right now, and it causes bigger problems when the
+        // fetch that fails to resolve is the proactive scanner task, who is often the one that
+        // would eventually come along and re-fetch the object.
+        //
+        // The key thing to note is that it does no harm to notify even if we fail to store: at best
+        // we wake some tasks up sooner; at worst, anyone who misses the notification still
+        // satisfies the invariant that we only wait on notifications for objects which are not in
+        // storage, and eventually some other task will come along, find the object missing from
+        // storage, and re-fetch it.
+        self.pending.leaves.push(leaf.clone());
+
+        // Store the new leaf.
+        self.inner.insert_leaf(leaf).await
     }
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
-        // Store the new block.
-        self.inner.insert_block(block.clone()).await?;
-        // Queue a notification about the newly received block.
-        self.inserted_blocks.push(block);
-        Ok(())
+        // Same logic as `insert_leaf`. See comments there for discussion of some subtleties.
+        self.pending.blocks.push(block.clone());
+        self.inner.insert_block(block).await
     }
 
     async fn insert_vid(
@@ -322,11 +377,9 @@ where
         common: VidCommonQueryData<Types>,
         share: Option<VidShare>,
     ) -> anyhow::Result<()> {
-        // Store the new VID.
-        self.inner.insert_vid(common.clone(), share).await?;
-        // Queue a notification about the newly received VID.
-        self.inserted_vid.push(common);
-        Ok(())
+        // Same logic as `insert_leaf`. See comments there for discussion of some subtleties.
+        self.pending.vid.push(common.clone());
+        self.inner.insert_vid(common, share).await
     }
 }
 

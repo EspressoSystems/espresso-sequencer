@@ -664,8 +664,16 @@ where
         R: Into<T::Request> + Send,
     {
         let req = req.into();
-        // Subscribe to notifications while we run `ok_or_fetch`. This means we won't miss any
-        // notifications sent in between checking local storage and triggering a fetch if necessary.
+
+        // Subscribe to notifications before we check storage for the requested object. This ensures
+        // that this operation will always eventually succeed as long as the requested object
+        // actually exists (or will exist). We will either find it in our local storage and succeed
+        // immediately, or (if it exists) someone will *later* come and add it to storage, at which
+        // point we will get a notification causing this passive fetch to resolve.
+        //
+        // Note the "someone" who later fetches the object and adds it to storage may be an active
+        // fetch triggered by this very requests, in cases where that is possible, but it need not
+        // be.
         let passive = T::passive_fetch(self.storage.notifiers(), req).await;
 
         let mut tx = match self.read().await {
@@ -754,8 +762,9 @@ where
     where
         T: RangedFetchable<Types>,
     {
-        // Subscribe to notifications first. This means we won't miss any notifications sent in
-        // between checking local storage and triggering a fetch if necessary.
+        // Subscribe to notifications first. As in [`get`](Self::get), this ensures we won't miss
+        // any notifications sent in between checking local storage and triggering a fetch if
+        // necessary.
         let mut passive = join_all(
             chunk
                 .clone()
