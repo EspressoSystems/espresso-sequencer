@@ -149,12 +149,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 .await;
             }
             HotShotEvent::DaProposalValidated(proposal, sender) => {
-                let curr_view = self.consensus.read().await.cur_view();
+                let cur_view = self.consensus.read().await.cur_view();
                 ensure!(
-                  curr_view <= proposal.data.view_number() + 1,
+                  cur_view <= proposal.data.view_number() + 1,
                   debug!(
                     "Validated DA proposal for prior view but it's too old now Current view {:?}, DA Proposal view {:?}", 
-                    curr_view,
+                    cur_view,
                     proposal.data.view_number()
                   )
                 );
@@ -212,18 +212,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 tracing::debug!("Sending vote to the DA leader {:?}", vote.view_number());
 
                 broadcast_event(Arc::new(HotShotEvent::DaVoteSend(vote)), &event_stream).await;
-                let mut consensus = self.consensus.write().await;
+                let mut consensus_writer = self.consensus.write().await;
 
                 // Ensure this view is in the view map for garbage collection.
                 let view = View {
                     view_inner: ViewInner::Da { payload_commitment },
                 };
-                if let Err(e) = consensus.update_validated_state_map(view_number, view.clone()) {
+                if let Err(e) =
+                    consensus_writer.update_validated_state_map(view_number, view.clone())
+                {
                     tracing::trace!("{e:?}");
                 }
 
                 // Record the payload we have promised to make available.
-                if let Err(e) = consensus.update_saved_payloads(
+                if let Err(e) = consensus_writer.update_saved_payloads(
                     view_number,
                     Arc::clone(&proposal.data.encoded_transactions),
                 ) {

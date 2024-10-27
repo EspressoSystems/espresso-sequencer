@@ -827,10 +827,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         let txns = Arc::clone(consensus.read().await.saved_payloads().get(&view)?);
         let vid = VidDisperse::calculate_vid_disperse(txns, &membership, view, epoch, None).await;
         let shares = VidDisperseShare::from_vid_disperse(vid);
-        let mut consensus = consensus.write().await;
+        let mut consensus_writer = consensus.write().await;
         for share in shares {
             if let Some(prop) = share.to_proposal(private_key) {
-                consensus.update_vid_shares(view, prop);
+                consensus_writer.update_vid_shares(view, prop);
             }
         }
         Some(())

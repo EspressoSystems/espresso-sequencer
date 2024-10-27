@@ -151,13 +151,13 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             .get(&view)
             .is_some_and(|m| m.contains_key(key));
         if !contained {
-            let current_epoch = self.consensus.read().await.cur_epoch();
+            let cur_epoch = self.consensus.read().await.cur_epoch();
             if Consensus::calculate_and_update_vid(
                 OuterConsensus::new(Arc::clone(&self.consensus)),
                 view,
                 Arc::clone(&self.quorum),
                 &self.private_key,
-                current_epoch,
+                cur_epoch,
             )
             .await
             .is_none()
@@ -169,7 +169,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                     view,
                     Arc::clone(&self.quorum),
                     &self.private_key,
-                    current_epoch,
+                    cur_epoch,
                 )
                 .await?;
             }

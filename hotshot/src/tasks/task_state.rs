@@ -48,7 +48,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
     async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
         Self {
             network: Arc::clone(&handle.hotshot.network),
-            state: OuterConsensus::new(handle.hotshot.consensus()),
+            consensus: OuterConsensus::new(handle.hotshot.consensus()),
             view: handle.cur_view().await,
             delay: handle.hotshot.config.data_request_delay,
             da_membership: handle.hotshot.memberships.da_membership.clone(),
@@ -162,9 +162,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
         let cur_view = handle.cur_view().await;
 
         Self {
-            current_view: cur_view,
+            cur_view,
             next_view: cur_view,
-            current_epoch: handle.cur_epoch().await,
+            cur_epoch: handle.cur_epoch().await,
             network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),

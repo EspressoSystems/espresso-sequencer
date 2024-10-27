@@ -65,10 +65,13 @@ const RETRY_DELAY: Duration = Duration::from_millis(100);
 pub struct BuilderResponse<TYPES: NodeType> {
     /// Fee information
     pub fee: BuilderFee<TYPES>,
+
     /// Block payload
     pub block_payload: TYPES::BlockPayload,
+
     /// Block metadata
     pub metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
+
     /// Optional precomputed commitment
     pub precompute_data: Option<VidPrecomputeData>,
 }
@@ -101,16 +104,22 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V
 
     /// This Nodes Public Key
     pub public_key: TYPES::SignatureKey,
+
     /// Our Private Key
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+
     /// InstanceState
     pub instance_state: Arc<TYPES::InstanceState>,
+
     /// This state's ID
     pub id: u64,
+
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
+
     /// auction results provider
     pub auction_results_provider: Arc<I::AuctionResultsProvider>,
+
     /// fallback builder url
     pub fallback_builder_url: Url,
 }
@@ -517,11 +526,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &self,
         block_view: TYPES::View,
     ) -> Result<(TYPES::View, VidCommitment)> {
-        let consensus = self.consensus.read().await;
+        let consensus_reader = self.consensus.read().await;
         let mut target_view = TYPES::View::new(block_view.saturating_sub(1));
 
         loop {
-            let view_data = consensus
+            let view_data = consensus_reader
                 .validated_state_map()
                 .get(&target_view)
                 .context(info!(
@@ -536,7 +545,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     leaf: leaf_commitment,
                     ..
                 } => {
-                    let leaf = consensus.saved_leaves().get(leaf_commitment).context
+                    let leaf = consensus_reader.saved_leaves().get(leaf_commitment).context
                         (info!("Missing leaf with commitment {leaf_commitment} for view {target_view} in saved_leaves"))?;
                     return Ok((target_view, leaf.payload_commitment()));
                 }
