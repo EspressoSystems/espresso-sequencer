@@ -1449,7 +1449,7 @@ where
         // encoded transaction length. Luckily, this being roughly proportional
         // to encoded length is enough, because we only use this value to estimate
         // our limitations on computing the VID in time.
-        let len = tx.minimum_block_size(true);
+        let len = tx.minimum_block_size();
         let max_txn_len = self.max_txn_len;
         if len > max_txn_len {
             tracing::warn!(%commit, %len, %max_txn_len, "Transaction too big");
