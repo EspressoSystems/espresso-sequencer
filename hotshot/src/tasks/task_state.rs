@@ -254,7 +254,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
 
         Self {
             latest_proposed_view: handle.cur_view().await,
-            proposal_dependencies: HashMap::new(),
+            proposal_dependencies: BTreeMap::new(),
             network: Arc::clone(&handle.hotshot.network),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             consensus: OuterConsensus::new(consensus),

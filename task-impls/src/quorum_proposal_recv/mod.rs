@@ -169,7 +169,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
             let Some((_, handles)) = self.spawned_tasks.pop_first() else {
                 break;
             };
-
             for handle in handles {
                 #[cfg(async_executor_impl = "async-std")]
                 handle.cancel().await;
