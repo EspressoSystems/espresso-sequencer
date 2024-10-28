@@ -69,7 +69,7 @@ async fn test_vote_dependency_handle() {
     // the dependency handles do not (yet) work with the existing test suite.
     let all_inputs = vec![
         DaCertificateValidated(dacs[1].clone()),
-        QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+        QuorumProposalValidated(proposals[1].clone(), leaves[0].clone()),
         VidShareValidated(vids[1].0[0].clone()),
     ]
     .into_iter()

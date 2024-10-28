@@ -285,7 +285,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
             match event.as_ref() {
                 #[allow(unused_assignments)]
                 HotShotEvent::QuorumProposalValidated(proposal, parent_leaf) => {
-                    let proposal_payload_comm = proposal.block_header.payload_commitment();
+                    let proposal_payload_comm = proposal.data.block_header.payload_commitment();
                     if let Some(ref comm) = payload_commitment {
                         if proposal_payload_comm != *comm {
                             tracing::error!("Quorum proposal has inconsistent payload commitment with DAC or VID.");
@@ -295,9 +295,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                         payload_commitment = Some(proposal_payload_comm);
                     }
                     let parent_commitment = parent_leaf.commit(&self.upgrade_lock).await;
-                    let proposed_leaf = Leaf::from_quorum_proposal(proposal);
+                    let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
                     if proposed_leaf.parent_commitment() != parent_commitment {
                         tracing::warn!("Proposed leaf parent commitment does not match parent leaf payload commitment. Aborting vote.");
+                        return;
+                    }
+                    // Update our persistent storage of the proposal. If we cannot store the proposal reutrn
+                    // and error so we don't vote
+                    if let Err(e) = self.storage.write().await.append_proposal(proposal).await {
+                        tracing::error!("failed to store proposal, not voting.  error = {e:#}");
                         return;
                     }
                     leaf = Some(proposed_leaf);
@@ -424,7 +430,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 let event_view = match dependency_type {
                     VoteDependency::QuorumProposal => {
                         if let HotShotEvent::QuorumProposalValidated(proposal, _) = event {
-                            proposal.view_number
+                            proposal.data.view_number
                         } else {
                             return false;
                         }
@@ -549,11 +555,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
         match event.as_ref() {
             HotShotEvent::QuorumProposalValidated(proposal, _leaf) => {
                 let cur_epoch = self.consensus.read().await.cur_epoch();
-                tracing::trace!("Received Proposal for view {}", *proposal.view_number());
+                tracing::trace!(
+                    "Received Proposal for view {}",
+                    *proposal.data.view_number()
+                );
 
                 // Handle the event before creating the dependency task.
                 if let Err(e) =
-                    handle_quorum_proposal_validated(proposal, &event_sender, self).await
+                    handle_quorum_proposal_validated(&proposal.data, &event_sender, self).await
                 {
                     tracing::debug!(
                         "Failed to handle QuorumProposalValidated event; error = {e:#}"
@@ -561,7 +570,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 }
 
                 self.create_dependency_task_if_new(
-                    proposal.view_number,
+                    proposal.data.view_number,
                     cur_epoch,
                     event_receiver,
                     &event_sender,

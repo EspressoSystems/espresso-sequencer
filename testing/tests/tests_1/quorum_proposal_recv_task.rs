@@ -111,7 +111,7 @@ async fn test_quorum_proposal_recv_task() {
             .await,
         )),
         exact(QuorumProposalValidated(
-            proposals[1].data.clone(),
+            proposals[1].clone(),
             leaves[0].clone(),
         )),
         exact(ViewChange(ViewNumber::new(2))),

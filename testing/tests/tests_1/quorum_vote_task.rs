@@ -75,7 +75,7 @@ async fn test_quorum_vote_task_success() {
     // Send the quorum proposal, DAC, VID share data, and validated state, in which case a dummy
     // vote can be formed and the view number will be updated.
     let inputs = vec![random![
-        QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+        QuorumProposalValidated(proposals[1].clone(), leaves[0].clone()),
         DaCertificateRecv(dacs[1].clone()),
         VidShareRecv(leaders[1], vids[1].0[0].clone()),
     ]];
@@ -150,11 +150,11 @@ async fn test_quorum_vote_task_miss_dependency() {
     // Send two of quorum proposal, DAC, VID share data, in which case there's no vote.
     let inputs = vec![
         random![
-            QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+            QuorumProposalValidated(proposals[1].clone(), leaves[0].clone()),
             VidShareRecv(leaders[1], vid_share(&vids[1].0, handle.public_key())),
         ],
         random![
-            QuorumProposalValidated(proposals[2].data.clone(), leaves[1].clone()),
+            QuorumProposalValidated(proposals[2].clone(), leaves[1].clone()),
             DaCertificateRecv(dacs[2].clone()),
         ],
         random![
@@ -223,7 +223,7 @@ async fn test_quorum_vote_task_incorrect_dependency() {
 
     // Send the correct quorum proposal and DAC, and incorrect VID share data.
     let inputs = vec![random![
-        QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+        QuorumProposalValidated(proposals[1].clone(), leaves[0].clone()),
         DaCertificateRecv(dacs[1].clone()),
         VidShareRecv(leaders[0], vids[0].0[0].clone()),
     ]];

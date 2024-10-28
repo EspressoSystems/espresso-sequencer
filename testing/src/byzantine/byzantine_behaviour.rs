@@ -186,7 +186,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
                 ];
             }
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
-                self.validated_proposals.push(proposal.clone());
+                self.validated_proposals.push(proposal.data.clone());
             }
             _ => {}
         }

@@ -100,7 +100,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// 2. The proposal has been correctly signed by the leader of the current view
     /// 3. The justify QC is valid
     /// 4. The proposal passes either liveness or safety check.
-    QuorumProposalValidated(QuorumProposal<TYPES>, Leaf<TYPES>),
+    QuorumProposalValidated(Proposal<TYPES, QuorumProposal<TYPES>>, Leaf<TYPES>),
     /// A quorum proposal is missing for a view that we need.
     QuorumProposalRequestSend(
         ProposalRequestPayload<TYPES>,
@@ -267,9 +267,14 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
                 Some(v.view_number())
             }
             HotShotEvent::QuorumProposalRecv(proposal, _)
-            | HotShotEvent::QuorumProposalSend(proposal, _) => Some(proposal.data.view_number()),
+            | HotShotEvent::QuorumProposalSend(proposal, _)
+            | HotShotEvent::QuorumProposalValidated(proposal, _)
+            | HotShotEvent::QuorumProposalResponseSend(_, proposal)
+            | HotShotEvent::QuorumProposalResponseRecv(proposal)
+            | HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
+                Some(proposal.data.view_number())
+            }
             HotShotEvent::QuorumVoteSend(vote) => Some(vote.view_number()),
-            HotShotEvent::QuorumProposalValidated(proposal, _) => Some(proposal.view_number()),
             HotShotEvent::DaProposalRecv(proposal, _)
             | HotShotEvent::DaProposalValidated(proposal, _)
             | HotShotEvent::DaProposalSend(proposal, _) => Some(proposal.data.view_number()),
@@ -311,11 +316,6 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             }
             HotShotEvent::QuorumProposalRequestSend(req, _)
             | HotShotEvent::QuorumProposalRequestRecv(req, _) => Some(req.view_number),
-            HotShotEvent::QuorumProposalResponseSend(_, proposal)
-            | HotShotEvent::QuorumProposalResponseRecv(proposal)
-            | HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
-                Some(proposal.data.view_number())
-            }
             HotShotEvent::QuorumVoteDependenciesValidated(view_number)
             | HotShotEvent::ViewChange(view_number)
             | HotShotEvent::ViewSyncTimeout(view_number, _, _)
@@ -398,7 +398,7 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             HotShotEvent::QuorumProposalValidated(proposal, _) => write!(
                 f,
                 "QuorumProposalValidated(view_number={:?})",
-                proposal.view_number()
+                proposal.data.view_number()
             ),
             HotShotEvent::DaProposalSend(proposal, _) => write!(
                 f,

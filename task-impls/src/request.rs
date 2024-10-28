@@ -96,7 +96,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
     ) -> Result<()> {
         match event.as_ref() {
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
-                let prop_view = proposal.view_number();
+                let prop_view = proposal.data.view_number();
                 let cur_epoch = self.consensus.read().await.cur_epoch();
 
                 // If we already have the VID shares for the next view, do nothing.

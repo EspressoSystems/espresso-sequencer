@@ -108,27 +108,27 @@ async fn test_upgrade_task_with_vote() {
 
     let inputs = vec![
         random![
-            QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+            QuorumProposalValidated(proposals[1].clone(), leaves[0].clone()),
             DaCertificateRecv(dacs[1].clone()),
             VidShareRecv(leaders[1], vids[1].0[0].clone()),
         ],
         random![
-            QuorumProposalValidated(proposals[2].data.clone(), leaves[1].clone()),
+            QuorumProposalValidated(proposals[2].clone(), leaves[1].clone()),
             DaCertificateRecv(dacs[2].clone()),
             VidShareRecv(leaders[2], vids[2].0[0].clone()),
         ],
         random![
-            QuorumProposalValidated(proposals[3].data.clone(), leaves[2].clone()),
+            QuorumProposalValidated(proposals[3].clone(), leaves[2].clone()),
             DaCertificateRecv(dacs[3].clone()),
             VidShareRecv(leaders[3], vids[3].0[0].clone()),
         ],
         random![
-            QuorumProposalValidated(proposals[4].data.clone(), leaves[3].clone()),
+            QuorumProposalValidated(proposals[4].clone(), leaves[3].clone()),
             DaCertificateRecv(dacs[4].clone()),
             VidShareRecv(leaders[4], vids[4].0[0].clone()),
         ],
         random![QuorumProposalValidated(
-            proposals[5].data.clone(),
+            proposals[5].clone(),
             leaves[5].clone()
         ),],
     ];

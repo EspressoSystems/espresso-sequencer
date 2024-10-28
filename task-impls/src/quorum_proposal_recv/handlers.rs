@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use async_broadcast::{broadcast, Receiver, Sender};
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLockUpgradableReadGuard;
 use committable::Committable;
 use hotshot_types::{
@@ -19,6 +20,7 @@ use hotshot_types::{
     traits::{
         election::Membership,
         node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
         storage::Storage,
         ValidatedState,
     },
@@ -104,6 +106,35 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
     Ok(())
 }
 
+/// Spawn a task which will fire a request to get a proposal, and store it.
+#[allow(clippy::too_many_arguments)]
+fn spawn_fetch_proposal<TYPES: NodeType, V: Versions>(
+    view: TYPES::View,
+    event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
+    membership: Arc<TYPES::Membership>,
+    consensus: OuterConsensus<TYPES>,
+    sender_public_key: TYPES::SignatureKey,
+    sender_private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    upgrade_lock: UpgradeLock<TYPES, V>,
+) {
+    async_spawn(async move {
+        let lock = upgrade_lock;
+
+        let _ = fetch_proposal(
+            view,
+            event_sender,
+            event_receiver,
+            membership,
+            consensus,
+            sender_public_key,
+            sender_private_key,
+            &lock,
+        )
+        .await;
+    });
+}
+
 /// Handles the `QuorumProposalRecv` event by first validating the cert itself for the view, and then
 /// updating the states, which runs when the proposal cannot be found in the internal state map.
 ///
@@ -155,7 +186,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
     .await;
 
     // Get the parent leaf and state.
-    let mut parent_leaf = task_state
+    let parent_leaf = task_state
         .consensus
         .read()
         .await
@@ -163,9 +194,8 @@ pub(crate) async fn handle_quorum_proposal_recv<
         .get(&justify_qc.data.leaf_commit)
         .cloned();
 
-    parent_leaf = match parent_leaf {
-        Some(p) => Some(p),
-        None => fetch_proposal(
+    if parent_leaf.is_none() {
+        spawn_fetch_proposal(
             justify_qc.view_number(),
             event_sender.clone(),
             event_receiver.clone(),
@@ -176,11 +206,9 @@ pub(crate) async fn handle_quorum_proposal_recv<
             // incorrectly.
             task_state.public_key.clone(),
             task_state.private_key.clone(),
-            &task_state.upgrade_lock,
-        )
-        .await
-        .ok(),
-    };
+            task_state.upgrade_lock.clone(),
+        );
+    }
     let consensus_reader = task_state.consensus.read().await;
 
     let parent = match parent_leaf {
