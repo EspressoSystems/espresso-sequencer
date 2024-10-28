@@ -200,7 +200,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 // Generate and send vote
                 let vote = DaVote::create_signed_vote(
                     DaData {
-                        payload_commit: payload_commitment.clone(),
+                        payload_commit: payload_commitment,
                     },
                     view_number,
                     &self.public_key,

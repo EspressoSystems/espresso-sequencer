@@ -310,7 +310,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                             return;
                         }
                     } else {
-                        payload_commitment = Some(cert_payload_comm.clone());
+                        payload_commitment = Some(*cert_payload_comm);
                     }
                 }
                 HotShotEvent::VidShareValidated(share) => {
@@ -322,7 +322,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
                             return;
                         }
                     } else {
-                        payload_commitment = Some(vid_payload_commitment.clone());
+                        payload_commitment = Some(*vid_payload_commitment);
                     }
                 }
                 _ => {}

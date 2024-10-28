@@ -69,7 +69,7 @@ async fn test_vid_task() {
     let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let (_, vid_precompute) = vid.commit_only_precompute(&encoded_transactions).unwrap();
-    let payload_commitment = vid_disperse.commit.clone();
+    let payload_commitment = vid_disperse.commit;
 
     let signature = <TestTypes as NodeType>::SignatureKey::sign(
         handle.private_key(),

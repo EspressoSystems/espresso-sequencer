@@ -311,7 +311,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                     auction_result,
                 ) => {
                     commit_and_metadata = Some(CommitmentAndMetadata {
-                        commitment: payload_commitment.clone(),
+                        commitment: *payload_commitment,
                         builder_commitment: builder_commitment.clone(),
                         metadata: metadata.clone(),
                         fees: fees.clone(),

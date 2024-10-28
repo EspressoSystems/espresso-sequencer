@@ -58,7 +58,7 @@ impl<TYPES: NodeType> Clone for ViewInner<TYPES> {
     fn clone(&self) -> Self {
         match self {
             Self::Da { payload_commitment } => Self::Da {
-                payload_commitment: payload_commitment.clone(),
+                payload_commitment: *payload_commitment,
             },
             Self::Leaf { leaf, state, delta } => Self::Leaf {
                 leaf: *leaf,
@@ -123,7 +123,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
     #[must_use]
     pub fn payload_commitment(&self) -> Option<VidCommitment> {
         if let Self::Da { payload_commitment } = self {
-            Some(payload_commitment.clone())
+            Some(*payload_commitment)
         } else {
             None
         }

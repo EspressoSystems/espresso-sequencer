@@ -87,7 +87,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                     vid_precompute.clone(),
                 )
                 .await;
-                let payload_commitment = vid_disperse.payload_commitment.clone();
+                let payload_commitment = vid_disperse.payload_commitment;
                 let shares = VidDisperseShare::from_vid_disperse(vid_disperse.clone());
                 let mut consensus_writer = self.consensus.write().await;
                 for share in shares {
