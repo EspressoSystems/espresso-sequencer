@@ -41,6 +41,11 @@ pub trait EncodeBytes {
 pub trait Transaction:
     Clone + Serialize + DeserializeOwned + Debug + PartialEq + Eq + Sync + Send + Committable + Hash
 {
+    /// The function to estimate the transaction size
+    /// It takes in the transaction itself and a boolean indicating if the transaction adds a new namespace
+    /// Since each new namespace adds overhead
+    /// just ignore this parameter by default and use it when needed
+    fn minimum_block_size(&self) -> u64;
 }
 
 /// Abstraction over the full contents of a block
