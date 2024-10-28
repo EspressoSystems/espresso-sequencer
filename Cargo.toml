@@ -155,3 +155,15 @@ debug = false
 strip = "debuginfo"
 [profile.dev.package."*"]
 opt-level = 3
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
+libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", tag = "0.5.78-patch5" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch5" }
