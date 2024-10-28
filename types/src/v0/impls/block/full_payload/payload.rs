@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use committable::Committable;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::data::ViewNumber;
-use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
     utils::BuilderCommitment,
@@ -87,13 +86,7 @@ impl Payload {
         // add each tx to its namespace
         let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
-            let mut tx_size = 0;
-            if !ns_builders.contains_key(&tx.namespace()) {
-                // each new namespace adds overhead
-                tx_size += tx.minimum_block_size(true);
-            } else {
-                tx_size += tx.minimum_block_size(false);
-            }
+            let tx_size = tx.size_in_block(!ns_builders.contains_key(&tx.namespace()));
 
             if tx_size > max_block_byte_len {
                 // skip this transaction since it exceeds the block size limit

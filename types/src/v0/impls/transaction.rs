@@ -62,6 +62,15 @@ impl Transaction {
         self.payload
     }
 
+    pub fn size_in_block(&self, new_ns: bool) -> u64 {
+        if new_ns {
+            // each new namespace adds overhead, therefore it includes `NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len()`
+            self.minimum_block_size()
+        } else {
+            (self.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len()) as u64
+        }
+    }
+
     #[cfg(any(test, feature = "testing"))]
     pub fn random(rng: &mut dyn rand::RngCore) -> Self {
         use rand::Rng;
@@ -82,11 +91,11 @@ impl Transaction {
 }
 
 impl HotShotTransaction for Transaction {
-    fn minimum_block_size(&self, new_ns: bool) -> u64 {
-        let mut len = self.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
-        if new_ns {
-            len += NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
-        }
+    fn minimum_block_size(&self) -> u64 {
+        let len = self.payload().len()
+            + NsPayloadBuilder::tx_table_entry_byte_len()
+            + NsTableBuilder::entry_byte_len()
+            + NsPayloadBuilder::tx_table_header_byte_len();
         len as u64
     }
 }
