@@ -26,9 +26,9 @@ use async_std::{
     sync::{Arc, Mutex},
     task::{sleep, spawn},
 };
+use backoff::{backoff::Backoff, ExponentialBackoff};
 use derivative::Derivative;
 use std::{
-    cmp::min,
     collections::{hash_map::Entry, BTreeSet, HashMap},
     fmt::Debug,
     time::Duration,
@@ -40,25 +40,6 @@ pub mod request;
 pub use provider::Provider;
 pub use request::Request;
 
-// The fastest we will retry failed requests.
-const MIN_RETRY_DELAY: Duration = Duration::from_secs(2);
-// Factor by which to increase the retry delay each failed request.
-//
-// Our backoff strategy is to start with a relatively quick retry delay, but back off very quickly
-// until reaching a maximum delay. This lets us succeed quickly when there is a transient failure in
-// the provider, while limiting spam/failed requests when the provider is down for a long time.
-//
-// Backoff also lets us set a longer maximum delay without affecting optimistic performance, further
-// reducing spam.
-const BACKOFF_FACTOR: u32 = 4;
-
-// The longest we will wait to retry failed requests.
-//
-// Since many of the issues we might encounter when fetching from a peer are of the kind that won't
-// recover immediately, and since we may have many parallel requests for resources and don't want to
-// spam our peers, and since backoff allows us to first try a few times with a faster delay, we can
-// safely wait a long while before retrying failed requests.
-const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(5 * 60);
 const DEFAULT_RATE_LIMIT: usize = 32;
 
 /// A callback to process the result of a request.
@@ -84,7 +65,7 @@ pub trait LocalCallback<T>: Debug + Ord {
 pub struct Fetcher<T, C> {
     #[derivative(Debug = "ignore")]
     in_progress: Arc<Mutex<HashMap<T, BTreeSet<C>>>>,
-    retry_delay: Duration,
+    backoff: ExponentialBackoff,
     permit: Arc<Semaphore>,
 }
 
@@ -92,15 +73,15 @@ impl<T, C> Default for Fetcher<T, C> {
     fn default() -> Self {
         Self {
             in_progress: Default::default(),
-            retry_delay: DEFAULT_RETRY_DELAY,
+            backoff: Default::default(),
             permit: Arc::new(Semaphore::new(DEFAULT_RATE_LIMIT)),
         }
     }
 }
 
 impl<T, C> Fetcher<T, C> {
-    pub fn with_retry_delay(mut self, retry_delay: Duration) -> Self {
-        self.retry_delay = retry_delay;
+    pub fn with_backoff(mut self, backoff: ExponentialBackoff) -> Self {
+        self.backoff = backoff;
         self
     }
 
@@ -140,7 +121,7 @@ impl<T, C> Fetcher<T, C> {
     {
         let in_progress = self.in_progress.clone();
         let permit = self.permit.clone();
-        let max_retry_delay = self.retry_delay;
+        let mut backoff = self.backoff.clone();
 
         spawn(async move {
             tracing::info!("spawned active fetch for {req:?}");
@@ -166,7 +147,8 @@ impl<T, C> Fetcher<T, C> {
             }
 
             // Now we are responsible for fetching the object, reach out to the provider.
-            let mut delay = min(MIN_RETRY_DELAY, max_retry_delay);
+            backoff.reset();
+            let mut delay = backoff.next_backoff().unwrap_or(Duration::from_secs(1));
             let res = loop {
                 // Acquire a permit from the semaphore to rate limit the number of concurrent fetch requests
                 let permit = permit.acquire().await;
@@ -189,10 +171,9 @@ impl<T, C> Fetcher<T, C> {
                 drop(permit);
                 sleep(delay).await;
 
-                // Try a few times with a short delay, on the off chance that the problem resolves
-                // quickly. Back off until we eventually reach the maximum delay, which should be
-                // pretty long.
-                delay = min(delay * BACKOFF_FACTOR, max_retry_delay);
+                if let Some(next_delay) = backoff.next_backoff() {
+                    delay = next_delay;
+                }
             };
 
             // Done fetching, remove our lock on the object and execute all callbacks.

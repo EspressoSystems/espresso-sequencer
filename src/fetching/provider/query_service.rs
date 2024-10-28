@@ -784,7 +784,7 @@ mod test {
         ));
         let data_source = builder(&db, &provider)
             .await
-            .with_retry_delay(Duration::from_secs(1))
+            .with_max_retry_interval(Duration::from_secs(1))
             .build()
             .await
             .unwrap();
@@ -1088,6 +1088,8 @@ mod test {
         let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
         let data_source = FetchingDataSource::builder(storage, provider)
             .disable_proactive_fetching()
+            .with_max_retry_interval(Duration::from_millis(100))
+            .with_retry_timeout(Duration::from_secs(1))
             .build()
             .await
             .unwrap();
@@ -1108,11 +1110,12 @@ mod test {
         // Trigger a fetch of the first leaf; it should resolve even if we fail to store the leaf.
         tracing::info!("fetch with write failure");
         match failure {
-            FailureType::Begin => data_source.as_ref().fail_one_begin_writable().await,
-            FailureType::Write => data_source.as_ref().fail_one_write().await,
-            FailureType::Commit => data_source.as_ref().fail_one_commit().await,
+            FailureType::Begin => data_source.as_ref().fail_begins_writable().await,
+            FailureType::Write => data_source.as_ref().fail_writes().await,
+            FailureType::Commit => data_source.as_ref().fail_commits().await,
         }
         assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
+        data_source.as_ref().pass().await;
 
         // We can get the same leaf again, this will again trigger an active fetch since storage
         // failed the first time.
@@ -1140,6 +1143,81 @@ mod test {
     #[async_std::test]
     async fn test_fetch_storage_failure_on_commit() {
         test_fetch_storage_failure_helper(FailureType::Commit).await;
+    }
+
+    async fn test_fetch_storage_failure_retry_helper(failure: FailureType) {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
+        );
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            MockBase::instance(),
+        ));
+        let db = TmpDb::init().await;
+        let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
+        let data_source = FetchingDataSource::builder(storage, provider)
+            .disable_proactive_fetching()
+            .with_min_retry_interval(Duration::from_millis(100))
+            .build()
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a couple of blocks are produced.
+        let leaves = network.data_source().subscribe_leaves(1).await;
+        let leaves = leaves.take(2).collect::<Vec<_>>().await;
+
+        // Send the last leaf to the disconnected data source so it learns about the height.
+        let last_leaf = leaves.last().unwrap();
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Trigger a fetch of the first leaf; it should retry until it successfully stores the leaf.
+        tracing::info!("fetch with write failure");
+        match failure {
+            FailureType::Begin => data_source.as_ref().fail_one_begin_writable().await,
+            FailureType::Write => data_source.as_ref().fail_one_write().await,
+            FailureType::Commit => data_source.as_ref().fail_one_commit().await,
+        }
+        assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
+
+        // Check that the leaf ended up in local storage.
+        let mut tx = data_source.read().await.unwrap();
+        assert_eq!(leaves[0], tx.get_leaf(1.into()).await.unwrap());
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_retry_on_begin() {
+        test_fetch_storage_failure_retry_helper(FailureType::Begin).await;
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_retry_on_write() {
+        test_fetch_storage_failure_retry_helper(FailureType::Write).await;
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_retry_on_commit() {
+        test_fetch_storage_failure_retry_helper(FailureType::Commit).await;
     }
 
     #[async_std::test]
@@ -1170,7 +1248,7 @@ mod test {
         ));
         let data_source = builder(&db, &provider)
             .await
-            .with_retry_delay(Duration::from_secs(1))
+            .with_max_retry_interval(Duration::from_secs(1))
             .build()
             .await
             .unwrap();

@@ -104,6 +104,7 @@ use anyhow::Context;
 use async_lock::Semaphore;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
+use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
 use derivative::Derivative;
 use futures::{
     future::{join_all, BoxFuture, Future, FutureExt},
@@ -137,7 +138,7 @@ use self::{
 pub struct Builder<Types, S, P> {
     storage: S,
     provider: P,
-    retry_delay: Option<Duration>,
+    backoff: ExponentialBackoffBuilder,
     rate_limit: Option<usize>,
     range_chunk_size: usize,
     minor_scan_interval: Duration,
@@ -153,10 +154,17 @@ pub struct Builder<Types, S, P> {
 impl<Types, S, P> Builder<Types, S, P> {
     /// Construct a new builder with the given storage and fetcher and the default options.
     pub fn new(storage: S, provider: P) -> Self {
+        let mut default_backoff = ExponentialBackoffBuilder::default();
+        default_backoff
+            .with_initial_interval(Duration::from_secs(1))
+            .with_multiplier(2.)
+            .with_max_interval(Duration::from_secs(32))
+            .with_max_elapsed_time(Some(Duration::from_secs(64)));
+
         Self {
             storage,
             provider,
-            retry_delay: None,
+            backoff: default_backoff,
             rate_limit: None,
             range_chunk_size: 25,
             // By default, we run minor proactive scans fairly frequently: once every minute. These
@@ -178,13 +186,37 @@ impl<Types, S, P> Builder<Types, S, P> {
         }
     }
 
-    /// Set the maximum delay between retries of fetches.
-    pub fn with_retry_delay(mut self, retry_delay: Duration) -> Self {
-        self.retry_delay = Some(retry_delay);
+    /// Set the minimum delay between retries of failed operations.
+    pub fn with_min_retry_interval(mut self, interval: Duration) -> Self {
+        self.backoff.with_initial_interval(interval);
         self
     }
 
-    /// Set the maximum delay between retries of fetches.
+    /// Set the maximum delay between retries of failed operations.
+    pub fn with_max_retry_interval(mut self, interval: Duration) -> Self {
+        self.backoff.with_max_interval(interval);
+        self
+    }
+
+    /// Set the multiplier for exponential backoff when retrying failed requests.
+    pub fn with_retry_multiplier(mut self, multiplier: f64) -> Self {
+        self.backoff.with_multiplier(multiplier);
+        self
+    }
+
+    /// Set the randomization factor for randomized backoff when retrying failed requests.
+    pub fn with_retry_randomization_factor(mut self, factor: f64) -> Self {
+        self.backoff.with_randomization_factor(factor);
+        self
+    }
+
+    /// Set the maximum time to retry failed operations before giving up.
+    pub fn with_retry_timeout(mut self, timeout: Duration) -> Self {
+        self.backoff.with_max_elapsed_time(Some(timeout));
+        self
+    }
+
+    /// Set the maximum number of simultaneous fetches.
     pub fn with_rate_limit(mut self, with_rate_limit: usize) -> Self {
         self.rate_limit = Some(with_rate_limit);
         self
@@ -627,6 +659,8 @@ where
     active_fetch_delay: Duration,
     // Duration to sleep after each chunk fetched
     chunk_fetch_delay: Duration,
+    // Exponential backoff when retrying failed oeprations.
+    backoff: ExponentialBackoff,
 }
 
 impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
@@ -658,14 +692,14 @@ where
     for<'a> S::ReadOnly<'a>: PrunedHeightStorage + NodeStorage<Types>,
 {
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+        let backoff = builder.backoff.build();
+
         let mut payload_fetcher = fetching::Fetcher::default();
         let mut leaf_fetcher = fetching::Fetcher::default();
         let mut vid_common_fetcher = fetching::Fetcher::default();
-        if let Some(delay) = builder.retry_delay {
-            payload_fetcher = payload_fetcher.with_retry_delay(delay);
-            leaf_fetcher = leaf_fetcher.with_retry_delay(delay);
-            vid_common_fetcher = vid_common_fetcher.with_retry_delay(delay);
-        }
+        payload_fetcher = payload_fetcher.with_backoff(backoff.clone());
+        leaf_fetcher = leaf_fetcher.with_backoff(backoff.clone());
+        vid_common_fetcher = vid_common_fetcher.with_backoff(backoff.clone());
 
         if let Some(limit) = builder.rate_limit {
             let permit = Arc::new(Semaphore::new(limit));
@@ -685,6 +719,7 @@ where
             range_chunk_size: builder.range_chunk_size,
             active_fetch_delay: builder.active_fetch_delay,
             chunk_fetch_delay: builder.chunk_fetch_delay,
+            backoff,
         })
     }
 }
@@ -1089,21 +1124,33 @@ where
     where
         T: Storable<Types>,
     {
-        let try_store = async {
+        let try_store = || async {
             let mut tx = self.storage.write().await?;
             obj.clone().store(&mut tx).await?;
             tx.commit().await
         };
 
         // Store the object in local storage, so we can avoid fetching it in the future.
-        if let Err(err) = try_store.await {
+        let mut backoff = self.backoff.clone();
+        backoff.reset();
+        loop {
+            let Err(err) = try_store().await else {
+                break;
+            };
             // It is unfortunate if this fails, but we can still proceed by notifying with the
-            // object that we fetched, keeping it in memory. Simply log the error and move on.
+            // object that we fetched, keeping it in memory. Log the error, retry a few times, and
+            // eventually move on.
             tracing::warn!(
                 "failed to store fetched {} {}: {err:#}",
                 T::name(),
                 obj.height()
             );
+
+            let Some(delay) = backoff.next_backoff() else {
+                break;
+            };
+            tracing::info!(?delay, "retrying failed operation");
+            sleep(delay).await;
         }
 
         // Send a notification about the newly received object. It is important that we do this
