@@ -138,11 +138,13 @@ pub use super::storage::fs::Transaction;
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
-///             let mut tx = state.hotshot_qs.write().await.unwrap();
-///             tx.update(&event).await.unwrap();
-///             // Update other modules' states based on `event`.
+///             state.hotshot_qs.update(&event).await;
 ///
+///             // Update other modules' states based on `event`.
+///             let mut tx = state.hotshot_qs.write().await.unwrap();
+///             // Do updates
 ///             tx.commit().await.unwrap();
+///
 ///             // Commit or skip versions for other modules' storage.
 ///             state.store.commit_version().unwrap();
 ///         }

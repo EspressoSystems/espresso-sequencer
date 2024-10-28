@@ -76,11 +76,8 @@
 //! // Update query data using HotShot events.
 //! let mut events = hotshot.event_stream();
 //! while let Some(event) = events.next().await {
-//!     let mut tx = data_source.write().await?;
-//!
 //!     // Update the query data based on this event.
-//!     tx.update(&event).await?;
-//!     tx.commit().await?;
+//!     data_source.update(&event).await;
 //! }
 //! # Ok(())
 //! # }

@@ -226,15 +226,7 @@ impl Config {
 /// create an aggregate struct containing both [`SqlDataSource`] and your additional module
 /// states, as described in the [composition guide](crate#composition). If the additional modules
 /// have data that should live in the same database as the [`SqlDataSource`] data, you can follow
-/// the steps in [custom migrations](#custom-migrations) to accomodate this. When modifying that
-/// data, you can use a [`Transaction`] to atomically synchronize updates to the other modules' data
-/// with updates to the [`SqlDataSource`]. If the additional data is completely independent of
-/// HotShot query service data and does not need to be synchronized, you can also connect to the
-/// database directly to make updates.
-///
-/// In the following example, we compose HotShot query service modules with other application-
-/// specific modules, synchronizing updates using SQL transactions via
-/// [`write`](super::VersionedDataSource::write).
+/// the steps in [custom migrations](#custom-migrations) to accomodate this.
 ///
 /// ```
 /// # use async_std::{sync::Arc, task::spawn};
@@ -276,14 +268,10 @@ impl Config {
 ///     spawn(async move {
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
-///             let mut tx = state.hotshot_qs.write().await.unwrap();
-///             UpdateDataSource::<AppTypes>::update(&mut tx, &event)
-///                 .await
-///                 .unwrap();
-///             // Update other modules' states based on `event`. Use `tx` to include database
-///             // updates in the same atomic transaction as `update`.
+///             state.hotshot_qs.update(&event).await;
 ///
-///             // Commit all outstanding changes to the entire state at the same time.
+///             let mut tx = state.hotshot_qs.write().await.unwrap();
+///             // Update other modules' states based on `event`, using `tx` to access the database.
 ///             tx.commit().await.unwrap();
 ///         }
 ///     });
