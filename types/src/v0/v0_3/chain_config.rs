@@ -32,6 +32,13 @@ pub struct ChainConfig {
 
     /// Account that receives sequencing bids.
     pub bid_recipient: Option<FeeAccount>,
+
+    /// `StakeTable `(proxy) contract address on L1.
+    ///
+    /// This is optional so that stake can easily be toggled on/off, with no need to deploy a
+    /// contract when they are off. In a future release, after PoS is switched on and thoroughly
+    /// tested, this may be made mandatory.
+    pub stake_table_contract: Option<Address>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
@@ -134,6 +141,7 @@ impl From<v0_1::ChainConfig> for ChainConfig {
             fee_contract,
             fee_recipient,
             bid_recipient: None,
+            stake_table_contract: None,
         }
     }
 }
@@ -168,6 +176,7 @@ impl Default for ChainConfig {
             fee_contract: None,
             fee_recipient: Default::default(),
             bid_recipient: None,
+            stake_table_contract: None,
         }
     }
 }

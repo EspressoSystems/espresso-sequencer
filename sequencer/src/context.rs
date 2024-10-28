@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use anyhow::Context;
 use async_compatibility_layer::art::async_timeout;
 use async_std::{
@@ -10,19 +8,17 @@ use committable::{Commitment, Committable};
 use derivative::Derivative;
 use espresso_types::{
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
-    NodeState, PubKey, Transaction, ValidatedState,
+    NodeState, PubKey, StakeCommittee, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::StaticCommittee,
     types::{Event, EventType, SystemContextHandle},
     MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
-
 use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
@@ -30,7 +26,6 @@ use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     network::NetworkConfig,
     traits::{
-        election::Membership,
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
         node_implementation::{ConsensusTime, Versions},
@@ -39,6 +34,7 @@ use hotshot_types::{
     utils::{View, ViewInner},
     PeerConfig,
 };
+use std::fmt::Display;
 use std::time::Duration;
 use url::Url;
 
@@ -112,20 +108,24 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             .load_consensus_state::<V>(instance_state.clone())
             .await?;
 
-        let committee_membership = StaticCommittee::new(
+        let committee_membership = StakeCommittee::new_stake(
             config.known_nodes_with_stake.clone(),
             config.known_nodes_with_stake.clone(),
             Topic::Global,
+            &instance_state,
+            config.epoch_height,
         );
 
-        let da_membership = StaticCommittee::new(
+        let da_membership = StakeCommittee::new_stake(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
             Topic::Da,
+            &instance_state,
+            config.epoch_height,
         );
 
         let memberships = Memberships {
-            quorum_membership: committee_membership.clone(),
+            quorum_membership: committee_membership,
             da_membership,
         };
 

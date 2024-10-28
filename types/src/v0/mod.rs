@@ -1,6 +1,3 @@
-use std::marker::PhantomData;
-
-use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
@@ -10,6 +7,7 @@ use hotshot_types::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 mod header;
 mod impls;
@@ -136,7 +134,7 @@ impl NodeType for SeqTypes {
     type Transaction = Transaction;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
-    type Membership = StaticCommittee<Self>;
+    type Membership = StakeCommittee<Self>;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
@@ -181,7 +179,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 pub type NetworkConfig = hotshot_types::network::NetworkConfig<PubKey>;
 
-pub use self::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};
+pub use self::impls::{NodeState, SolverAuctionResultsProvider, StakeCommittee, ValidatedState};
 pub use crate::v0_1::{
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,

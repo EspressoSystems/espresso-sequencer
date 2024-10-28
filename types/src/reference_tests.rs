@@ -100,6 +100,7 @@ fn reference_chain_config() -> crate::v0_3::ChainConfig {
         fee_contract: Some(Default::default()),
         fee_recipient: Default::default(),
         bid_recipient: Some(Default::default()),
+        stake_table_contract: Some(Default::default()),
     }
 }
 
