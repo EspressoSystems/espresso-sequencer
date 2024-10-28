@@ -2,17 +2,19 @@ use anyhow::Context;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use clap::Parser;
+use committable::Committable;
 use derivative::Derivative;
 use espresso_types::{
     parse_duration,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
+use futures::stream::StreamExt;
 use hotshot_query_service::data_source::storage::sql::Write;
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, Config, SqlStorage, Transaction},
+        sql::{include_migrations, query_as, Config, SqlStorage, Transaction},
     },
     Transaction as _, VersionedDataSource,
 };
@@ -236,10 +238,12 @@ impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        Ok(Persistence {
+        let persistence = Persistence {
             store_undecided_state: self.store_undecided_state,
             db: SqlStorage::connect(self.try_into()?).await?,
-        })
+        };
+        persistence.migrate_quorum_proposal_leaf_hashes().await?;
+        Ok(persistence)
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -252,6 +256,39 @@ impl PersistenceOptions for Options {
 pub struct Persistence {
     db: SqlStorage,
     store_undecided_state: bool,
+}
+
+impl Persistence {
+    /// Ensure the `leaf_hash` column is populated for all existing quorum proposals.
+    ///
+    /// This column was added in a migration, but because it requires computing a commitment of the
+    /// existing data, it is not easy to populate in the SQL migration itself. Thus, on startup, we
+    /// check if there are any just-migrated quorum proposals with a `NULL` value for this column,
+    /// and if so we populate the column manually.
+    async fn migrate_quorum_proposal_leaf_hashes(&self) -> anyhow::Result<()> {
+        let mut tx = self.db.write().await?;
+        let mut proposals = tx.fetch("SELECT * FROM quorum_proposals");
+        let mut updates = vec![];
+        while let Some(row) = proposals.next().await {
+            let row = row?;
+            let hash: Option<String> = row.try_get("leaf_hash")?;
+            if hash.is_none() {
+                let view: i64 = row.try_get("view")?;
+                let data: Vec<u8> = row.try_get("data")?;
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&data)?;
+                let leaf = Leaf::from_quorum_proposal(&proposal.data);
+                let leaf_hash = Committable::commit(&leaf);
+                tracing::info!(view, %leaf_hash, "populating quorum proposal leaf hash");
+                updates.push((view, leaf_hash.to_string()));
+            }
+        }
+        drop(proposals);
+
+        tx.upsert("quorum_proposals", ["view", "leaf_hash"], ["view"], updates)
+            .await?;
+        tx.commit().await
+    }
 }
 
 #[async_trait]
@@ -364,6 +401,14 @@ impl SequencerPersistence for Persistence {
         Ok(Some((leaf, qc)))
     }
 
+    async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
+        let mut tx = self.db.read().await?;
+        let (view,) = query_as::<(i64,)>("SELECT coalesce(max(view), 0) FROM anchor_leaf")
+            .fetch_one(tx.as_mut())
+            .await?;
+        Ok(ViewNumber::new(view as u64))
+    }
+
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
@@ -452,6 +497,20 @@ impl SequencerPersistence for Persistence {
         ))
     }
 
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+        let mut tx = self.db.read().await?;
+        let (data,) =
+            query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE view = $1 LIMIT 1")
+                .bind(view.u64() as i64)
+                .fetch_one(tx.as_mut())
+                .await?;
+        let proposal = bincode::deserialize(&data)?;
+        Ok(proposal)
+    }
+
     async fn append_vid(
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
@@ -530,12 +589,13 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
+        let leaf_hash = Committable::commit(&Leaf::from_quorum_proposal(&proposal.data));
         let mut tx = self.db.write().await?;
         tx.upsert(
             "quorum_proposals",
-            ["view", "data"],
+            ["view", "leaf_hash", "data"],
             ["view"],
-            [(view_number as i64, proposal_bytes)],
+            [(view_number as i64, leaf_hash.to_string(), proposal_bytes)],
         )
         .await?;
         tx.commit().await
@@ -793,4 +853,83 @@ mod generic_tests {
     use crate::*;
 
     instantiate_persistence_tests!(Persistence);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
+    use espresso_types::{NodeState, ValidatedState};
+    use futures::stream::TryStreamExt;
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::traits::signature_key::SignatureKey;
+
+    #[async_std::test]
+    async fn test_quorum_proposals_leaf_hash_migration() {
+        // Create some quorum proposals to test with.
+        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let privkey = BLSPubKey::generated_from_seed_indexed([0; 32], 1).1;
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
+        let mut quorum_proposal = Proposal {
+            data: QuorumProposal::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            },
+            signature,
+            _pd: Default::default(),
+        };
+
+        let qp1 = quorum_proposal.clone();
+
+        quorum_proposal.data.view_number = ViewNumber::new(1);
+        let qp2 = quorum_proposal.clone();
+
+        let qps = [qp1, qp2];
+
+        // Create persistence and add the quorum proposals with NULL leaf hash.
+        let db = Persistence::tmp_storage().await;
+        let persistence = Persistence::connect(&db).await;
+        let mut tx = persistence.db.write().await.unwrap();
+        let params = qps
+            .iter()
+            .map(|qp| {
+                (
+                    qp.data.view_number.u64() as i64,
+                    bincode::serialize(&qp).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        tx.upsert("quorum_proposals", ["view", "data"], ["view"], params)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        // Create a new persistence and ensure the commitments get populated.
+        let persistence = Persistence::connect(&db).await;
+        let mut tx = persistence.db.read().await.unwrap();
+        let rows = tx
+            .fetch("SELECT * FROM quorum_proposals ORDER BY view ASC")
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), qps.len());
+        for (row, qp) in rows.into_iter().zip(qps) {
+            assert_eq!(row.get::<i64, _>("view"), qp.data.view_number.u64() as i64);
+            assert_eq!(
+                row.get::<Vec<u8>, _>("data"),
+                bincode::serialize(&qp).unwrap()
+            );
+            assert_eq!(
+                row.get::<String, _>("leaf_hash"),
+                Committable::commit(&Leaf::from_quorum_proposal(&qp.data)).to_string()
+            );
+        }
+    }
 }

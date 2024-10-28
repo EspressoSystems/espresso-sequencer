@@ -38,14 +38,15 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
+use marketplace_builder_core::service::EventServiceStream;
 use marketplace_builder_core::{
     builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
     service::{
         run_builder_service, BroadcastSenders, BuilderHooks, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
-    utils::ParentBlockReferences,
 };
+use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_solver::SolverError;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
@@ -118,14 +119,14 @@ impl BuilderConfig {
         // spawn the builder service
         tracing::info!("Running builder against hotshot events API at {events_api_url}",);
 
-        let stream = marketplace_builder_core::utils::EventServiceStream::<
+        let stream = marketplace_builder_core::service::EventServiceStream::<
             SeqTypes,
             SequencerApiVersion,
         >::connect(events_api_url)
         .await?;
 
         async_spawn(async move {
-            let res = run_builder_service::<SeqTypes>(hooks, senders, stream).await;
+            let res = run_builder_service::<SeqTypes, _>(hooks, senders, stream).await;
             tracing::error!(?res, "Builder service exited");
             if res.is_err() {
                 panic!("Builder should restart.");
@@ -147,7 +148,6 @@ impl BuilderConfig {
         events_api_url: Url,
         builder_api_url: Url,
         api_timeout: Duration,
-        buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
         bid_config: Option<BidConfig>,
@@ -159,7 +159,7 @@ impl BuilderConfig {
             %tx_channel_capacity,
             %event_channel_capacity,
             ?api_timeout,
-            buffered_view_num_count,
+            ?instance_state.chain_config.max_block_size,
             ?maximize_txns_count_timeout_duration,
             "initializing builder",
         );
@@ -243,7 +243,7 @@ impl BuilderConfig {
             let namespaces_to_skip = fetch_namespaces_to_skip(solver_base_url.clone()).await;
             let hooks = Arc::new(hooks::EspressoFallbackHooks {
                 solver_base_url,
-                namespaces_to_skip: RwLock::new(namespaces_to_skip),
+                namespaces_to_skip: RwLock::new(namespaces_to_skip).into(),
             });
             Self::start_service(
                 Arc::clone(&global_state),
@@ -317,8 +317,8 @@ mod test {
     use marketplace_builder_core::{
         builder_state::{self, RequestMessage, TransactionSource},
         service::run_builder_service,
-        utils::BuilderStateId,
     };
+    use marketplace_builder_shared::block::BuilderStateId;
     use marketplace_solver::{testing::MockSolver, SolverError};
     use portpicker::pick_unused_port;
     use sequencer::{
@@ -636,7 +636,6 @@ mod test {
             urls.event.clone(),
             urls.builder.clone(),
             Duration::from_secs(2),
-            5,
             Duration::from_secs(2),
             base_fee,
             Some(BidConfig {
@@ -768,7 +767,6 @@ mod test {
             urls.event.clone(),
             urls.builder.clone(),
             Duration::from_secs(2),
-            5,
             Duration::from_secs(2),
             base_fee,
             None,

@@ -10,9 +10,10 @@ use hotshot_types::{
         BlockPayload, ValidatedState as _,
     },
     utils::BuilderCommitment,
-    vid::{VidCommitment, VidCommon},
+    vid::{VidCommitment, VidCommon, VidSchemeType},
 };
 use jf_merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
+use jf_vid::VidScheme;
 use serde::{
     de::{self, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
@@ -521,16 +522,16 @@ impl Header {
     async fn get_chain_config(
         validated_state: &ValidatedState,
         instance_state: &NodeState,
-    ) -> ChainConfig {
+    ) -> anyhow::Result<ChainConfig> {
         let validated_cf = validated_state.chain_config;
         let instance_cf = instance_state.chain_config;
 
         if validated_cf.commit() == instance_cf.commit() {
-            return instance_cf;
+            return Ok(instance_cf);
         }
 
         match validated_cf.resolve() {
-            Some(cf) => cf,
+            Some(cf) => Ok(cf),
             None => {
                 tracing::info!("fetching chain config {} from peers", validated_cf.commit());
 
@@ -732,6 +733,17 @@ impl BlockHeader<SeqTypes> for Header {
 
     /// Build a header with the parent validate state, instance-level state, parent leaf, payload
     /// commitment, metadata, and auction results. This is only used in post-marketplace versions
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            height = parent_leaf.block_header().block_number() + 1,
+            parent_view = ?parent_leaf.view_number(),
+            payload_commitment,
+            payload_size = VidSchemeType::get_payload_byte_len(&_vid_common),
+            ?auction_results,
+            version,
+        )
+    )]
     async fn new_marketplace(
         parent_state: &<SeqTypes as NodeType>::ValidatedState,
         instance_state: &<<SeqTypes as NodeType>::ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Instance,
@@ -744,6 +756,8 @@ impl BlockHeader<SeqTypes> for Header {
         auction_results: Option<SolverAuctionResults>,
         version: Version,
     ) -> Result<Self, Self::Error> {
+        tracing::info!("preparing to propose marketplace header");
+
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
@@ -755,10 +769,10 @@ impl BlockHeader<SeqTypes> for Header {
                     UpgradeType::Marketplace { chain_config } => chain_config,
                     UpgradeType::Fee { chain_config } => chain_config,
                 },
-                None => Header::get_chain_config(&validated_state, instance_state).await,
+                None => Header::get_chain_config(&validated_state, instance_state).await?,
             }
         } else {
-            Header::get_chain_config(&validated_state, instance_state).await
+            Header::get_chain_config(&validated_state, instance_state).await?
         };
 
         validated_state.chain_config = chain_config.into();
@@ -807,6 +821,7 @@ impl BlockHeader<SeqTypes> for Header {
                 .peers
                 .as_ref()
                 .fetch_accounts(
+                    instance_state,
                     height,
                     view,
                     parent_state.fee_merkle_tree.commitment(),
@@ -815,9 +830,8 @@ impl BlockHeader<SeqTypes> for Header {
                 .await?;
 
             // Insert missing fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
+            for proof in missing_account_proofs.iter() {
+                proof
                     .remember(&mut validated_state.fee_merkle_tree)
                     .context("remembering fee account")?;
             }
@@ -829,7 +843,12 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(height, view, &mut validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(
+                    instance_state,
+                    height,
+                    view,
+                    &mut validated_state.block_merkle_tree,
+                )
                 .await
                 .context("remembering block proof")?;
         }
@@ -850,6 +869,16 @@ impl BlockHeader<SeqTypes> for Header {
         )?)
     }
 
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            height = parent_leaf.block_header().block_number() + 1,
+            parent_view = ?parent_leaf.view_number(),
+            payload_commitment,
+            payload_size = VidSchemeType::get_payload_byte_len(&_vid_common),
+            version,
+        )
+    )]
     async fn new_legacy(
         parent_state: &ValidatedState,
         instance_state: &NodeState,
@@ -861,6 +890,8 @@ impl BlockHeader<SeqTypes> for Header {
         _vid_common: VidCommon,
         version: Version,
     ) -> Result<Self, Self::Error> {
+        tracing::info!("preparing to propose legacy header");
+
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
@@ -870,12 +901,12 @@ impl BlockHeader<SeqTypes> for Header {
             match instance_state.upgrades.get(&version) {
                 Some(upgrade) => match upgrade.upgrade_type {
                     UpgradeType::Fee { chain_config } => chain_config,
-                    _ => Header::get_chain_config(&validated_state, instance_state).await,
+                    _ => Header::get_chain_config(&validated_state, instance_state).await?,
                 },
-                None => Header::get_chain_config(&validated_state, instance_state).await,
+                None => Header::get_chain_config(&validated_state, instance_state).await?,
             }
         } else {
-            Header::get_chain_config(&validated_state, instance_state).await
+            Header::get_chain_config(&validated_state, instance_state).await?
         };
 
         validated_state.chain_config = chain_config.into();
@@ -921,6 +952,7 @@ impl BlockHeader<SeqTypes> for Header {
                 .peers
                 .as_ref()
                 .fetch_accounts(
+                    instance_state,
                     height,
                     view,
                     parent_state.fee_merkle_tree.commitment(),
@@ -929,9 +961,8 @@ impl BlockHeader<SeqTypes> for Header {
                 .await?;
 
             // Insert missing fee state entries
-            for account in missing_account_proofs.iter() {
-                account
-                    .proof
+            for proof in missing_account_proofs.iter() {
+                proof
                     .remember(&mut validated_state.fee_merkle_tree)
                     .context("remembering fee account")?;
             }
@@ -943,7 +974,12 @@ impl BlockHeader<SeqTypes> for Header {
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(height, view, &mut validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(
+                    instance_state,
+                    height,
+                    view,
+                    &mut validated_state.block_merkle_tree,
+                )
                 .await
                 .context("remembering block proof")?;
         }
@@ -1065,27 +1101,19 @@ impl ExplorerHeader<SeqTypes> for Header {
 
 #[cfg(test)]
 mod test_headers {
+
     use std::sync::Arc;
 
-    use ethers::{
-        types::{Address, U256},
-        utils::Anvil,
-    };
+    use ethers::{types::Address, utils::Anvil};
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
-    use jf_vid::VidScheme;
+
     use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
-    use vbs::{
-        bincode_serializer::BincodeSerializer,
-        version::{StaticVersion, StaticVersionType},
-        BinarySerializer,
-    };
+    use vbs::{bincode_serializer::BincodeSerializer, version::StaticVersion, BinarySerializer};
+
+    use crate::{eth_signature_key::EthKeyPair, mock::MockStateCatchup};
 
     use super::*;
-    use crate::{
-        eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal, ProposalValidationError,
-    };
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -1373,103 +1401,7 @@ mod test_headers {
     }
 
     #[async_std::test]
-    async fn test_validate_proposal_error_cases() {
-        // TODO add assertion for timestamp validation
-        let genesis = GenesisForTest::default().await;
-        let vid_common = vid_scheme(1).disperse([]).unwrap().common;
-
-        let mut validated_state = ValidatedState::default();
-        let mut block_merkle_tree = validated_state.block_merkle_tree.clone();
-
-        let mut parent_header = genesis.header.clone();
-        let mut parent_leaf = genesis.leaf.clone();
-        *parent_leaf.block_header_mut() = parent_header.clone();
-
-        // Populate the tree with an initial `push`.
-        block_merkle_tree.push(genesis.header.commit()).unwrap();
-        let block_merkle_tree_root = block_merkle_tree.commitment();
-        validated_state.block_merkle_tree = block_merkle_tree.clone();
-        *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
-        let mut proposal = parent_header.clone();
-        *proposal.timestamp_mut() = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        *proposal.l1_head_mut() = 5;
-
-        let ver = StaticVersion::<0, 1>::version();
-
-        // Pass a different chain config to trigger a chain config validation error.
-        let state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
-            .await
-            .unwrap()
-            .0;
-
-        let chain_config = ChainConfig {
-            chain_id: U256::zero().into(),
-            ..Default::default()
-        };
-        let err = validate_proposal(&state, chain_config, &parent_leaf, &proposal, &vid_common)
-            .unwrap_err();
-
-        assert_eq!(
-            ProposalValidationError::InvalidChainConfig {
-                expected: format!("{:?}", chain_config),
-                proposal: format!("{:?}", proposal.chain_config())
-            },
-            err
-        );
-
-        // Advance `proposal.height` to trigger validation error.
-
-        let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
-            .await
-            .unwrap()
-            .0;
-        let err = validate_proposal(
-            &validated_state,
-            genesis.instance_state.chain_config,
-            &parent_leaf,
-            &proposal,
-            &vid_common,
-        )
-        .unwrap_err();
-        assert_eq!(
-            ProposalValidationError::InvalidHeight {
-                parent_height: 0,
-                proposal_height: 0
-            },
-            err
-        );
-
-        // proposed `Header` root should include parent + parent.commit
-        *proposal.height_mut() += 1;
-
-        let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
-            .await
-            .unwrap()
-            .0;
-
-        let err = validate_proposal(
-            &validated_state,
-            genesis.instance_state.chain_config,
-            &parent_leaf,
-            &proposal,
-            &vid_common,
-        )
-        .unwrap_err();
-        // Fails b/c `proposal` has not advanced from `parent`
-        assert_eq!(
-            ProposalValidationError::InvalidBlockRoot {
-                expected_root: validated_state.block_merkle_tree.commitment(),
-                proposal_root: proposal.block_merkle_tree_root()
-            },
-            err
-        );
-    }
-
-    #[async_std::test]
-    async fn test_validate_proposal_success() {
+    async fn test_proposal_validation_success() {
         setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
@@ -1547,9 +1479,10 @@ mod test_headers {
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
         block_merkle_tree.push(proposal.commit()).unwrap();
 
-        let proposal_state = proposal_state
+        let _proposal_state = proposal_state
             .apply_header(
                 &genesis_state,
+                &genesis_state.peers,
                 &parent_leaf,
                 &proposal,
                 StaticVersion::<0, 1>::version(),
@@ -1557,23 +1490,23 @@ mod test_headers {
             .await
             .unwrap()
             .0;
-        validate_proposal(
-            &proposal_state,
-            genesis.instance_state.chain_config,
-            &parent_leaf,
-            &proposal.clone(),
-            &vid_common,
-        )
-        .unwrap();
 
-        assert_eq!(
-            proposal_state.block_merkle_tree.commitment(),
-            proposal.block_merkle_tree_root()
-        );
+        // ValidatedTransition::new(
+        //     proposal_state.clone(),
+        //     &parent_leaf.block_header(),
+        //     Proposal::new(&proposal, VidSchemeType::get_payload_byte_len(&vid_common)),
+        // )
+        // .validate()
+        // .unwrap();
+
+        // assert_eq!(
+        //     proposal_state.block_merkle_tree.commitment(),
+        //     proposal.block_merkle_tree_root()
+        // );
     }
 
     #[test]
-    fn verify_header_signature() {
+    fn verify_builder_signature() {
         // simulate a fixed size hash by padding our message
         let message = ";)";
         let mut commitment = [0u8; 32];

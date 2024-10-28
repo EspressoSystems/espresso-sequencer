@@ -41,7 +41,7 @@ processes:
     # script will think they're already deployed.
     command:
       unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
-      --use-mock-contract --only hotshot,light-client
+      --use-mock-contract --only light-client
     namespace: setup
     depends_on:
       demo-l1-network:
@@ -451,23 +451,6 @@ processes:
         condition: process_healthy
       keydb:
         condition: process_healthy
-
-  commitment-task:
-    command: commitment-task
-    depends_on:
-      sequencer0:
-        condition: process_healthy
-      demo-l1-network:
-        condition: process_healthy
-      deploy-prover-contracts:
-        condition: process_completed
-    readiness_probe:
-      http_get:
-        scheme: http
-        host: localhost
-        port: $ESPRESSO_COMMITMENT_TASK_PORT
-        path: /healthcheck
-      failure_threshold: 100
 
   submit-transactions-public:
     command: submit-transactions

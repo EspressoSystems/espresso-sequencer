@@ -4,7 +4,6 @@ use clap::{builder::OsStr, Parser, ValueEnum};
 use contract_bindings::{
     erc1967_proxy::ERC1967Proxy,
     fee_contract::FeeContract,
-    hot_shot::HotShot,
     light_client::{LightClient, LIGHTCLIENT_ABI},
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
@@ -26,10 +25,6 @@ use url::Url;
 /// Set of predeployed contracts.
 #[derive(Clone, Debug, Parser)]
 pub struct DeployedContracts {
-    /// Use an already-deployed HotShot.sol instead of deploying a new one.
-    #[clap(long, env = Contract::HotShot)]
-    hotshot: Option<Address>,
-
     /// Use an already-deployed PlonkVerifier.sol instead of deploying a new one.
     #[clap(long, env = Contract::PlonkVerifier)]
     plonk_verifier: Option<Address>,
@@ -58,8 +53,6 @@ pub struct DeployedContracts {
 /// An identifier for a particular contract.
 #[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
 pub enum Contract {
-    #[display(fmt = "ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS")]
-    HotShot,
     #[display(fmt = "ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
     PlonkVerifier,
     #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
@@ -87,9 +80,6 @@ pub struct Contracts(HashMap<Contract, Address>);
 impl From<DeployedContracts> for Contracts {
     fn from(deployed: DeployedContracts) -> Self {
         let mut m = HashMap::new();
-        if let Some(addr) = deployed.hotshot {
-            m.insert(Contract::HotShot, addr);
-        }
         if let Some(addr) = deployed.plonk_verifier {
             m.insert(Contract::PlonkVerifier, addr);
         }
@@ -338,13 +328,6 @@ pub async fn deploy(
     );
     tracing::info!(%balance, "deploying from address {deployer:#x}");
 
-    // `HotShot.sol`
-    if should_deploy(ContractGroup::HotShot, &only) {
-        contracts
-            .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
-            .await?;
-    }
-
     // `LightClient.sol`
     if should_deploy(ContractGroup::LightClient, &only) {
         // Deploy the upgradable light client contract first, then initialize it through a proxy contract
@@ -474,8 +457,6 @@ pub async fn is_proxy_contract(
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ContractGroup {
-    #[clap(name = "hotshot")]
-    HotShot, // TODO: confirm whether we keep HotShot in the contract group
     FeeContract,
     LightClient,
 }
