@@ -86,7 +86,9 @@ jobs:
             target/release/dev-rollup
 
   build-arm:
-    runs-on: buildjet-16vcpu-ubuntu-2204-arm
+    runs-on: buildjet-8vcpu-ubuntu-2204-arm
+    env:
+      CARGO_BUILD_JOBS: '6'
     steps:
       - name: Fix submodule permissions check
         run: |
