@@ -180,6 +180,12 @@ pub struct GlobalState<Types: NodeType> {
     pub highest_view_num_builder_id: BuilderStateId<Types>,
 
     pub block_size_limits: BlockSizeLimits,
+
+    /// Number of nodes.
+    ///
+    /// This gets updated when HotShot queries `claim_block_with_num_nodes` after each epoch
+    /// upgrade. The value is used for VID commitment calculation.
+    pub num_nodes: usize,
 }
 
 /// `GetChannelForMatchingBuilderError` is an error enum that represents the
@@ -221,6 +227,7 @@ impl<Types: NodeType> GlobalState<Types> {
         last_garbage_collected_view_num: Types::View,
         max_block_size_increment_period: Duration,
         protocol_max_block_size: u64,
+        num_nodes: usize,
     ) -> Self {
         let mut spawned_builder_states = HashMap::new();
         let bootstrap_id = BuilderStateId {
@@ -239,6 +246,7 @@ impl<Types: NodeType> GlobalState<Types> {
                 protocol_max_block_size,
                 max_block_size_increment_period,
             ),
+            num_nodes,
         }
     }
 
@@ -989,6 +997,21 @@ where
         Ok(self
             .claim_block_implementation(block_hash, view_number, sender, signature)
             .await?)
+    }
+
+    async fn claim_block_with_num_nodes(
+        &self,
+        block_hash: &BuilderCommitment,
+        view_number: u64,
+        sender: <Types as NodeType>::SignatureKey,
+        signature: &<<Types as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+        num_nodes: usize,
+    ) -> Result<AvailableBlockData<Types>, BuildError> {
+        // Update the stored `num_nodes` with the given value, which will be used for VID computation.
+        self.global_state.write_arc().await.num_nodes = num_nodes;
+
+        self.claim_block(block_hash, view_number, sender, signature)
+            .await
     }
 
     async fn claim_block_header_input(

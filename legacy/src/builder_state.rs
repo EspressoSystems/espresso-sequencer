@@ -170,9 +170,6 @@ pub struct BuilderState<Types: NodeType> {
     /// global state handle, defined in the service.rs
     pub global_state: Arc<RwLock<GlobalState<Types>>>,
 
-    /// total nodes required for the VID computation as part of block header input response
-    pub total_nodes: NonZeroUsize,
-
     /// locally spawned builder Commitements
     pub builder_commitments: HashSet<(BuilderStateId<Types>, BuilderCommitment)>,
 
@@ -627,8 +624,6 @@ impl<Types: NodeType> BuilderState<Types> {
         req_sender: BroadcastSender<MessageType<Types>>,
     ) {
         let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
-        self.total_nodes =
-            NonZeroUsize::new(da_proposal_info.num_nodes).unwrap_or(self.total_nodes);
 
         // We replace our parent_block_references with information from the
         // quorum proposal.  This is identifying the block that this specific
@@ -795,9 +790,9 @@ impl<Types: NodeType> BuilderState<Types> {
         let block_size: u64 = encoded_txns.len() as u64;
         let offered_fee: u64 = self.base_fee * block_size;
 
-        // get the total nodes from the builder state.
-        // stored while processing the DA Proposal
-        let vid_num_nodes = self.total_nodes.get();
+        // get the total nodes from the global state.
+        // stored while processing the `claim_block_with_num_nodes` request.
+        let num_nodes = self.global_state.read_arc().await.num_nodes;
 
         let (trigger_send, trigger_recv) = oneshot();
 
@@ -811,7 +806,7 @@ impl<Types: NodeType> BuilderState<Types> {
             };
 
             let join_handle =
-                spawn_blocking(move || precompute_vid_commitment(&encoded_txns, vid_num_nodes));
+                spawn_blocking(move || precompute_vid_commitment(&encoded_txns, num_nodes));
             #[cfg(async_executor_impl = "tokio")]
             let (vidc, pre_compute_data) = join_handle.await.unwrap();
             #[cfg(async_executor_impl = "async-std")]
@@ -1035,7 +1030,6 @@ impl<Types: NodeType> BuilderState<Types> {
         tx_receiver: BroadcastReceiver<Arc<ReceivedTransaction<Types>>>,
         tx_queue: VecDeque<Arc<ReceivedTransaction<Types>>>,
         global_state: Arc<RwLock<GlobalState<Types>>>,
-        num_nodes: NonZeroUsize,
         maximize_txn_capture_timeout: Duration,
         base_fee: u64,
         instance_state: Arc<Types::InstanceState>,
@@ -1059,7 +1053,6 @@ impl<Types: NodeType> BuilderState<Types> {
             tx_queue,
             global_state,
             builder_commitments: HashSet::new(),
-            total_nodes: num_nodes,
             maximize_txn_capture_timeout,
             base_fee,
             instance_state,
@@ -1108,7 +1101,6 @@ impl<Types: NodeType> BuilderState<Types> {
             tx_queue: self.tx_queue.clone(),
             global_state: self.global_state.clone(),
             builder_commitments: self.builder_commitments.clone(),
-            total_nodes: self.total_nodes,
             maximize_txn_capture_timeout: self.maximize_txn_capture_timeout,
             base_fee: self.base_fee,
             instance_state: self.instance_state.clone(),
