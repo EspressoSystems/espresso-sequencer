@@ -346,7 +346,7 @@ where
                         SELECT t1.block_height
                             FROM transaction AS t1
                             WHERE t1.block_height = {}
-                            ORDER BY (t1.block_height, t1.index) DESC
+                            ORDER BY (t1.block_height, t1.index)
                             OFFSET {}
                             LIMIT 1
                     )
