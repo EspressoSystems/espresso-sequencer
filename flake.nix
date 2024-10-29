@@ -12,7 +12,7 @@
     ];
   };
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.rust-overlay.url = "github:oxalica/rust-overlay";
 
   inputs.nixpkgs-cross-overlay.url =
@@ -175,11 +175,6 @@
           nightlyToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.minimal.override {
             extensions = [ "rust-analyzer" ];
           });
-          # nixWithFlakes allows pre v2.4 nix installations to use
-          # flake commands (like `nix flake update`)
-          nixWithFlakes = pkgs.writeShellScriptBin "nix" ''
-            exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
-          '';
           solc = pkgs.solc-bin.latest;
         in
         mkShell (rustEnvVars // {
@@ -195,14 +190,14 @@
             # Rust tools
             cargo-audit
             cargo-edit
-            cargo-sort
+            cargo-mutants
             cargo-nextest
+            cargo-sort
             typos
             just
             nightlyToolchain.passthru.availableComponents.rust-analyzer
 
             # Tools
-            nixWithFlakes
             nixpkgs-fmt
             entr
             process-compose
