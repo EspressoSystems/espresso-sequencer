@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["URL"],"fn":["gas_category_to_confidence"],"struct":["BaseFeeEstimate","BlockNative","BlockPrice","GasEstimate","Response"]};
