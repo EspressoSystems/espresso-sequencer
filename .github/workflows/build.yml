@@ -144,7 +144,9 @@ jobs:
 
   build-dockers:
     runs-on: ubuntu-latest
-    needs: [build, build-arm]
+    needs: [build]
+    # run if `build` succeeded and build-arm succeeded or was skipped
+    if: success() && (needs.build.result == 'success' && (needs.build-arm.result == 'success' || needs.build-arm.result == 'skipped'))
     outputs:
       sequencer-tag: ${{ steps.sequencer.outputs.tags }}
       cdn-broker-tag: ${{ steps.cdn-broker.outputs.tags }}
