@@ -519,12 +519,11 @@ where
         let header_tag = Commitment::<Header<Types>>::tag();
         let tx_tag = Commitment::<HotshotTransaction<Types>>::tag();
 
-        let search_query_string = search_query.to_string();
-
         if search_tag != header_tag && search_tag != tx_tag {
             return Err(GetSearchResultsError::InvalidQuery(errors::BadQuery {}));
         }
 
+        let search_query_string = search_query.to_string();
         if search_tag == header_tag {
             let block_query = format!(
                 "SELECT {BLOCK_COLUMNS}
