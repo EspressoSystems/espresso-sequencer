@@ -38,7 +38,6 @@ seed = [
   0
 ]
 transaction_size = 100
-start_delay_seconds = 10
 builder = "Simple"
 
 [config]
@@ -47,9 +46,6 @@ num_nodes_with_stake = 10
 staked_da_nodes = 10
 fixed_leader_for_gpuvid = 1
 next_view_timeout = 15_000
-timeout_ratio = [ 11, 10 ]
-round_start_delay = 1
-start_delay = 10_000
 num_bootstrap = 5
 builder_urls = [ "https://builder.staging.testnet.espresso.network/" ]
 

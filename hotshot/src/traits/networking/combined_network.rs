@@ -261,7 +261,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
         num_bootstrap: usize,
         network_id: usize,
         da_committee_size: usize,
-        is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         secondary_network_delay: Duration,
     ) -> AsyncGenerator<Arc<Self>> {
@@ -271,7 +270,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 num_bootstrap,
                 network_id,
                 da_committee_size,
-                is_da,
                 None,
                 Duration::default(),
             ),
@@ -280,7 +278,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 num_bootstrap,
                 network_id,
                 da_committee_size,
-                is_da,
                 reliability_config,
                 Duration::default(),
             )

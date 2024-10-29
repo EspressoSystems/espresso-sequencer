@@ -76,5 +76,3 @@ pub const ORCHESTRATOR_DEFAULT_NUM_ROUNDS: usize = 100;
 pub const ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND: usize = 10;
 /// default size of transactions
 pub const ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE: usize = 100;
-/// default delay before beginning consensus
-pub const ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS: u64 = 60;

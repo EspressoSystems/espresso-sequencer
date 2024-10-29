@@ -91,7 +91,7 @@ impl<S: TaskState + Send + 'static> Task<S> {
                         let _ =
                             S::handle_event(&mut self.state, input, &self.sender, &self.receiver)
                                 .await
-                                .inspect_err(|e| tracing::info!("{e}"));
+                                .inspect_err(|e| tracing::debug!("{e}"));
                     }
                     Err(RecvError::Closed) => {
                         break self.boxed_state();

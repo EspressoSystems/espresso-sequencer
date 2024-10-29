@@ -4,14 +4,14 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{num::NonZeroUsize, time::Duration, vec};
+use std::{num::NonZeroUsize, time::Duration};
 
 use surf_disco::Url;
 use vec1::Vec1;
 
 use crate::{
     constants::REQUEST_DATA_DELAY, traits::signature_key::SignatureKey,
-    upgrade_config::UpgradeConfig, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+    upgrade_config::UpgradeConfig, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 
 /// Default builder URL, used as placeholder
@@ -37,9 +37,6 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     #[serde(skip)]
     /// The known DA nodes' public key and stake values
     pub known_da_nodes: Vec<PeerConfig<KEY>>,
-    #[serde(skip)]
-    /// The known non-staking nodes'
-    pub known_nodes_without_stake: Vec<KEY>,
     /// Number of staking DA nodes
     pub staked_da_nodes: usize,
     /// Number of fixed leaders for GPU VID
@@ -48,12 +45,6 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     pub next_view_timeout: u64,
     /// Duration for view sync round timeout
     pub view_sync_timeout: Duration,
-    /// The exponential backoff ration for the next-view timeout
-    pub timeout_ratio: (u64, u64),
-    /// The delay a leader inserts before starting pre-commit, in milliseconds
-    pub round_start_delay: u64,
-    /// Delay after init before starting consensus, in milliseconds
-    pub start_delay: u64,
     /// Number of network bootstrap nodes
     pub num_bootstrap: usize,
     /// The maximum amount of time a leader can wait to get a block from a builder
@@ -72,20 +63,15 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
 impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
     fn from(val: HotShotConfigFile<KEY>) -> Self {
         HotShotConfig {
-            execution_type: ExecutionType::Continuous,
             start_threshold: val.start_threshold,
             num_nodes_with_stake: val.num_nodes_with_stake,
             known_da_nodes: val.known_da_nodes,
             known_nodes_with_stake: val.known_nodes_with_stake,
-            known_nodes_without_stake: val.known_nodes_without_stake,
             my_own_validator_config: val.my_own_validator_config,
             da_staked_committee_size: val.staked_da_nodes,
             fixed_leader_for_gpuvid: val.fixed_leader_for_gpuvid,
             next_view_timeout: val.next_view_timeout,
             view_sync_timeout: val.view_sync_timeout,
-            timeout_ratio: val.timeout_ratio,
-            round_start_delay: val.round_start_delay,
-            start_delay: val.start_delay,
             num_bootstrap: val.num_bootstrap,
             builder_timeout: val.builder_timeout,
             data_request_delay: val
@@ -136,15 +122,11 @@ impl<KEY: SignatureKey> HotShotConfigFile<KEY> {
             start_threshold: (1, 1),
             my_own_validator_config: ValidatorConfig::default(),
             known_nodes_with_stake: gen_known_nodes_with_stake,
-            known_nodes_without_stake: vec![],
             staked_da_nodes,
             known_da_nodes,
             fixed_leader_for_gpuvid: 1,
             next_view_timeout: 10000,
             view_sync_timeout: Duration::from_millis(1000),
-            timeout_ratio: (11, 10),
-            round_start_delay: 1,
-            start_delay: 1,
             num_bootstrap: 5,
             builder_timeout: Duration::from_secs(10),
             data_request_delay: Some(Duration::from_millis(REQUEST_DATA_DELAY)),

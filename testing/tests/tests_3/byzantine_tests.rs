@@ -77,11 +77,11 @@ cross_tests!(
                                              },
                                          ),
             behaviour,
+            num_nodes_with_stake: 12,
             ..TestDescription::default()
         };
 
-        metadata.overall_safety_properties.num_failed_views = 0;
-
+        metadata.overall_safety_properties.num_failed_views = 15;
         metadata
     },
 );

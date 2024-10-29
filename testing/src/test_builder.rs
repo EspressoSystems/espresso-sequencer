@@ -20,7 +20,7 @@ use hotshot_example_types::{
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     traits::node_implementation::{NodeType, Versions},
-    ExecutionType, HotShotConfig, ValidatorConfig,
+    HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
 use vec1::Vec1;
@@ -44,12 +44,6 @@ pub type TransactionValidator = Arc<dyn Fn(&Vec<(u64, u64)>) -> Result<()> + Sen
 pub struct TimingData {
     /// Base duration for next-view timeout, in milliseconds
     pub next_view_timeout: u64,
-    /// The exponential backoff ration for the next-view timeout
-    pub timeout_ratio: (u64, u64),
-    /// The delay a leader inserts before starting pre-commit, in milliseconds
-    pub round_start_delay: u64,
-    /// Delay after init before starting consensus, in milliseconds
-    pub start_delay: u64,
     /// The maximum amount of time a leader can wait to get a block from a builder
     pub builder_timeout: Duration,
     /// time to wait until we request data associated with a proposal
@@ -287,9 +281,6 @@ impl Default for TimingData {
     fn default() -> Self {
         Self {
             next_view_timeout: 4000,
-            timeout_ratio: (11, 10),
-            round_start_delay: 100,
-            start_delay: 100,
             builder_timeout: Duration::from_millis(500),
             data_request_delay: Duration::from_millis(200),
             secondary_network_delay: Duration::from_millis(1000),
@@ -320,9 +311,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
             },
             timing_data: TimingData {
                 next_view_timeout: 2000,
-                timeout_ratio: (1, 1),
-                start_delay: 20000,
-                round_start_delay: 25,
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
@@ -349,8 +337,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TestDescription
                 expected_views_to_fail: HashMap::new(),
             },
             timing_data: TimingData {
-                start_delay: 120_000,
-                round_start_delay: 25,
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
@@ -500,23 +486,17 @@ where
         );
         // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
         let config = HotShotConfig {
-            // TODO this doesn't exist anymore
-            execution_type: ExecutionType::Incremental,
             start_threshold: (1, 1),
             num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
             // Currently making this zero for simplicity
             known_da_nodes,
             num_bootstrap: num_bootstrap_nodes,
             known_nodes_with_stake,
-            known_nodes_without_stake: vec![],
             my_own_validator_config,
             da_staked_committee_size,
             fixed_leader_for_gpuvid: 1,
             next_view_timeout: 500,
             view_sync_timeout: Duration::from_millis(250),
-            timeout_ratio: (11, 10),
-            round_start_delay: 25,
-            start_delay: 1,
             builder_timeout: Duration::from_millis(1000),
             data_request_delay: Duration::from_millis(200),
             // Placeholder until we spin up the builder
@@ -533,9 +513,6 @@ where
         };
         let TimingData {
             next_view_timeout,
-            timeout_ratio,
-            round_start_delay,
-            start_delay,
             builder_timeout,
             data_request_delay,
             secondary_network_delay,
@@ -545,9 +522,6 @@ where
             // TODO this should really be using the timing config struct
             |a: &mut HotShotConfig<TYPES::SignatureKey>| {
                 a.next_view_timeout = next_view_timeout;
-                a.timeout_ratio = timeout_ratio;
-                a.round_start_delay = round_start_delay;
-                a.start_delay = start_delay;
                 a.builder_timeout = builder_timeout;
                 a.data_request_delay = data_request_delay;
                 a.view_sync_timeout = view_sync_timeout;

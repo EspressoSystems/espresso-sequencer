@@ -12,13 +12,10 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
     num::NonZeroUsize,
     sync::Arc,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
-use async_compatibility_layer::{
-    art::async_sleep,
-    logging::{setup_backtrace, setup_logging},
-};
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_trait::async_trait;
 use cdn_broker::reexports::crypto::signature::KeyPair;
 use chrono::Utc;
@@ -443,10 +440,7 @@ pub trait RunDa<
         transaction_size_in_bytes: u64,
     ) -> BenchResults {
         let NetworkConfig {
-            rounds,
-            node_index,
-            start_delay_seconds,
-            ..
+            rounds, node_index, ..
         } = self.config();
 
         let mut total_transactions_committed = 0;
@@ -455,9 +449,6 @@ pub trait RunDa<
         let mut maximum_latency = 0;
         let mut total_latency = 0;
         let mut num_latency = 0;
-
-        info!("Sleeping for {start_delay_seconds} seconds before starting hotshot!");
-        async_sleep(Duration::from_secs(start_delay_seconds)).await;
 
         info!("Starting HotShot example!");
         let start = Instant::now();

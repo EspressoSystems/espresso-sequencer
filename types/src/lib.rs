@@ -63,18 +63,6 @@ where
 {
     assert_future::<F::Output, _>(Box::pin(fut))
 }
-/// the type of consensus to run. Either:
-/// wait for a signal to start a view,
-/// or constantly run
-/// you almost always want continuous
-/// incremental is just for testing
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
-pub enum ExecutionType {
-    /// constantly increment view as soon as view finishes
-    Continuous,
-    /// wait for a signal
-    Incremental,
-}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Derivative, Display)]
 #[serde(bound(deserialize = ""))]
@@ -178,8 +166,6 @@ impl<KEY: SignatureKey> Default for PeerConfig<KEY> {
 #[derive(Clone, custom_debug::Debug, serde::Serialize, serde::Deserialize)]
 #[serde(bound(deserialize = ""))]
 pub struct HotShotConfig<KEY: SignatureKey> {
-    /// Whether to run one view or continuous views
-    pub execution_type: ExecutionType,
     /// The proportion of nodes required before the orchestrator issues the ready signal,
     /// expressed as (numerator, denominator)
     pub start_threshold: (u64, u64),
@@ -190,8 +176,6 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     /// All public keys known to be DA nodes
     pub known_da_nodes: Vec<PeerConfig<KEY>>,
-    /// List of known non-staking nodes' public keys
-    pub known_nodes_without_stake: Vec<KEY>,
     /// My own validator config, including my public key, private key, stake value, serving as private parameter
     pub my_own_validator_config: ValidatorConfig<KEY>,
     /// List of DA committee (staking)nodes for static DA committee
@@ -202,12 +186,6 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     pub next_view_timeout: u64,
     /// Duration of view sync round timeouts
     pub view_sync_timeout: Duration,
-    /// The exponential backoff ration for the next-view timeout
-    pub timeout_ratio: (u64, u64),
-    /// The delay a leader inserts before starting pre-commit, in milliseconds
-    pub round_start_delay: u64,
-    /// Delay after init before starting consensus, in milliseconds
-    pub start_delay: u64,
     /// Number of network bootstrap nodes
     pub num_bootstrap: usize,
     /// The maximum amount of time a leader can wait to get a block from a builder

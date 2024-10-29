@@ -54,9 +54,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
             HotShotEvent::QuorumProposalSend(proposal, signature) => {
                 let mut result = Vec::new();
 
-                for n in 0..self.multiplier {
-                    // reset last actioned view so we actually propose multiple times
-                    consensus.write().await.reset_actions();
+                for n in 1..self.multiplier {
                     let mut modified_proposal = proposal.clone();
 
                     modified_proposal.data.view_number += n * self.increment;
@@ -66,8 +64,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
                         signature.clone(),
                     ));
                 }
-                consensus.write().await.reset_actions();
 
+                consensus.write().await.reset_actions();
                 result
             }
             _ => vec![event.clone()],

@@ -14,9 +14,8 @@ use tracing::error;
 
 use crate::{
     constants::{
-        ORCHESTRATOR_DEFAULT_NUM_ROUNDS, ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS,
-        ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND, ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE,
-        REQUEST_DATA_DELAY,
+        ORCHESTRATOR_DEFAULT_NUM_ROUNDS, ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND,
+        ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE, REQUEST_DATA_DELAY,
     },
     hotshot_config_file::HotShotConfigFile,
     light_client::StateVerKey,
@@ -137,8 +136,6 @@ pub struct NetworkConfig<KEY: SignatureKey> {
     pub seed: [u8; 32],
     /// size of transactions
     pub transaction_size: usize,
-    /// delay before beginning consensus
-    pub start_delay_seconds: u64,
     /// name of the key type (for debugging)
     pub key_type_name: String,
     /// the libp2p config
@@ -281,7 +278,6 @@ impl<K: SignatureKey> Default for NetworkConfig<K> {
             manual_start_password: None,
             libp2p_config: None,
             config: HotShotConfigFile::hotshot_config_5_nodes_10_da().into(),
-            start_delay_seconds: 60,
             key_type_name: std::any::type_name::<K>().to_string(),
             cdn_marshal_address: None,
             combined_network_config: None,
@@ -337,9 +333,6 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     /// size of transactions
     #[serde_inline_default(ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE)]
     pub transaction_size: usize,
-    /// delay before beginning consensus
-    #[serde_inline_default(ORCHESTRATOR_DEFAULT_START_DELAY_SECONDS)]
-    pub start_delay_seconds: u64,
     /// the hotshot config file
     #[serde(default = "HotShotConfigFile::hotshot_config_5_nodes_10_da")]
     pub config: HotShotConfigFile<KEY>,
@@ -385,7 +378,6 @@ impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
             }),
             config: val.config.into(),
             key_type_name: std::any::type_name::<K>().to_string(),
-            start_delay_seconds: val.start_delay_seconds,
             cdn_marshal_address: val.cdn_marshal_address,
             combined_network_config: val.combined_network_config,
             commit_sha: String::new(),

@@ -76,9 +76,6 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     /// View timeout from config.
     pub timeout: u64,
 
-    /// Round start delay from config, in milliseconds.
-    pub round_start_delay: u64,
-
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,
 
@@ -326,7 +323,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 quorum_membership: Arc::clone(&self.quorum_membership),
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
-                round_start_delay: self.round_start_delay,
                 instance_state: Arc::clone(&self.instance_state),
                 consensus: OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                 formed_upgrade_certificate: self.formed_upgrade_certificate.clone(),

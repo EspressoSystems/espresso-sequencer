@@ -303,7 +303,6 @@ where
         num_bootstrap: usize,
         network_id: usize,
         da_committee_size: usize,
-        is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         secondary_network_delay: Duration,
     ) -> AsyncGenerator<Arc<Self>>;

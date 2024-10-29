@@ -81,8 +81,6 @@ async fn test_timeout_libp2p() {
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
         next_view_timeout: 2000,
-        start_delay: 2000,
-        round_start_delay: 1000,
         ..Default::default()
     };
 

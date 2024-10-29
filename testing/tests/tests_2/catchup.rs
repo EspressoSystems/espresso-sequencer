@@ -37,9 +37,6 @@ async fn test_catchup() {
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {
         next_view_timeout: 2000,
-        // increase the round delay for this test
-        // TODO: remove this delay increase for test - https://github.com/EspressoSystems/HotShot/issues/3673
-        round_start_delay: 200,
         ..Default::default()
     };
     let mut metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> =
@@ -324,7 +321,6 @@ cross_tests!(
     Metadata: {
       let timing_data = TimingData {
           next_view_timeout: 2000,
-          round_start_delay: 500,
           ..Default::default()
       };
       let mut metadata = TestDescription::default();
@@ -378,7 +374,6 @@ cross_tests!(
     Metadata: {
       let timing_data = TimingData {
           next_view_timeout: 2000,
-          round_start_delay: 500,
           ..Default::default()
       };
       let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> =

@@ -7,10 +7,10 @@
 //! This module holds the dependency task for the QuorumProposalTask. It is spawned whenever an event that could
 //! initiate a proposal occurs.
 
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, sync::Arc};
 
 use async_broadcast::{InactiveReceiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn};
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use hotshot_task::{
     dependency::{Dependency, EventDependency},
@@ -82,9 +82,6 @@ pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
 
     /// Our Private Key
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
-
-    /// Round start delay from config, in milliseconds.
-    pub round_start_delay: u64,
 
     /// Shared consensus task state
     pub consensus: OuterConsensus<TYPES>,
@@ -233,7 +230,6 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             proposed_leaf.view_number(),
         );
 
-        async_sleep(Duration::from_millis(self.round_start_delay)).await;
         broadcast_event(
             Arc::new(HotShotEvent::QuorumProposalSend(
                 message.clone(),

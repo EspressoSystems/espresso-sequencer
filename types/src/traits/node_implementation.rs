@@ -153,7 +153,6 @@ where
             num_bootstrap,
             0,
             da_committee_size,
-            false,
             reliability_config.clone(),
             secondary_network_delay,
         )

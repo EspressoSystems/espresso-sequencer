@@ -190,7 +190,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _num_bootstrap: usize,
         _network_id: usize,
         da_committee_size: usize,
-        _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
     ) -> AsyncGenerator<Arc<Self>> {

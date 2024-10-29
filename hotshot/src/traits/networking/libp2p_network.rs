@@ -174,8 +174,6 @@ struct Libp2pNetworkInner<K: SignatureKey + 'static> {
     #[cfg(feature = "hotshot-testing")]
     /// reliability_config
     reliability_config: Option<Box<dyn NetworkReliability>>,
-    /// if we're a member of the DA committee or not
-    is_da: bool,
     /// Killswitch sender
     kill_switch: channel::Sender<()>,
 }
@@ -207,7 +205,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         num_bootstrap: usize,
         _network_id: usize,
         da_committee_size: usize,
-        _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
     ) -> AsyncGenerator<Arc<Self>> {
@@ -217,16 +214,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         );
         let bootstrap_addrs: PeerInfoVec = Arc::default();
         let node_ids: Arc<RwLock<HashSet<u64>>> = Arc::default();
-        // We assign known_nodes' public key and stake value rather than read from config file since it's a test
-        let mut da_keys = BTreeSet::new();
-
-        for i in 0u64..(expected_node_count as u64) {
-            let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], i).1;
-            let pubkey = TYPES::SignatureKey::from_private(&privkey);
-            if i < da_committee_size as u64 {
-                da_keys.insert(pubkey.clone());
-            }
-        }
 
         // NOTE uncomment this for easier debugging
         // let start_port = 5000;
@@ -277,7 +264,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
 
                 let bootstrap_addrs_ref = Arc::clone(&bootstrap_addrs);
                 let node_ids_ref = Arc::clone(&node_ids);
-                let da = da_keys.clone();
                 let reliability_config_dup = reliability_config.clone();
 
                 Box::pin(async move {
@@ -299,7 +285,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                             usize::try_from(node_id).unwrap(),
                             #[cfg(feature = "hotshot-testing")]
                             reliability_config_dup,
-                            da.contains(&pubkey),
                         )
                         .await
                         {
@@ -484,12 +469,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 
         // Calculate all keys so we can keep track of direct message recipients
         let mut all_keys = BTreeSet::new();
-        let mut da_keys = BTreeSet::new();
-
-        // Make a node DA if it is under the staked committee size
-        for node in config.config.known_da_nodes {
-            da_keys.insert(K::public_key(&node.stake_table_entry));
-        }
 
         // Insert all known nodes into the set of all keys
         for node in config.config.known_nodes_with_stake {
@@ -505,7 +484,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
             usize::try_from(config.node_index)?,
             #[cfg(feature = "hotshot-testing")]
             None,
-            da_keys.contains(pub_key),
         )
         .await?)
     }
@@ -547,7 +525,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         bootstrap_addrs: BootstrapAddrs,
         id: usize,
         #[cfg(feature = "hotshot-testing")] reliability_config: Option<Box<dyn NetworkReliability>>,
-        is_da: bool,
     ) -> Result<Libp2pNetwork<K>, NetworkError> {
         let (mut rx, network_handle) = spawn_network_node::<K>(config.clone(), id)
             .await
@@ -562,10 +539,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         pubkey_pid_map.insert(pk.clone(), network_handle.peer_id());
 
         // Subscribe to the relevant topics
-        let mut subscribed_topics = HashSet::from_iter(vec![QC_TOPIC.to_string()]);
-        if is_da {
-            subscribed_topics.insert("DA".to_string());
-        }
+        let subscribed_topics = HashSet::from_iter(vec![QC_TOPIC.to_string()]);
 
         // unbounded channels may not be the best choice (spammed?)
         // if bounded figure out a way to log dropped msgs
@@ -594,7 +568,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                 latest_seen_view: Arc::new(AtomicU64::new(0)),
                 #[cfg(feature = "hotshot-testing")]
                 reliability_config,
-                is_da,
                 kill_switch: kill_tx,
             }),
         };
@@ -644,7 +617,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         let handle = Arc::clone(&self.inner.handle);
         let is_bootstrapped = Arc::clone(&self.inner.is_bootstrapped);
         let inner = Arc::clone(&self.inner);
-        let is_da = self.inner.is_da;
 
         async_spawn({
             let is_ready = Arc::clone(&self.inner.is_ready);
@@ -663,11 +635,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 
                 // Subscribe to the QC topic
                 handle.subscribe(QC_TOPIC.to_string()).await.unwrap();
-
-                // Only subscribe to DA events if we are DA
-                if is_da {
-                    handle.subscribe("DA".to_string()).await.unwrap();
-                }
 
                 // Map our staking key to our Libp2p Peer ID so we can properly
                 // route direct messages

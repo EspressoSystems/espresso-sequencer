@@ -506,9 +506,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
                 // and will be updated to be part of SystemContext. I wanted to use associated
                 // constants in NodeType, but that seems to be unavailable in the current Rust.
                 api
-                    .network.broadcast_message(
+                    .network.da_broadcast_message(
                         serialized_message,
-                        da_membership.committee_topic(),
+                        da_membership.committee_members(view_number, TYPES::Epoch::new(1)).iter().cloned().collect(),
                         BroadcastDelay::None,
                     ),
                 api
