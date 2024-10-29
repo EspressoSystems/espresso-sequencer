@@ -104,6 +104,7 @@ reexport_unchanged_types!(
     NumTxsUnchecked,
     Payload,
     PayloadByteLen,
+    RpcClient,
     Transaction,
     TxIndex,
     TxIter,

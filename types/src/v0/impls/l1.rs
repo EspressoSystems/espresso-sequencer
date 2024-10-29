@@ -1,21 +1,28 @@
 use std::{
     cmp::{min, Ordering},
+    fmt::Debug,
     sync::Arc,
     time::Duration,
 };
 
+use anyhow::bail;
 use async_std::task::sleep;
+use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::FeeContract;
-use ethers::prelude::{H256, U256, *};
+use ethers::{
+    prelude::{Address, BlockNumber, Middleware, Provider, H256, U256},
+    providers::{Http, JsonRpcClient, ProviderError, Ws},
+};
 use futures::{
     join,
     stream::{self, StreamExt},
 };
+use serde::{de::DeserializeOwned, Serialize};
 use time::OffsetDateTime;
 use url::Url;
 
-use super::L1BlockInfo;
+use super::{L1BlockInfo, RpcClient};
 use crate::{FeeInfo, L1Client, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
@@ -64,16 +71,64 @@ impl L1BlockInfo {
     }
 }
 
+#[async_trait]
+impl JsonRpcClient for RpcClient {
+    type Error = ProviderError;
+
+    async fn request<T, R>(&self, method: &str, params: T) -> Result<R, Self::Error>
+    where
+        T: Debug + Serialize + Send + Sync,
+        R: DeserializeOwned + Send,
+    {
+        let res = match self {
+            Self::Http(client) => client.request(method, params).await?,
+            Self::Ws(client) => client.request(method, params).await?,
+        };
+        Ok(res)
+    }
+}
+
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
-    pub fn new(url: Url, events_max_block_range: u64) -> Self {
-        let provider = Arc::new(Provider::new(Http::new(url)));
+    ///
+    /// The type of the JSON-RPC client is inferred from the scheme of the URL. Supported schemes
+    /// are `ws`, `wss`, `http`, and `https`.
+    pub async fn new(url: Url, events_max_block_range: u64) -> anyhow::Result<Self> {
+        match url.scheme() {
+            "http" | "https" => Ok(Self::http(url, events_max_block_range)),
+            "ws" | "wss" => Self::ws(url, events_max_block_range).await,
+            scheme => bail!("unsupported JSON-RPC protocol {scheme}"),
+        }
+    }
+
+    /// Synchronous, infallible version of `new` for HTTP clients.
+    ///
+    /// `url` must have a scheme `http` or `https`.
+    pub fn http(url: Url, events_max_block_range: u64) -> Self {
+        Self::with_provider(
+            Provider::new(RpcClient::Http(Http::new(url))),
+            events_max_block_range,
+        )
+    }
+
+    /// Construct a new WebSockets client.
+    ///
+    /// `url` must have a scheme `ws` or `wss`.
+    pub async fn ws(url: Url, events_max_block_range: u64) -> anyhow::Result<Self> {
+        Ok(Self::with_provider(
+            Provider::new(RpcClient::Ws(Ws::connect(url).await?)),
+            events_max_block_range,
+        ))
+    }
+
+    fn with_provider(provider: Provider<RpcClient>, events_max_block_range: u64) -> Self {
         Self {
             retry_delay: Duration::from_secs(1),
-            provider,
+            provider: Arc::new(provider),
             events_max_block_range,
         }
     }
+
     /// Get a snapshot from the l1.
     pub async fn snapshot(&self) -> L1Snapshot {
         let (head, finalized) = join!(self.get_block_number(), self.get_finalized_block());
@@ -336,20 +391,31 @@ mod test {
     use std::ops::Add;
 
     use contract_bindings::fee_contract::FeeContract;
-    use ethers::utils::{hex, parse_ether, Anvil};
+    use ethers::{
+        prelude::{LocalWallet, Signer, SignerMiddleware, H160, U64},
+        utils::{hex, parse_ether, Anvil, AnvilInstance},
+    };
     use sequencer_utils::test_utils::setup_test;
 
     use super::*;
     use crate::NodeState;
 
-    #[async_std::test]
-    async fn test_l1_block_fetching() -> anyhow::Result<()> {
+    async fn new_l1_client(anvil: &AnvilInstance, ws: bool) -> L1Client {
+        let url = if ws {
+            anvil.ws_endpoint()
+        } else {
+            anvil.endpoint()
+        };
+        L1Client::new(url.parse().unwrap(), 1).await.unwrap()
+    }
+
+    async fn test_l1_block_fetching_helper(ws: bool) -> anyhow::Result<()> {
         setup_test();
 
         // Test l1_client methods against `ethers::Provider`. There is
         // also some sanity testing demonstrating `Anvil` availability.
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
+        let l1_client = new_l1_client(&anvil, ws).await;
         let provider = &l1_client.provider;
 
         let version = provider.client_version().await.unwrap();
@@ -357,7 +423,7 @@ mod test {
 
         // Test that nothing funky is happening to the provider when
         // passed along in state.
-        let state = NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
+        let state = NodeState::mock().with_l1(new_l1_client(&anvil, ws).await);
         let version = state.l1_client.provider.client_version().await.unwrap();
         assert_eq!("anvil/v0.2.0", version);
 
@@ -380,7 +446,16 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_get_finalized_deposits() -> anyhow::Result<()> {
+    async fn test_l1_block_fetching_ws() -> anyhow::Result<()> {
+        test_l1_block_fetching_helper(true).await
+    }
+
+    #[async_std::test]
+    async fn test_l1_block_fetching_http() -> anyhow::Result<()> {
+        test_l1_block_fetching_helper(false).await
+    }
+
+    async fn test_get_finalized_deposits_helper(ws: bool) -> anyhow::Result<()> {
         setup_test();
 
         // how many deposits will we make
@@ -389,7 +464,7 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
+        let l1_client = new_l1_client(&anvil, ws).await;
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -472,7 +547,7 @@ mod test {
         assert_eq!(deposits + deploy_txn_count, head);
 
         // Use non-signing `L1Client` to retrieve data.
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
+        let l1_client = new_l1_client(&anvil, ws).await;
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).
@@ -540,11 +615,20 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_wait_for_finalized_block() {
+    async fn test_get_finalized_deposits_ws() -> anyhow::Result<()> {
+        test_get_finalized_deposits_helper(true).await
+    }
+
+    #[async_std::test]
+    async fn test_get_finalized_deposits_http() -> anyhow::Result<()> {
+        test_get_finalized_deposits_helper(false).await
+    }
+
+    async fn test_wait_for_finalized_block_helper(ws: bool) {
         setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
+        let l1_client = new_l1_client(&anvil, ws).await;
         let provider = &l1_client.provider;
 
         // Wait for a block 10 blocks in the future.
@@ -560,5 +644,15 @@ mod test {
             .unwrap();
         assert_eq!(block.timestamp, true_block.timestamp);
         assert_eq!(block.hash, true_block.hash.unwrap());
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_finalized_block_ws() {
+        test_wait_for_finalized_block_helper(true).await
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_finalized_block_http() {
+        test_wait_for_finalized_block_helper(false).await
     }
 }

@@ -473,7 +473,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         genesis_state.prefund_account(address, amount);
     }
 
-    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range).await?;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
@@ -975,7 +975,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
-                L1Client::new(self.l1_url.clone(), 1000),
+                L1Client::new(self.l1_url.clone(), 1000).await.unwrap(),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
                 V::Base::VERSION,
             )

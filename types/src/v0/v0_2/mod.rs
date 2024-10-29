@@ -8,6 +8,7 @@ pub use super::v0_1::{
     L1Snapshot, NamespaceId, NsIndex, NsIter, NsPayload, NsPayloadBuilder, NsPayloadByteLen,
     NsPayloadOwned, NsPayloadRange, NsProof, NsTable, NsTableBuilder, NsTableValidationError,
     NumNss, NumTxs, NumTxsRange, NumTxsUnchecked, Payload, PayloadByteLen, ResolvableChainConfig,
+    RpcClient,
     TimeBasedUpgrade, Transaction, TxIndex, TxIter, TxPayload, TxPayloadRange, TxProof,
     TxTableEntries, TxTableEntriesRange, Upgrade, UpgradeMode, UpgradeType, ViewBasedUpgrade,
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,

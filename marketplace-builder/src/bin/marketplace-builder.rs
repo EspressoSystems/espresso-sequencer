@@ -165,7 +165,9 @@ async fn run<V: Versions>(
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
     let instance_state =
-        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers)
+            .await
+            .unwrap();
 
     let base_fee = genesis.max_base_fee();
     tracing::info!(?base_fee, "base_fee");

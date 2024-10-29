@@ -1,6 +1,6 @@
 use ethers::{
     prelude::{H256, U256},
-    providers::{Http, Provider},
+    providers::{Http, Ws, Provider},
 };
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
@@ -34,11 +34,18 @@ pub struct L1Snapshot {
 }
 
 #[derive(Clone, Debug)]
-/// An Http Provider and configuration to interact with the L1.
+/// An Ethereum provider and configuration to interact with the L1.
 pub struct L1Client {
     pub retry_delay: Duration,
     /// `Provider` from `ethers-provider`.
-    pub provider: Arc<Provider<Http>>,
+    pub provider: Arc<Provider<RpcClient>>,
     /// Maximum number of L1 blocks that can be scanned for events in a single query.
     pub events_max_block_range: u64,
+}
+
+/// An Ethereum RPC client over HTTP or WebSockets.
+#[derive(Clone, Debug)]
+pub enum RpcClient {
+    Http(Http),
+    Ws(Ws),
 }
