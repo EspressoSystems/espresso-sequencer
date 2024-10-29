@@ -80,6 +80,7 @@ use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
+use tagged_base64::TaggedBase64;
 
 pub mod fs;
 mod ledger_log;
@@ -233,7 +234,7 @@ where
     /// query string.
     async fn get_search_results(
         &mut self,
-        query: String,
+        query: TaggedBase64,
     ) -> Result<SearchResult<Types>, GetSearchResultsError>;
 }
 

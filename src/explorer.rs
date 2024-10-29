@@ -373,16 +373,15 @@ where
         .get("get_search_result", move |req, state| {
             async move {
                 let query = req
-                    .string_param("query")
+                    .tagged_base64_param("query")
                     .map_err(|err| {
                         tracing::error!("query param error: {}", err);
                         GetSearchResultsError::InvalidQuery(errors::BadQuery {})
                     })
-                    .map_err(Error::GetSearchResults)?
-                    .to_string();
+                    .map_err(Error::GetSearchResults)?;
 
                 state
-                    .get_search_results(query)
+                    .get_search_results(query.clone())
                     .await
                     .map(SearchResultResponse::from)
                     .map_err(Error::GetSearchResults)
