@@ -1,0 +1,4 @@
+# cargo-mutants configuration
+
+# profile = "mutants" # Build without debug symbols
+test_tool = "nextest"
