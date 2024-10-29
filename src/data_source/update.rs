@@ -17,6 +17,7 @@ use crate::{
     },
     Leaf, Payload,
 };
+use anyhow::Context;
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot::types::{Event, EventType};
@@ -83,11 +84,8 @@ where
                 },
             ) in qcs.zip(leaf_chain.iter().rev())
             {
-                // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
-                // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
-                // guaranteed to correspond, and this should never panic.
                 let leaf_data =
-                    LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
+                    LeafQueryData::new(leaf.clone(), qc.clone()).context("inconsistent leaf")?;
                 self.insert_leaf(leaf_data.clone()).await?;
 
                 if let Some(vid_share) = vid_share {
