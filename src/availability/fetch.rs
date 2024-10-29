@@ -71,6 +71,11 @@ impl<T> Fetch<T> {
     {
         self.try_resolve().ok().with_context(context)
     }
+
+    /// Does this fetch represent an unresolved query?
+    pub fn is_pending(&self) -> bool {
+        matches!(self, Self::Pending(_))
+    }
 }
 
 impl<T: Send + 'static> Fetch<T> {
