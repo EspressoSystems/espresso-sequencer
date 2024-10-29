@@ -5,7 +5,7 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 //! The election trait, used to decide which node is the leader and determine if a vote is valid.
-use std::{collections::BTreeSet, fmt::Debug, hash::Hash, num::NonZeroU64};
+use std::{collections::BTreeSet, fmt::Debug, num::NonZeroU64};
 
 use utils::anytrace::Result;
 
@@ -13,9 +13,7 @@ use super::{network::Topic, node_implementation::NodeType};
 use crate::{traits::signature_key::SignatureKey, PeerConfig};
 
 /// A protocol for determining membership in and participating in a committee.
-pub trait Membership<TYPES: NodeType>:
-    Clone + Debug + Eq + PartialEq + Send + Sync + Hash + 'static
-{
+pub trait Membership<TYPES: NodeType>: Clone + Debug + Send + Sync {
     /// The error type returned by methods like `lookup_leader`.
     type Error: std::fmt::Display;
 
