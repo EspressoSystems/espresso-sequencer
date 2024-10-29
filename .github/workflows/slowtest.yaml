@@ -43,6 +43,8 @@ jobs:
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-test
 
       - name: Build
         # Build test binary with `testing` feature, which requires `hotshot_example` config

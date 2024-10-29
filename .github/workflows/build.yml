@@ -45,7 +45,8 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: v1-rust
+          prefix-key: v0-rust
+          shared-key: build-test
 
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
