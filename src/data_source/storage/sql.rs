@@ -27,15 +27,16 @@ use chrono::Utc;
 use futures::future::FutureExt;
 use hotshot_types::traits::metrics::Metrics;
 use itertools::Itertools;
+use log::LevelFilter;
 use sqlx::{
     pool::{Pool, PoolOptions},
     postgres::{PgConnectOptions, PgSslMode},
-    ConnectOptions, Connection, Row,
+    ConnectOptions, Row,
 };
 use std::{cmp::min, fmt::Debug, str::FromStr, time::Duration};
 
 pub extern crate sqlx;
-pub use sqlx::{Database, Postgres, Sqlite};
+pub use sqlx::{Database, Sqlite};
 
 mod db;
 mod migrate;
@@ -185,11 +186,8 @@ fn add_custom_migrations(
 
 /// Postgres client config.
 #[derive(Clone, Debug)]
-pub struct Config<DB>
-where
-    DB: Database,
-{
-    db_opt: <DB::Connection as Connection>::Options,
+pub struct Config {
+    db_opt: PgConnectOptions,
     pool_opt: PoolOptions<Db>,
     schema: String,
     reset: bool,
@@ -199,7 +197,7 @@ where
     archive: bool,
 }
 
-impl Default for Config<Postgres> {
+impl Default for Config {
     fn default() -> Self {
         PgConnectOptions::default()
             .host("localhost")
@@ -208,7 +206,7 @@ impl Default for Config<Postgres> {
     }
 }
 
-impl From<PgConnectOptions> for Config<Postgres> {
+impl From<PgConnectOptions> for Config {
     fn from(db_opt: PgConnectOptions) -> Self {
         Self {
             db_opt,
@@ -223,7 +221,7 @@ impl From<PgConnectOptions> for Config<Postgres> {
     }
 }
 
-impl FromStr for Config<Postgres> {
+impl FromStr for Config {
     type Err = <PgConnectOptions as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -231,7 +229,7 @@ impl FromStr for Config<Postgres> {
     }
 }
 
-impl Config<Postgres> {
+impl Config {
     /// Set the hostname of the database server.
     ///
     /// The default is `localhost`.
@@ -275,9 +273,7 @@ impl Config<Postgres> {
         self.db_opt = self.db_opt.ssl_mode(PgSslMode::Require);
         self
     }
-}
 
-impl<DB: Database> Config<DB> {
     /// Set the name of the schema to use for queries.
     ///
     /// The default schema is named `hotshot` and is created via the default migrations.
@@ -375,6 +371,16 @@ impl<DB: Database> Config<DB> {
         self.pool_opt = self.pool_opt.max_connections(max);
         self
     }
+
+    /// Log at WARN level any time a SQL statement takes longer than `threshold`.
+    ///
+    /// The default threshold is 1s.
+    pub fn slow_statement_threshold(mut self, threshold: Duration) -> Self {
+        self.db_opt = self
+            .db_opt
+            .log_slow_statements(LevelFilter::Warn, threshold);
+        self
+    }
 }
 
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
@@ -395,7 +401,7 @@ pub struct Pruner {
 
 impl SqlStorage {
     /// Connect to a remote database.
-    pub async fn connect<DB: Database>(mut config: Config<DB>) -> Result<Self, Error> {
+    pub async fn connect(mut config: Config) -> Result<Self, Error> {
         let schema = config.schema.clone();
         let pool = config
             .pool_opt
@@ -409,7 +415,7 @@ impl SqlStorage {
                 }
                 .boxed()
             })
-            .connect(config.db_opt.to_url_lossy().as_ref())
+            .connect_with(config.db_opt)
             .await?;
 
         // Create or connect to the schema for this query service.
@@ -678,7 +684,7 @@ pub mod testing {
     use portpicker::pick_unused_port;
     use refinery::Migration;
 
-    use super::{Config, Postgres};
+    use super::Config;
     use crate::testing::sleep;
 
     #[derive(Debug)]
@@ -745,7 +751,7 @@ pub mod testing {
             self.port
         }
 
-        pub fn config(&self) -> Config<Postgres> {
+        pub fn config(&self) -> Config {
             Config::default()
                 .user("postgres")
                 .password("password")

@@ -3262,6 +3262,7 @@ dependencies = [
  "itertools 0.12.1",
  "jf-merkle-tree",
  "jf-vid",
+ "log",
  "portpicker",
  "prometheus",
  "rand 0.8.5",

@@ -36,6 +36,7 @@ no-storage = []
 # Enable the availability data source backed by a Postgres database.
 sql-data-source = [
 	"include_dir",
+	"log",
 	"refinery",
 	"refinery-core",
 	"sqlx",
@@ -105,6 +106,7 @@ atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag
 
 # Dependencies enabled by feature "sql-data-source".
 include_dir = { version = "0.7", optional = true }
+log = { version = "0.4", optional = true }
 refinery = { version = "0.8", features = ["tokio-postgres"], optional = true }
 refinery-core = { version = "0.8", optional = true }
 sqlx = { version = "0.8", features = [
