@@ -531,18 +531,17 @@ where
                     JOIN payload AS p ON h.height = p.height
                     WHERE h.hash = $1
                     ORDER BY h.height DESC
-                    LIMIT 5"
+                    LIMIT 1"
             );
-            let block_query_rows = query(block_query.as_str())
+            let row = query(block_query.as_str())
                 .bind(&search_query_string)
-                .fetch(self.as_mut());
-            let block_query_result: Vec<BlockSummary<Types>> = block_query_rows
-                .map(|row| BlockSummary::from_row(&row?))
-                .try_collect()
+                .fetch_one(self.as_mut())
                 .await?;
 
+            let block = BlockSummary::from_row(&row)?;
+
             Ok(SearchResult {
-                blocks: block_query_result,
+                blocks: vec![block],
                 transactions: Vec::new(),
             })
         } else {
@@ -564,7 +563,7 @@ where
                     let transactions = block
                         .enumerate()
                         .enumerate()
-                        .filter(|(_, (_, txn))| txn.commit().to_string().starts_with(&search_query_string))
+                        .filter(|(_, (_, txn))| txn.commit().to_string() == search_query_string)
                         .map(|(offset, (_, txn))| {
                             Ok(TransactionSummary::try_from((
                                 &block, offset, txn,
