@@ -86,12 +86,19 @@ where
             ) in qcs.zip(leaf_chain.iter().rev())
             {
                 let height = leaf.block_header().block_number();
+                let leaf_data = match LeafQueryData::new(leaf.clone(), qc.clone()) {
+                    Ok(leaf) => leaf,
+                    Err(err) => {
+                        tracing::error!(
+                            height,
+                            ?leaf,
+                            ?qc,
+                            "inconsistent leaf; cannot append leaf information: {err:#}"
+                        );
+                        continue;
+                    }
+                };
 
-                // `LeafQueryData::new` only fails if `qc` does not reference `leaf`. We have just
-                // gotten `leaf` and `qc` directly from a consensus `Decide` event, so they are
-                // guaranteed to correspond, and this should never panic.
-                let leaf_data =
-                    LeafQueryData::new(leaf.clone(), qc.clone()).expect("inconsistent leaf");
                 let block_data = leaf
                     .block_payload()
                     .map(|payload| BlockQueryData::new(leaf.block_header().clone(), payload));
