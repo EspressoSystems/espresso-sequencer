@@ -1330,7 +1330,7 @@ mod test {
         // testing fee_balance api
         let account = TestConfig::<5>::builder_key().fee_account();
         let amount = client
-            .get::<Option<FeeAmount>>(&format!("fee-state/fee-balance/{}", account))
+            .get::<Option<FeeAmount>>(&format!("fee-state/fee-balance/latest/{}", account))
             .send()
             .await
             .unwrap()
