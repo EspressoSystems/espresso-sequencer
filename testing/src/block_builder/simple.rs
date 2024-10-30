@@ -141,7 +141,7 @@ where
         &self,
         _parent_view: u64,
         _parent_hash: &VidCommitment,
-        _view_number: u64,
+        view_number: u64,
     ) -> Result<Bundle<TYPES>, BuildError> {
         let transactions = self
             .transactions
@@ -170,6 +170,7 @@ where
             fee_signature: TYPES::BuilderSignatureKey::sign_sequencing_fee_marketplace(
                 &self.priv_key.clone(),
                 fee_amount,
+                view_number,
             )
             .expect("Failed to sign fee!"),
         };

@@ -801,7 +801,7 @@ pub mod null_block {
     use crate::{
         traits::{
             block_contents::BuilderFee,
-            node_implementation::{NodeType, Versions},
+            node_implementation::{ConsensusTime, NodeType, Versions},
             signature_key::BuilderSignatureKey,
             BlockPayload,
         },
@@ -840,8 +840,11 @@ pub mod null_block {
             );
 
         if version >= V::Marketplace::VERSION {
-            match TYPES::BuilderSignatureKey::sign_sequencing_fee_marketplace(&priv_key, FEE_AMOUNT)
-            {
+            match TYPES::BuilderSignatureKey::sign_sequencing_fee_marketplace(
+                &priv_key,
+                FEE_AMOUNT,
+                *TYPES::View::genesis(),
+            ) {
                 Ok(sig) => Some(BuilderFee {
                     fee_amount: FEE_AMOUNT,
                     fee_account: pub_key,

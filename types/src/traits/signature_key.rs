@@ -227,8 +227,12 @@ pub trait BuilderSignatureKey:
         &self,
         signature: &Self::BuilderSignature,
         fee_amount: u64,
+        view_number: u64,
     ) -> bool {
-        self.validate_builder_signature(signature, &fee_amount.to_be_bytes())
+        self.validate_builder_signature(
+            signature,
+            &aggregate_fee_data_marketplace(fee_amount, view_number),
+        )
     }
 
     /// validate the bundle's signature using the builder's public key
@@ -285,12 +289,15 @@ pub trait BuilderSignatureKey:
     /// sign fee offer for proposed payload (marketplace version)
     /// # Errors
     /// If unable to sign the data with the key
-    // TODO: this should include view number
     fn sign_sequencing_fee_marketplace(
         private_key: &Self::BuilderPrivateKey,
         fee_amount: u64,
+        view_number: u64,
     ) -> Result<Self::BuilderSignature, Self::SignError> {
-        Self::sign_builder_message(private_key, &fee_amount.to_be_bytes())
+        Self::sign_builder_message(
+            private_key,
+            &aggregate_fee_data_marketplace(fee_amount, view_number),
+        )
     }
 
     /// sign transactions (marketplace version)
@@ -337,6 +344,14 @@ fn aggregate_fee_data<Metadata: EncodeBytes>(
     fee_info.extend_from_slice(fee_amount.to_be_bytes().as_ref());
     fee_info.extend_from_slice(metadata.encode().as_ref());
     fee_info.extend_from_slice(vid_commitment.as_ref());
+    fee_info
+}
+
+/// Aggregate all inputs used for signature over fee data
+fn aggregate_fee_data_marketplace(fee_amount: u64, view_number: u64) -> Vec<u8> {
+    let mut fee_info = Vec::new();
+    fee_info.extend_from_slice(fee_amount.to_be_bytes().as_ref());
+    fee_info.extend_from_slice(view_number.to_be_bytes().as_ref());
     fee_info
 }
 
