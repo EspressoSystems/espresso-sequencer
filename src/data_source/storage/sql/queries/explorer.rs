@@ -382,7 +382,7 @@ where
                 }),
             ),
             TransactionIdentifier::HeightAndOffset(height, offset) => {
-                txns.into_iter().enumerate().rev().nth(offset).ok_or(
+                txns.into_iter().enumerate().nth(offset).ok_or(
                     GetTransactionDetailError::TransactionNotFound(NotFound {
                         key: format!("at {height} and {offset}"),
                     }),
