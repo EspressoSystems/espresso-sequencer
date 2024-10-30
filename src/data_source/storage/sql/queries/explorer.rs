@@ -20,7 +20,10 @@ use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionIndex},
     data_source::storage::ExplorerStorage,
     explorer::{
-        self, errors::NotFound, query_data::TransactionDetailResponse, traits::ExplorerHeader,
+        self,
+        errors::{self, NotFound},
+        query_data::TransactionDetailResponse,
+        traits::ExplorerHeader,
         BalanceAmount, BlockDetail, BlockIdentifier, BlockRange, BlockSummary, ExplorerHistograms,
         ExplorerSummary, GenesisOverview, GetBlockDetailError, GetBlockSummariesError,
         GetBlockSummariesRequest, GetExplorerSummaryError, GetSearchResultsError,
@@ -28,15 +31,16 @@ use crate::{
         MonetaryValue, SearchResult, TransactionIdentifier, TransactionRange, TransactionSummary,
         TransactionSummaryFilter,
     },
-    Header, Payload, QueryError, QueryResult,
+    Header, Payload, QueryError, QueryResult, Transaction as HotshotTransaction,
 };
 use async_trait::async_trait;
-use committable::Committable;
+use committable::{Commitment, Committable};
 use futures::stream::{self, StreamExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use itertools::Itertools;
 use sqlx::{types::Json, FromRow, Row};
 use std::num::NonZeroUsize;
+use tagged_base64::{Tagged, TaggedBase64};
 
 impl From<sqlx::Error> for GetExplorerSummaryError {
     fn from(err: sqlx::Error) -> Self {
@@ -509,61 +513,75 @@ where
 
     async fn get_search_results(
         &mut self,
-        search_query: String,
+        search_query: TaggedBase64,
     ) -> Result<SearchResult<Types>, GetSearchResultsError> {
-        let block_query = format!(
-            "SELECT {BLOCK_COLUMNS}
-                FROM header AS h
-                JOIN payload AS p ON h.height = p.height
-                WHERE h.hash LIKE $1 || '%'
-                ORDER BY h.height DESC
-                LIMIT 5"
-        );
-        let block_query_rows = query(block_query.as_str())
-            .bind(&search_query)
-            .fetch(self.as_mut());
-        let block_query_result: Vec<BlockSummary<Types>> = block_query_rows
-            .map(|row| BlockSummary::from_row(&row?))
-            .try_collect()
-            .await?;
+        let search_tag = search_query.tag();
+        let header_tag = Commitment::<Header<Types>>::tag();
+        let tx_tag = Commitment::<HotshotTransaction<Types>>::tag();
 
-        let transactions_query = format!(
-            "SELECT {BLOCK_COLUMNS}
-                FROM header AS h
-                JOIN payload AS p ON h.height = p.height
-                JOIN transaction AS t ON h.height = t.block_height
-                WHERE t.hash LIKE $1 || '%'
-                ORDER BY h.height DESC
-                LIMIT 5"
-        );
-        let transactions_query_rows = query(transactions_query.as_str())
-            .bind(&search_query)
-            .fetch(self.as_mut());
-        let transactions_query_result: Vec<TransactionSummary<Types>> = transactions_query_rows
-            .map(|row| -> Result<Vec<TransactionSummary<Types>>, QueryError>{
-                let block = BlockQueryData::<Types>::from_row(&row?)?;
-                let transactions = block
-                    .enumerate()
-                    .enumerate()
-                    .filter(|(_, (_, txn))| txn.commit().to_string().starts_with(&search_query))
-                    .map(|(offset, (_, txn))| {
-                        Ok(TransactionSummary::try_from((
-                            &block, offset, txn,
-                        ))?)
-                    })
-                    .try_collect::<TransactionSummary<Types>, Vec<TransactionSummary<Types>>, QueryError>()?;
+        if search_tag != header_tag && search_tag != tx_tag {
+            return Err(GetSearchResultsError::InvalidQuery(errors::BadQuery {}));
+        }
 
-                Ok(transactions)
+        let search_query_string = search_query.to_string();
+        if search_tag == header_tag {
+            let block_query = format!(
+                "SELECT {BLOCK_COLUMNS}
+                    FROM header AS h
+                    JOIN payload AS p ON h.height = p.height
+                    WHERE h.hash = $1
+                    ORDER BY h.height DESC
+                    LIMIT 1"
+            );
+            let row = query(block_query.as_str())
+                .bind(&search_query_string)
+                .fetch_one(self.as_mut())
+                .await?;
+
+            let block = BlockSummary::from_row(&row)?;
+
+            Ok(SearchResult {
+                blocks: vec![block],
+                transactions: Vec::new(),
             })
-            .try_collect::<Vec<Vec<TransactionSummary<Types>>>>()
-            .await?
-            .into_iter()
-            .flatten()
-            .collect();
+        } else {
+            let transactions_query = format!(
+                "SELECT {BLOCK_COLUMNS}
+                    FROM header AS h
+                    JOIN payload AS p ON h.height = p.height
+                    JOIN transaction AS t ON h.height = t.block_height
+                    WHERE t.hash = $1
+                    ORDER BY h.height DESC
+                    LIMIT 5"
+            );
+            let transactions_query_rows = query(transactions_query.as_str())
+                .bind(&search_query_string)
+                .fetch(self.as_mut());
+            let transactions_query_result: Vec<TransactionSummary<Types>> = transactions_query_rows
+                .map(|row| -> Result<Vec<TransactionSummary<Types>>, QueryError>{
+                    let block = BlockQueryData::<Types>::from_row(&row?)?;
+                    let transactions = block
+                        .enumerate()
+                        .enumerate()
+                        .filter(|(_, (_, txn))| txn.commit().to_string() == search_query_string)
+                        .map(|(offset, (_, txn))| {
+                            Ok(TransactionSummary::try_from((
+                                &block, offset, txn,
+                            ))?)
+                        })
+                        .try_collect::<TransactionSummary<Types>, Vec<TransactionSummary<Types>>, QueryError>()?;
+                    Ok(transactions)
+                })
+                .try_collect::<Vec<Vec<TransactionSummary<Types>>>>()
+                .await?
+                .into_iter()
+                .flatten()
+                .collect();
 
-        Ok(SearchResult {
-            blocks: block_query_result,
-            transactions: transactions_query_result,
-        })
+            Ok(SearchResult {
+                blocks: Vec::new(),
+                transactions: transactions_query_result,
+            })
+        }
     }
 }

@@ -120,6 +120,7 @@ use std::{
     ops::{Bound, Range, RangeBounds},
     time::Duration,
 };
+use tagged_base64::TaggedBase64;
 use tracing::Instrument;
 
 mod block;
@@ -1248,7 +1249,7 @@ where
 
     async fn get_search_results(
         &self,
-        query: String,
+        query: TaggedBase64,
     ) -> Result<
         explorer::query_data::SearchResult<Types>,
         explorer::query_data::GetSearchResultsError,

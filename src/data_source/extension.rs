@@ -31,6 +31,7 @@ use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
+use tagged_base64::TaggedBase64;
 
 /// Wrapper to add extensibility to an existing data source.
 ///
@@ -403,7 +404,7 @@ where
 
     async fn get_search_results(
         &self,
-        query: String,
+        query: TaggedBase64,
     ) -> Result<
         explorer::query_data::SearchResult<Types>,
         explorer::query_data::GetSearchResultsError,

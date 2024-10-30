@@ -26,6 +26,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
+use tagged_base64::TaggedBase64;
 
 /// An interface for querying Data and Statistics from the HotShot Blockchain.
 ///
@@ -87,6 +88,6 @@ where
     /// query string.
     async fn get_search_results(
         &self,
-        query: String,
+        query: TaggedBase64,
     ) -> Result<SearchResult<Types>, GetSearchResultsError>;
 }
