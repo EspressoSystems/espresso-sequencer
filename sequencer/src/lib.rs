@@ -41,7 +41,7 @@ use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 pub use genesis::Genesis;
 #[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{
-    derive_libp2p_multiaddr, CombinedNetworks, GossipConfig, Libp2pNetwork,
+    derive_libp2p_multiaddr, CombinedNetworks, GossipConfig, Libp2pNetwork, RequestResponseConfig,
 };
 use hotshot::{
     traits::implementations::{
@@ -142,7 +142,10 @@ pub struct NetworkParams {
     pub libp2p_mesh_outbound_min: usize,
 
     /// The maximum gossip message size
-    pub libp2p_max_transmit_size: usize,
+    pub libp2p_max_gossip_transmit_size: usize,
+
+    /// The maximum direct message size
+    pub libp2p_max_direct_transmit_size: usize,
 
     /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
     pub libp2p_max_ihave_length: usize,
@@ -403,7 +406,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         mesh_n_low: network_params.libp2p_mesh_n_low,
         mesh_outbound_min: network_params.libp2p_mesh_outbound_min,
         max_ihave_messages: network_params.libp2p_max_ihave_messages,
-        max_transmit_size: network_params.libp2p_max_transmit_size,
+        max_transmit_size: network_params.libp2p_max_gossip_transmit_size,
         max_ihave_length: network_params.libp2p_max_ihave_length,
         published_message_ids_cache_time: network_params.libp2p_published_message_ids_cache_time,
         iwant_followup_time: network_params.libp2p_iwant_followup_time,
@@ -417,12 +420,19 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         gossip_lazy: network_params.libp2p_gossip_lazy,
     };
 
+    // Configure request/response based on the command line options
+    let request_response_config = RequestResponseConfig {
+        request_size_maximum: network_params.libp2p_max_direct_transmit_size,
+        response_size_maximum: network_params.libp2p_max_direct_transmit_size,
+    };
+
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let network = {
         let p2p_network = Libp2pNetwork::from_config(
             config.clone(),
             gossip_config,
+            request_response_config,
             libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair
