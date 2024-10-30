@@ -172,6 +172,7 @@ where
         libp2p_max_ihave_messages: opt.libp2p_max_ihave_messages,
         libp2p_max_gossip_transmit_size: opt.libp2p_max_gossip_transmit_size,
         libp2p_max_direct_transmit_size: opt.libp2p_max_direct_transmit_size,
+        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
         libp2p_mesh_n: opt.libp2p_mesh_n,
         libp2p_mesh_n_high: opt.libp2p_mesh_n_high,
         libp2p_heartbeat_interval: opt.libp2p_heartbeat_interval,
