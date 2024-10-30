@@ -208,7 +208,7 @@ pub struct Options {
         env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_DIRECT_TRANSMIT_SIZE",
         default_value = "20000000"
     )]
-    pub libp2p_max_direct_transmit_size: usize,
+    pub libp2p_max_direct_transmit_size: u64,
 
     /// The URL we advertise to other nodes as being for our public API.
     /// Should be supplied in `http://host:port` form.
