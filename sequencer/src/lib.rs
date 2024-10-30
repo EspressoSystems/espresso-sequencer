@@ -142,10 +142,10 @@ pub struct NetworkParams {
     pub libp2p_mesh_outbound_min: usize,
 
     /// The maximum gossip message size
-    pub libp2p_max_gossip_transmit_size: usize,
+    pub libp2p_max_gossip_transmit_size: u64,
 
     /// The maximum direct message size
-    pub libp2p_max_direct_transmit_size: usize,
+    pub libp2p_max_direct_transmit_size: u64,
 
     /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
     pub libp2p_max_ihave_length: usize,
