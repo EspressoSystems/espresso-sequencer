@@ -197,10 +197,18 @@ pub struct Options {
     /// The maximum number of bytes we will send in a single Libp2p gossip message
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_TRANSMIT_SIZE",
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_GOSSIP_TRANSMIT_SIZE",
         default_value = "2000000"
     )]
-    pub libp2p_max_transmit_size: usize,
+    pub libp2p_max_gossip_transmit_size: usize,
+
+    /// The maximum number of bytes we will send in a single Libp2p direct message
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_DIRECT_TRANSMIT_SIZE",
+        default_value = "20000000"
+    )]
+    pub libp2p_max_direct_transmit_size: usize,
 
     /// The URL we advertise to other nodes as being for our public API.
     /// Should be supplied in `http://host:port` form.
