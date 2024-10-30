@@ -357,7 +357,7 @@ where
         &self,
         parent_view: u64,
         parent_hash: &VidCommitment,
-        _view_number: u64,
+        view_number: u64,
     ) -> Result<Bundle<Types>, BuildError> {
         let start = Instant::now();
 
@@ -449,6 +449,7 @@ where
                 <Types::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
                     &self.builder_keys.1,
                     response.offered_fee,
+                    view_number
                 )
                 .map_err(|e| BuildError::Error(e.to_string()))?;
 
