@@ -14,15 +14,18 @@
 
 use super::{
     header::{fetch_header_and_then, HeaderCallback},
-    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, NotifyStorage,
-    RangedFetchable,
+    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, RangedFetchable,
+    Storable,
 };
 use crate::{
-    availability::{BlockId, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData},
-    data_source::{storage::AvailabilityStorage, update::Transaction, VersionedDataSource},
+    availability::{BlockId, QueryablePayload, VidCommonQueryData},
+    data_source::{
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        VersionedDataSource,
+    },
     fetching::{self, request, Callback},
     types::HeightIndexed,
-    Header, Payload, QueryResult, VidCommon,
+    Header, Payload, QueryResult, VidCommon, VidShare,
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -87,7 +90,7 @@ where
         req: Self::Request,
     ) where
         S: VersionedDataSource + 'static,
-        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
     {
         fetch_header_and_then(
@@ -125,6 +128,46 @@ where
     }
 }
 
+impl<Types> Storable<Types> for VidCommonQueryData<Types>
+where
+    Types: NodeType,
+{
+    fn name() -> &'static str {
+        "VID common"
+    }
+
+    async fn notify(&self, notifiers: &Notifiers<Types>) {
+        notifiers.vid_common.notify(self).await;
+    }
+
+    async fn store(
+        self,
+        storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+    ) -> anyhow::Result<()> {
+        storage.insert_vid(self, None).await
+    }
+}
+
+impl<Types> Storable<Types> for (VidCommonQueryData<Types>, Option<VidShare>)
+where
+    Types: NodeType,
+{
+    fn name() -> &'static str {
+        "VID data"
+    }
+
+    async fn notify(&self, notifiers: &Notifiers<Types>) {
+        notifiers.vid_common.notify(&self.0).await;
+    }
+
+    async fn store(
+        self,
+        storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+    ) -> anyhow::Result<()> {
+        storage.insert_vid(self.0, self.1).await
+    }
+}
+
 pub(super) fn fetch_vid_common_with_header<Types, S, P>(
     fetcher: Arc<Fetcher<Types, S, P>>,
     header: Header<Types>,
@@ -132,7 +175,7 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     // Now that we have the header, we only need to retrieve the VID common data.
@@ -149,22 +192,6 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
             fetcher: fetcher.clone(),
         }),
     );
-}
-
-async fn store_vid_common<Types, S>(
-    storage: &NotifyStorage<Types, S>,
-    common: VidCommonQueryData<Types>,
-) -> anyhow::Result<()>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    S: VersionedDataSource,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
-{
-    let mut tx = storage.write().await?;
-    tx.insert_vid(common, None).await?;
-    tx.commit().await?;
-    Ok(())
 }
 
 #[derive(Derivative)]
@@ -199,22 +226,12 @@ impl<Types: NodeType, S, P> Callback<VidCommon> for VidCommonCallback<Types, S, 
 where
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, common: VidCommon) {
         tracing::info!("fetched VID common {:?}", self.header.payload_commitment());
         let common = VidCommonQueryData::new(self.header, common);
-        let height = common.height();
-
-        // Store the data in local storage, so we can avoid fetching it in the future.
-        {
-            if let Err(err) = store_vid_common(&self.fetcher.storage, common).await {
-                // It is unfortunate if this fails, but we can still proceed by returning
-                // the block that we fetched, keeping it in memory. Simply log the error and
-                // move on.
-                tracing::warn!("failed to store fetched VID common {height}: {err}");
-            }
-        }
+        self.fetcher.store_and_notify(common).await;
     }
 }

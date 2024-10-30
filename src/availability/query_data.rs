@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCommon};
+use crate::{types::HeightIndexed, Header, Metadata, Payload, Transaction, VidCommon, VidShare};
 use committable::{Commitment, Committable};
 use hotshot_types::{
     data::Leaf,
@@ -483,6 +483,12 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
 impl<Types: NodeType> HeightIndexed for VidCommonQueryData<Types> {
     fn height(&self) -> u64 {
         self.height
+    }
+}
+
+impl<Types: NodeType> HeightIndexed for (VidCommonQueryData<Types>, Option<VidShare>) {
+    fn height(&self) -> u64 {
+        self.0.height
     }
 }
 

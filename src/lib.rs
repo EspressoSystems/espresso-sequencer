@@ -76,11 +76,8 @@
 //! // Update query data using HotShot events.
 //! let mut events = hotshot.event_stream();
 //! while let Some(event) = events.next().await {
-//!     let mut tx = data_source.write().await?;
-//!
 //!     // Update the query data based on this event.
-//!     tx.update(&event).await?;
-//!     tx.commit().await?;
+//!     data_source.update(&event).await;
 //! }
 //! # Ok(())
 //! # }
@@ -423,7 +420,6 @@ pub use resolvable::Resolvable;
 
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use data_source::{Transaction as _, UpdateDataSource};
 use derive_more::{Deref, From, Into};
 use futures::{future::BoxFuture, stream::StreamExt};
 use hotshot::types::SystemContextHandle;
@@ -521,13 +517,13 @@ where
     Payload<Types>: availability::QueryablePayload<Types>,
     Header<Types>: availability::QueryableHeader<Types>,
     D: availability::AvailabilityDataSource<Types>
+        + data_source::UpdateDataSource<Types>
         + node::NodeDataSource<Types>
         + status::StatusDataSource
         + data_source::VersionedDataSource
         + Send
         + Sync
         + 'static,
-    for<'a> D::Transaction<'a>: data_source::UpdateDataSource<Types>,
     ApiVer: StaticVersionType + 'static,
 {
     // Create API modules.
@@ -558,9 +554,7 @@ where
     // Update query data using HotShot events.
     while let Some(event) = events.next().await {
         // Update the query data based on this event.
-        let mut tx = data_source.write().await.map_err(Error::internal)?;
-        tx.update(&event).await.map_err(Error::internal)?;
-        tx.commit().await.map_err(Error::internal)?;
+        data_source.update(&event).await;
     }
 
     Ok(())
@@ -571,11 +565,10 @@ mod test {
     use super::*;
     use crate::{
         availability::{
-            AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-            PayloadQueryData, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
-            VidCommonQueryData,
+            AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId,
+            LeafQueryData, PayloadQueryData, TransactionHash, TransactionQueryData,
+            UpdateAvailabilityData, VidCommonQueryData,
         },
-        data_source::VersionedDataSource,
         metrics::PrometheusMetrics,
         node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
         status::{HasMetrics, StatusDataSource},
@@ -747,10 +740,10 @@ mod test {
                 .await;
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
         let block = BlockQueryData::new(leaf.header().clone(), MockPayload::genesis());
-        let mut tx = hotshot_qs.write().await.unwrap();
-        tx.insert_leaf(leaf).await.unwrap();
-        tx.insert_block(block).await.unwrap();
-        tx.commit().await.unwrap();
+        hotshot_qs
+            .append(BlockInfo::new(leaf, Some(block), None, None))
+            .await
+            .unwrap();
 
         let module_state =
             RollingLog::create(&mut loader, Default::default(), "module_state", 1024).unwrap();

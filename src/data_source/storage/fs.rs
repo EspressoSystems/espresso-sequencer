@@ -15,12 +15,12 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AvailabilityStorage, NodeStorage,
+    AvailabilityStorage, NodeStorage, UpdateAvailabilityStorage,
 };
 
 use crate::{
     availability::{
-        data_source::{BlockId, LeafId, UpdateAvailabilityData},
+        data_source::{BlockId, LeafId},
         query_data::{
             BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryableHeader,
             QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
@@ -529,8 +529,7 @@ where
     }
 }
 
-#[async_trait]
-impl<'a, Types: NodeType> UpdateAvailabilityData<Types>
+impl<'a, Types: NodeType> UpdateAvailabilityStorage<Types>
     for Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
 where
     Payload<Types>: QueryablePayload<Types>,

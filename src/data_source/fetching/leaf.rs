@@ -14,11 +14,14 @@
 
 use super::{
     header::HeaderCallback, AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights,
-    Notifiers, NotifyStorage, RangedFetchable,
+    Notifiers, RangedFetchable, Storable,
 };
 use crate::{
-    availability::{LeafId, LeafQueryData, QueryablePayload, UpdateAvailabilityData},
-    data_source::{storage::AvailabilityStorage, update::Transaction, VersionedDataSource},
+    availability::{LeafId, LeafQueryData, QueryablePayload},
+    data_source::{
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        VersionedDataSource,
+    },
     fetching::{self, request, Callback},
     types::HeightIndexed,
     Payload, QueryResult,
@@ -80,7 +83,7 @@ where
         req: Self::Request,
     ) where
         S: VersionedDataSource + 'static,
-        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
     {
         fetch_leaf_with_callbacks(fetcher, req, None)
@@ -102,7 +105,7 @@ pub(super) fn fetch_leaf_with_callbacks<Types, S, P, I>(
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
     I: IntoIterator<Item = LeafCallback<Types, S, P>> + Send + 'static,
     I::IntoIter: Send,
@@ -125,22 +128,6 @@ pub(super) fn fetch_leaf_with_callbacks<Types, S, P, I>(
     }
 }
 
-async fn store_leaf<Types, S>(
-    storage: &NotifyStorage<Types, S>,
-    leaf: LeafQueryData<Types>,
-) -> anyhow::Result<()>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    S: VersionedDataSource,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
-{
-    let mut tx = storage.write().await?;
-    tx.insert_leaf(leaf).await?;
-    tx.commit().await?;
-    Ok(())
-}
-
 #[async_trait]
 impl<Types> RangedFetchable<Types> for LeafQueryData<Types>
 where
@@ -155,6 +142,26 @@ where
         R: RangeBounds<usize> + Send + 'static,
     {
         storage.get_leaf_range(range).await
+    }
+}
+
+impl<Types> Storable<Types> for LeafQueryData<Types>
+where
+    Types: NodeType,
+{
+    fn name() -> &'static str {
+        "leaf"
+    }
+
+    async fn notify(&self, notifiers: &Notifiers<Types>) {
+        notifiers.leaf.notify(self).await;
+    }
+
+    async fn store(
+        self,
+        storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+    ) -> anyhow::Result<()> {
+        storage.insert_leaf(self).await
     }
 }
 
@@ -206,20 +213,14 @@ impl<Types: NodeType, S, P> Callback<LeafQueryData<Types>> for LeafCallback<Type
 where
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, leaf: LeafQueryData<Types>) {
         match self {
             Self::Leaf { fetcher } => {
-                let height = leaf.height();
-                tracing::info!("fetched leaf {height}");
-                if let Err(err) = store_leaf(&fetcher.storage, leaf).await {
-                    // It is unfortunate if this fails, but we can still proceed by
-                    // returning the leaf that we fetched, keeping it in memory.
-                    // Simply log the error and move on.
-                    tracing::warn!("failed to store fetched leaf {height}: {err}");
-                }
+                tracing::info!("fetched leaf {}", leaf.height());
+                fetcher.store_and_notify(leaf).await;
             }
             Self::Continuation { callback } => callback.run(leaf.leaf.block_header().clone()),
         }

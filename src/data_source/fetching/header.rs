@@ -17,8 +17,11 @@ use super::{
     vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher, ResultExt,
 };
 use crate::{
-    availability::{BlockId, QueryablePayload, UpdateAvailabilityData},
-    data_source::{storage::AvailabilityStorage, update::VersionedDataSource},
+    availability::{BlockId, QueryablePayload},
+    data_source::{
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        update::VersionedDataSource,
+    },
     Header, Payload,
 };
 use anyhow::Context;
@@ -75,7 +78,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     fn fetcher(&self) -> Arc<Fetcher<Types, S, P>> {
@@ -113,7 +116,7 @@ pub(super) async fn fetch_header_and_then<Types, S, P>(
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     // Check if at least the header is available in local storage. If it is, we benefit two ways:

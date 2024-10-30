@@ -204,7 +204,7 @@ mod test {
     use super::*;
     use crate::{
         availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
-        data_source::{storage::sql::testing::TmpDb, Transaction, VersionedDataSource},
+        data_source::storage::sql::testing::TmpDb,
         fetching::provider::{NoFetching, QueryServiceProvider},
         task::BackgroundTask,
         testing::{
@@ -265,11 +265,10 @@ mod test {
 
         // Give the node a leaf after the range of interest so it learns about the correct block
         // height.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(leaves.last().cloned().unwrap())
+        data_source
+            .append(leaves.last().cloned().unwrap().into())
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         tracing::info!("requesting leaf from multiple providers");
         let leaf = data_source

@@ -77,17 +77,21 @@ use crate::{
     Header, Payload, QueryResult, Transaction, VidShare,
 };
 use async_trait::async_trait;
+use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 use tagged_base64::TaggedBase64;
 
+pub mod fail_storage;
 pub mod fs;
 mod ledger_log;
 pub mod no_storage;
 pub mod pruning;
 pub mod sql;
 
+#[cfg(any(test, feature = "testing"))]
+pub use fail_storage::FailStorage;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemStorage;
 #[cfg(feature = "no-storage")]
@@ -153,6 +157,25 @@ where
         &mut self,
         hash: TransactionHash<Types>,
     ) -> QueryResult<TransactionQueryData<Types>>;
+}
+
+pub trait UpdateAvailabilityStorage<Types>
+where
+    Types: NodeType,
+{
+    fn insert_leaf(
+        &mut self,
+        leaf: LeafQueryData<Types>,
+    ) -> impl Send + Future<Output = anyhow::Result<()>>;
+    fn insert_block(
+        &mut self,
+        block: BlockQueryData<Types>,
+    ) -> impl Send + Future<Output = anyhow::Result<()>>;
+    fn insert_vid(
+        &mut self,
+        common: VidCommonQueryData<Types>,
+        share: Option<VidShare>,
+    ) -> impl Send + Future<Output = anyhow::Result<()>>;
 }
 
 #[async_trait]

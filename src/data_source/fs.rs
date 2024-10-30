@@ -138,11 +138,13 @@ pub use super::storage::fs::Transaction;
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
-///             let mut tx = state.hotshot_qs.write().await.unwrap();
-///             tx.update(&event).await.unwrap();
-///             // Update other modules' states based on `event`.
+///             state.hotshot_qs.update(&event).await;
 ///
+///             // Update other modules' states based on `event`.
+///             let mut tx = state.hotshot_qs.write().await.unwrap();
+///             // Do updates
 ///             tx.commit().await.unwrap();
+///
 ///             // Commit or skip versions for other modules' storage.
 ///             state.store.commit_version().unwrap();
 ///         }
@@ -237,7 +239,7 @@ where
 mod impl_testable_data_source {
     use super::*;
     use crate::{
-        data_source::{Transaction, UpdateDataSource, VersionedDataSource},
+        data_source::UpdateDataSource,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use async_trait::async_trait;
@@ -267,9 +269,7 @@ mod impl_testable_data_source {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            let mut tx = self.write().await.unwrap();
-            tx.update(event).await.unwrap();
-            tx.commit().await.unwrap();
+            self.update(event).await;
         }
     }
 }

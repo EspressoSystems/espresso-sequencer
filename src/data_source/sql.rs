@@ -225,15 +225,7 @@ impl Config {
 /// create an aggregate struct containing both [`SqlDataSource`] and your additional module
 /// states, as described in the [composition guide](crate#composition). If the additional modules
 /// have data that should live in the same database as the [`SqlDataSource`] data, you can follow
-/// the steps in [custom migrations](#custom-migrations) to accomodate this. When modifying that
-/// data, you can use a [`Transaction`] to atomically synchronize updates to the other modules' data
-/// with updates to the [`SqlDataSource`]. If the additional data is completely independent of
-/// HotShot query service data and does not need to be synchronized, you can also connect to the
-/// database directly to make updates.
-///
-/// In the following example, we compose HotShot query service modules with other application-
-/// specific modules, synchronizing updates using SQL transactions via
-/// [`write`](super::VersionedDataSource::write).
+/// the steps in [custom migrations](#custom-migrations) to accomodate this.
 ///
 /// ```
 /// # use async_std::{sync::Arc, task::spawn};
@@ -275,14 +267,10 @@ impl Config {
 ///     spawn(async move {
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
-///             let mut tx = state.hotshot_qs.write().await.unwrap();
-///             UpdateDataSource::<AppTypes>::update(&mut tx, &event)
-///                 .await
-///                 .unwrap();
-///             // Update other modules' states based on `event`. Use `tx` to include database
-///             // updates in the same atomic transaction as `update`.
+///             state.hotshot_qs.update(&event).await;
 ///
-///             // Commit all outstanding changes to the entire state at the same time.
+///             let mut tx = state.hotshot_qs.write().await.unwrap();
+///             // Update other modules' states based on `event`, using `tx` to access the database.
 ///             tx.commit().await.unwrap();
 ///         }
 ///     });
@@ -314,7 +302,7 @@ where
 pub mod testing {
     use super::*;
     use crate::{
-        data_source::{Transaction, UpdateDataSource, VersionedDataSource},
+        data_source::UpdateDataSource,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
     use async_trait::async_trait;
@@ -346,9 +334,7 @@ pub mod testing {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            let mut tx = self.write().await.unwrap();
-            tx.update(event).await.unwrap();
-            tx.commit().await.unwrap();
+            self.update(event).await;
         }
     }
 }
@@ -371,9 +357,13 @@ mod test {
     use super::*;
     use crate::{
         availability::{
-            AvailabilityDataSource, LeafQueryData, UpdateAvailabilityData, VidCommonQueryData,
+            AvailabilityDataSource, BlockInfo, LeafQueryData, UpdateAvailabilityData,
+            VidCommonQueryData,
         },
-        data_source::{storage::NodeStorage, Transaction, VersionedDataSource},
+        data_source::{
+            storage::{NodeStorage, UpdateAvailabilityStorage},
+            Transaction, VersionedDataSource,
+        },
         fetching::provider::NoFetching,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
     };
@@ -404,13 +394,14 @@ mod test {
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
-        let mut tx = ds.write().await.unwrap();
-        tx.insert_leaf(leaf).await.unwrap();
-        tx.insert_vid(common.clone(), None).await.unwrap();
-        tx.commit().await.unwrap();
+        ds.append(BlockInfo::new(leaf, None, Some(common.clone()), None))
+            .await
+            .unwrap();
 
         assert_eq!(ds.get_vid_common(0).await.await, common);
-        ds.read().await.unwrap().vid_share(0).await.unwrap_err();
+        NodeStorage::<MockTypes>::vid_share(&mut ds.read().await.unwrap(), 0)
+            .await
+            .unwrap_err();
 
         // Re-insert the common data with the share.
         let mut tx = ds.write().await.unwrap();
@@ -420,7 +411,9 @@ mod test {
         tx.commit().await.unwrap();
         assert_eq!(ds.get_vid_common(0).await.await, common);
         assert_eq!(
-            ds.read().await.unwrap().vid_share(0).await.unwrap(),
+            NodeStorage::<MockTypes>::vid_share(&mut ds.read().await.unwrap(), 0)
+                .await
+                .unwrap(),
             disperse.shares[0]
         );
     }

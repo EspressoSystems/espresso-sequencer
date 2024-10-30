@@ -165,15 +165,17 @@ mod test {
     use crate::{
         api::load_api,
         availability::{
-            define_api, AvailabilityDataSource, Fetch, TransactionQueryData, UpdateAvailabilityData,
+            define_api, AvailabilityDataSource, BlockId, BlockInfo, Fetch, TransactionQueryData,
+            UpdateAvailabilityData,
         },
         data_source::{
             sql::{self, SqlDataSource},
             storage::{
                 pruning::{PrunedHeightStorage, PrunerCfg},
                 sql::testing::TmpDb,
+                AvailabilityStorage, FailStorage, SqlStorage, UpdateAvailabilityStorage,
             },
-            AvailabilityProvider, Transaction, VersionedDataSource,
+            AvailabilityProvider, FetchingDataSource, Transaction, VersionedDataSource,
         },
         fetching::provider::{NoFetching, Provider as ProviderTrait, TestProvider},
         node::{data_source::NodeDataSource, SyncStatus},
@@ -338,11 +340,10 @@ mod test {
         // Now we will actually fetch the missing data. First, since our node is not really
         // connected to consensus, we need to give it a leaf after the range of interest so it
         // learns about the correct block height.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(leaves.last().cloned().unwrap())
+        data_source
+            .append(leaves.last().cloned().unwrap().into())
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         // Block requests to the provider so that we can verify that without the provider, the node
         // does _not_ get the data.
@@ -487,9 +488,7 @@ mod test {
         let test_leaf = &leaves[0];
 
         // Tell the node about a leaf after the one of interest so it learns about the block height.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(leaves[1].clone()).await.unwrap();
-        tx.commit().await.unwrap();
+        data_source.append(leaves[1].clone().into()).await.unwrap();
 
         // Fetch a leaf and the corresponding block at the same time. This will result in two tasks
         // trying to fetch the same leaf, but one should win and notify the other, which ultimately
@@ -547,11 +546,10 @@ mod test {
 
         // Tell the node about a leaf after the range of interest so it learns about the block
         // height.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(leaves.last().cloned().unwrap())
+        data_source
+            .append(leaves.last().cloned().unwrap().into())
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         // All the blocks here are empty, so they have the same payload:
         assert_eq!(leaves[0].payload_hash(), leaves[1].payload_hash());
@@ -614,11 +612,10 @@ mod test {
 
         // Tell the node about a leaf after the range of interest so it learns about the block
         // height.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(finalized_leaves.last().cloned().unwrap())
+        data_source
+            .append(finalized_leaves.last().cloned().unwrap().into())
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         // Check the subscriptions.
         let blocks = blocks.take(5).collect::<Vec<_>>().await;
@@ -735,12 +732,10 @@ mod test {
             let leaf = leaves.next().await.unwrap();
             let block = blocks.next().await.unwrap();
 
-            {
-                let mut tx = data_source.write().await.unwrap();
-                tx.insert_leaf(leaf).await.unwrap();
-                tx.insert_block(block.clone()).await.unwrap();
-                tx.commit().await.unwrap();
-            }
+            data_source
+                .append(BlockInfo::new(leaf, Some(block.clone()), None, None))
+                .await
+                .unwrap();
 
             if block.transaction_by_hash(tx.commit()).is_some() {
                 break block;
@@ -789,7 +784,7 @@ mod test {
         ));
         let data_source = builder(&db, &provider)
             .await
-            .with_retry_delay(Duration::from_secs(1))
+            .with_max_retry_interval(Duration::from_secs(1))
             .build()
             .await
             .unwrap();
@@ -805,11 +800,10 @@ mod test {
 
         // Give the node a leaf after the range of interest so it learns about the correct block
         // height.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(leaves.last().cloned().unwrap())
+        data_source
+            .append(leaves.last().cloned().unwrap().into())
             .await
             .unwrap();
-        tx.commit().await.unwrap();
 
         // Cause requests to fail temporarily, so we can test retries.
         provider.fail();
@@ -960,7 +954,6 @@ mod test {
             .read()
             .await
             .unwrap()
-            .as_mut()
             .load_pruned_height()
             .await
             .unwrap();
@@ -970,9 +963,7 @@ mod test {
         // Send the last leaf to the disconnected data source so it learns about the height and
         // fetches the missing data.
         let last_leaf = leaves.last().unwrap();
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(last_leaf.clone()).await.unwrap();
-        tx.commit().await.unwrap();
+        data_source.append(last_leaf.clone().into()).await.unwrap();
 
         // Trigger a fetch of each leaf so the database gets populated.
         for i in 1..=last_leaf.height() {
@@ -989,7 +980,6 @@ mod test {
                 .read()
                 .await
                 .unwrap()
-                .as_mut()
                 .load_pruned_height()
                 .await
                 .unwrap();
@@ -1022,7 +1012,6 @@ mod test {
             .read()
             .await
             .unwrap()
-            .as_mut()
             .load_pruned_height()
             .await
             .unwrap();
@@ -1031,9 +1020,7 @@ mod test {
         // The node has pruned all of it's data including the latest block, so it's forgotten the
         // block height. We need to give it another leaf with some height so it will be willing to
         // fetch.
-        let mut tx = data_source.write().await.unwrap();
-        tx.insert_leaf(last_leaf.clone()).await.unwrap();
-        tx.commit().await.unwrap();
+        data_source.append(last_leaf.clone().into()).await.unwrap();
 
         // Wait for the data to be restored. It should be restored by the next major scan.
         loop {
@@ -1064,5 +1051,236 @@ mod test {
             .is_fully_synced(),
             "{sync_status:?}"
         );
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum FailureType {
+        Begin,
+        Write,
+        Commit,
+    }
+
+    async fn test_fetch_storage_failure_helper(failure: FailureType) {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
+        );
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            MockBase::instance(),
+        ));
+        let db = TmpDb::init().await;
+        let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
+        let data_source = FetchingDataSource::builder(storage, provider)
+            .disable_proactive_fetching()
+            .with_max_retry_interval(Duration::from_millis(100))
+            .with_retry_timeout(Duration::from_secs(1))
+            .build()
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a couple of blocks are produced.
+        let leaves = network.data_source().subscribe_leaves(1).await;
+        let leaves = leaves.take(2).collect::<Vec<_>>().await;
+
+        // Send the last leaf to the disconnected data source so it learns about the height.
+        let last_leaf = leaves.last().unwrap();
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Trigger a fetch of the first leaf; it should resolve even if we fail to store the leaf.
+        tracing::info!("fetch with write failure");
+        match failure {
+            FailureType::Begin => data_source.as_ref().fail_begins_writable().await,
+            FailureType::Write => data_source.as_ref().fail_writes().await,
+            FailureType::Commit => data_source.as_ref().fail_commits().await,
+        }
+        assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
+        data_source.as_ref().pass().await;
+
+        // We can get the same leaf again, this will again trigger an active fetch since storage
+        // failed the first time.
+        tracing::info!("fetch with write success");
+        let fetch = data_source.get_leaf(1).await;
+        assert!(fetch.is_pending());
+        assert_eq!(leaves[0], fetch.await);
+
+        // Finally, we should have the leaf locally and not need to fetch it.
+        tracing::info!("retrieve from storage");
+        let fetch = data_source.get_leaf(1).await;
+        assert_eq!(leaves[0], fetch.try_resolve().ok().unwrap());
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_on_begin() {
+        test_fetch_storage_failure_helper(FailureType::Begin).await;
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_on_write() {
+        test_fetch_storage_failure_helper(FailureType::Write).await;
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_on_commit() {
+        test_fetch_storage_failure_helper(FailureType::Commit).await;
+    }
+
+    async fn test_fetch_storage_failure_retry_helper(failure: FailureType) {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
+        );
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            MockBase::instance(),
+        ));
+        let db = TmpDb::init().await;
+        let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
+        let data_source = FetchingDataSource::builder(storage, provider)
+            .disable_proactive_fetching()
+            .with_min_retry_interval(Duration::from_millis(100))
+            .build()
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a couple of blocks are produced.
+        let leaves = network.data_source().subscribe_leaves(1).await;
+        let leaves = leaves.take(2).collect::<Vec<_>>().await;
+
+        // Send the last leaf to the disconnected data source so it learns about the height.
+        let last_leaf = leaves.last().unwrap();
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Trigger a fetch of the first leaf; it should retry until it successfully stores the leaf.
+        tracing::info!("fetch with write failure");
+        match failure {
+            FailureType::Begin => data_source.as_ref().fail_one_begin_writable().await,
+            FailureType::Write => data_source.as_ref().fail_one_write().await,
+            FailureType::Commit => data_source.as_ref().fail_one_commit().await,
+        }
+        assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
+
+        // Check that the leaf ended up in local storage.
+        let mut tx = data_source.read().await.unwrap();
+        assert_eq!(leaves[0], tx.get_leaf(1.into()).await.unwrap());
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_retry_on_begin() {
+        test_fetch_storage_failure_retry_helper(FailureType::Begin).await;
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_retry_on_write() {
+        test_fetch_storage_failure_retry_helper(FailureType::Write).await;
+    }
+
+    #[async_std::test]
+    async fn test_fetch_storage_failure_retry_on_commit() {
+        test_fetch_storage_failure_retry_helper(FailureType::Commit).await;
+    }
+
+    #[async_std::test]
+    async fn test_fetch_on_decide() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
+        );
+
+        // Start a data source which is not receiving events from consensus.
+        let db = TmpDb::init().await;
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            MockBase::instance(),
+        ));
+        let data_source = builder(&db, &provider)
+            .await
+            .with_max_retry_interval(Duration::from_secs(1))
+            .build()
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a block has been decided.
+        let leaf = network
+            .data_source()
+            .subscribe_leaves(1)
+            .await
+            .next()
+            .await
+            .unwrap();
+
+        // Give the node a decide containing the leaf but no additional information.
+        data_source.append(leaf.clone().into()).await.unwrap();
+
+        // We will eventually retrieve the corresponding block and VID common, triggered by seeing
+        // the leaf.
+        sleep(Duration::from_secs(5)).await;
+
+        // Read the missing data directly from storage (via a database transaction), rather than
+        // going through the data source, so that this request itself does not trigger a fetch.
+        // Thus, this will only work if the data was already fetched, triggered by the leaf.
+        let mut tx = data_source.read().await.unwrap();
+        let id = BlockId::<MockTypes>::from(leaf.height() as usize);
+        let block = tx.get_block(id).await.unwrap();
+        let vid = tx.get_vid_common(id).await.unwrap();
+
+        assert_eq!(block.hash(), leaf.block_hash());
+        assert_eq!(vid.block_hash(), leaf.block_hash());
     }
 }

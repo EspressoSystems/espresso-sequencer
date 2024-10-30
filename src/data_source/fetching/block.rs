@@ -14,14 +14,15 @@
 
 use super::{
     header::{fetch_header_and_then, HeaderCallback},
-    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, NotifyStorage,
-    RangedFetchable,
+    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Heights, Notifiers, RangedFetchable,
+    Storable,
 };
 use crate::{
-    availability::{
-        BlockId, BlockQueryData, PayloadQueryData, QueryablePayload, UpdateAvailabilityData,
+    availability::{BlockId, BlockQueryData, PayloadQueryData, QueryablePayload},
+    data_source::{
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        VersionedDataSource,
     },
-    data_source::{storage::AvailabilityStorage, update::Transaction, VersionedDataSource},
     fetching::{
         self,
         request::{self, PayloadRequest},
@@ -87,7 +88,7 @@ where
         req: Self::Request,
     ) where
         S: VersionedDataSource + 'static,
-        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
     {
         fetch_header_and_then(
@@ -125,6 +126,26 @@ where
     }
 }
 
+impl<Types> Storable<Types> for BlockQueryData<Types>
+where
+    Types: NodeType,
+{
+    fn name() -> &'static str {
+        "block"
+    }
+
+    async fn notify(&self, notifiers: &Notifiers<Types>) {
+        notifiers.block.notify(self).await;
+    }
+
+    async fn store(
+        self,
+        storage: &mut (impl UpdateAvailabilityStorage<Types> + Send),
+    ) -> anyhow::Result<()> {
+        storage.insert_block(self).await
+    }
+}
+
 pub(super) fn fetch_block_with_header<Types, S, P>(
     fetcher: Arc<Fetcher<Types, S, P>>,
     header: Header<Types>,
@@ -132,7 +153,7 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     // Now that we have the header, we only need to retrieve the payload.
@@ -149,21 +170,6 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
             fetcher: fetcher.clone(),
         }),
     );
-}
-
-async fn store_block<Types, S>(
-    storage: &NotifyStorage<Types, S>,
-    block: BlockQueryData<Types>,
-) -> anyhow::Result<()>
-where
-    Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
-    S: VersionedDataSource,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
-{
-    let mut tx = storage.write().await?;
-    tx.insert_block(block).await?;
-    tx.commit().await
 }
 
 #[async_trait]
@@ -201,7 +207,7 @@ where
         req: Self::Request,
     ) where
         S: VersionedDataSource + 'static,
-        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
     {
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
@@ -267,19 +273,12 @@ impl<Types: NodeType, S, P> Callback<Payload<Types>> for PayloadCallback<Types, 
 where
     Payload<Types>: QueryablePayload<Types>,
     S: 'static + VersionedDataSource,
-    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, payload: Payload<Types>) {
         tracing::info!("fetched payload {:?}", self.header.payload_commitment());
         let block = BlockQueryData::new(self.header, payload);
-        let height = block.height();
-
-        // Store the block in local storage, so we can avoid fetching it in the future.
-        if let Err(err) = store_block(&self.fetcher.storage, block).await {
-            // It is unfortunate if this fails, but we can still proceed by returning the block that
-            // we fetched, keeping it in memory. Simply log the error and move on.
-            tracing::warn!("failed to store fetched block {height}: {err}");
-        }
+        self.fetcher.store_and_notify(block).await;
     }
 }
