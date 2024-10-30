@@ -41,7 +41,7 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{election::Membership, network::Topic, signature_key::SignatureKey as _},
-    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+    HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -129,14 +129,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             fixed_leader_for_gpuvid: 0,
             num_nodes_with_stake: num_staked_nodes,
             known_nodes_with_stake: known_nodes_with_stake.clone(),
-            known_nodes_without_stake: vec![],
             my_own_validator_config: Default::default(),
-            start_delay: 0,
-            round_start_delay: 0,
             next_view_timeout: 10000,
-            timeout_ratio: (11, 10),
             num_bootstrap: 0,
-            execution_type: ExecutionType::Continuous,
             da_staked_committee_size: pub_keys.len(),
             known_da_nodes: known_nodes_with_stake.clone(),
             data_request_delay: Duration::from_millis(200),
