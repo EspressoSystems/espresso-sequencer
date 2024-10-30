@@ -382,9 +382,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
         )
     );
     let parent_view_number = consensus_reader.high_qc().view_number();
-    let vsm_contains_parent_view = consensus
-        .read()
-        .await
+    let vsm_contains_parent_view = consensus_reader
         .validated_state_map()
         .contains_key(&parent_view_number);
     drop(consensus_reader);
