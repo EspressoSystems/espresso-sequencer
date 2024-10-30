@@ -15,8 +15,7 @@ async fn test_upgrade() -> Result<()> {
     let versions = if testing.sequencer_version >= 3 {
         (FeeVersion::version(), MarketplaceVersion::version())
     } else {
-        println!("invalid sequencer version provided. skipping upgrade test...");
-        return Ok(());
+        panic!("Invalid sequencer version provided for upgrade test.");
     };
 
     println!("Waiting on readiness");

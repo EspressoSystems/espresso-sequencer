@@ -77,9 +77,12 @@ impl TestConfig {
         // and proceed against any working services, but we run the
         // risk of testing against the wrong ones. For example, legacy
         // builder may be alive during marketplace test.
+        //
+        // If no version is specified, we default to V2,
+        // which is the initial mainnet version without any upgrades.
         let sequencer_version: u8 = dotenvy::var("INTEGRATION_TEST_SEQUENCER_VERSION")?
             .parse()
-            .unwrap();
+            .unwrap_or(2);
 
         // Varies between v0 and v3.
         let load_generator_url = if sequencer_version >= 3 {

@@ -77,8 +77,7 @@ jobs:
       - name: Test Integration
         env:
           NEXTEST_PROFILE: integration
-          INTEGRATION_TEST_SEQUENCER_VERSION: 02
-        run: cargo nextest run --locked --release --all-features --verbose --nocapture
+        run: cargo nextest run --locked --release --all-features --verbose --nocapture --test integration smoke
         timeout-minutes: 40
 
       - name: Process Compose Down
