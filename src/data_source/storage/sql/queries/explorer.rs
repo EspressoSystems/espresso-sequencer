@@ -350,7 +350,7 @@ where
                         SELECT t1.block_height
                             FROM transaction AS t1
                             WHERE t1.block_height = {}
-                            ORDER BY (t1.block_height, t1.index) DESC
+                            ORDER BY (t1.block_height, t1.index)
                             OFFSET {}
                             LIMIT 1
                     )
@@ -386,7 +386,7 @@ where
                 }),
             ),
             TransactionIdentifier::HeightAndOffset(height, offset) => {
-                txns.into_iter().enumerate().rev().nth(offset).ok_or(
+                txns.into_iter().enumerate().nth(offset).ok_or(
                     GetTransactionDetailError::TransactionNotFound(NotFound {
                         key: format!("at {height} and {offset}"),
                     }),
