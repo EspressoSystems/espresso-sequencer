@@ -109,7 +109,6 @@ async fn main() -> anyhow::Result<()> {
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
         }
-
         (FeeVersion::VERSION, _) => run::<SequencerVersions<FeeVersion, V0_0>>(genesis, opt).await,
         (MarketplaceVersion::VERSION, _) => {
             run::<SequencerVersions<MarketplaceVersion, V0_0>>(genesis, opt).await
