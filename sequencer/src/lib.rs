@@ -563,7 +563,7 @@ pub mod testing {
             node_implementation::ConsensusTime,
             stake_table::StakeTableScheme,
         },
-        ExecutionType, HotShotConfig, PeerConfig,
+        HotShotConfig, PeerConfig,
     };
     use marketplace_builder_core::{
         builder_state::BuilderState,
@@ -798,15 +798,10 @@ pub mod testing {
 
             let config: HotShotConfig<PubKey> = HotShotConfig {
                 fixed_leader_for_gpuvid: 0,
-                execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
-                known_nodes_without_stake: vec![],
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
-                timeout_ratio: (10, 11),
-                round_start_delay: Duration::from_millis(1).as_millis() as u64,
-                start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes,
                 my_own_validator_config: Default::default(),
