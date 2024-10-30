@@ -104,7 +104,6 @@ reexport_unchanged_types!(
     NumTxsUnchecked,
     Payload,
     PayloadByteLen,
-    RpcClient,
     Transaction,
     TxIndex,
     TxIter,
@@ -120,6 +119,7 @@ reexport_unchanged_types!(
     ViewBasedUpgrade,
     BlockSize,
 );
+pub(crate) use v0_3::{L1Event, L1State, L1UpdateTask, RpcClient};
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,

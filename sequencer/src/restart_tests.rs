@@ -557,7 +557,7 @@ impl TestNetwork {
         };
 
         let anvil_port = ports.pick();
-        let anvil = Anvil::new().port(anvil_port).spawn();
+        let anvil = Anvil::new().port(anvil_port).block_time(1u64).spawn();
         let anvil_endpoint = anvil.endpoint();
 
         let api_ports = node_params

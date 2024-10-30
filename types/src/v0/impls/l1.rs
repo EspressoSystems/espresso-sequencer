@@ -1,29 +1,33 @@
 use std::{
     cmp::{min, Ordering},
     fmt::Debug,
-    sync::Arc,
+    num::NonZeroUsize,
     time::Duration,
 };
 
-use anyhow::bail;
-use async_std::task::sleep;
+use anyhow::{bail, Context};
+use async_std::{
+    sync::{Arc, MutexGuard},
+    task::{sleep, spawn},
+};
 use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::FeeContract;
 use ethers::{
     prelude::{Address, BlockNumber, Middleware, Provider, H256, U256},
-    providers::{Http, JsonRpcClient, ProviderError, Ws},
+    providers::{Http, JsonRpcClient, ProviderError, PubsubClient, Ws},
 };
 use futures::{
-    join,
+    future::Future,
     stream::{self, StreamExt},
 };
+use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
-use time::OffsetDateTime;
+use tracing::Instrument;
 use url::Url;
 
-use super::{L1BlockInfo, RpcClient};
-use crate::{FeeInfo, L1Client, L1Snapshot};
+use super::{L1BlockInfo, L1State, L1UpdateTask, RpcClient};
+use crate::{FeeInfo, L1Client, L1Event, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -88,6 +92,42 @@ impl JsonRpcClient for RpcClient {
     }
 }
 
+impl PubsubClient for RpcClient {
+    type NotificationStream = <Ws as PubsubClient>::NotificationStream;
+
+    fn subscribe<T>(&self, id: T) -> Result<Self::NotificationStream, Self::Error>
+    where
+        T: Into<U256>,
+    {
+        match self {
+            Self::Http(_) => Err(ProviderError::CustomError(
+                "subscriptions not supported with HTTP client".into(),
+            )),
+            Self::Ws(client) => Ok(client.subscribe(id)?),
+        }
+    }
+
+    fn unsubscribe<T>(&self, id: T) -> Result<(), Self::Error>
+    where
+        T: Into<U256>,
+    {
+        match self {
+            Self::Http(_) => Err(ProviderError::CustomError(
+                "subscriptions not supported with HTTP client".into(),
+            )),
+            Self::Ws(client) => Ok(client.unsubscribe(id)?),
+        }
+    }
+}
+
+impl Drop for L1UpdateTask {
+    fn drop(&mut self) {
+        if let Some(task) = self.0.get_mut().take() {
+            async_std::task::block_on(task.cancel());
+        }
+    }
+}
+
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
     ///
@@ -121,69 +161,345 @@ impl L1Client {
         ))
     }
 
-    fn with_provider(provider: Provider<RpcClient>, events_max_block_range: u64) -> Self {
+    /// Start the background tasks which keep the L1 client up to date.
+    pub async fn start(&self) {
+        let mut update_task = self.update_task.0.lock().await;
+        if update_task.is_none() {
+            *update_task = Some(spawn(self.update_loop()));
+        }
+    }
+
+    /// Shut down background tasks associated with this L1 client.
+    ///
+    /// The L1 client will still be usable, but will stop updating until [`start`](Self::start) is
+    /// called again.
+    pub async fn stop(&self) {
+        if let Some(update_task) = self.update_task.0.lock().await.take() {
+            update_task.cancel().await;
+        }
+    }
+
+    fn with_provider(mut provider: Provider<RpcClient>, events_max_block_range: u64) -> Self {
+        let (sender, mut receiver) = async_broadcast::broadcast(100);
+        receiver.set_await_active(false);
+        receiver.set_overflow(true);
+
+        provider.set_interval(Duration::from_secs(1));
         Self {
             retry_delay: Duration::from_secs(1),
             provider: Arc::new(provider),
             events_max_block_range,
+            state: Default::default(),
+            sender,
+            receiver: receiver.deactivate(),
+            update_task: Default::default(),
         }
+    }
+
+    fn update_loop(&self) -> impl Future<Output = ()> {
+        let rpc = self.provider.clone();
+        let retry_delay = self.retry_delay;
+        let state = self.state.clone();
+        let sender = self.sender.clone();
+
+        let span = tracing::warn_span!("L1 client update");
+        async move {
+            loop {
+                // Subscribe to new blocks. This task cannot fail; retry until we succeed.
+                let mut block_stream = loop {
+                    let res = match (*rpc).as_ref() {
+                        RpcClient::Ws(_) => rpc.subscribe_blocks().await.map(StreamExt::boxed),
+                        RpcClient::Http(_) => rpc
+                            .watch_blocks()
+                            .await
+                            .map(|stream| {
+                                let rpc = rpc.clone();
+
+                                // For HTTP, we simulate a subscription by polling. The polling
+                                // stream provided by ethers only yields block hashes, so for each
+                                // one, we have to go fetch the block itself.
+                                stream.filter_map(move |hash| {
+                                    let rpc = rpc.clone();
+                                    async move {
+                                        match rpc.get_block(hash).await {
+                                            Ok(Some(block)) => Some(block),
+                                            // If we can't fetch the block for some reason, we can
+                                            // just skip it.
+                                            Ok(None) => {
+                                                tracing::warn!(%hash, "HTTP stream yielded a block hash that was not available");
+                                                None
+                                            }
+                                            Err(err) => {
+                                                tracing::warn!(%hash, "error fetching block from HTTP stream: {err:#}");
+                                                None
+                                            }
+                                        }
+                                    }
+                                })
+                            }
+                            .boxed()),
+                    };
+                    match res {
+                        Ok(stream) => break stream,
+                        Err(err) => {
+                            tracing::error!("error subscribing to L1 blocks: {err:#}");
+                            sleep(retry_delay).await;
+                        }
+                    }
+                };
+
+                tracing::info!("established L1 block stream");
+                while let Some(head) = block_stream.next().await {
+                    let Some(head) = head.number else {
+                        // This shouldn't happen, but if it does, it means the block stream has
+                        // erroneously given us a pending block. We are only interested in committed
+                        // blocks, so just skip this one.
+                        tracing::warn!("got block from L1 block stream with no number");
+                        continue;
+                    };
+                    let head = head.as_u64();
+                    tracing::debug!(head, "received L1 block");
+
+                    // A new block has been produced. This happens fairly rarely, so it is now ok to
+                    // poll to see if a new block has been finalized.
+                    let finalized = loop {
+                        match get_finalized_block(&rpc).await {
+                            Ok(finalized) => break finalized,
+                            Err(err) => {
+                                tracing::warn!("error getting finalized block: {err:#}");
+                                sleep(retry_delay).await;
+                            }
+                        }
+                    };
+
+                    // Update the state snapshot;
+                    let mut state = state.lock().await;
+                    if head > state.snapshot.head {
+                        tracing::info!(head, old_head = state.snapshot.head, "L1 head updated");
+                        state.snapshot.head = head;
+                        // Emit an event about the new L1 head. Ignore send errors; it just means no
+                        // one is listening to events right now.
+                        sender
+                            .broadcast_direct(L1Event::NewHead { head })
+                            .await
+                            .ok();
+                    }
+                    if finalized > state.snapshot.finalized {
+                        tracing::info!(
+                            ?finalized,
+                            old_finalized = ?state.snapshot.finalized,
+                            "L1 finalized updated",
+                        );
+                        state.snapshot.finalized = finalized;
+                        if let Some(finalized) = finalized {
+                            sender
+                                .broadcast_direct(L1Event::NewFinalized { finalized })
+                                .await
+                                .ok();
+                        }
+                    }
+                    tracing::info!("updated L1 snapshot to {:?}", state.snapshot);
+                }
+
+                tracing::error!("L1 block stream ended unexpectedly, trying to re-establish");
+            }
+        }.instrument(span)
     }
 
     /// Get a snapshot from the l1.
     pub async fn snapshot(&self) -> L1Snapshot {
-        let (head, finalized) = join!(self.get_block_number(), self.get_finalized_block());
-        L1Snapshot { head, finalized }
+        self.state.lock().await.snapshot
     }
 
-    pub async fn wait_for_block(&self, number: u64) -> L1BlockInfo {
-        // When we are polling the L1 waiting for new blocks, we use a long interval calibrated to
-        // the rate at which L1 blocks are produced.
-        let interval = self.provider.get_interval();
-        // When we are retrying after an error, or expecting a block to appear any second, we use a
-        // shorter polling interval.
-        let retry = self.retry_delay;
+    /// Wait until the highest L1 block number reaches at least `number`.
+    ///
+    /// This function does not return any information about the block, since the block is not
+    /// necessarily finalized when it returns. It is only used to guarantee that some block at
+    /// height `number` exists, possibly in the unsafe part of the L1 chain.
+    pub async fn wait_for_block(&self, number: u64) {
+        loop {
+            // Subscribe to events before checking the current state, to ensure we don't miss a
+            // relevant event.
+            let mut events = self.receiver.activate_cloned();
 
-        // Wait until we expect the block to be available.
-        let l1_head = loop {
-            let l1_head = self.get_block_number().await;
-            if l1_head >= number {
-                // The block should be ready to retrieve.
-                break l1_head;
-            } else if l1_head + 1 == number {
-                // The block we want is the next L1 block. It could be ready any second, so don't
-                // sleep for too long.
-                tracing::info!(number, l1_head, "waiting for next L1 block");
-                sleep(retry).await;
-            } else {
-                // We are waiting at least a few more L1 blocks, so back off and don't spam the RPC.
-                tracing::info!(number, l1_head, "waiting for future L1 block");
-                sleep(interval).await;
+            // Check if the block we are waiting for already exists.
+            {
+                let state = self.state.lock().await;
+                if state.snapshot.head >= number {
+                    return;
+                }
+                tracing::info!(number, head = state.snapshot.head, "waiting for l1 block");
             }
+
+            // Wait for the block.
+            while let Some(event) = events.next().await {
+                let L1Event::NewHead { head } = event else {
+                    continue;
+                };
+                if head >= number {
+                    return;
+                }
+                tracing::debug!(number, head, "waiting for L1 block");
+            }
+
+            // This should not happen: the event stream ended. All we can do is try again.
+            tracing::warn!(number, "L1 event stream ended unexpectedly; retry");
+            sleep(self.retry_delay).await;
+        }
+    }
+
+    /// Get information about the given block.
+    ///
+    /// If the desired block number is not finalized yet, this function will block until it becomes
+    /// finalized.
+    pub async fn wait_for_finalized_block(&self, number: u64) -> L1BlockInfo {
+        loop {
+            // Subscribe to events before checking the current state, to ensure we don't miss a relevant
+            // event.
+            let mut events = self.receiver.activate_cloned();
+
+            // Check if the block we are waiting for already exists.
+            {
+                let state = self.state.lock().await;
+                if let Some(finalized) = state.snapshot.finalized {
+                    if finalized.number >= number {
+                        return self.get_finalized_block(state, number).await.1;
+                    }
+                    tracing::info!(
+                        number,
+                        finalized = ?state.snapshot.finalized,
+                        "waiting for l1 finalized block",
+                    );
+                };
+            }
+
+            // Wait for the block.
+            while let Some(event) = events.next().await {
+                let L1Event::NewFinalized { finalized } = event else {
+                    continue;
+                };
+                if finalized.number < number {
+                    tracing::debug!(number, ?finalized, "waiting for L1 finalized block");
+                    continue;
+                }
+                return self
+                    .get_finalized_block(self.state.lock().await, number)
+                    .await
+                    .1;
+            }
+
+            // This should not happen: the event stream ended. All we can do is try again.
+            tracing::warn!(number, "L1 event stream ended unexpectedly; retry",);
+            sleep(self.retry_delay).await;
+        }
+    }
+
+    /// Get information about the first finalized block with timestamp greater than or equal
+    /// `timestamp`.
+    pub async fn wait_for_finalized_block_with_timestamp(&self, timestamp: U256) -> L1BlockInfo {
+        // Wait until the finalized block has timestamp >= `timestamp`.
+        let (mut state, finalized) = 'outer: loop {
+            // Subscribe to events before checking the current state, to ensure we don't miss a
+            // relevant event.
+            let mut events = self.receiver.activate_cloned();
+
+            // Check if the block we are waiting for already exists.
+            {
+                let state = self.state.lock().await;
+                if let Some(finalized) = state.snapshot.finalized {
+                    if finalized.timestamp >= timestamp {
+                        break 'outer (state, finalized);
+                    }
+                }
+                tracing::info!(
+                    %timestamp,
+                    finalized = ?state.snapshot.finalized,
+                    "waiting for L1 finalized block",
+                );
+            }
+
+            // Wait for the block.
+            while let Some(event) = events.next().await {
+                let L1Event::NewFinalized { finalized } = event else {
+                    continue;
+                };
+                if finalized.timestamp < timestamp {
+                    tracing::debug!(%timestamp, ?finalized, "waiting for L1 finalized block");
+                    continue;
+                }
+                break 'outer (self.state.lock().await, finalized);
+            }
+
+            // This should not happen: the event stream ended. All we can do is try again.
+            tracing::warn!(%timestamp, "L1 event stream ended unexpectedly; retry",);
+            sleep(self.retry_delay).await;
         };
 
-        // The block should be ready now, but we may still get errors from the RPC, so we retry
-        // until we successfully pull the block.
+        // Find the earliest finalized block in our cache with timestamp greater or equal to
+        // `timestamp`.
+        let block = match state.finalized_by_timestamp.range(timestamp..).next() {
+            Some((_, number)) => {
+                let number = *number;
+                state.finalized.get(&number).copied()
+            }
+            None => None,
+        };
+        // There should almost always be something in the cache, but just in case (e.g. block
+        // getting evicted at just the wrong time), we can fall back to using the finalized
+        // snapshot, since we have previously verified that it is at least `timestamp`.
+        let mut block = block.unwrap_or(finalized);
+
+        // It is possible there is some earlier block that also has the proper timestamp; maybe we
+        // just didn't have it in cache. Work backwards until we find the true earliest block.
         loop {
+            let (state_lock, parent) = self.get_finalized_block(state, block.number - 1).await;
+            if parent.timestamp < timestamp {
+                return block;
+            }
+            state = state_lock;
+            block = parent;
+        }
+    }
+
+    async fn get_finalized_block<'a>(
+        &'a self,
+        mut state: MutexGuard<'a, L1State>,
+        number: u64,
+    ) -> (MutexGuard<'a, L1State>, L1BlockInfo) {
+        // Try to get the block from the finalized block cache.
+        assert!(
+            state.snapshot.finalized.is_some()
+                && number <= state.snapshot.finalized.unwrap().number,
+            "requesting a finalized block {number} that isn't finalized; snapshot: {:?}",
+            state.snapshot,
+        );
+        if let Some(block) = state.finalized.get(&number) {
+            let block = *block;
+            return (state, block);
+        }
+        drop(state);
+
+        // If not in cache, fetch the block from the L1 provider.
+        let block = loop {
             let block = match self.provider.get_block(number).await {
                 Ok(Some(block)) => block,
                 Ok(None) => {
                     tracing::warn!(
                         number,
-                        l1_head,
-                        "expected L1 block to be available; possible L1 reorg"
+                        "provider error: finalized L1 block should always be available"
                     );
-                    sleep(retry).await;
+                    sleep(self.retry_delay).await;
                     continue;
                 }
                 Err(err) => {
-                    tracing::error!(number, l1_head, "failed to get L1 block: {err:#}");
-                    sleep(retry).await;
+                    tracing::warn!(number, "failed to get finalized L1 block: {err:#}");
+                    sleep(self.retry_delay).await;
                     continue;
                 }
             };
             let Some(hash) = block.hash else {
-                tracing::error!(number, l1_head, ?block, "L1 block has no hash");
-                sleep(retry).await;
+                tracing::warn!(number, ?block, "finalized L1 block has no hash");
+                sleep(self.retry_delay).await;
                 continue;
             };
             break L1BlockInfo {
@@ -191,108 +507,14 @@ impl L1Client {
                 hash,
                 timestamp: block.timestamp,
             };
-        }
-    }
-    /// Get information about the given block.
-    ///
-    /// If the desired block number is not finalized yet, this function will block until it becomes
-    /// finalized.
-    pub async fn wait_for_finalized_block(&self, number: u64) -> L1BlockInfo {
-        // First just wait for the block to exist. This uses an efficient polling mechanism that
-        // polls more frequently as we get closer to expecting the block to be ready.
-        self.wait_for_block(number).await;
-
-        // Wait for the block to finalize. Since we know the block at least exists, we don't expect
-        // to have to wait _too_ long for it to finalize, so we poll relatively frequently, using
-        // the retry delay instead of the provider interval.
-        let finalized = loop {
-            let Some(block) = self.get_finalized_block().await else {
-                tracing::info!("waiting for finalized block");
-                sleep(self.retry_delay).await;
-                continue;
-            };
-            if block.number >= number {
-                break block;
-            }
-            tracing::info!(current_finalized = %block.number, "waiting for finalized block");
-            sleep(self.retry_delay).await;
-            continue;
         };
 
-        if finalized.number == number {
-            return finalized;
-        }
-
-        // Load the block again, since it may have changed between first being produced and becoming
-        // finalized.
-        self.wait_for_block(number).await
+        // After fetching, add the block to the cache.
+        let mut state = self.state.lock().await;
+        state.put_finalized(block);
+        (state, block)
     }
 
-    /// Get information about the first finalized block with timestamp greater than or equal
-    /// `timestamp`.
-    pub async fn wait_for_finalized_block_with_timestamp(&self, timestamp: U256) -> L1BlockInfo {
-        let interval = self.provider.get_interval();
-
-        // Sleep until approximately the right time for the desired block to appear.
-        let now = U256::from(OffsetDateTime::now_utc().unix_timestamp() as u64);
-        if timestamp > now {
-            let dur = (timestamp - now).as_u64();
-            tracing::warn!("sleeping for {dur:?}, until {timestamp}");
-            sleep(Duration::from_secs(dur)).await;
-        }
-
-        // Wait until the finalized block has timestamp greater or equal to `timestamp`.
-        let mut block = loop {
-            let Some(block) = self.get_finalized_block().await else {
-                sleep(interval).await;
-                continue;
-            };
-            if block.timestamp >= timestamp {
-                break block;
-            }
-            tracing::info!(
-                %timestamp,
-                ?block,
-                "waiting for finalized block with sufficient timestamp"
-            );
-            sleep(interval).await;
-        };
-
-        // The finalized block jumps by more than 1 at a time, so we might not have found the
-        // earliest block with the desired timestamp. Work backwards until we find it.
-        loop {
-            let parent = self.wait_for_block(block.number - 1).await;
-            if parent.timestamp < timestamp {
-                return block;
-            }
-            block = parent;
-        }
-    }
-
-    /// Proxy to `Provider.get_block_number`.
-    async fn get_block_number(&self) -> u64 {
-        loop {
-            match self.provider.get_block_number().await {
-                Ok(n) => return n.as_u64(),
-                Err(e) => {
-                    tracing::warn!("Blocknumber error: {}", e);
-                    sleep(self.retry_delay).await;
-                }
-            }
-        }
-    }
-    /// Proxy to `get_finalized_block`.
-    async fn get_finalized_block(&self) -> Option<L1BlockInfo> {
-        loop {
-            match get_finalized_block(&self.provider).await {
-                Ok(block) => return block,
-                Err(e) => {
-                    tracing::warn!("Finalized block error: {}", e);
-                    sleep(self.retry_delay).await;
-                }
-            }
-        }
-    }
     /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_finalized_deposits(
@@ -346,7 +568,7 @@ impl L1Client {
                     {
                         Ok(events) => break stream::iter(events),
                         Err(err) => {
-                            tracing::warn!(from, to, %err, "Fee Event Error");
+                            tracing::warn!(from, to, %err, "Fee L1Event Error");
                             sleep(retry_delay).await;
                         }
                     }
@@ -357,9 +579,47 @@ impl L1Client {
     }
 }
 
-async fn get_finalized_block<P: JsonRpcClient>(
-    rpc: &Provider<P>,
-) -> Result<Option<L1BlockInfo>, ProviderError> {
+impl Default for L1State {
+    fn default() -> Self {
+        Self {
+            snapshot: Default::default(),
+            finalized: LruCache::new(NonZeroUsize::new(100).unwrap()),
+            finalized_by_timestamp: Default::default(),
+        }
+    }
+}
+
+impl L1State {
+    fn put_finalized(&mut self, info: L1BlockInfo) {
+        assert!(
+            self.snapshot.finalized.is_some()
+                && info.number <= self.snapshot.finalized.unwrap().number,
+            "inserting a finalized block {info:?} that isn't finalized; snapshot: {:?}",
+            self.snapshot,
+        );
+
+        if let Some((old_number, old_info)) = self.finalized.push(info.number, info) {
+            if old_number == info.number {
+                tracing::error!(
+                    ?old_info,
+                    ?info,
+                    "got different info for the same finalized height; something has gone very wrong with the L1",
+                );
+            } else {
+                // We have removed the entry `old_number` due to exceeding the size of the LRU
+                // cache. This is fine, but for consistency we must also remove this entry from the
+                // timestamp index.
+                self.finalized_by_timestamp.remove(&old_info.timestamp);
+            }
+        }
+
+        // Ensure everything we put in `finalized` is also indexed by timestamp.
+        self.finalized_by_timestamp
+            .insert(info.timestamp, info.number);
+    }
+}
+
+async fn get_finalized_block(rpc: &Provider<RpcClient>) -> anyhow::Result<Option<L1BlockInfo>> {
     let Some(block) = rpc.get_block(BlockNumber::Finalized).await? else {
         // This can happen in rare cases where the L1 chain is very young and has not finalized a
         // block yet. This is more common in testing and demo environments. In any case, we proceed
@@ -372,12 +632,8 @@ async fn get_finalized_block<P: JsonRpcClient>(
     // The number and hash _should_ both exists: they exist unless the block is pending, and the
     // finalized block cannot be pending, unless there has been a catastrophic reorg of the
     // finalized prefix of the L1 chain.
-    let number = block
-        .number
-        .ok_or_else(|| ProviderError::CustomError("finalized block has no number".into()))?;
-    let hash = block
-        .hash
-        .ok_or_else(|| ProviderError::CustomError("finalized block has no hash".into()))?;
+    let number = block.number.context("finalized block has no number")?;
+    let hash = block.hash.context("finalized block has no hash")?;
 
     Ok(Some(L1BlockInfo {
         number: number.as_u64(),
@@ -396,9 +652,9 @@ mod test {
         utils::{hex, parse_ether, Anvil, AnvilInstance},
     };
     use sequencer_utils::test_utils::setup_test;
+    use time::OffsetDateTime;
 
     use super::*;
-    use crate::NodeState;
 
     async fn new_l1_client(anvil: &AnvilInstance, ws: bool) -> L1Client {
         let url = if ws {
@@ -406,53 +662,9 @@ mod test {
         } else {
             anvil.endpoint()
         };
-        L1Client::new(url.parse().unwrap(), 1).await.unwrap()
-    }
-
-    async fn test_l1_block_fetching_helper(ws: bool) -> anyhow::Result<()> {
-        setup_test();
-
-        // Test l1_client methods against `ethers::Provider`. There is
-        // also some sanity testing demonstrating `Anvil` availability.
-        let anvil = Anvil::new().block_time(1u32).spawn();
-        let l1_client = new_l1_client(&anvil, ws).await;
-        let provider = &l1_client.provider;
-
-        let version = provider.client_version().await.unwrap();
-        assert_eq!("anvil/v0.2.0", version);
-
-        // Test that nothing funky is happening to the provider when
-        // passed along in state.
-        let state = NodeState::mock().with_l1(new_l1_client(&anvil, ws).await);
-        let version = state.l1_client.provider.client_version().await.unwrap();
-        assert_eq!("anvil/v0.2.0", version);
-
-        // compare response of underlying provider w/ `get_block_number`
-        let expected_head = provider.get_block_number().await.unwrap().as_u64();
-        let head = l1_client.get_block_number().await;
-        assert_eq!(expected_head, head);
-
-        // compare response of underlying provider w/ `get_finalized_block`
-        let expected_finalized = provider.get_block(BlockNumber::Finalized).await.unwrap();
-        let finalized = l1_client.get_finalized_block().await.unwrap();
-
-        assert_eq!(expected_finalized.unwrap().hash.unwrap(), finalized.hash);
-
-        // If we drop `anvil` the same request will fail.
-        drop(anvil);
-        provider.client_version().await.unwrap_err();
-
-        Ok(())
-    }
-
-    #[async_std::test]
-    async fn test_l1_block_fetching_ws() -> anyhow::Result<()> {
-        test_l1_block_fetching_helper(true).await
-    }
-
-    #[async_std::test]
-    async fn test_l1_block_fetching_http() -> anyhow::Result<()> {
-        test_l1_block_fetching_helper(false).await
+        let client = L1Client::new(url.parse().unwrap(), 1).await.unwrap();
+        client.start().await;
+        client
     }
 
     async fn test_get_finalized_deposits_helper(ws: bool) -> anyhow::Result<()> {
@@ -523,9 +735,9 @@ mod test {
         assert_eq!(fee_contract.clone().address(), implementation_address);
 
         // Anvil will produce a bock for every transaction.
-        let head = l1_client.get_block_number().await;
+        let head = l1_client.provider.get_block_number().await.unwrap();
         // there are two transactions, deploying the implementation contract, FeeContract, and deploying the proxy contract
-        assert_eq!(deploy_txn_count, head);
+        assert_eq!(deploy_txn_count, head.as_u64());
 
         // make some deposits.
         for n in 1..=deposits {
@@ -542,9 +754,9 @@ mod test {
             assert_eq!(Some(U64::from(1)), receipt.clone().unwrap().status);
         }
 
-        let head = l1_client.get_block_number().await;
+        let head = l1_client.provider.get_block_number().await.unwrap();
         // Anvil will produce a block for every transaction.
-        assert_eq!(deposits + deploy_txn_count, head);
+        assert_eq!(deposits + deploy_txn_count, head.as_u64());
 
         // Use non-signing `L1Client` to retrieve data.
         let l1_client = new_l1_client(&anvil, ws).await;
@@ -654,5 +866,71 @@ mod test {
     #[async_std::test]
     async fn test_wait_for_finalized_block_http() {
         test_wait_for_finalized_block_helper(false).await
+    }
+
+    async fn test_wait_for_finalized_block_by_timestamp_helper(ws: bool) {
+        setup_test();
+
+        let anvil = Anvil::new().block_time(1u32).spawn();
+        let l1_client = new_l1_client(&anvil, ws).await;
+        let provider = &l1_client.provider;
+
+        // Wait for a block 10 blocks in the future.
+        let timestamp = U256::from(OffsetDateTime::now_utc().unix_timestamp() as u64) + 10;
+        let block = l1_client
+            .wait_for_finalized_block_with_timestamp(timestamp)
+            .await;
+        assert!(
+            block.timestamp >= timestamp,
+            "wait_for_finalized_block_with_timestamp({timestamp}) returned too early a block: {block:?}",
+        );
+        let parent = provider.get_block(block.number - 1).await.unwrap().unwrap();
+        assert!(
+            parent.timestamp < timestamp,
+            "wait_for_finalized_block_with_timestamp({timestamp}) did not return the earliest possible block: returned {block:?}, but earlier block {parent:?} has an acceptable timestamp too",
+        );
+
+        // Compare against underlying provider.
+        let true_block = provider.get_block(block.number).await.unwrap().unwrap();
+        assert_eq!(block.timestamp, true_block.timestamp);
+        assert_eq!(block.hash, true_block.hash.unwrap());
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_finalized_block_by_timestamp_ws() {
+        test_wait_for_finalized_block_by_timestamp_helper(true).await
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_finalized_block_by_timestamp_http() {
+        test_wait_for_finalized_block_by_timestamp_helper(false).await
+    }
+
+    async fn test_wait_for_block_helper(ws: bool) {
+        setup_test();
+
+        let anvil = Anvil::new().block_time(1u32).spawn();
+        let l1_client = new_l1_client(&anvil, ws).await;
+        let provider = &l1_client.provider;
+
+        // Wait for a block 10 blocks in the future.
+        let block_height = provider.get_block_number().await.unwrap().as_u64();
+        l1_client.wait_for_block(block_height + 10).await;
+
+        let new_block_height = provider.get_block_number().await.unwrap().as_u64();
+        assert!(
+            new_block_height >= block_height + 10,
+            "wait_for_block returned too early; initial height = {block_height}, new height = {new_block_height}",
+        );
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_block_ws() {
+        test_wait_for_block_helper(true).await
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_block_http() {
+        test_wait_for_block_helper(false).await
     }
 }

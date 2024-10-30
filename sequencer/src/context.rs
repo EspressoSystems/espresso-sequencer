@@ -104,6 +104,9 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             .create_gauge("node_index".into(), None)
             .set(instance_state.node_id as usize);
 
+        // Start L1 client if it isn't already.
+        instance_state.l1_client.start().await;
+
         // Load saved consensus state from storage.
         let (initializer, anchor_view) = persistence
             .load_consensus_state::<V>(instance_state.clone())
@@ -321,6 +324,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         tracing::info!("shutting down SequencerContext");
         self.handle.write().await.shut_down().await;
         self.tasks.shut_down().await;
+        self.node_state.l1_client.stop().await;
 
         // Since we've already shut down, we can set `detached` so the drop
         // handler doesn't call `shut_down` again.
