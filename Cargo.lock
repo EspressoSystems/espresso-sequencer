@@ -3062,8 +3062,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3104,13 +3104,14 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "utils",
  "vbs",
 ]
 
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "async-trait",
  "clap",
@@ -3128,8 +3129,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3143,6 +3144,7 @@ dependencies = [
  "ethereum-types",
  "futures",
  "hotshot",
+ "hotshot-builder-api",
  "hotshot-task",
  "hotshot-task-impls",
  "hotshot-types",
@@ -3161,8 +3163,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-fakeapi"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3181,8 +3183,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -3192,8 +3194,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3278,8 +3280,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3289,12 +3291,13 @@ dependencies = [
  "futures",
  "tokio",
  "tracing",
+ "utils",
 ]
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3324,14 +3327,15 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "utils",
  "vbs",
  "vec1",
 ]
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3377,7 +3381,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3429,6 +3433,7 @@ dependencies = [
  "tracing",
  "typenum",
  "url",
+ "utils",
  "vbs",
  "vec1",
 ]
@@ -4443,8 +4448,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.78"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.78-patch4#e8abb17d990560d6c92489522d218b99d2089db3"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -8383,6 +8388,14 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
+
+[[package]]
+name = "utils"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "uuid"
