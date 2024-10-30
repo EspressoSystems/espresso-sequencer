@@ -3,7 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use espresso_types::{
     traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
-    SolverAuctionResultsProvider, V0_0, V0_1,
+    SolverAuctionResultsProvider, V0_0,
 };
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
@@ -39,30 +39,12 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<V0_1, FeeVersion>::new(),
-            )
-            .await
-        }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run(
                 genesis,
                 modules,
                 opt,
                 SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
-        }
-        (V0_1::VERSION, _) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<V0_1, V0_0>::new(),
             )
             .await
         }
