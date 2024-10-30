@@ -80,8 +80,8 @@ impl TestConfig {
         //
         // If no version is specified, we default to V2,
         // which is the initial mainnet version without any upgrades.
-        let sequencer_version: u8 = dotenvy::var("INTEGRATION_TEST_SEQUENCER_VERSION")?
-            .parse()
+        let sequencer_version: u8 = dotenvy::var("INTEGRATION_TEST_SEQUENCER_VERSION")
+            .map(|v| v.parse().unwrap())
             .unwrap_or(2);
 
         // Varies between v0 and v3.
