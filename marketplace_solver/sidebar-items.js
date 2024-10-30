@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SOLVER_API_PATH"],"enum":["SolverError"],"fn":["define_api","handle_events"],"mod":["api","database","events","mock","options","state","testing"],"struct":["ApiOptions","DatabaseOptions","EventsServiceClient","Options"],"type":["SolverResult"]};

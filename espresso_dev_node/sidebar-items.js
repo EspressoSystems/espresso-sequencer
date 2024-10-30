@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main","run_dev_node_server"],"struct":["AltChainInfo","ApiState","Args","DevInfo","SetHotshotDownReqBody","SetHotshotUpReqBody"]};

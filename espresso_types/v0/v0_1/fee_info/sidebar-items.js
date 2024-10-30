@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FeeMerkleProof"],"struct":["AccountQueryData","FeeAccount","FeeAccountProof","FeeAmount","FeeInfo"]};
