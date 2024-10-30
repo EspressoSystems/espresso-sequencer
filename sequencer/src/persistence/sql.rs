@@ -28,7 +28,6 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
-use sqlx::Postgres;
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, time::Duration};
@@ -119,7 +118,7 @@ pub struct Options {
     pub(crate) archive: bool,
 }
 
-impl TryFrom<Options> for Config<Postgres> {
+impl TryFrom<Options> for Config {
     type Error = anyhow::Error;
 
     fn try_from(opt: Options) -> Result<Self, Self::Error> {
