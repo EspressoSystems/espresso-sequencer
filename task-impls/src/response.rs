@@ -143,52 +143,45 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         view: TYPES::View,
         key: &TYPES::SignatureKey,
     ) -> Option<Proposal<TYPES, VidDisperseShare<TYPES>>> {
-        let contained = self
-            .consensus
-            .read()
-            .await
-            .vid_shares()
-            .get(&view)
-            .is_some_and(|m| m.contains_key(key));
-        if !contained {
-            let cur_epoch = self.consensus.read().await.cur_epoch();
-            if Consensus::calculate_and_update_vid(
+        let consensus_reader = self.consensus.read().await;
+        if let Some(view) = consensus_reader.vid_shares().get(&view) {
+            if let Some(share) = view.get(key) {
+                return Some(share.clone());
+            }
+        }
+
+        let cur_epoch = consensus_reader.cur_epoch();
+        drop(consensus_reader);
+
+        if Consensus::calculate_and_update_vid(
+            OuterConsensus::new(Arc::clone(&self.consensus)),
+            view,
+            Arc::clone(&self.quorum),
+            &self.private_key,
+            cur_epoch,
+        )
+        .await
+        .is_none()
+        {
+            // Sleep in hope we receive txns in the meantime
+            async_sleep(TXNS_TIMEOUT).await;
+            Consensus::calculate_and_update_vid(
                 OuterConsensus::new(Arc::clone(&self.consensus)),
                 view,
                 Arc::clone(&self.quorum),
                 &self.private_key,
                 cur_epoch,
             )
-            .await
-            .is_none()
-            {
-                // Sleep in hope we receive txns in the meantime
-                async_sleep(TXNS_TIMEOUT).await;
-                Consensus::calculate_and_update_vid(
-                    OuterConsensus::new(Arc::clone(&self.consensus)),
-                    view,
-                    Arc::clone(&self.quorum),
-                    &self.private_key,
-                    cur_epoch,
-                )
-                .await?;
-            }
-            return self
-                .consensus
-                .read()
-                .await
-                .vid_shares()
-                .get(&view)?
-                .get(key)
-                .cloned();
+            .await?;
         }
-        self.consensus
+        return self
+            .consensus
             .read()
             .await
             .vid_shares()
             .get(&view)?
             .get(key)
-            .cloned()
+            .cloned();
     }
 
     /// Makes sure the sender is allowed to send a request in the given epoch.
