@@ -49,7 +49,6 @@ jobs:
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
         with:
-          cache-on-failure: true
           cache-all-crates: true
 
       - name: Build
