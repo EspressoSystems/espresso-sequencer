@@ -4179,8 +4179,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
-version = "0.1.51"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.54#efdf2ccab5b8b943f4ce192c4143d616857f1412"
+version = "0.1.55"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.55#ce8947c5c47ede1f471e0cc88c3a50753b0e500c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6329,8 +6329,8 @@ dependencies = [
 
 [[package]]
 name = "marketplace-builder-core"
-version = "0.1.51"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.54#efdf2ccab5b8b943f4ce192c4143d616857f1412"
+version = "0.1.55"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.55#ce8947c5c47ede1f471e0cc88c3a50753b0e500c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6371,8 +6371,8 @@ dependencies = [
 
 [[package]]
 name = "marketplace-builder-shared"
-version = "0.1.51"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.54#efdf2ccab5b8b943f4ce192c4143d616857f1412"
+version = "0.1.55"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.55#ce8947c5c47ede1f471e0cc88c3a50753b0e500c"
 dependencies = [
  "anyhow",
  "async-broadcast",
