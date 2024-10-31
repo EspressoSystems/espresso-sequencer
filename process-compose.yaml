@@ -470,6 +470,8 @@ processes:
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
         path: /healthcheck
       failure_threshold: 100
+    availability:
+      exit_on_skipped: true
 
   submit-transactions-private:
     command: submit-transactions
@@ -488,6 +490,8 @@ processes:
         port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
         path: /healthcheck
       failure_threshold: 100
+    availability:
+      exit_on_skipped: true
 
   permissionless-builder:
     command: permissionless-builder
@@ -509,6 +513,8 @@ processes:
         port: $ESPRESSO_BUILDER_SERVER_PORT
         path: /healthcheck
       failure_threshold: 100
+    availability:
+      restart: "exit_on_failure"
 
   nasty-client:
     command: nasty-client
