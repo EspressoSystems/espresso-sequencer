@@ -76,13 +76,15 @@ struct NonPermissionedBuilderOptions {
     )]
     max_api_timeout_duration: Duration,
 
-    /// The number of views to buffer before a builder garbage collects its state
+    /// The amount of time a builder can wait before incrementing the max block size.
     #[clap(
+        short,
         long,
-        env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
-        default_value = "15"
+        env = "ESPRESSO_BUILDER_MAX_BLOCK_SIZE_INCREMENT_PERIOD",
+        default_value = "3600s",
+        value_parser = parse_duration
     )]
-    buffer_view_num_count: usize,
+    max_block_size_increment_period: Duration,
 
     /// Path to TOML file containing genesis state.
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
@@ -148,20 +150,18 @@ async fn run<V: Versions>(
     // make the txn timeout as 1/4 of the api_response_timeout_duration
     let txn_timeout_duration = api_response_timeout_duration / 4;
 
-    let buffer_view_num_count = opt.buffer_view_num_count;
-
     let _builder_config = BuilderConfig::init::<V>(
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
         opt.node_count,
-        instance_state,
+        instance_state.clone(),
         validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
-        buffer_view_num_count,
+        opt.max_block_size_increment_period,
         txn_timeout_duration,
         base_fee,
     )

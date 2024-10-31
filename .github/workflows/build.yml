@@ -20,6 +20,7 @@ concurrency:
 env:
   RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
+  DOCKER_PLATFORMS: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
 
 jobs:
   build:
@@ -70,7 +71,6 @@ jobs:
             target/release/state-prover
             target/release/sequencer
             target/release/cli
-            target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
             target/release/utils
@@ -87,7 +87,10 @@ jobs:
             target/release/dev-rollup
 
   build-arm:
+    if: github.event_name != 'pull_request'
     runs-on: buildjet-8vcpu-ubuntu-2204-arm
+    env:
+      CARGO_BUILD_JOBS: '6'
     steps:
       - name: Fix submodule permissions check
         run: |
@@ -126,7 +129,6 @@ jobs:
             target/release/state-prover
             target/release/sequencer
             target/release/cli
-            target/release/commitment-task
             target/release/submit-transactions
             target/release/reset-storage
             target/release/utils
@@ -145,6 +147,8 @@ jobs:
   build-dockers:
     runs-on: ubuntu-latest
     needs: [build, build-arm]
+    # if build_arm is skipped, run this job anyway
+    if: ${{ !(failure() || cancelled()) }}
     outputs:
       sequencer-tag: ${{ steps.sequencer.outputs.tags }}
       cdn-broker-tag: ${{ steps.cdn-broker.outputs.tags }}
@@ -153,7 +157,6 @@ jobs:
       state-relay-server-tag: ${{ steps.state-relay-server.outputs.tags }}
       prover-service-tag: ${{ steps.prover-service.outputs.tags }}
       orchestrator-tag: ${{ steps.orchestrator.outputs.tags }}
-      commitment-task-tag: ${{ steps.commitment-task.outputs.tags }}
       submit-transactions-tag: ${{ steps.submit-transactions.outputs.tags }}
       deploy-tag: ${{ steps.deploy.outputs.tags }}
       builder-tag: ${{ steps.builder.outputs.tags }}
@@ -177,6 +180,7 @@ jobs:
           path: target/amd64/release
 
       - name: Download executables ARM
+        if: github.event_name != 'pull_request'
         uses: actions/download-artifact@v4
         with:
           name: aarch64-unknown-linux-gnu-services
@@ -234,12 +238,6 @@ jobs:
         id: orchestrator
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/orchestrator
-
-      - name: Generate commitment task docker metadata
-        uses: docker/metadata-action@v5
-        id: commitment-task
-        with:
-          images: ghcr.io/espressosystems/espresso-sequencer/commitment-task
 
       - name: Generate submit-transactions docker metadata
         uses: docker/metadata-action@v5
@@ -307,7 +305,7 @@ jobs:
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.sequencer.outputs.tags }}
           labels: ${{ steps.sequencer.outputs.labels }}
@@ -317,7 +315,7 @@ jobs:
         with:
           context: ./
           file: ./docker/cdn-broker.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-broker.outputs.tags }}
           labels: ${{ steps.cdn-broker.outputs.labels }}
@@ -327,7 +325,7 @@ jobs:
         with:
           context: ./
           file: ./docker/cdn-marshal.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-marshal.outputs.tags }}
           labels: ${{ steps.cdn-marshal.outputs.labels }}
@@ -337,7 +335,7 @@ jobs:
         with:
           context: ./
           file: ./docker/cdn-whitelist.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-whitelist.outputs.tags }}
           labels: ${{ steps.cdn-whitelist.outputs.labels }}
@@ -347,7 +345,7 @@ jobs:
         with:
           context: ./
           file: ./docker/state-relay-server.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.state-relay-server.outputs.tags }}
           labels: ${{ steps.state-relay-server.outputs.labels }}
@@ -357,7 +355,7 @@ jobs:
         with:
           context: ./
           file: ./docker/prover-service.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.prover-service.outputs.tags }}
           labels: ${{ steps.prover-service.outputs.labels }}
@@ -367,27 +365,17 @@ jobs:
         with:
           context: ./
           file: ./docker/orchestrator.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.orchestrator.outputs.tags }}
           labels: ${{ steps.orchestrator.outputs.labels }}
-
-      - name: Build and push commitment-task docker
-        uses: docker/build-push-action@v6
-        with:
-          context: ./
-          file: ./docker/commitment-task.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.commitment-task.outputs.tags }}
-          labels: ${{ steps.commitment-task.outputs.labels }}
 
       - name: Build and push submit-transactions docker
         uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/submit-transactions.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.submit-transactions.outputs.tags }}
           labels: ${{ steps.submit-transactions.outputs.labels }}
@@ -397,7 +385,7 @@ jobs:
         with:
           context: ./
           file: ./docker/deploy.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.deploy.outputs.tags }}
           labels: ${{ steps.deploy.outputs.labels }}
@@ -407,7 +395,7 @@ jobs:
         with:
           context: ./
           file: ./docker/permissionless-builder.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.builder.outputs.tags }}
           labels: ${{ steps.builder.outputs.labels }}
@@ -417,7 +405,7 @@ jobs:
         with:
           context: ./
           file: ./docker/nasty-client.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.nasty-client.outputs.tags }}
           labels: ${{ steps.nasty-client.outputs.labels }}
@@ -427,7 +415,7 @@ jobs:
         with:
           context: ./
           file: ./docker/espresso-dev-node.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.espresso-dev-node.outputs.tags }}
           labels: ${{ steps.espresso-dev-node.outputs.labels }}
@@ -436,7 +424,7 @@ jobs:
         with:
           context: ./
           file: ./docker/espresso-bridge.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.bridge.outputs.tags }}
           labels: ${{ steps.bridge.outputs.labels }}
@@ -446,7 +434,7 @@ jobs:
         with:
           context: ./
           file: ./docker/marketplace-solver.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.marketplace-solver.outputs.tags }}
           labels: ${{ steps.marketplace-solver.outputs.labels }}
@@ -456,7 +444,7 @@ jobs:
         with:
           context: ./
           file: ./docker/marketplace-builder.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.marketplace-builder.outputs.tags }}
           labels: ${{ steps.marketplace-builder.outputs.labels }}
@@ -466,7 +454,7 @@ jobs:
         with:
           context: ./
           file: ./docker/node-validator.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.node-validator.outputs.tags }}
           labels: ${{ steps.node-validator.outputs.labels }}
@@ -476,7 +464,7 @@ jobs:
         with:
           context: ./
           file: ./docker/dev-rollup.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.dev-rollup.outputs.tags }}
           labels: ${{ steps.dev-rollup.outputs.labels }}
@@ -503,7 +491,6 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.state-relay-server-tag }}
           docker pull ${{ needs.build-dockers.outputs.prover-service-tag }}
           docker pull ${{ needs.build-dockers.outputs.orchestrator-tag }}
-          docker pull ${{ needs.build-dockers.outputs.commitment-task-tag }}
           docker pull ${{ needs.build-dockers.outputs.submit-transactions-tag }}
           docker pull ${{ needs.build-dockers.outputs.deploy-tag }}
           docker pull ${{ needs.build-dockers.outputs.builder-tag }}
@@ -523,7 +510,6 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.state-relay-server-tag }} ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main
           docker tag ${{ needs.build-dockers.outputs.prover-service-tag }} ghcr.io/espressosystems/espresso-sequencer/prover-service:main
           docker tag ${{ needs.build-dockers.outputs.orchestrator-tag }} ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
-          docker tag ${{ needs.build-dockers.outputs.commitment-task-tag }} ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
           docker tag ${{ needs.build-dockers.outputs.submit-transactions-tag }} ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main
           docker tag ${{ needs.build-dockers.outputs.deploy-tag }} ghcr.io/espressosystems/espresso-sequencer/deploy:main
           docker tag ${{ needs.build-dockers.outputs.builder-tag }} ghcr.io/espressosystems/espresso-sequencer/builder:main
