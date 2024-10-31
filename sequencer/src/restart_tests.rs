@@ -284,6 +284,8 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
                 .join(","),
             "--l1-provider-url",
             network.l1_provider,
+            "--l1-polling-interval",
+            "1s",
         ]);
         opt.is_da = node.is_da;
         Self {

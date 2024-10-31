@@ -5,8 +5,8 @@ use async_broadcast::broadcast;
 use async_compatibility_layer::art::async_spawn;
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
-    SeqTypes, ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
+    ValidatedState,
 };
 use hotshot::traits::BlockPayload;
 use hotshot_builder_core::{
@@ -44,7 +44,7 @@ pub async fn build_instance_state<V: Versions>(
     l1_params: L1Params,
     state_peers: Vec<Url>,
 ) -> anyhow::Result<NodeState> {
-    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range).await?;
+    let l1_client = l1_params.options.connect(l1_params.url).await?;
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,

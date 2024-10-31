@@ -12,7 +12,7 @@ use std::{
 use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use derivative::Derivative;
-use espresso_types::{parse_duration, BackoffParams};
+use espresso_types::{parse_duration, BackoffParams, L1ClientOptions};
 use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use url::Url;
@@ -334,13 +334,9 @@ pub struct Options {
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
 
-    /// Maximum number of L1 blocks that can be scanned for events in a single query.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE",
-        default_value = "10000"
-    )]
-    pub l1_events_max_block_range: u64,
+    /// Configuration for the L1 client.
+    #[clap(flatten)]
+    pub l1_options: L1ClientOptions,
 
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]

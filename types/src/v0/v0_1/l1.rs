@@ -1,12 +1,14 @@
+use crate::parse_duration;
 use ethers::{
     prelude::{H256, U256},
     providers::{Http, Ws, Provider},
 };
 use async_broadcast::{Sender, InactiveReceiver};
 use async_std::{sync::{Arc, Mutex}, task::JoinHandle};
+use clap::Parser;
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, num::NonZeroUsize, time::Duration};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -34,6 +36,44 @@ pub struct L1Snapshot {
     /// genesis of the L1, and the L1 has yet to finalize a block. In all other cases it will be
     /// `Some`.
     pub finalized: Option<L1BlockInfo>,
+}
+
+/// Configuration for an L1 client.
+#[derive(Clone, Debug, Parser)]
+pub struct L1ClientOptions {
+    /// Delay when retrying failed L1 queries.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_RETRY_DELAY",
+        default_value = "1s",
+        value_parser = parse_duration,
+    )]
+    pub l1_retry_delay: Duration,
+
+    /// Request rate when polling L1.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL",
+        default_value = "7s",
+        value_parser = parse_duration,
+    )]
+    pub l1_polling_interval: Duration,
+
+    /// Maximum number of L1 blocks to keep in cache at once.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_BLOCKS_CACHE_SIZE", default_value = "100")]
+    pub l1_blocks_cache_size: NonZeroUsize,
+
+    /// Number of L1 events to buffer before discarding.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_EVENTS_CHANNEL_CAPACITY", default_value = "100")]
+    pub l1_events_channel_capacity: usize,
+
+    /// Maximum number of L1 blocks that can be scanned for events in a single query.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE",
+        default_value = "10000"
+    )]
+    pub l1_events_max_block_range: u64,
 }
 
 #[derive(Clone, Debug)]

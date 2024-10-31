@@ -2,15 +2,15 @@ use std::{
     cmp::{min, Ordering},
     fmt::Debug,
     num::NonZeroUsize,
-    time::Duration,
 };
 
 use anyhow::{bail, Context};
 use async_std::{
-    sync::{Arc, MutexGuard},
+    sync::{Arc, Mutex, MutexGuard},
     task::{sleep, spawn},
 };
 use async_trait::async_trait;
+use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::FeeContract;
 use ethers::{
@@ -27,7 +27,7 @@ use tracing::Instrument;
 use url::Url;
 
 use super::{L1BlockInfo, L1State, L1UpdateTask, RpcClient};
-use crate::{FeeInfo, L1Client, L1Event, L1Snapshot};
+use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -101,7 +101,7 @@ impl PubsubClient for RpcClient {
     {
         match self {
             Self::Http(_) => Err(ProviderError::CustomError(
-                "subscriptions not supported with HTTP client".into(),
+                "subscriptions not supportedg with HTTP client".into(),
             )),
             Self::Ws(client) => Ok(client.subscribe(id)?),
         }
@@ -113,7 +113,7 @@ impl PubsubClient for RpcClient {
     {
         match self {
             Self::Http(_) => Err(ProviderError::CustomError(
-                "subscriptions not supported with HTTP client".into(),
+                "subscriptions not supportedg with HTTP client".into(),
             )),
             Self::Ws(client) => Ok(client.unsubscribe(id)?),
         }
@@ -128,37 +128,78 @@ impl Drop for L1UpdateTask {
     }
 }
 
-impl L1Client {
+impl Default for L1ClientOptions {
+    fn default() -> Self {
+        Self::parse_from(std::iter::empty::<String>())
+    }
+}
+
+impl L1ClientOptions {
     /// Instantiate an `L1Client` for a given `Url`.
     ///
     /// The type of the JSON-RPC client is inferred from the scheme of the URL. Supported schemes
     /// are `ws`, `wss`, `http`, and `https`.
-    pub async fn new(url: Url, events_max_block_range: u64) -> anyhow::Result<Self> {
+    pub async fn connect(self, url: Url) -> anyhow::Result<L1Client> {
         match url.scheme() {
-            "http" | "https" => Ok(Self::http(url, events_max_block_range)),
-            "ws" | "wss" => Self::ws(url, events_max_block_range).await,
+            "http" | "https" => Ok(self.http(url)),
+            "ws" | "wss" => self.ws(url).await,
             scheme => bail!("unsupported JSON-RPC protocol {scheme}"),
         }
     }
 
-    /// Synchronous, infallible version of `new` for HTTP clients.
+    /// Synchronous, infallible version of `connect` for HTTP clients.
     ///
     /// `url` must have a scheme `http` or `https`.
-    pub fn http(url: Url, events_max_block_range: u64) -> Self {
-        Self::with_provider(
-            Provider::new(RpcClient::Http(Http::new(url))),
-            events_max_block_range,
-        )
+    pub fn http(self, url: Url) -> L1Client {
+        L1Client::with_provider(self, Provider::new(RpcClient::Http(Http::new(url))))
     }
 
     /// Construct a new WebSockets client.
     ///
     /// `url` must have a scheme `ws` or `wss`.
-    pub async fn ws(url: Url, events_max_block_range: u64) -> anyhow::Result<Self> {
-        Ok(Self::with_provider(
+    pub async fn ws(self, url: Url) -> anyhow::Result<L1Client> {
+        Ok(L1Client::with_provider(
+            self,
             Provider::new(RpcClient::Ws(Ws::connect(url).await?)),
-            events_max_block_range,
         ))
+    }
+}
+
+impl L1Client {
+    fn with_provider(opt: L1ClientOptions, mut provider: Provider<RpcClient>) -> Self {
+        let (sender, mut receiver) = async_broadcast::broadcast(opt.l1_events_channel_capacity);
+        receiver.set_await_active(false);
+        receiver.set_overflow(true);
+
+        provider.set_interval(opt.l1_polling_interval);
+        Self {
+            retry_delay: opt.l1_retry_delay,
+            provider: Arc::new(provider),
+            events_max_block_range: opt.l1_events_max_block_range,
+            state: Arc::new(Mutex::new(L1State::new(opt.l1_blocks_cache_size))),
+            sender,
+            receiver: receiver.deactivate(),
+            update_task: Default::default(),
+        }
+    }
+
+    /// Construct a new L1 client with the default options.
+    pub async fn new(url: Url) -> anyhow::Result<Self> {
+        L1ClientOptions::default().connect(url).await
+    }
+
+    /// Construct a new WebSockets client with the default options.
+    ///
+    /// `url` must have a scheme `ws` or `wss`.
+    pub async fn ws(url: Url) -> anyhow::Result<Self> {
+        L1ClientOptions::default().ws(url).await
+    }
+
+    /// Synchronous, infallible version of `new` for HTTP clients.
+    ///
+    /// `url` must have a scheme `http` or `https`.
+    pub fn http(url: Url) -> Self {
+        L1ClientOptions::default().http(url)
     }
 
     /// Start the background tasks which keep the L1 client up to date.
@@ -176,23 +217,6 @@ impl L1Client {
     pub async fn stop(&self) {
         if let Some(update_task) = self.update_task.0.lock().await.take() {
             update_task.cancel().await;
-        }
-    }
-
-    fn with_provider(mut provider: Provider<RpcClient>, events_max_block_range: u64) -> Self {
-        let (sender, mut receiver) = async_broadcast::broadcast(100);
-        receiver.set_await_active(false);
-        receiver.set_overflow(true);
-
-        provider.set_interval(Duration::from_secs(1));
-        Self {
-            retry_delay: Duration::from_secs(1),
-            provider: Arc::new(provider),
-            events_max_block_range,
-            state: Default::default(),
-            sender,
-            receiver: receiver.deactivate(),
-            update_task: Default::default(),
         }
     }
 
@@ -579,17 +603,15 @@ impl L1Client {
     }
 }
 
-impl Default for L1State {
-    fn default() -> Self {
+impl L1State {
+    fn new(cache_size: NonZeroUsize) -> Self {
         Self {
             snapshot: Default::default(),
-            finalized: LruCache::new(NonZeroUsize::new(100).unwrap()),
+            finalized: LruCache::new(cache_size),
             finalized_by_timestamp: Default::default(),
         }
     }
-}
 
-impl L1State {
     fn put_finalized(&mut self, info: L1BlockInfo) {
         assert!(
             self.snapshot.finalized.is_some()
@@ -652,6 +674,7 @@ mod test {
         utils::{hex, parse_ether, Anvil, AnvilInstance},
     };
     use sequencer_utils::test_utils::setup_test;
+    use std::time::Duration;
     use time::OffsetDateTime;
 
     use super::*;
@@ -662,7 +685,16 @@ mod test {
         } else {
             anvil.endpoint()
         };
-        let client = L1Client::new(url.parse().unwrap(), 1).await.unwrap();
+
+        let client = L1ClientOptions {
+            l1_events_max_block_range: 1,
+            l1_polling_interval: Duration::from_secs(1),
+            ..Default::default()
+        }
+        .connect(url.parse().unwrap())
+        .await
+        .unwrap();
+
         client.start().await;
         client
     }

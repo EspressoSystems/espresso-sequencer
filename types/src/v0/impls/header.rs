@@ -1407,7 +1407,7 @@ mod test_headers {
         let anvil = Anvil::new().block_time(1u32).spawn();
         let mut genesis_state = NodeState::mock()
             .with_l1(
-                L1Client::new(anvil.endpoint().parse().unwrap(), 1)
+                L1Client::new(anvil.endpoint().parse().unwrap())
                     .await
                     .unwrap(),
             )
