@@ -32,5 +32,9 @@ url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
 
+[dev-dependencies]
+portpicker = "0.1.1"
+tide-disco = { workspace = true }
+
 [lints]
 workspace = true
