@@ -77,7 +77,7 @@
 //! let mut events = hotshot.event_stream();
 //! while let Some(event) = events.next().await {
 //!     // Update the query data based on this event.
-//!     data_source.update(&event).await;
+//!     data_source.update(&event).await.ok();
 //! }
 //! # Ok(())
 //! # }
@@ -553,8 +553,10 @@ where
 
     // Update query data using HotShot events.
     while let Some(event) = events.next().await {
-        // Update the query data based on this event.
-        data_source.update(&event).await;
+        // Update the query data based on this event. It is safe to ignore errors here; the error
+        // just returns the failed block height for use in garbage collection, but this simple
+        // implementation isn't doing any kind of garbage collection.
+        data_source.update(&event).await.ok();
     }
 
     Ok(())

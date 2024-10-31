@@ -383,7 +383,7 @@ pub mod testing {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            self.update(event).await;
+            self.update(event).await.unwrap();
         }
     }
 

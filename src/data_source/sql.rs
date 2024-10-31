@@ -267,7 +267,9 @@ impl Config {
 ///     spawn(async move {
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
-///             state.hotshot_qs.update(&event).await;
+///             if state.hotshot_qs.update(&event).await.is_err() {
+///                 continue;
+///             }
 ///
 ///             let mut tx = state.hotshot_qs.write().await.unwrap();
 ///             // Update other modules' states based on `event`, using `tx` to access the database.
@@ -334,7 +336,7 @@ pub mod testing {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            self.update(event).await;
+            self.update(event).await.unwrap();
         }
     }
 }
