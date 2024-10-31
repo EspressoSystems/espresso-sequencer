@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["light_client_state_update_vk_mock"]};
