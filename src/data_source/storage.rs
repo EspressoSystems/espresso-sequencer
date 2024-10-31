@@ -21,7 +21,6 @@
 //! This module also comes with a few pre-built persistence implementations:
 //! * [`SqlStorage`]
 //! * [`FileSystemStorage`]
-//! * [`NoStorage`]
 //!
 //! # Storage Traits vs Data Source Traits
 //!
@@ -87,7 +86,6 @@ use tagged_base64::TaggedBase64;
 pub mod fail_storage;
 pub mod fs;
 mod ledger_log;
-pub mod no_storage;
 pub mod pruning;
 pub mod sql;
 
@@ -95,8 +93,6 @@ pub mod sql;
 pub use fail_storage::FailStorage;
 #[cfg(feature = "file-system-data-source")]
 pub use fs::FileSystemStorage;
-#[cfg(feature = "no-storage")]
-pub use no_storage::NoStorage;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlStorage;
 

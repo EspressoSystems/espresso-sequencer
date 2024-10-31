@@ -298,7 +298,7 @@ pub mod availability_tests {
 
             // Wait for the transaction to be finalized.
             let (i, block) = loop {
-                tracing::info!("waiting for block {nonce}");
+                tracing::info!("waiting for tx {nonce}");
                 let (i, block) = blocks.next().await.unwrap();
                 if !block.is_empty() {
                     break (i, block);
@@ -306,6 +306,7 @@ pub mod availability_tests {
                 tracing::info!("block {i} is empty");
             };
 
+            tracing::info!("got tx {nonce} in block {i}");
             assert_eq!(ds.get_block(i).await.await, block);
             validate(&ds).await;
         }
@@ -446,6 +447,71 @@ pub mod availability_tests {
             assert!(vid_common.next().await.is_none());
             assert!(vid_common_meta.next().await.is_none());
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_range_rev<D: TestableDataSource>()
+    where
+        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
+    {
+        setup_test();
+
+        let mut network = MockNetwork::<D>::init().await;
+        let ds = network.data_source();
+        network.start().await;
+
+        // Wait for there to be at least 5 blocks.
+        ds.subscribe_leaves(5).await.next().await.unwrap();
+
+        // Test inclusive, exclusive and unbounded lower bound.
+        do_range_rev_test(&ds, Bound::Included(1), 5, 1..=5).await;
+        do_range_rev_test(&ds, Bound::Excluded(1), 5, 2..=5).await;
+        do_range_rev_test(&ds, Bound::Unbounded, 5, 0..=5).await;
+    }
+
+    async fn do_range_rev_test<D>(
+        ds: &D,
+        start: Bound<usize>,
+        end: usize,
+        expected_indices: impl DoubleEndedIterator<Item = u64>,
+    ) where
+        D: TestableDataSource,
+    {
+        tracing::info!("testing range {start:?}-{end}");
+
+        let mut leaves = ds.get_leaf_range_rev(start, end).await;
+        let mut blocks = ds.get_block_range_rev(start, end).await;
+        let mut payloads = ds.get_payload_range_rev(start, end).await;
+        let mut payloads_meta = ds.get_payload_metadata_range_rev(start, end).await;
+        let mut vid_common = ds.get_vid_common_range_rev(start, end).await;
+        let mut vid_common_meta = ds.get_vid_common_metadata_range_rev(start, end).await;
+
+        for i in expected_indices.rev() {
+            tracing::info!(i, "check entries");
+            let leaf = leaves.next().await.unwrap().await;
+            let block = blocks.next().await.unwrap().await;
+            let payload = payloads.next().await.unwrap().await;
+            let payload_meta = payloads_meta.next().await.unwrap().await;
+            let common = vid_common.next().await.unwrap().await;
+            let common_meta = vid_common_meta.next().await.unwrap().await;
+            assert_eq!(leaf.height(), i);
+            assert_eq!(block.height(), i);
+            assert_eq!(payload.height(), i);
+            assert_eq!(payload_meta.height(), i);
+            assert_eq!(common, ds.get_vid_common(i as usize).await.await);
+            assert_eq!(
+                common_meta,
+                ds.get_vid_common_metadata(i as usize).await.await
+            );
+        }
+
+        // The range should end where expected.
+        assert!(leaves.next().await.is_none());
+        assert!(blocks.next().await.is_none());
+        assert!(payloads.next().await.is_none());
+        assert!(payloads_meta.next().await.is_none());
+        assert!(vid_common.next().await.is_none());
+        assert!(vid_common_meta.next().await.is_none());
     }
 
     // A wrapper around a range that turns the lower bound from inclusive to exclusive.

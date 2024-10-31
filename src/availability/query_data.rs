@@ -29,6 +29,8 @@ use snafu::{ensure, Snafu};
 use std::fmt::Debug;
 
 pub type LeafHash<Types> = Commitment<Leaf<Types>>;
+pub type QcHash<Types> = Commitment<QuorumCertificate<Types>>;
+
 /// A block hash is the hash of the block header.
 ///
 /// A block consists of a header and a payload. But the header itself contains a commitment to the

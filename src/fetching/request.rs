@@ -12,7 +12,10 @@
 
 //! Requests for fetching resources.
 
-use crate::{availability::LeafQueryData, Payload, VidCommitment, VidCommon};
+use crate::{
+    availability::{LeafHash, LeafQueryData, QcHash},
+    Payload, VidCommitment, VidCommon,
+};
 use derive_more::{From, Into};
 use hotshot_types::traits::node_implementation::NodeType;
 
@@ -42,9 +45,26 @@ impl<Types: NodeType> Request<Types> for VidCommonRequest {
 }
 
 /// A request for a leaf with a given height.
+///
+/// The expected hash and QC hash are also provided, so that the request can be verified against a
+/// response from an untrusted provider.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, From, Into)]
-pub struct LeafRequest(usize);
+pub struct LeafRequest<Types: NodeType> {
+    pub height: u64,
+    pub expected_leaf: LeafHash<Types>,
+    pub expected_qc: QcHash<Types>,
+}
 
-impl<Types: NodeType> Request<Types> for LeafRequest {
+impl<Types: NodeType> LeafRequest<Types> {
+    pub fn new(height: u64, expected_leaf: LeafHash<Types>, expected_qc: QcHash<Types>) -> Self {
+        Self {
+            height,
+            expected_leaf,
+            expected_qc,
+        }
+    }
+}
+
+impl<Types: NodeType> Request<Types> for LeafRequest<Types> {
     type Response = LeafQueryData<Types>;
 }

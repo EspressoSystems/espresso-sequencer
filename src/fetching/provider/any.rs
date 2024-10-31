@@ -44,7 +44,7 @@ where
 }
 
 type PayloadProvider<Types> = Arc<dyn DebugProvider<Types, PayloadRequest>>;
-type LeafProvider<Types> = Arc<dyn DebugProvider<Types, LeafRequest>>;
+type LeafProvider<Types> = Arc<dyn DebugProvider<Types, LeafRequest<Types>>>;
 type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 
 /// Adaptor combining multiple data availability providers.
@@ -107,11 +107,11 @@ where
 }
 
 #[async_trait]
-impl<Types> Provider<Types, LeafRequest> for AnyProvider<Types>
+impl<Types> Provider<Types, LeafRequest<Types>> for AnyProvider<Types>
 where
     Types: NodeType,
 {
-    async fn fetch(&self, req: LeafRequest) -> Option<LeafQueryData<Types>> {
+    async fn fetch(&self, req: LeafRequest<Types>) -> Option<LeafQueryData<Types>> {
         any_fetch(&self.leaf_providers, req).await
     }
 }
@@ -154,7 +154,7 @@ where
     /// Add a sub-provider which fetches leaves.
     pub fn with_leaf_provider<P>(mut self, provider: P) -> Self
     where
-        P: Provider<Types, LeafRequest> + Debug + 'static,
+        P: Provider<Types, LeafRequest<Types>> + Debug + 'static,
     {
         self.leaf_providers.push(Arc::new(provider));
         self

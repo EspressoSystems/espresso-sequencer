@@ -84,9 +84,10 @@ use super::{
 };
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash,
-        TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata, VidCommonQueryData,
+        AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
+        LeafQueryData, PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload,
+        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata,
+        VidCommonQueryData,
     },
     explorer::{self, ExplorerDataSource},
     fetching::{self, request, Provider},
@@ -108,7 +109,7 @@ use derivative::Derivative;
 use futures::{
     channel::oneshot,
     future::{self, join_all, BoxFuture, Either, Future, FutureExt},
-    stream::{self, BoxStream, Stream, StreamExt},
+    stream::{self, BoxStream, StreamExt},
 };
 use hotshot_types::traits::{
     metrics::{Gauge, Metrics},
@@ -117,7 +118,7 @@ use hotshot_types::traits::{
 use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
 use std::sync::Arc;
 use std::{
-    cmp::min,
+    cmp::{max, min},
     fmt::{Debug, Display},
     iter::repeat_with,
     marker::PhantomData,
@@ -559,25 +560,6 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    type LeafRange<R> = BoxStream<'static, Fetch<LeafQueryData<Types>>>
-    where
-        R: RangeBounds<usize> + Send;
-    type BlockRange<R> = BoxStream<'static, Fetch<BlockQueryData<Types>>>
-    where
-        R: RangeBounds<usize> + Send;
-    type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<Types>>>
-    where
-        R: RangeBounds<usize> + Send;
-    type PayloadMetadataRange<R> = BoxStream<'static, Fetch<PayloadMetadata<Types>>>
-    where
-        R: RangeBounds<usize> + Send;
-    type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<Types>>>
-    where
-        R: RangeBounds<usize> + Send;
-    type VidCommonMetadataRange<R> = BoxStream<'static, Fetch<VidCommonMetadata<Types>>>
-    where
-        R: RangeBounds<usize> + Send;
-
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync,
@@ -620,46 +602,97 @@ where
         self.fetcher.get(VidCommonRequest::from(id.into())).await
     }
 
-    async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
+    async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.fetcher.clone().get_range(range)
     }
 
-    async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.fetcher.clone().get_range(range)
     }
 
-    async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.fetcher.clone().get_range(range)
     }
 
-    async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.fetcher.clone().get_range(range)
     }
 
-    async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+    async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.fetcher.clone().get_range(range)
     }
 
-    async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
+    async fn get_vid_common_metadata_range<R>(
+        &self,
+        range: R,
+    ) -> FetchStream<VidCommonMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.fetcher.clone().get_range(range)
+    }
+
+    async fn get_leaf_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<LeafQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
+    }
+
+    async fn get_block_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<BlockQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
+    }
+
+    async fn get_payload_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<PayloadQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
+    }
+
+    async fn get_payload_metadata_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<PayloadMetadata<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
+    }
+
+    async fn get_vid_common_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<VidCommonQueryData<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
+    }
+
+    async fn get_vid_common_metadata_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<VidCommonMetadata<Types>> {
+        self.fetcher.clone().get_range_rev(start, end)
     }
 
     async fn get_transaction(
@@ -683,6 +716,9 @@ where
         let height = info.height() as usize;
         let fetch_block = info.block.is_none();
         let fetch_vid = info.vid_common.is_none();
+
+        // Trigger a fetch of the parent leaf, if we don't already have it.
+        leaf::trigger_fetch_for_parent(&self.fetcher, &info.leaf).await;
 
         self.fetcher.store_and_notify(info).await;
 
@@ -975,7 +1011,68 @@ where
                         // especially for older streams that fetch most of the data from local
                         // storage.
                         sleep(chunk_fetch_delay).await;
-                        chunk
+                        stream::iter(chunk)
+                    }
+                }
+            })
+            .flatten()
+            .then(move |f| async move {
+                match f {
+                    // Introduce a delay (`active_fetch_delay`) for active fetches to reduce load on
+                    // the catchup provider. The delay applies between pending fetches, not between
+                    // chunks.
+                    Fetch::Pending(_) => sleep(active_fetch_delay).await,
+                    Fetch::Ready(_) => (),
+                };
+                f
+            })
+            .boxed()
+    }
+
+    /// Same as [`Self::get_range`], but yields objects in reverse order by height.
+    ///
+    /// Note that unlike [`Self::get_range`], which accepts any range and yields an infinite stream
+    /// if the range has no upper bound, this function requires there to be a defined upper bound,
+    /// otherwise we don't know where the reversed stream should _start_. The `end` bound given here
+    /// is inclusive; i.e. the first item yielded by the stream will have height `end`.
+    fn get_range_rev<T>(
+        self: Arc<Self>,
+        start: Bound<usize>,
+        end: usize,
+    ) -> BoxStream<'static, Fetch<T>>
+    where
+        T: RangedFetchable<Types>,
+    {
+        let chunk_size = self.range_chunk_size;
+        self.get_range_with_chunk_size_rev(chunk_size, start, end)
+    }
+
+    /// Same as [`Self::get_range_rev`], but uses the given chunk size instead of the default.
+    fn get_range_with_chunk_size_rev<T>(
+        self: Arc<Self>,
+        chunk_size: usize,
+        start: Bound<usize>,
+        end: usize,
+    ) -> BoxStream<'static, Fetch<T>>
+    where
+        T: RangedFetchable<Types>,
+    {
+        let chunk_fetch_delay = self.chunk_fetch_delay;
+        let active_fetch_delay = self.active_fetch_delay;
+
+        stream::iter(range_chunks_rev(start, end, chunk_size))
+            .then(move |chunk| {
+                let self_clone = self.clone();
+                async move {
+                    {
+                        let chunk = self_clone.get_chunk(chunk).await;
+
+                        // Introduce a delay (`chunk_fetch_delay`) between fetching chunks. This
+                        // helps to limit constant high CPU usage when fetching long range of data,
+                        // especially for older streams that fetch most of the data from local
+                        // storage
+                        sleep(chunk_fetch_delay).await;
+                        stream::iter(chunk.into_iter().rev())
                     }
                 }
             })
@@ -999,7 +1096,7 @@ where
     /// * It fetches all desired objects together, as a single chunk
     /// * It loads the object or triggers fetches right now rather than providing a lazy stream
     ///   which only fetches objects when polled.
-    async fn get_chunk<T>(self: &Arc<Self>, chunk: Range<usize>) -> impl Stream<Item = Fetch<T>>
+    async fn get_chunk<T>(self: &Arc<Self>, chunk: Range<usize>) -> Vec<Fetch<T>>
     where
         T: RangedFetchable<Types>,
     {
@@ -1017,13 +1114,15 @@ where
             Ok(objs) => {
                 // Convert to fetches. Objects which are not immediately available (`None` in the
                 // chunk) become passive fetches awaiting a notification of availability.
-                return stream::iter(objs.into_iter().zip(passive_fetches).enumerate().map(
-                    move |(i, (obj, passive_fetch))| match obj {
+                return objs
+                    .into_iter()
+                    .zip(passive_fetches)
+                    .enumerate()
+                    .map(move |(i, (obj, passive_fetch))| match obj {
                         Some(obj) => Fetch::Ready(obj),
                         None => passive(T::Request::from(chunk.start + i), passive_fetch),
-                    },
-                ))
-                .boxed();
+                    })
+                    .collect();
             }
             Err(err) => {
                 tracing::warn!(
@@ -1093,15 +1192,17 @@ where
 
         // Wait for the objects to be fetched, either from the local database on retry or from
         // another provider eventually.
-        stream::iter(passive_fetches.into_iter().zip(recv).enumerate().map(
-            move |(i, (passive_fetch, recv))| {
+        passive_fetches
+            .into_iter()
+            .zip(recv)
+            .enumerate()
+            .map(move |(i, (passive_fetch, recv))| {
                 passive(
                     T::Request::from(chunk.start + i),
                     select_some(passive_fetch, recv.map(Result::ok)),
                 )
-            },
-        ))
-        .boxed()
+            })
+            .collect()
     }
 
     /// Try to get a range of objects from local storage, intializing fetches if any are missing.
@@ -1247,8 +1348,8 @@ where
                     break heights;
                 };
 
-                // Get the pruned height or default to 0 if it is not set. We will start looking for
-                // missing blocks from the pruned height.
+                // Get the pruned height or default to 0 if it is not set. We will not look for
+                // blocks older than the pruned height.
                 let minimum_block_height = heights.pruned_height.unwrap_or(0) as usize;
                 // Get the block height; we will look for any missing blocks up to `block_height`.
                 let block_height = heights.height as usize;
@@ -1285,11 +1386,19 @@ where
                 // enough to trigger an active fetch of the corresponding leaf and the full block if
                 // they are missing, without loading the full payload from storage if we already
                 // have it.
+                //
+                // We iterate in reverse order for two reasons:
+                // 1. More recent blocks are more likely to be requested sooner.
+                // 2. Leaves are inherently fetched in reverse order, because we cannot (actively)
+                //    fetch a leaf until we have the subsequent leaf, which tells us what the hash
+                //    of its parent should be. Thus, if we iterated forwards, we could get stuck any
+                //    time we came upon two consecutive missing leaves.
                 let mut blocks = self
                     .clone()
-                    .get_range_with_chunk_size::<_, PayloadMetadata<Types>>(
+                    .get_range_with_chunk_size_rev::<PayloadMetadata<Types>>(
                         chunk_size,
-                        start..block_height,
+                        Bound::Included(start),
+                        block_height.saturating_sub(1),
                     );
                 let mut missing_blocks = 0;
                 while let Some(fetch) = blocks.next().await {
@@ -1310,9 +1419,10 @@ where
                 // independently of the block payload.
                 let mut vid = self
                     .clone()
-                    .get_range_with_chunk_size::<_, VidCommonMetadata<Types>>(
+                    .get_range_with_chunk_size_rev::<VidCommonMetadata<Types>>(
                         chunk_size,
-                        start..block_height,
+                        Bound::Included(start),
+                        block_height.saturating_sub(1),
                     );
                 let mut missing_vid = 0;
                 while let Some(fetch) = vid.next().await {
@@ -1764,7 +1874,7 @@ where
 
 /// A provider which can be used as a fetcher by the availability service.
 pub trait AvailabilityProvider<Types: NodeType>:
-    Provider<Types, request::LeafRequest>
+    Provider<Types, request::LeafRequest<Types>>
     + Provider<Types, request::PayloadRequest>
     + Provider<Types, request::VidCommonRequest>
     + Sync
@@ -1772,7 +1882,7 @@ pub trait AvailabilityProvider<Types: NodeType>:
 {
 }
 impl<Types: NodeType, P> AvailabilityProvider<Types> for P where
-    P: Provider<Types, request::LeafRequest>
+    P: Provider<Types, request::LeafRequest<Types>>
         + Provider<Types, request::PayloadRequest>
         + Provider<Types, request::VidCommonRequest>
         + Sync
@@ -1839,6 +1949,8 @@ where
     where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>;
 
     /// Wait for someone else to fetch the object.
@@ -1942,6 +2054,42 @@ where
 
         let chunk = start..chunk_end;
         start = chunk_end;
+        Some(chunk)
+    })
+}
+
+/// Break a range into fixed-size chunks, starting from the end and moving towards the start.
+///
+/// While the chunks are yielded in reverse order, from `end` to `start`, each individual chunk is
+/// in the usual ascending order. That is, the first chunk ends with `end` and the last chunk starts
+/// with `start`.
+///
+/// Note that unlike [`range_chunks_rev`], which accepts any range and yields an infinite iterator
+/// if the range has no upper bound, this function requires there to be a defined upper bound,
+/// otherwise we don't know where the reversed iterator should _start_. The `end` bound given here
+/// is inclusive; i.e. the end of the first chunk yielded by the stream will be exactly `end`.
+fn range_chunks_rev(
+    start: Bound<usize>,
+    end: usize,
+    chunk_size: usize,
+) -> impl Iterator<Item = Range<usize>> {
+    // Transform the start bound to be inclusive.
+    let start = match start {
+        Bound::Included(i) => i,
+        Bound::Excluded(i) => i + 1,
+        Bound::Unbounded => 0,
+    };
+    // Transform the end bound to be exclusive.
+    let mut end = end + 1;
+
+    std::iter::from_fn(move || {
+        let chunk_start = max(start, end.saturating_sub(chunk_size));
+        if end <= chunk_start {
+            return None;
+        }
+
+        let chunk = chunk_start..end;
+        end = chunk_start;
         Some(chunk)
     })
 }
@@ -2103,5 +2251,70 @@ async fn select_some<T>(
         // If the first future resolves with `None`, wait for the result of the second future.
         Either::Left((None, b)) => b.await,
         Either::Right((None, a)) => a.await,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_range_chunks() {
+        // Inclusive bounds, partial last chunk.
+        assert_eq!(
+            range_chunks(0..=4, 2).collect::<Vec<_>>(),
+            [0..2, 2..4, 4..5]
+        );
+
+        // Inclusive bounds, complete last chunk.
+        assert_eq!(
+            range_chunks(0..=5, 2).collect::<Vec<_>>(),
+            [0..2, 2..4, 4..6]
+        );
+
+        // Exclusive bounds, partial last chunk.
+        assert_eq!(
+            range_chunks(0..5, 2).collect::<Vec<_>>(),
+            [0..2, 2..4, 4..5]
+        );
+
+        // Exclusive bounds, complete last chunk.
+        assert_eq!(
+            range_chunks(0..6, 2).collect::<Vec<_>>(),
+            [0..2, 2..4, 4..6]
+        );
+
+        // Unbounded.
+        assert_eq!(
+            range_chunks(0.., 2).take(5).collect::<Vec<_>>(),
+            [0..2, 2..4, 4..6, 6..8, 8..10]
+        );
+    }
+
+    #[test]
+    fn test_range_chunks_rev() {
+        // Inclusive bounds, partial last chunk.
+        assert_eq!(
+            range_chunks_rev(Bound::Included(0), 4, 2).collect::<Vec<_>>(),
+            [3..5, 1..3, 0..1]
+        );
+
+        // Inclusive bounds, complete last chunk.
+        assert_eq!(
+            range_chunks_rev(Bound::Included(0), 5, 2).collect::<Vec<_>>(),
+            [4..6, 2..4, 0..2]
+        );
+
+        // Exclusive bounds, partial last chunk.
+        assert_eq!(
+            range_chunks_rev(Bound::Excluded(0), 5, 2).collect::<Vec<_>>(),
+            [4..6, 2..4, 1..2]
+        );
+
+        // Exclusive bounds, complete last chunk.
+        assert_eq!(
+            range_chunks_rev(Bound::Excluded(0), 4, 2).collect::<Vec<_>>(),
+            [3..5, 1..3]
+        );
     }
 }
