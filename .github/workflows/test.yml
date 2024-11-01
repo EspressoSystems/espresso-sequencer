@@ -129,6 +129,7 @@ jobs:
       - name: debug
         run: |
           ls -R
+          pwd
           ls -l
 
       - name: Test
