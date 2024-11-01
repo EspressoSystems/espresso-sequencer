@@ -2954,7 +2954,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3002,7 +3002,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "async-trait",
  "clap",
@@ -3049,7 +3049,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3083,7 +3083,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3099,7 +3099,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3137,7 +3137,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4195,7 +4195,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4204,6 +4204,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "blake3",
+ "cbor4ii",
  "custom_debug",
  "delegate",
  "derive_builder",
@@ -5808,9 +5809,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.8"
+version = "0.12.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
+checksum = "f8f4955649ef5c38cc7f9e8aa41761d48fb9677197daea9984dc54f56aad5e63"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -7928,7 +7929,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.79#f942200b8ae31038d55cc1a45d2f780bc13de458"
+source = "git+https://github.com/EspressoSystems/HotShot.git?branch=keyao/num_nodes_api#d213cda358ce782058c8743b3a65296e8f127642"
 dependencies = [
  "tracing",
 ]
