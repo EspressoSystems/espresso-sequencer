@@ -164,7 +164,7 @@ fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Deb
     setup_backtrace();
 
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(std::env::var("CARGO_MANIFEST_DIR")).join("../data");
+    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
     let expected_bytes = std::fs::read(data_dir.join(format!("{name}.json"))).unwrap();
     let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
 
