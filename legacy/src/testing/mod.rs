@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, marker::PhantomData, num::NonZeroUsize};
+use std::{collections::VecDeque, marker::PhantomData};
 
 use crate::{
     builder_state::{
@@ -73,6 +73,7 @@ pub async fn create_builder_state(
         ViewNumber::genesis(),
         TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
         TEST_PROTOCOL_MAX_BLOCK_SIZE,
+        num_storage_nodes,
     )));
 
     // instantiate the bootstrap builder state
@@ -90,7 +91,6 @@ pub async fn create_builder_state(
         tx_receiver,
         VecDeque::new(),
         global_state.clone(),
-        NonZeroUsize::new(num_storage_nodes).unwrap(),
         Duration::from_millis(100),
         1,
         Arc::new(TestInstanceState::default()),
@@ -155,7 +155,6 @@ pub async fn calc_proposal_msg(
                 _pd: PhantomData,
             }),
             sender: pub_key,
-            total_nodes: num_storage_nodes,
         }
     };
 
@@ -241,7 +240,6 @@ pub async fn calc_builder_commitment(
     let encoded_txns = &proposal.data.encoded_transactions;
 
     let metadata = &proposal.data.metadata;
-    let num_nodes = da_proposal_message.total_nodes;
     // form a block payload from the encoded transactions
     let block_payload =
         <TestBlockPayload as BlockPayload<TestTypes>>::from_bytes(encoded_txns, metadata);
@@ -252,7 +250,6 @@ pub async fn calc_builder_commitment(
     let da_proposal_info = DAProposalInfo {
         view_number,
         proposal,
-        num_nodes,
     };
     (payload_builder_commitment, da_proposal_info)
 }

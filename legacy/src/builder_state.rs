@@ -33,11 +33,11 @@ use async_std::task::spawn_blocking;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 
+use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Instant;
-use std::{cmp::PartialEq, num::NonZeroUsize};
 use std::{collections::hash_map::Entry, time::Duration};
 
 pub type TxTimeStamp = u128;
@@ -59,7 +59,6 @@ pub struct DecideMessage<Types: NodeType> {
 pub struct DaProposalMessage<Types: NodeType> {
     pub proposal: Arc<Proposal<Types, DaProposal<Types>>>,
     pub sender: Types::SignatureKey,
-    pub total_nodes: usize,
 }
 /// Quorum proposal message to be put on the quorum proposal channel
 #[derive(Clone, Debug, PartialEq)]
@@ -110,7 +109,6 @@ pub enum Status {
 pub struct DAProposalInfo<Types: NodeType> {
     pub view_number: Types::View,
     pub proposal: Arc<Proposal<Types, DaProposal<Types>>>,
-    pub num_nodes: usize,
 }
 
 /// [`ALLOW_EMPTY_BLOCK_PERIOD`] is a constant that is used to determine the
@@ -418,8 +416,6 @@ impl<Types: NodeType> BuilderState<Types> {
 
         let metadata = &proposal.data.metadata;
 
-        let num_nodes = da_msg.total_nodes;
-
         // form a block payload from the encoded transactions
         let block_payload =
             <Types::BlockPayload as BlockPayload<Types>>::from_bytes(encoded_txns, metadata);
@@ -435,7 +431,6 @@ impl<Types: NodeType> BuilderState<Types> {
         let da_proposal_info = DAProposalInfo {
             view_number,
             proposal,
-            num_nodes,
         };
 
         let std::collections::hash_map::Entry::Vacant(e) = self
@@ -790,8 +785,8 @@ impl<Types: NodeType> BuilderState<Types> {
         let block_size: u64 = encoded_txns.len() as u64;
         let offered_fee: u64 = self.base_fee * block_size;
 
-        // get the total nodes from the global state.
-        // stored while processing the `claim_block_with_num_nodes` request.
+        // Get the number of nodes stored while processing the `claim_block_with_num_nodes` request
+        // or upon initialization.
         let num_nodes = self.global_state.read_arc().await.num_nodes;
 
         let (trigger_send, trigger_recv) = oneshot();
@@ -1151,6 +1146,7 @@ mod test {
     use hotshot_types::data::{Leaf, QuorumProposal};
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
+    use marketplace_builder_shared::testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION;
 
     use super::DAProposalInfo;
     use super::MessageType;
@@ -1172,7 +1168,7 @@ mod test {
         // Capacity of broadcast channels
         const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
         // Number of nodes on DA committee
-        const NUM_STORAGE_NODES: usize = 4;
+        const NUM_STORAGE_NODES: usize = TEST_NUM_NODES_IN_VID_COMPUTATION;
 
         // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
@@ -1291,7 +1287,7 @@ mod test {
         // Capacity of broadcast channels
         const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
         // Number of nodes on DA committee
-        const NUM_STORAGE_NODES: usize = 4;
+        const NUM_STORAGE_NODES: usize = TEST_NUM_NODES_IN_VID_COMPUTATION;
 
         // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
@@ -1392,7 +1388,7 @@ mod test {
         // Capacity of broadcast channels
         const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
         // Number of nodes on DA committee
-        const NUM_STORAGE_NODES: usize = 4;
+        const NUM_STORAGE_NODES: usize = TEST_NUM_NODES_IN_VID_COMPUTATION;
 
         // create builder_state without entering event loop
         let (_senders, global_state, mut builder_state) =
