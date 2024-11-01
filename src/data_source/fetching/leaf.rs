@@ -125,8 +125,44 @@ where
         LeafId::Number(n) => {
             // We need the next leaf in the chain so we can figure out what hash we expect for this
             // leaf, so we can fetch it securely from an untrusted provider.
-            let next = match tx.get_leaf((n + 1).into()).await {
-                Ok(next) => next,
+            let next = (n + 1) as u64;
+            let next = match tx.first_available_leaf(next).await {
+                Ok(leaf) if leaf.height() == next => leaf,
+                Ok(leaf) => {
+                    // If we don't have the immediate successor leaf, but we have some later leaf,
+                    // then we can't trigger this exact fetch, but we can fetch the (apparently)
+                    // missing parent of the leaf we do have, which will trigger a chain of fetches
+                    // that eventually reaches all the way back to the desired leaf.
+                    tracing::debug!(
+                        n,
+                        fetching = leaf.height() - 1,
+                        "do not have necessary leaf; trigger fetch of a later leaf"
+                    );
+                    fetcher.leaf_fetcher.clone().spawn_fetch(
+                        request::LeafRequest::new(
+                            leaf.height() - 1,
+                            leaf.leaf().parent_commitment(),
+                            leaf.leaf().justify_qc().commit(),
+                        ),
+                        fetcher.provider.clone(),
+                        // After getting the leaf, grab the other data as well; that will be missing
+                        // whenever the leaf was.
+                        [
+                            LeafCallback::Leaf {
+                                fetcher: fetcher.clone(),
+                            },
+                            HeaderCallback::Payload {
+                                fetcher: fetcher.clone(),
+                            }
+                            .into(),
+                            HeaderCallback::VidCommon {
+                                fetcher: fetcher.clone(),
+                            }
+                            .into(),
+                        ],
+                    );
+                    return Ok(());
+                }
                 Err(QueryError::Missing | QueryError::NotFound) => {
                     // We successfully queried the database, but the next leaf wasn't there. We
                     // know for sure that based on the current state of the DB, we cannot fetch this
@@ -137,7 +173,7 @@ where
                 Err(QueryError::Error { message }) => {
                     // An error occurred while querying the database. We don't know if we need to
                     // fetch the leaf or not. Return an error so we can try again.
-                    bail!("failed to fetch successor for leaf {req}: {message}");
+                    bail!("failed to fetch successor for leaf {n}: {message}");
                 }
             };
 
