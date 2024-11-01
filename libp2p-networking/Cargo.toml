@@ -39,6 +39,7 @@ void = "1"
 lazy_static = { workspace = true }
 pin-project = "1"
 portpicker.workspace = true
+cbor4ii = "0.3"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 libp2p = { workspace = true, features = ["tokio"] }

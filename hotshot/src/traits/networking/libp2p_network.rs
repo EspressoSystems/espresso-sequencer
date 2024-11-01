@@ -59,7 +59,7 @@ use libp2p_identity::{
     ed25519::{self, SecretKey},
     Keypair, PeerId,
 };
-pub use libp2p_networking::network::GossipConfig;
+pub use libp2p_networking::network::{GossipConfig, RequestResponseConfig};
 use libp2p_networking::{
     network::{
         behaviours::dht::record::{Namespace, RecordKey, RecordValue},
@@ -395,6 +395,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     pub async fn from_config(
         mut config: NetworkConfig<K>,
         gossip_config: GossipConfig,
+        request_response_config: RequestResponseConfig,
         bind_address: Multiaddr,
         pub_key: &K,
         priv_key: &K::PrivateKey,
@@ -414,6 +415,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 
         // Set the gossip configuration
         config_builder.gossip_config(gossip_config.clone());
+        config_builder.request_response_config(request_response_config);
 
         // Extrapolate the stake table from the known nodes
         let stake_table: HashSet<K> = config

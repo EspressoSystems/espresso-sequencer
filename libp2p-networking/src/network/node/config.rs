@@ -33,6 +33,10 @@ pub struct NetworkNodeConfig<K: SignatureKey + 'static> {
     /// Configuration for `GossipSub`
     pub gossip_config: GossipConfig,
 
+    #[builder(default)]
+    /// Configuration for `RequestResponse`
+    pub request_response_config: RequestResponseConfig,
+
     /// list of addresses to connect to at initialization
     pub to_connect_addrs: HashSet<(PeerId, Multiaddr)>,
     /// republication interval in DHT, must be much less than `ttl`
@@ -148,6 +152,24 @@ impl Default for GossipConfig {
             gossip_lazy: 6,
 
             max_transmit_size: MAX_GOSSIP_MSG_SIZE, // The maximum gossip message size
+        }
+    }
+}
+
+/// Configuration for Libp2p's request-response
+#[derive(Clone, Debug)]
+pub struct RequestResponseConfig {
+    /// The maximum request size in bytes
+    pub request_size_maximum: u64,
+    /// The maximum response size in bytes
+    pub response_size_maximum: u64,
+}
+
+impl Default for RequestResponseConfig {
+    fn default() -> Self {
+        Self {
+            request_size_maximum: 20 * 1024 * 1024,
+            response_size_maximum: 20 * 1024 * 1024,
         }
     }
 }

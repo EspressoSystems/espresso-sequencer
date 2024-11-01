@@ -13,6 +13,9 @@ mod node;
 /// Alternative Libp2p transport implementations
 pub mod transport;
 
+/// Forked `cbor` codec with altered request/response sizes
+pub mod cbor;
+
 use std::{collections::HashSet, fmt::Debug};
 
 use futures::channel::oneshot::Sender;
@@ -44,7 +47,7 @@ pub use self::{
     node::{
         spawn_network_node, GossipConfig, NetworkNode, NetworkNodeConfig, NetworkNodeConfigBuilder,
         NetworkNodeConfigBuilderError, NetworkNodeHandle, NetworkNodeReceiver,
-        DEFAULT_REPLICATION_FACTOR,
+        RequestResponseConfig, DEFAULT_REPLICATION_FACTOR,
     },
 };
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]

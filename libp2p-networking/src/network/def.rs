@@ -10,14 +10,14 @@ use libp2p::{
     gossipsub::{Behaviour as GossipBehaviour, Event as GossipEvent, IdentTopic},
     identify::{Behaviour as IdentifyBehaviour, Event as IdentifyEvent},
     kad::store::MemoryStore,
-    request_response::{cbor, OutboundRequestId, ResponseChannel},
+    request_response::{OutboundRequestId, ResponseChannel},
     Multiaddr,
 };
 use libp2p_identity::PeerId;
 use libp2p_swarm_derive::NetworkBehaviour;
 use tracing::{debug, error};
 
-use super::{behaviours::dht::store::ValidatedStore, NetworkEventInternal};
+use super::{behaviours::dht::store::ValidatedStore, cbor, NetworkEventInternal};
 
 /// Overarching network behaviour performing:
 /// - network topology discovoery
@@ -45,7 +45,7 @@ pub struct NetworkDef<K: SignatureKey + 'static> {
 
     /// purpose: directly messaging peer
     #[debug(skip)]
-    pub direct_message: libp2p::request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
+    pub direct_message: cbor::Behaviour<Vec<u8>, Vec<u8>>,
 
     /// Auto NAT behaviour to determine if we are publically reachable and
     /// by which address
@@ -60,7 +60,7 @@ impl<K: SignatureKey + 'static> NetworkDef<K> {
         gossipsub: GossipBehaviour,
         dht: libp2p::kad::Behaviour<ValidatedStore<MemoryStore, K>>,
         identify: IdentifyBehaviour,
-        direct_message: cbor::Behaviour<Vec<u8>, Vec<u8>>,
+        direct_message: super::cbor::Behaviour<Vec<u8>, Vec<u8>>,
         autonat: autonat::Behaviour,
     ) -> NetworkDef<K> {
         Self {
