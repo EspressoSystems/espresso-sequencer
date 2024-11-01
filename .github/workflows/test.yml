@@ -45,9 +45,8 @@ jobs:
         run: cargo nextest archive --locked --workspace --all-features --archive-file nextest-archive.tar.zst
       - name: debug
         run: |
-          ls -R
-          pwd
           ls -l
+          pwd
       - name: Upload archive to workflow
         uses: actions/upload-artifact@v4
         with:
@@ -128,12 +127,13 @@ jobs:
 
       - name: debug
         run: |
-          ls -R
-          pwd
           ls -l
+          pwd
 
       - name: Test
-        run: cargo nextest run --archive-file nextest-archive.tar.zst  --verbose --no-fail-fast
+        run: |
+          cargo nextest run --archive-file nextest-archive.tar.zst  --verbose --no-fail-fast \
+          --workspace-remap $PWD
         timeout-minutes: 20
 
   test-integration:
@@ -188,14 +188,13 @@ jobs:
       - name: Run Demo-Native ${{matrix.version}}
         run: bash -x scripts/demo-native ${{matrix.compose}}
 
-      - name: debug
-        run: echo $PATH
-
       - name: Test Integration
         env:
           NEXTEST_PROFILE: integration
           INTEGRATION_TEST_SEQUENCER_VERSION: ${{matrix.version}}
-        run: cargo nextest run --archive-file nextest-archive.tar.zst --verbose --nocapture --no-fail-fast
+        run: |
+          cargo nextest run --archive-file nextest-archive.tar.zst  --verbose --no-fail-fast \
+          --workspace-remap $PWD
         timeout-minutes: 40
 
       - name: Process Compose Down
