@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["L1BlockInfo","L1Client","L1Snapshot"]};
