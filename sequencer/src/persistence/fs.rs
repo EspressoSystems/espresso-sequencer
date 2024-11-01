@@ -12,7 +12,10 @@ use hotshot_types::{
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{QuorumCertificate, UpgradeCertificate},
-    traits::{block_contents::BlockPayload, node_implementation::ConsensusTime},
+    traits::{
+        block_contents::{BlockHeader, BlockPayload},
+        node_implementation::ConsensusTime,
+    },
     utils::View,
     vid::VidSchemeType,
     vote::HasViewNumber,
@@ -23,6 +26,7 @@ use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
+    ops::RangeInclusive,
     path::{Path, PathBuf},
 };
 
@@ -173,47 +177,59 @@ impl Inner {
         Ok(())
     }
 
-    fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+    fn collect_garbage(
+        &mut self,
+        view: ViewNumber,
+        intervals: &[RangeInclusive<u64>],
+    ) -> anyhow::Result<()> {
         let view_number = view.u64();
 
-        let delete_files = |view_number: u64, dir_path: PathBuf| -> anyhow::Result<()> {
-            if !dir_path.is_dir() {
-                return Ok(());
-            }
+        let delete_files =
+            |intervals: &[RangeInclusive<u64>], keep, dir_path: PathBuf| -> anyhow::Result<()> {
+                if !dir_path.is_dir() {
+                    return Ok(());
+                }
 
-            for entry in fs::read_dir(dir_path)? {
-                let entry = entry?;
-                let path = entry.path();
+                for entry in fs::read_dir(dir_path)? {
+                    let entry = entry?;
+                    let path = entry.path();
 
-                if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
-                    if let Ok(v) = file.parse::<u64>() {
-                        if v <= view_number {
-                            fs::remove_file(&path)?;
+                    if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
+                        if let Ok(v) = file.parse::<u64>() {
+                            if let Some(keep) = keep {
+                                if keep == v {
+                                    continue;
+                                }
+                            }
+                            if intervals.iter().any(|i| i.contains(&v)) {
+                                fs::remove_file(&path)?;
+                            }
                         }
                     }
                 }
-            }
 
-            Ok(())
-        };
+                Ok(())
+            };
 
-        delete_files(view_number, self.da_dir_path())?;
-        delete_files(view_number, self.vid_dir_path())?;
-        delete_files(view_number, self.quorum_proposals_dir_path())?;
+        delete_files(intervals, None, self.da_dir_path())?;
+        delete_files(intervals, None, self.vid_dir_path())?;
+        delete_files(intervals, None, self.quorum_proposals_dir_path())?;
 
         // Save the most recent leaf as it will be our anchor point if the node restarts.
-        if view_number > 0 {
-            delete_files(view_number - 1, self.decided_leaf_path())?;
-        }
+        delete_files(intervals, Some(view_number), self.decided_leaf_path())?;
 
         Ok(())
     }
 
+    /// Generate events based on persisted decided leaves.
+    ///
+    /// Returns a list of closed intervals of views which can be safely deleted, as all leaves
+    /// within these view ranges have been processed by the event consumer.
     async fn generate_decide_events(
         &self,
         view: ViewNumber,
         consumer: &impl EventConsumer,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Vec<RangeInclusive<u64>>> {
         // Generate a decide event for each leaf, to be processed by the event consumer. We make a
         // separate event for each leaf because it is possible we have non-consecutive leaves in our
         // storage, which would not be valid as a single decide with a single leaf chain.
@@ -281,7 +297,10 @@ impl Inner {
             }
         }
 
+        let mut intervals = vec![];
+        let mut current_interval = None;
         for (view, (leaf, qc)) in leaves {
+            let height = leaf.leaf.block_header().block_number();
             consumer
                 .handle_event(&Event {
                     view_number: ViewNumber::new(view),
@@ -292,9 +311,27 @@ impl Inner {
                     },
                 })
                 .await?;
+            if let Some((start, end, current_height)) = current_interval.as_mut() {
+                if height == *current_height + 1 {
+                    // If we have a chain of consecutive leaves, extend the current interval of
+                    // views which are safe to delete.
+                    *current_height += 1;
+                    *end = view;
+                } else {
+                    // Otherwise, end the current interval and start a new one.
+                    intervals.push(*start..=*end);
+                    current_interval = Some((view, view, height));
+                }
+            } else {
+                // Start a new interval.
+                current_interval = Some((view, view, height));
+            }
+        }
+        if let Some((start, end, _)) = current_interval {
+            intervals.push(start..=end);
         }
 
-        Ok(())
+        Ok(intervals)
     }
 
     fn load_da_proposal(
@@ -466,20 +503,21 @@ impl SequencerPersistence for Persistence {
             )?;
         }
 
-        // Event processing failure is not an error, since by this point we have at least managed to
-        // persist the decided leaves successfully, and the event processing will just run again at
-        // the next decide. If there is an error here, we just log it and return early with success
-        // to prevent GC from running before the decided leaves are processed.
-        if let Err(err) = inner.generate_decide_events(view, consumer).await {
-            tracing::warn!(?view, "event processing failed: {err:#}");
-            return Ok(());
-        }
-
-        if let Err(err) = inner.collect_garbage(view) {
-            // Similarly, garbage collection is not an error. We have done everything we strictly
-            // needed to do, and GC will run again at the next decide. Log the error but do not
-            // return it.
-            tracing::warn!(?view, "GC failed: {err:#}");
+        match inner.generate_decide_events(view, consumer).await {
+            Err(err) => {
+                // Event processing failure is not an error, since by this point we have at least
+                // managed to persist the decided leaves successfully, and the event processing will
+                // just run again at the next decide.
+                tracing::warn!(?view, "event processing failed: {err:#}");
+            }
+            Ok(intervals) => {
+                if let Err(err) = inner.collect_garbage(view, &intervals) {
+                    // Similarly, garbage collection is not an error. We have done everything we
+                    // strictly needed to do, and GC will run again at the next decide. Log the
+                    // error but do not return it.
+                    tracing::warn!(?view, "GC failed: {err:#}");
+                }
+            }
         }
 
         Ok(())

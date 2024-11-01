@@ -1037,10 +1037,15 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
     use hotshot_types::{
-        data::QuorumProposal, event::LeafInfo, simple_certificate::QuorumCertificate,
-        traits::node_implementation::ConsensusTime,
+        data::{DaProposal, QuorumProposal, VidDisperseShare},
+        event::LeafInfo,
+        message::Proposal,
+        simple_certificate::QuorumCertificate,
+        traits::{node_implementation::ConsensusTime, signature_key::SignatureKey, EncodeBytes},
+        vid::vid_scheme,
     };
 
+    use jf_vid::VidScheme;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use std::fmt::Debug;
@@ -1196,6 +1201,7 @@ mod api_tests {
         }
 
         setup_test();
+        let (pubkey, privkey) = PubKey::generated_from_seed_indexed([0; 32], 1);
 
         let storage = D::create_storage().await;
         let persistence = D::persistence_options(&storage).create().await.unwrap();
@@ -1210,11 +1216,12 @@ mod api_tests {
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
 
+        let genesis = Leaf::genesis(&Default::default(), &NodeState::mock()).await;
+        let payload = genesis.block_payload().unwrap();
+        let payload_bytes_arc = payload.encode();
+        let disperse = vid_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
         let mut quorum_proposal = QuorumProposal::<SeqTypes> {
-            block_header: Leaf::genesis(&Default::default(), &NodeState::mock())
-                .await
-                .block_header()
-                .clone(),
+            block_header: genesis.block_header().clone(),
             view_number: ViewNumber::genesis(),
             justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
                 &ValidatedState::default(),
@@ -1240,6 +1247,47 @@ mod api_tests {
             qc.data.leaf_commit = Committable::commit(&leaf);
             justify_qc = qc.clone();
             chain1.push((leaf.clone(), qc.clone()));
+
+            // Include a quorum proposal for each leaf.
+            let quorum_proposal_signature =
+                PubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
+                    .expect("Failed to sign quorum_proposal");
+            persistence
+                .append_quorum_proposal(&Proposal {
+                    data: quorum_proposal.clone(),
+                    signature: quorum_proposal_signature,
+                    _pd: Default::default(),
+                })
+                .await
+                .unwrap();
+
+            // Include VID information for each leaf.
+            let share = VidDisperseShare::<SeqTypes> {
+                view_number: leaf.view_number(),
+                payload_commitment: Default::default(),
+                share: disperse.shares[0].clone(),
+                common: disperse.common.clone(),
+                recipient_key: pubkey,
+            };
+            persistence
+                .append_vid(&share.to_proposal(&privkey).unwrap())
+                .await
+                .unwrap();
+
+            // Include payload information for each leaf.
+            let block_payload_signature =
+                PubKey::sign(&privkey, &payload_bytes_arc).expect("Failed to sign block payload");
+            let da_proposal_inner = DaProposal::<SeqTypes> {
+                encoded_transactions: payload_bytes_arc.clone(),
+                metadata: payload.ns_table().clone(),
+                view_number: leaf.view_number(),
+            };
+            let da_proposal = Proposal {
+                data: da_proposal_inner,
+                signature: block_payload_signature,
+                _pd: Default::default(),
+            };
+            persistence.append_da(&da_proposal).await.unwrap();
         }
         // Split into two chains.
         let mut chain2 = chain1.split_off(2);
@@ -1278,13 +1326,59 @@ mod api_tests {
             .await
             .unwrap();
 
-        // Check that the leaves were moved to archive storage.
+        // Check that the leaves were moved to archive storage, along with payload and VID
+        // information.
         for (leaf, qc) in chain1.iter().chain(&chain2) {
             tracing::info!(height = leaf.height(), "check archive");
             let qd = data_source.get_leaf(leaf.height() as usize).await.await;
             assert_eq!(qd.leaf(), leaf);
             assert_eq!(qd.qc(), qc);
+
+            data_source
+                .get_block(leaf.height() as usize)
+                .await
+                .try_resolve()
+                .ok()
+                .unwrap();
+            data_source
+                .get_vid_common(leaf.height() as usize)
+                .await
+                .try_resolve()
+                .ok()
+                .unwrap();
+
+            // Check that all data has been garbage collected for the decided views.
+            assert!(persistence
+                .load_da_proposal(leaf.view_number())
+                .await
+                .unwrap()
+                .is_none());
+            assert!(persistence
+                .load_vid_share(leaf.view_number())
+                .await
+                .unwrap()
+                .is_none());
+            assert!(persistence
+                .load_quorum_proposal(leaf.view_number())
+                .await
+                .is_err());
         }
+
+        // Check that data has _not_ been garbage collected for the missing view.
+        assert!(persistence
+            .load_da_proposal(ViewNumber::new(2))
+            .await
+            .unwrap()
+            .is_some());
+        assert!(persistence
+            .load_vid_share(ViewNumber::new(2))
+            .await
+            .unwrap()
+            .is_some());
+        persistence
+            .load_quorum_proposal(ViewNumber::new(2))
+            .await
+            .unwrap();
     }
 
     fn leaf_info(leaf: Leaf) -> LeafInfo<SeqTypes> {
