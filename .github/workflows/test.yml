@@ -43,10 +43,7 @@ jobs:
 
       - name: Build and archive tests
         run: cargo nextest archive --locked --workspace --all-features --archive-file nextest-archive.tar.zst
-      - name: debug
-        run: |
-          ls -l
-          pwd
+
       - name: Upload archive to workflow
         uses: actions/upload-artifact@v4
         with:
@@ -124,11 +121,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: nextest-archive
-
-      - name: debug
-        run: |
-          ls -l
-          pwd
 
       - name: Test
         run: |
