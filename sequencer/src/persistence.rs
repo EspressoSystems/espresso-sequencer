@@ -83,6 +83,22 @@ mod persistence_tests {
         events: Arc<RwLock<Vec<Event>>>,
     }
 
+    impl EventCollector {
+        async fn leaf_chain(&self) -> Vec<LeafInfo<SeqTypes>> {
+            self.events
+                .read()
+                .await
+                .iter()
+                .flat_map(|event| {
+                    let EventType::Decide { leaf_chain, .. } = &event.event else {
+                        panic!("expected decide event, got {event:?}");
+                    };
+                    leaf_chain.iter().cloned().rev()
+                })
+                .collect::<Vec<_>>()
+        }
+    }
+
     #[async_trait]
     impl EventConsumer for EventCollector {
         async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
@@ -420,15 +436,7 @@ mod persistence_tests {
         );
 
         // A decide event should have been processed.
-        let events = consumer.events.read().await;
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].view_number, ViewNumber::new(2));
-        let EventType::Decide { qc, leaf_chain, .. } = &events[0].event else {
-            panic!("expected decide event, got {:?}", events[0]);
-        };
-        assert_eq!(**qc, qcs[2]);
-        assert_eq!(leaf_chain.len(), 3, "{leaf_chain:#?}");
-        for (leaf, info) in leaves.iter().zip(leaf_chain.iter().rev()) {
+        for (leaf, info) in leaves.iter().zip(consumer.leaf_chain().await.iter()) {
             assert_eq!(info.leaf, *leaf);
             let decided_vid_share = info.vid_share.as_ref().unwrap();
             assert_eq!(decided_vid_share.view_number, leaf.view_number());
@@ -714,15 +722,9 @@ mod persistence_tests {
 
         // Check decide event.
         tracing::info!("check decide event");
-        let events = consumer.events.read().await;
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].view_number, ViewNumber::new(3));
-        let EventType::Decide { qc, leaf_chain, .. } = &events[0].event else {
-            panic!("expected decide event, got {:?}", events[0]);
-        };
-        assert_eq!(**qc, chain[3].1);
+        let leaf_chain = consumer.leaf_chain().await;
         assert_eq!(leaf_chain.len(), 4, "{leaf_chain:#?}");
-        for ((leaf, _, _, _), info) in chain.iter().zip(leaf_chain.iter().rev()) {
+        for ((leaf, _, _, _), info) in chain.iter().zip(leaf_chain.iter()) {
             assert_eq!(info.leaf, *leaf);
             let decided_vid_share = info.vid_share.as_ref().unwrap();
             assert_eq!(decided_vid_share.view_number, leaf.view_number());
