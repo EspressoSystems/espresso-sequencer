@@ -41,6 +41,24 @@ pub struct Options {
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
     store_undecided_state: bool,
+
+    /// Number of views to retain in consensus storage before data that hasn't been archived is
+    /// garbage collected.
+    ///
+    /// The longer this is, the more certain that all data will eventually be archived, even if
+    /// there are temporary problems with archive storage or partially missing data. This can be set
+    /// very large, as most data is garbage collected as soon as it is finalized by consensus. This
+    /// setting only applies to views which never get decided (ie forks in consensus) and views for
+    /// which this node is partially offline. These should be exceptionally rare.
+    ///
+    /// The default of 130000 views equates to approximately 3 days (259200 seconds) at an average
+    /// view time of 2s.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_CONSENSUS_VIEW_RETENTION",
+        default_value = "130000"
+    )]
+    pub(crate) consensus_view_retention: u64,
 }
 
 impl Default for Options {
@@ -54,6 +72,7 @@ impl Options {
         Self {
             path,
             store_undecided_state: false,
+            consensus_view_retention: 130000,
         }
     }
 
@@ -66,10 +85,17 @@ impl Options {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
+    fn set_view_retention(&mut self, view_retention: u64) {
+        self.consensus_view_retention = view_retention;
+    }
+
     async fn create(self) -> anyhow::Result<Persistence> {
         Ok(Persistence {
             store_undecided_state: self.store_undecided_state,
-            inner: Arc::new(RwLock::new(Inner { path: self.path })),
+            inner: Arc::new(RwLock::new(Inner {
+                path: self.path,
+                view_retention: self.consensus_view_retention,
+            })),
         })
     }
 
@@ -92,6 +118,7 @@ pub struct Persistence {
 #[derive(Debug)]
 struct Inner {
     path: PathBuf,
+    view_retention: u64,
 }
 
 impl Inner {
@@ -183,6 +210,7 @@ impl Inner {
         intervals: &[RangeInclusive<u64>],
     ) -> anyhow::Result<()> {
         let view_number = view.u64();
+        let prune_view = view.saturating_sub(self.view_retention);
 
         let delete_files =
             |intervals: &[RangeInclusive<u64>], keep, dir_path: PathBuf| -> anyhow::Result<()> {
@@ -196,12 +224,16 @@ impl Inner {
 
                     if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
                         if let Ok(v) = file.parse::<u64>() {
+                            // If the view is the anchor view, keep it no matter what.
                             if let Some(keep) = keep {
                                 if keep == v {
                                     continue;
                                 }
                             }
-                            if intervals.iter().any(|i| i.contains(&v)) {
+                            // Otherwise, delete it if it is time to prune this view _or_ if the
+                            // given intervals, which we've already successfully processed, contain
+                            // the view; in this case we simply don't need it anymore.
+                            if v < prune_view || intervals.iter().any(|i| i.contains(&v)) {
                                 fs::remove_file(&path)?;
                             }
                         }
@@ -864,8 +896,8 @@ mod testing {
             TempDir::new().unwrap()
         }
 
-        async fn connect(storage: &Self::Storage) -> Self {
-            Options::new(storage.path().into()).create().await.unwrap()
+        fn options(storage: &Self::Storage) -> impl PersistenceOptions<Persistence = Self> {
+            Options::new(storage.path().into())
         }
     }
 }

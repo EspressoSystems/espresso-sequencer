@@ -1220,6 +1220,7 @@ mod api_tests {
         let payload = genesis.block_payload().unwrap();
         let payload_bytes_arc = payload.encode();
         let disperse = vid_scheme(2).disperse(payload_bytes_arc.clone()).unwrap();
+        let payload_commitment = disperse.commit;
         let mut quorum_proposal = QuorumProposal::<SeqTypes> {
             block_header: genesis.block_header().clone(),
             view_number: ViewNumber::genesis(),
@@ -1264,7 +1265,7 @@ mod api_tests {
             // Include VID information for each leaf.
             let share = VidDisperseShare::<SeqTypes> {
                 view_number: leaf.view_number(),
-                payload_commitment: Default::default(),
+                payload_commitment,
                 share: disperse.shares[0].clone(),
                 common: disperse.common.clone(),
                 recipient_key: pubkey,
@@ -1287,7 +1288,10 @@ mod api_tests {
                 signature: block_payload_signature,
                 _pd: Default::default(),
             };
-            persistence.append_da(&da_proposal).await.unwrap();
+            persistence
+                .append_da(&da_proposal, payload_commitment)
+                .await
+                .unwrap();
         }
         // Split into two chains.
         let mut chain2 = chain1.split_off(2);

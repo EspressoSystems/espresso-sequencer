@@ -371,6 +371,8 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
 
+    fn set_view_retention(&mut self, view_retention: u64);
+
     async fn create(self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
 
