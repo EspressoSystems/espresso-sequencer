@@ -4,13 +4,13 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashSet, fmt::Debug, marker::PhantomData, time::Duration};
+use std::{collections::HashSet, fmt::Debug, time::Duration};
 
 use async_compatibility_layer::{
     art::{async_sleep, async_timeout},
     channel::{Receiver, UnboundedReceiver, UnboundedSender},
 };
-use hotshot_types::traits::{network::NetworkError, signature_key::SignatureKey};
+use hotshot_types::traits::{network::NetworkError, node_implementation::NodeType};
 use libp2p::{request_response::ResponseChannel, Multiaddr};
 use libp2p_identity::PeerId;
 use tracing::{debug, info, instrument};
@@ -24,9 +24,9 @@ use crate::network::{
 /// - A reference to the state
 /// - Controls for the swarm
 #[derive(Debug, Clone)]
-pub struct NetworkNodeHandle<K: SignatureKey + 'static> {
+pub struct NetworkNodeHandle<T: NodeType> {
     /// network configuration
-    network_config: NetworkNodeConfig<K>,
+    network_config: NetworkNodeConfig<T>,
 
     /// send an action to the networkbehaviour
     send_network: UnboundedSender<ClientRequest>,
@@ -39,9 +39,6 @@ pub struct NetworkNodeHandle<K: SignatureKey + 'static> {
 
     /// human readable id
     id: usize,
-
-    /// Phantom data to hold the key type
-    pd: PhantomData<K>,
 }
 
 /// internal network node receiver
@@ -78,10 +75,10 @@ impl NetworkNodeReceiver {
 /// Spawn a network node task task and return the handle and the receiver for it
 /// # Errors
 /// Errors if spawning the task fails
-pub async fn spawn_network_node<K: SignatureKey + 'static>(
-    config: NetworkNodeConfig<K>,
+pub async fn spawn_network_node<T: NodeType>(
+    config: NetworkNodeConfig<T>,
     id: usize,
-) -> Result<(NetworkNodeReceiver, NetworkNodeHandle<K>), NetworkError> {
+) -> Result<(NetworkNodeReceiver, NetworkNodeHandle<T>), NetworkError> {
     let mut network = NetworkNode::new(config.clone())
         .await
         .map_err(|e| NetworkError::ConfigError(format!("failed to create network node: {e}")))?;
@@ -104,18 +101,17 @@ pub async fn spawn_network_node<K: SignatureKey + 'static>(
         recv_kill: None,
     };
 
-    let handle = NetworkNodeHandle::<K> {
+    let handle = NetworkNodeHandle::<T> {
         network_config: config,
         send_network: send_chan,
         listen_addr,
         peer_id,
         id,
-        pd: PhantomData,
     };
     Ok((receiver, handle))
 }
 
-impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
+impl<T: NodeType> NetworkNodeHandle<T> {
     /// Cleanly shuts down a swarm node
     /// This is done by sending a message to
     /// the swarm itself to spin down
@@ -217,7 +213,7 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
     pub async fn put_record(
         &self,
         key: RecordKey,
-        value: RecordValue<K>,
+        value: RecordValue<T::SignatureKey>,
     ) -> Result<(), NetworkError> {
         // Serialize the key
         let key = key.to_bytes();
@@ -263,7 +259,7 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
         let result = r.await.map_err(|_| NetworkError::RequestCancelled)?;
 
         // Deserialize the record's value
-        let record: RecordValue<K> = bincode::deserialize(&result)
+        let record: RecordValue<T::SignatureKey> = bincode::deserialize(&result)
             .map_err(|e| NetworkError::FailedToDeserialize(e.to_string()))?;
 
         Ok(record.value().to_vec())
@@ -292,7 +288,7 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
     pub async fn put_record_timeout(
         &self,
         key: RecordKey,
-        value: RecordValue<K>,
+        value: RecordValue<T::SignatureKey>,
         timeout: Duration,
     ) -> Result<(), NetworkError> {
         async_timeout(timeout, self.put_record(key, value))
@@ -467,7 +463,7 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
 
     /// Return a reference to the network config
     #[must_use]
-    pub fn config(&self) -> &NetworkNodeConfig<K> {
+    pub fn config(&self) -> &NetworkNodeConfig<T> {
         &self.network_config
     }
 }

@@ -159,7 +159,7 @@ impl<TYPES: NodeType> NodeImplementation<TYPES> for CombinedImpl {
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for Libp2pImpl {
-    type Network = Libp2pNetwork<TYPES::SignatureKey>;
+    type Network = Libp2pNetwork<TYPES>;
     type Storage = TestStorage<TYPES>;
     type AuctionResultsProvider = TestAuctionResultsProvider<TYPES>;
 }

@@ -11,7 +11,7 @@ use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestTypes,
     storage_types::TestStorage,
 };
-use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
+use hotshot_types::traits::node_implementation::NodeImplementation;
 use serde::{Deserialize, Serialize};
 
 use crate::infra::Libp2pDaRun;
@@ -21,7 +21,7 @@ use crate::infra::Libp2pDaRun;
 pub struct NodeImpl {}
 
 /// Convenience type alias
-pub type Network = Libp2pNetwork<<TestTypes as NodeType>::SignatureKey>;
+pub type Network = Libp2pNetwork<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
     type Network = Network;

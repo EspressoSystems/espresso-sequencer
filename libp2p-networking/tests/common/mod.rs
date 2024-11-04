@@ -20,7 +20,7 @@ use async_compatibility_layer::{
     logging::{setup_backtrace, setup_logging},
 };
 use futures::{future::join_all, Future, FutureExt};
-use hotshot_types::traits::{network::NetworkError, signature_key::SignatureKey};
+use hotshot_types::traits::{network::NetworkError, node_implementation::NodeType};
 use libp2p::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_networking::network::{
@@ -31,8 +31,8 @@ use thiserror::Error;
 use tracing::{instrument, warn};
 
 #[derive(Clone, Debug)]
-pub(crate) struct HandleWithState<S: Debug + Default + Send, K: SignatureKey + 'static> {
-    pub(crate) handle: Arc<NetworkNodeHandle<K>>,
+pub(crate) struct HandleWithState<S: Debug + Default + Send, T: NodeType> {
+    pub(crate) handle: Arc<NetworkNodeHandle<T>>,
     pub(crate) state: Arc<SubscribableMutex<S>>,
 }
 
@@ -41,13 +41,13 @@ pub(crate) struct HandleWithState<S: Debug + Default + Send, K: SignatureKey + '
 /// # Panics
 ///
 /// Will panic if a handler is already spawned
-pub fn spawn_handler<F, RET, S, K: SignatureKey + 'static>(
-    handle_and_state: HandleWithState<S, K>,
+pub fn spawn_handler<F, RET, S, T: NodeType>(
+    handle_and_state: HandleWithState<S, T>,
     mut receiver: NetworkNodeReceiver,
     cb: F,
 ) -> impl Future
 where
-    F: Fn(NetworkEvent, HandleWithState<S, K>) -> RET + Sync + Send + 'static,
+    F: Fn(NetworkEvent, HandleWithState<S, T>) -> RET + Sync + Send + 'static,
     RET: Future<Output = Result<(), NetworkError>> + Send + 'static,
     S: Debug + Default + Send + Clone + 'static,
 {
@@ -97,14 +97,7 @@ where
 /// - Initialize network nodes
 /// - Kill network nodes
 /// - A test assertion fails
-pub async fn test_bed<
-    S: 'static + Send + Default + Debug + Clone,
-    F,
-    FutF,
-    G,
-    FutG,
-    K: SignatureKey + 'static,
->(
+pub async fn test_bed<S: 'static + Send + Default + Debug + Clone, F, FutF, G, FutG, T: NodeType>(
     run_test: F,
     client_handler: G,
     num_nodes: usize,
@@ -112,8 +105,8 @@ pub async fn test_bed<
 ) where
     FutF: Future<Output = ()>,
     FutG: Future<Output = Result<(), NetworkError>> + 'static + Send + Sync,
-    F: FnOnce(Vec<HandleWithState<S, K>>, Duration) -> FutF,
-    G: Fn(NetworkEvent, HandleWithState<S, K>) -> FutG + 'static + Send + Sync + Clone,
+    F: FnOnce(Vec<HandleWithState<S, T>>, Duration) -> FutF,
+    G: Fn(NetworkEvent, HandleWithState<S, T>) -> FutG + 'static + Send + Sync + Clone,
 {
     setup_logging();
     setup_backtrace();
@@ -121,7 +114,7 @@ pub async fn test_bed<
     let mut kill_switches = Vec::new();
     // NOTE we want this to panic if we can't spin up the swarms.
     // that amounts to a failed test.
-    let handles_and_receivers = spin_up_swarms::<S, K>(num_nodes, timeout).await.unwrap();
+    let handles_and_receivers = spin_up_swarms::<S, T>(num_nodes, timeout).await.unwrap();
 
     let (handles, receivers): (Vec<_>, Vec<_>) = handles_and_receivers.into_iter().unzip();
     let mut handler_futures = Vec::new();
@@ -149,9 +142,7 @@ pub async fn test_bed<
     }
 }
 
-fn gen_peerid_map<K: SignatureKey + 'static>(
-    handles: &[Arc<NetworkNodeHandle<K>>],
-) -> HashMap<PeerId, usize> {
+fn gen_peerid_map<T: NodeType>(handles: &[Arc<NetworkNodeHandle<T>>]) -> HashMap<PeerId, usize> {
     let mut r_val = HashMap::new();
     for handle in handles {
         r_val.insert(handle.peer_id(), handle.id());
@@ -161,7 +152,7 @@ fn gen_peerid_map<K: SignatureKey + 'static>(
 
 /// print the connections for each handle in `handles`
 /// useful for debugging
-pub async fn print_connections<K: SignatureKey + 'static>(handles: &[Arc<NetworkNodeHandle<K>>]) {
+pub async fn print_connections<T: NodeType>(handles: &[Arc<NetworkNodeHandle<T>>]) {
     let m = gen_peerid_map(handles);
     warn!("PRINTING CONNECTION STATES");
     for handle in handles {
@@ -183,10 +174,10 @@ pub async fn print_connections<K: SignatureKey + 'static>(handles: &[Arc<Network
 /// and waits for connections to propagate to all nodes.
 #[allow(clippy::type_complexity)]
 #[instrument]
-pub async fn spin_up_swarms<S: Debug + Default + Send, K: SignatureKey + 'static>(
+pub async fn spin_up_swarms<S: Debug + Default + Send, T: NodeType>(
     num_of_nodes: usize,
     timeout_len: Duration,
-) -> Result<Vec<(HandleWithState<S, K>, NetworkNodeReceiver)>, TestError<S>> {
+) -> Result<Vec<(HandleWithState<S, T>, NetworkNodeReceiver)>, TestError<S>> {
     let mut handles = Vec::new();
     let mut node_addrs = Vec::<(PeerId, Multiaddr)>::new();
     let mut connecting_futs = Vec::new();

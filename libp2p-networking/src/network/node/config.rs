@@ -6,7 +6,7 @@
 
 use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
-use hotshot_types::traits::signature_key::SignatureKey;
+use hotshot_types::traits::node_implementation::NodeType;
 use libp2p::{identity::Keypair, Multiaddr};
 use libp2p_identity::PeerId;
 
@@ -17,7 +17,7 @@ pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(1
 
 /// describe the configuration of the network
 #[derive(Clone, Default, derive_builder::Builder, custom_debug::Debug)]
-pub struct NetworkNodeConfig<K: SignatureKey + 'static> {
+pub struct NetworkNodeConfig<T: NodeType> {
     /// The keypair for the node
     #[builder(setter(into, strip_option), default)]
     #[debug(skip)]
@@ -49,7 +49,7 @@ pub struct NetworkNodeConfig<K: SignatureKey + 'static> {
     /// The stake table. Used for authenticating other nodes. If not supplied
     /// we will not check other nodes against the stake table
     #[builder(default)]
-    pub stake_table: Option<HashSet<K>>,
+    pub stake_table: Option<T::Membership>,
 
     /// The signed authentication message sent to the remote peer
     /// If not supplied we will not send an authentication message during the handshake

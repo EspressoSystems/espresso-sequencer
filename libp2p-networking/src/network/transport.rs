@@ -1,7 +1,5 @@
 use std::{
-    collections::HashSet,
     future::Future,
-    hash::BuildHasher,
     io::{Error as IoError, ErrorKind as IoErrorKind},
     pin::Pin,
     sync::Arc,
@@ -11,7 +9,10 @@ use std::{
 use anyhow::{ensure, Context, Result as AnyhowResult};
 use async_compatibility_layer::art::async_timeout;
 use futures::{future::poll_fn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use hotshot_types::traits::signature_key::SignatureKey;
+use hotshot_types::traits::node_implementation::ConsensusTime;
+use hotshot_types::traits::{
+    election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
+};
 use libp2p::{
     core::{muxing::StreamMuxerExt, transport::TransportEvent, StreamMuxer},
     identity::PeerId,
@@ -34,14 +35,13 @@ const AUTH_HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 /// by performing a handshake that checks if the remote peer is present in the
 /// stake table.
 #[pin_project]
-pub struct StakeTableAuthentication<T: Transport, S: SignatureKey + 'static, C: StreamMuxer + Unpin>
-{
+pub struct StakeTableAuthentication<T: Transport, Types: NodeType, C: StreamMuxer + Unpin> {
     #[pin]
     /// The underlying transport we are wrapping
     pub inner: T,
 
     /// The stake table we check against to authenticate connections
-    pub stake_table: Arc<Option<HashSet<S>>>,
+    pub stake_table: Arc<Option<Types::Membership>>,
 
     /// A pre-signed message that we send to the remote peer for authentication
     pub auth_message: Arc<Option<Vec<u8>>>,
@@ -54,10 +54,14 @@ pub struct StakeTableAuthentication<T: Transport, S: SignatureKey + 'static, C: 
 type UpgradeFuture<T> =
     Pin<Box<dyn Future<Output = Result<<T as Transport>::Output, <T as Transport>::Error>> + Send>>;
 
-impl<T: Transport, S: SignatureKey, C: StreamMuxer + Unpin> StakeTableAuthentication<T, S, C> {
+impl<T: Transport, Types: NodeType, C: StreamMuxer + Unpin> StakeTableAuthentication<T, Types, C> {
     /// Create a new `StakeTableAuthentication` transport that wraps the given transport
     /// and authenticates connections against the stake table.
-    pub fn new(inner: T, stake_table: Option<HashSet<S>>, auth_message: Option<Vec<u8>>) -> Self {
+    pub fn new(
+        inner: T,
+        stake_table: Option<Types::Membership>,
+        auth_message: Option<Vec<u8>>,
+    ) -> Self {
         Self {
             inner,
             stake_table: Arc::from(stake_table),
@@ -98,9 +102,9 @@ impl<T: Transport, S: SignatureKey, C: StreamMuxer + Unpin> StakeTableAuthentica
     /// - The message is invalid
     /// - The peer is not in the stake table
     /// - The signature is invalid
-    pub async fn verify_peer_authentication<R: AsyncReadExt + Unpin, H: BuildHasher>(
+    pub async fn verify_peer_authentication<R: AsyncReadExt + Unpin>(
         stream: &mut R,
-        stake_table: Arc<Option<HashSet<S, H>>>,
+        stake_table: Arc<Option<Types::Membership>>,
         required_peer_id: &PeerId,
     ) -> AnyhowResult<()> {
         // If we have a stake table, check if the remote peer is in it
@@ -109,7 +113,7 @@ impl<T: Transport, S: SignatureKey, C: StreamMuxer + Unpin> StakeTableAuthentica
             let message = read_length_delimited(stream, MAX_AUTH_MESSAGE_SIZE).await?;
 
             // Deserialize the authentication message
-            let auth_message: AuthMessage<S> = bincode::deserialize(&message)
+            let auth_message: AuthMessage<Types::SignatureKey> = bincode::deserialize(&message)
                 .with_context(|| "Failed to deserialize auth message")?;
 
             // Verify the signature on the public keys
@@ -127,7 +131,7 @@ impl<T: Transport, S: SignatureKey, C: StreamMuxer + Unpin> StakeTableAuthentica
             }
 
             // Check if the public key is in the stake table
-            if !stake_table.contains(&public_key) {
+            if !stake_table.has_stake(&public_key, Types::Epoch::new(0)) {
                 return Err(anyhow::anyhow!("Peer not in stake table"));
             }
         }
@@ -142,7 +146,7 @@ impl<T: Transport, S: SignatureKey, C: StreamMuxer + Unpin> StakeTableAuthentica
     fn gen_handshake<F: Future<Output = Result<T::Output, T::Error>> + Send + 'static>(
         original_future: F,
         outgoing: bool,
-        stake_table: Arc<Option<HashSet<S>>>,
+        stake_table: Arc<Option<Types::Membership>>,
         auth_message: Arc<Option<Vec<u8>>>,
     ) -> UpgradeFuture<T>
     where
@@ -286,8 +290,8 @@ pub fn construct_auth_message<S: SignatureKey + 'static>(
     bincode::serialize(&auth_message).with_context(|| "Failed to serialize auth message")
 }
 
-impl<T: Transport, S: SignatureKey + 'static, C: StreamMuxer + Unpin> Transport
-    for StakeTableAuthentication<T, S, C>
+impl<T: Transport, Types: NodeType, C: StreamMuxer + Unpin> Transport
+    for StakeTableAuthentication<T, Types, C>
 where
     T::Dial: Future<Output = Result<T::Output, T::Error>> + Send + 'static,
     T::ListenerUpgrade: Send + 'static,
@@ -513,16 +517,22 @@ pub async fn write_length_delimited<S: AsyncWrite + Unpin>(
 
 #[cfg(test)]
 mod test {
-    use std::{collections::HashSet, sync::Arc};
+    use std::sync::Arc;
 
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use hotshot_types::{
+        light_client::StateVerKey,
+        signature_key::BLSPubKey,
+        traits::{network::Topic, signature_key::SignatureKey},
+        PeerConfig,
+    };
     use libp2p::{core::transport::dummy::DummyTransport, quic::Connection};
     use rand::Rng;
 
     use super::*;
+    use hotshot_example_types::node_types::TestTypes;
 
     /// A mock type to help with readability
-    type MockStakeTableAuth = StakeTableAuthentication<DummyTransport, BLSPubKey, Connection>;
+    type MockStakeTableAuth = StakeTableAuthentication<DummyTransport, TestTypes, Connection>;
 
     // Helper macro for generating a new identity and authentication message
     macro_rules! new_identity {
@@ -629,8 +639,15 @@ mod test {
         let mut stream = cursor_from!(auth_message);
 
         // Create a stake table with the key
-        let mut stake_table = std::collections::HashSet::new();
-        stake_table.insert(keypair.0);
+        let peer_config = PeerConfig {
+            stake_table_entry: keypair.0.stake_table_entry(1),
+            state_ver_key: StateVerKey::default(),
+        };
+        let stake_table = <TestTypes as NodeType>::Membership::new(
+            vec![peer_config.clone()],
+            vec![peer_config],
+            Topic::Global,
+        );
 
         // Verify the authentication message
         let result = MockStakeTableAuth::verify_peer_authentication(
@@ -656,7 +673,7 @@ mod test {
         let mut stream = cursor_from!(auth_message);
 
         // Create an empty stake table
-        let stake_table: HashSet<BLSPubKey> = std::collections::HashSet::new();
+        let stake_table = <TestTypes as NodeType>::Membership::new(vec![], vec![], Topic::Global);
 
         // Verify the authentication message
         let result = MockStakeTableAuth::verify_peer_authentication(
@@ -689,8 +706,15 @@ mod test {
         let mut stream = cursor_from!(auth_message);
 
         // Create a stake table with the key
-        let mut stake_table: HashSet<BLSPubKey> = std::collections::HashSet::new();
-        stake_table.insert(keypair.0);
+        let peer_config = PeerConfig {
+            stake_table_entry: keypair.0.stake_table_entry(1),
+            state_ver_key: StateVerKey::default(),
+        };
+        let stake_table = <TestTypes as NodeType>::Membership::new(
+            vec![peer_config.clone()],
+            vec![peer_config],
+            Topic::Global,
+        );
 
         // Check against the malicious peer ID
         let result = MockStakeTableAuth::verify_peer_authentication(

@@ -14,9 +14,9 @@ use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::prelude::StreamExt;
 use common::{test_bed, HandleWithState, TestError};
-use hotshot_types::{
-    signature_key::BLSPubKey,
-    traits::{network::NetworkError, signature_key::SignatureKey},
+use hotshot_example_types::node_types::TestTypes;
+use hotshot_types::traits::{
+    network::NetworkError, node_implementation::NodeType, signature_key::SignatureKey,
 };
 use libp2p_networking::network::{
     behaviours::dht::record::{Namespace, RecordKey, RecordValue},
@@ -63,10 +63,10 @@ pub enum CounterMessage {
 /// chooses one
 /// # Panics
 /// panics if handles is of length 0
-fn random_handle<S: Debug + Default + Send + Clone, K: SignatureKey + 'static>(
-    handles: &[HandleWithState<S, K>],
+fn random_handle<S: Debug + Default + Send + Clone, T: NodeType>(
+    handles: &[HandleWithState<S, T>],
     rng: &mut dyn rand::RngCore,
-) -> HandleWithState<S, K> {
+) -> HandleWithState<S, T> {
     handles.iter().choose(rng).unwrap().clone()
 }
 
@@ -74,9 +74,9 @@ fn random_handle<S: Debug + Default + Send + Clone, K: SignatureKey + 'static>(
 /// - updates state based on events received
 /// - replies to direct messages
 #[instrument]
-pub async fn counter_handle_network_event<K: SignatureKey + 'static>(
+pub async fn counter_handle_network_event<T: NodeType>(
     event: NetworkEvent,
-    handle: HandleWithState<CounterState, K>,
+    handle: HandleWithState<CounterState, T>,
 ) -> Result<(), NetworkError> {
     use CounterMessage::*;
     use NetworkEvent::*;
@@ -166,9 +166,9 @@ pub async fn counter_handle_network_event<K: SignatureKey + 'static>(
 /// # Panics
 /// on error
 #[allow(clippy::similar_names)]
-async fn run_request_response_increment<'a, K: SignatureKey + 'static>(
-    requester_handle: HandleWithState<CounterState, K>,
-    requestee_handle: HandleWithState<CounterState, K>,
+async fn run_request_response_increment<'a, T: NodeType>(
+    requester_handle: HandleWithState<CounterState, T>,
+    requestee_handle: HandleWithState<CounterState, T>,
     timeout: Duration,
 ) -> Result<(), TestError<CounterState>> {
     async move {
@@ -218,8 +218,8 @@ async fn run_request_response_increment<'a, K: SignatureKey + 'static>(
 
 /// broadcasts `msg` from a randomly chosen handle
 /// then asserts that all nodes match `new_state`
-async fn run_gossip_round<K: SignatureKey + 'static>(
-    handles: &[HandleWithState<CounterState, K>],
+async fn run_gossip_round<T: NodeType>(
+    handles: &[HandleWithState<CounterState, T>],
     msg: CounterMessage,
     new_state: CounterState,
     timeout_duration: Duration,
@@ -293,8 +293,8 @@ async fn run_gossip_round<K: SignatureKey + 'static>(
     Ok(())
 }
 
-async fn run_intersperse_many_rounds<K: SignatureKey + 'static>(
-    handles: Vec<HandleWithState<CounterState, K>>,
+async fn run_intersperse_many_rounds<T: NodeType>(
+    handles: Vec<HandleWithState<CounterState, T>>,
     timeout: Duration,
 ) {
     for i in 0..u32::try_from(NUM_ROUNDS).unwrap() {
@@ -309,22 +309,22 @@ async fn run_intersperse_many_rounds<K: SignatureKey + 'static>(
     }
 }
 
-async fn run_dht_many_rounds<K: SignatureKey + 'static>(
-    handles: Vec<HandleWithState<CounterState, K>>,
+async fn run_dht_many_rounds<T: NodeType>(
+    handles: Vec<HandleWithState<CounterState, T>>,
     timeout: Duration,
 ) {
     run_dht_rounds(&handles, timeout, 0, NUM_ROUNDS).await;
 }
 
-async fn run_dht_one_round<K: SignatureKey + 'static>(
-    handles: Vec<HandleWithState<CounterState, K>>,
+async fn run_dht_one_round<T: NodeType>(
+    handles: Vec<HandleWithState<CounterState, T>>,
     timeout: Duration,
 ) {
     run_dht_rounds(&handles, timeout, 0, 1).await;
 }
 
-async fn run_request_response_many_rounds<K: SignatureKey + 'static>(
-    handles: Vec<HandleWithState<CounterState, K>>,
+async fn run_request_response_many_rounds<T: NodeType>(
+    handles: Vec<HandleWithState<CounterState, T>>,
     timeout: Duration,
 ) {
     for _i in 0..NUM_ROUNDS {
@@ -338,8 +338,8 @@ async fn run_request_response_many_rounds<K: SignatureKey + 'static>(
 /// runs one round of request response
 /// # Panics
 /// on error
-async fn run_request_response_one_round<K: SignatureKey + 'static>(
-    handles: Vec<HandleWithState<CounterState, K>>,
+async fn run_request_response_one_round<T: NodeType>(
+    handles: Vec<HandleWithState<CounterState, T>>,
     timeout: Duration,
 ) {
     run_request_response_increment_all(&handles, timeout).await;
@@ -351,8 +351,8 @@ async fn run_request_response_one_round<K: SignatureKey + 'static>(
 /// runs multiple rounds of gossip
 /// # Panics
 /// on error
-async fn run_gossip_many_rounds<K: SignatureKey + 'static>(
-    handles: Vec<HandleWithState<CounterState, K>>,
+async fn run_gossip_many_rounds<T: NodeType>(
+    handles: Vec<HandleWithState<CounterState, T>>,
     timeout: Duration,
 ) {
     run_gossip_rounds(&handles, NUM_ROUNDS, 0, timeout).await;
@@ -361,8 +361,8 @@ async fn run_gossip_many_rounds<K: SignatureKey + 'static>(
 /// runs one round of gossip
 /// # Panics
 /// on error
-async fn run_gossip_one_round<K: SignatureKey + 'static>(
-    handles: Vec<HandleWithState<CounterState, K>>,
+async fn run_gossip_one_round<T: NodeType>(
+    handles: Vec<HandleWithState<CounterState, T>>,
     timeout: Duration,
 ) {
     run_gossip_rounds(&handles, 1, 0, timeout).await;
@@ -371,8 +371,8 @@ async fn run_gossip_one_round<K: SignatureKey + 'static>(
 /// runs many rounds of dht
 /// # Panics
 /// on error
-async fn run_dht_rounds<K: SignatureKey + 'static>(
-    handles: &[HandleWithState<CounterState, K>],
+async fn run_dht_rounds<T: NodeType>(
+    handles: &[HandleWithState<CounterState, T>],
     timeout: Duration,
     _starting_val: usize,
     num_rounds: usize,
@@ -384,7 +384,11 @@ async fn run_dht_rounds<K: SignatureKey + 'static>(
 
         // Create a random keypair
         let mut rng = StdRng::from_entropy();
-        let (public_key, private_key) = K::generated_from_seed_indexed([1; 32], rng.gen::<u64>());
+        let (public_key, private_key) =
+            <T::SignatureKey as SignatureKey>::generated_from_seed_indexed(
+                [1; 32],
+                rng.gen::<u64>(),
+            );
 
         // Create a random value to sign
         let value = (0..DHT_KV_PADDING)
@@ -422,8 +426,8 @@ async fn run_dht_rounds<K: SignatureKey + 'static>(
 }
 
 /// runs `num_rounds` of message broadcast, incrementing the state of all nodes each broadcast
-async fn run_gossip_rounds<K: SignatureKey + 'static>(
-    handles: &[HandleWithState<CounterState, K>],
+async fn run_gossip_rounds<T: NodeType>(
+    handles: &[HandleWithState<CounterState, T>],
     num_rounds: usize,
     starting_state: CounterState,
     timeout: Duration,
@@ -448,8 +452,8 @@ async fn run_gossip_rounds<K: SignatureKey + 'static>(
 /// then has all other peers request its state
 /// and update their state to the recv'ed state
 #[allow(clippy::similar_names)]
-async fn run_request_response_increment_all<K: SignatureKey + 'static>(
-    handles: &[HandleWithState<CounterState, K>],
+async fn run_request_response_increment_all<T: NodeType>(
+    handles: &[HandleWithState<CounterState, T>],
     timeout: Duration,
 ) {
     let mut rng = rand::thread_rng();
@@ -524,7 +528,7 @@ async fn run_request_response_increment_all<K: SignatureKey + 'static>(
 #[instrument]
 async fn test_coverage_request_response_one_round() {
     Box::pin(test_bed(
-        run_request_response_one_round::<BLSPubKey>,
+        run_request_response_one_round::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         TIMEOUT_COVERAGE,
@@ -538,7 +542,7 @@ async fn test_coverage_request_response_one_round() {
 #[instrument]
 async fn test_coverage_request_response_many_rounds() {
     Box::pin(test_bed(
-        run_request_response_many_rounds::<BLSPubKey>,
+        run_request_response_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         TIMEOUT_COVERAGE,
@@ -552,7 +556,7 @@ async fn test_coverage_request_response_many_rounds() {
 #[instrument]
 async fn test_coverage_intersperse_many_rounds() {
     Box::pin(test_bed(
-        run_intersperse_many_rounds::<BLSPubKey>,
+        run_intersperse_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         TIMEOUT_COVERAGE,
@@ -566,7 +570,7 @@ async fn test_coverage_intersperse_many_rounds() {
 #[instrument]
 async fn test_coverage_gossip_many_rounds() {
     Box::pin(test_bed(
-        run_gossip_many_rounds::<BLSPubKey>,
+        run_gossip_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         TIMEOUT_COVERAGE,
@@ -580,7 +584,7 @@ async fn test_coverage_gossip_many_rounds() {
 #[instrument]
 async fn test_coverage_gossip_one_round() {
     Box::pin(test_bed(
-        run_gossip_one_round::<BLSPubKey>,
+        run_gossip_one_round::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         TIMEOUT_COVERAGE,
@@ -595,7 +599,7 @@ async fn test_coverage_gossip_one_round() {
 #[ignore]
 async fn test_stress_request_response_one_round() {
     Box::pin(test_bed(
-        run_request_response_one_round::<BLSPubKey>,
+        run_request_response_one_round::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         TIMEOUT_STRESS,
@@ -610,7 +614,7 @@ async fn test_stress_request_response_one_round() {
 #[ignore]
 async fn test_stress_request_response_many_rounds() {
     Box::pin(test_bed(
-        run_request_response_many_rounds::<BLSPubKey>,
+        run_request_response_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         TIMEOUT_STRESS,
@@ -625,7 +629,7 @@ async fn test_stress_request_response_many_rounds() {
 #[ignore]
 async fn test_stress_intersperse_many_rounds() {
     Box::pin(test_bed(
-        run_intersperse_many_rounds::<BLSPubKey>,
+        run_intersperse_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         TIMEOUT_STRESS,
@@ -640,7 +644,7 @@ async fn test_stress_intersperse_many_rounds() {
 #[ignore]
 async fn test_stress_gossip_many_rounds() {
     Box::pin(test_bed(
-        run_gossip_many_rounds::<BLSPubKey>,
+        run_gossip_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         TIMEOUT_STRESS,
@@ -655,7 +659,7 @@ async fn test_stress_gossip_many_rounds() {
 #[ignore]
 async fn test_stress_gossip_one_round() {
     Box::pin(test_bed(
-        run_gossip_one_round::<BLSPubKey>,
+        run_gossip_one_round::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         TIMEOUT_STRESS,
@@ -670,7 +674,7 @@ async fn test_stress_gossip_one_round() {
 #[ignore]
 async fn test_stress_dht_one_round() {
     Box::pin(test_bed(
-        run_dht_one_round::<BLSPubKey>,
+        run_dht_one_round::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         TIMEOUT_STRESS,
@@ -685,7 +689,7 @@ async fn test_stress_dht_one_round() {
 #[ignore]
 async fn test_stress_dht_many_rounds() {
     Box::pin(test_bed(
-        run_dht_many_rounds::<BLSPubKey>,
+        run_dht_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_STRESS,
         TIMEOUT_STRESS,
@@ -699,7 +703,7 @@ async fn test_stress_dht_many_rounds() {
 #[instrument]
 async fn test_coverage_dht_one_round() {
     Box::pin(test_bed(
-        run_dht_one_round::<BLSPubKey>,
+        run_dht_one_round::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         TIMEOUT_COVERAGE,
@@ -713,7 +717,7 @@ async fn test_coverage_dht_one_round() {
 #[instrument]
 async fn test_coverage_dht_many_rounds() {
     Box::pin(test_bed(
-        run_dht_many_rounds::<BLSPubKey>,
+        run_dht_many_rounds::<TestTypes>,
         counter_handle_network_event,
         TOTAL_NUM_PEERS_COVERAGE,
         TIMEOUT_COVERAGE,

@@ -132,7 +132,7 @@ pub struct Empty {
     byte: u8,
 }
 
-impl<K: SignatureKey + 'static> Debug for Libp2pNetwork<K> {
+impl<T: NodeType> Debug for Libp2pNetwork<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Libp2p").field("inner", &"inner").finish()
     }
@@ -143,17 +143,17 @@ pub type PeerInfoVec = Arc<RwLock<Vec<(PeerId, Multiaddr)>>>;
 
 /// The underlying state of the libp2p network
 #[derive(Debug)]
-struct Libp2pNetworkInner<K: SignatureKey + 'static> {
+struct Libp2pNetworkInner<T: NodeType> {
     /// this node's public key
-    pk: K,
+    pk: T::SignatureKey,
     /// handle to control the network
-    handle: Arc<NetworkNodeHandle<K>>,
+    handle: Arc<NetworkNodeHandle<T>>,
     /// Message Receiver
     receiver: UnboundedReceiver<Vec<u8>>,
     /// Sender for broadcast messages
     sender: UnboundedSender<Vec<u8>>,
     /// Sender for node lookup (relevant view number, key of node) (None for shutdown)
-    node_lookup_send: BoundedSender<Option<(ViewNumber, K)>>,
+    node_lookup_send: BoundedSender<Option<(ViewNumber, T::SignatureKey)>>,
     /// this is really cheating to enable local tests
     /// hashset of (bootstrap_addr, peer_id)
     bootstrap_addrs: PeerInfoVec,
@@ -181,15 +181,13 @@ struct Libp2pNetworkInner<K: SignatureKey + 'static> {
 /// Networking implementation that uses libp2p
 /// generic over `M` which is the message type
 #[derive(Clone)]
-pub struct Libp2pNetwork<K: SignatureKey + 'static> {
+pub struct Libp2pNetwork<T: NodeType> {
     /// holds the state of the libp2p network
-    inner: Arc<Libp2pNetworkInner<K>>,
+    inner: Arc<Libp2pNetworkInner<T>>,
 }
 
 #[cfg(feature = "hotshot-testing")]
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
-    for Libp2pNetwork<TYPES::SignatureKey>
-{
+impl<T: NodeType> TestableNetworkingImplementation<T> for Libp2pNetwork<T> {
     /// Returns a boxed function `f(node_id, public_key) -> Libp2pNetwork`
     /// with the purpose of generating libp2p networks.
     /// Generates `num_bootstrap` bootstrap nodes. The remainder of nodes are normal
@@ -232,12 +230,11 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                     Multiaddr::from_str(&format!("/ip4/127.0.0.1/udp/{port}/quic-v1")).unwrap();
 
                 // We assign node's public key and stake value rather than read from config file since it's a test
-                let privkey =
-                    TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
-                let pubkey = TYPES::SignatureKey::from_private(&privkey);
+                let privkey = T::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
+                let pubkey = T::SignatureKey::from_private(&privkey);
 
                 // Derive the Libp2p keypair from the private key
-                let libp2p_keypair = derive_libp2p_keypair::<TYPES::SignatureKey>(&privkey)
+                let libp2p_keypair = derive_libp2p_keypair::<T::SignatureKey>(&privkey)
                     .expect("Failed to derive libp2p keypair");
 
                 // Sign the lookup record
@@ -383,7 +380,7 @@ pub fn derive_libp2p_multiaddr(addr: &String) -> anyhow::Result<Multiaddr> {
     })
 }
 
-impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
+impl<T: NodeType> Libp2pNetwork<T> {
     /// Create and return a Libp2p network from a network config file
     /// and various other configuration-specific values.
     ///
@@ -392,13 +389,15 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     ///
     /// # Panics
     /// If we are unable to calculate the replication factor
+    #[allow(clippy::too_many_arguments)]
     pub async fn from_config(
-        mut config: NetworkConfig<K>,
+        mut config: NetworkConfig<T::SignatureKey>,
+        quorum_membership: T::Membership,
         gossip_config: GossipConfig,
         request_response_config: RequestResponseConfig,
         bind_address: Multiaddr,
-        pub_key: &K,
-        priv_key: &K::PrivateKey,
+        pub_key: &T::SignatureKey,
+        priv_key: &<T::SignatureKey as SignatureKey>::PrivateKey,
         metrics: Libp2pMetricsValue,
     ) -> anyhow::Result<Self> {
         // Try to take our Libp2p config from our broader network config
@@ -408,7 +407,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
             .ok_or(anyhow!("Libp2p config not supplied"))?;
 
         // Derive our Libp2p keypair from our supplied private key
-        let keypair = derive_libp2p_keypair::<K>(priv_key)?;
+        let keypair = derive_libp2p_keypair::<T::SignatureKey>(priv_key)?;
 
         // Build our libp2p configuration
         let mut config_builder = NetworkNodeConfigBuilder::default();
@@ -417,21 +416,14 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         config_builder.gossip_config(gossip_config.clone());
         config_builder.request_response_config(request_response_config);
 
-        // Extrapolate the stake table from the known nodes
-        let stake_table: HashSet<K> = config
-            .config
-            .known_nodes_with_stake
-            .iter()
-            .map(|node| K::public_key(&node.stake_table_entry))
-            .collect();
-
+        // Construct the auth message
         let auth_message =
             construct_auth_message(pub_key, &keypair.public().to_peer_id(), priv_key)
                 .with_context(|| "Failed to construct auth message")?;
 
         // Set the auth message and stake table
         config_builder
-            .stake_table(Some(stake_table))
+            .stake_table(Some(quorum_membership))
             .auth_message(Some(auth_message));
 
         // The replication factor is the minimum of [the default and 2/3 the number of nodes]
@@ -474,7 +466,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 
         // Insert all known nodes into the set of all keys
         for node in config.config.known_nodes_with_stake {
-            all_keys.insert(K::public_key(&node.stake_table_entry));
+            all_keys.insert(T::SignatureKey::public_key(&node.stake_table_entry));
         }
 
         Ok(Libp2pNetwork::new(
@@ -521,14 +513,14 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         metrics: Libp2pMetricsValue,
-        config: NetworkNodeConfig<K>,
-        pk: K,
-        lookup_record_value: RecordValue<K>,
+        config: NetworkNodeConfig<T>,
+        pk: T::SignatureKey,
+        lookup_record_value: RecordValue<T::SignatureKey>,
         bootstrap_addrs: BootstrapAddrs,
         id: usize,
         #[cfg(feature = "hotshot-testing")] reliability_config: Option<Box<dyn NetworkReliability>>,
-    ) -> Result<Libp2pNetwork<K>, NetworkError> {
-        let (mut rx, network_handle) = spawn_network_node::<K>(config.clone(), id)
+    ) -> Result<Libp2pNetwork<T>, NetworkError> {
+        let (mut rx, network_handle) = spawn_network_node::<T>(config.clone(), id)
             .await
             .map_err(|e| NetworkError::ConfigError(format!("failed to spawn network node: {e}")))?;
 
@@ -586,7 +578,10 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 
     /// Spawns task for looking up nodes pre-emptively
     #[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
-    fn spawn_node_lookup(&self, mut node_lookup_recv: BoundedReceiver<Option<(ViewNumber, K)>>) {
+    fn spawn_node_lookup(
+        &self,
+        mut node_lookup_recv: BoundedReceiver<Option<(ViewNumber, T::SignatureKey)>>,
+    ) {
         let handle = Arc::clone(&self.inner.handle);
         let dht_timeout = self.inner.dht_timeout;
         let latest_seen_view = Arc::clone(&self.inner.latest_seen_view);
@@ -613,7 +608,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     }
 
     /// Initiates connection to the outside world
-    fn spawn_connect(&mut self, id: usize, lookup_record_value: RecordValue<K>) {
+    fn spawn_connect(&mut self, id: usize, lookup_record_value: RecordValue<T::SignatureKey>) {
         let pk = self.inner.pk.clone();
         let bootstrap_ref = Arc::clone(&self.inner.bootstrap_addrs);
         let handle = Arc::clone(&self.inner.handle);
@@ -765,7 +760,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 }
 
 #[async_trait]
-impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
+impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
     #[instrument(name = "Libp2pNetwork::ready_blocking", skip_all)]
     async fn wait_for_ready(&self) {
         self.wait_for_ready().await;
@@ -854,7 +849,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
     async fn da_broadcast_message(
         &self,
         message: Vec<u8>,
-        recipients: Vec<K>,
+        recipients: Vec<T::SignatureKey>,
         _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         // If we're not ready, return an error
@@ -884,7 +879,11 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
     }
 
     #[instrument(name = "Libp2pNetwork::direct_message", skip_all)]
-    async fn direct_message(&self, message: Vec<u8>, recipient: K) -> Result<(), NetworkError> {
+    async fn direct_message(
+        &self,
+        message: Vec<u8>,
+        recipient: T::SignatureKey,
+    ) -> Result<(), NetworkError> {
         // If we're not ready, return an error
         if !self.is_ready() {
             self.inner.metrics.num_failed_messages.add(1);
@@ -966,11 +965,12 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
     }
 
     #[instrument(name = "Libp2pNetwork::queue_node_lookup", skip_all)]
+    #[allow(clippy::type_complexity)]
     fn queue_node_lookup(
         &self,
         view_number: ViewNumber,
-        pk: K,
-    ) -> Result<(), TrySendError<Option<(ViewNumber, K)>>> {
+        pk: T::SignatureKey,
+    ) -> Result<(), TrySendError<Option<(ViewNumber, T::SignatureKey)>>> {
         self.inner
             .node_lookup_send
             .try_send(Some((view_number, pk)))
@@ -990,7 +990,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
     /// use of the future view and leader to queue the lookups.
     async fn update_view<'a, TYPES>(&'a self, view: u64, epoch: u64, membership: &TYPES::Membership)
     where
-        TYPES: NodeType<SignatureKey = K> + 'a,
+        TYPES: NodeType<SignatureKey = T::SignatureKey> + 'a,
     {
         let future_view = <TYPES as NodeType>::View::new(view) + LOOK_AHEAD;
         let epoch = <TYPES as NodeType>::Epoch::new(epoch);

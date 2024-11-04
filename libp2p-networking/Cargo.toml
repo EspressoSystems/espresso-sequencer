@@ -11,6 +11,9 @@ authors = { workspace = true }
 default = ["webui"]
 webui = []
 
+[dev-dependencies]
+hotshot-example-types = { path = "../example-types" }
+
 [dependencies]
 anyhow = { workspace = true }
 async-compatibility-layer = { workspace = true }
