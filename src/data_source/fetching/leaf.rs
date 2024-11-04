@@ -244,8 +244,8 @@ pub(super) fn trigger_fetch_for_parent<Types, S, P>(
                     }
                 }
                 Err(err) => {
-                    // If we can't open a transaction, we can't be sure that we already have the parent, so
-                    // we fall through to fetching it just to be safe.
+                    // If we can't open a transaction, we can't be sure that we already have the
+                    // parent, so we fall through to fetching it just to be safe.
                     tracing::warn!(
                         height,
                         %parent,
@@ -258,8 +258,8 @@ pub(super) fn trigger_fetch_for_parent<Types, S, P>(
             fetcher.leaf_fetcher.clone().spawn_fetch(
                 request::LeafRequest::new(height - 1, parent, parent_qc),
                 fetcher.provider.clone(),
-                // After getting the leaf, grab the other data as well; that will be missing whenever the
-                // leaf was.
+                // After getting the leaf, grab the other data as well; that will be missing
+                // whenever the leaf was.
                 [
                     LeafCallback::Leaf {
                         fetcher: fetcher.clone(),
