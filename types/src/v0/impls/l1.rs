@@ -21,6 +21,8 @@ use futures::{
     future::Future,
     stream::{self, StreamExt},
 };
+use hotshot::types::SignatureKey;
+use hotshot_types::{stake_table::StakeTableEntry, traits::node_implementation::NodeType};
 use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
 use tracing::Instrument;
@@ -588,6 +590,17 @@ impl L1Client {
         });
         events.flatten().map(FeeInfo::from).collect().await
     }
+
+    /// Get `StakeTable` at block height.
+    pub async fn get_stake_table<TYPES: NodeType>(
+        &self,
+        _block: u64,
+        _address: Address,
+    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+        // TODO we either need address from configuration or contract-bindings.
+        // TODO epoch size will probably need to be passed in as well
+        unimplemented!();
+    }
 }
 
 impl L1State {
@@ -941,5 +954,41 @@ mod test {
     #[async_std::test]
     async fn test_wait_for_block_http() {
         test_wait_for_block_helper(false).await
+    }
+
+    #[async_std::test]
+    async fn test_get_stake_table() -> anyhow::Result<()> {
+        setup_test();
+
+        // how many deposits will we make
+        let deposits = 5;
+        let deploy_txn_count = 2;
+
+        let anvil = Anvil::new().spawn();
+        let wallet_address = anvil.addresses().first().cloned().unwrap();
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let wallet: LocalWallet = anvil.keys()[0].clone().into();
+
+        // In order to deposit we need a provider that can sign.
+        let provider =
+            Provider::<Http>::try_from(anvil.endpoint())?.interval(Duration::from_millis(10u64));
+        let client =
+            SignerMiddleware::new(provider.clone(), wallet.with_chain_id(anvil.chain_id()));
+        let client = Arc::new(client);
+
+        // Initialize a contract with some deposits
+
+        // deploy the fee contract
+        let stake_table_contract =
+            contract_bindings::stake_table::StakeTable::deploy(client.clone(), ())
+                .unwrap()
+                .send()
+                .await?;
+        //     contract_bindings::fee_contract::FeeContract::deploy(Arc::new(client.clone()), ())
+        //         .unwrap()
+        //         .send()
+        //         .await?;
+
+        Ok(())
     }
 }

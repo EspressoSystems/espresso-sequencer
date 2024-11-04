@@ -44,11 +44,15 @@ impl<TYPES: NodeType> StakeCommittee<TYPES> {
     /// to be called before calling `self.stake()` so that
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
+    // TODO we could just subscribe to L1 updates w/ recent `l1Client`
+    // changes, but current structure of `Membership` isn't ideal (we
+    // would have a subscription per field).
     async fn update_stake_table(&mut self, l1_block_height: u64) {
         let table: Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> = self
             .provider
             .get_stake_table::<TYPES>(l1_block_height, self.contract_address.unwrap())
-            .await;
+            .await
+            .clone();
         self.stake_table = table;
     }
     // We need a constructor to match our concrete type.
@@ -143,7 +147,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StakeCommittee<TYPES> {
             stake_table: members,
             indexed_stake_table,
             epoch_size: 12, // TODO get the real number from config (I think)
-            provider: L1Client::new(Url::from_str("http:://ab.b").unwrap(), 0),
+            provider: L1Client::http(Url::from_str("http:://ab.b").unwrap()),
             contract_address: None,
             committee_topic,
         }
