@@ -1,16 +1,13 @@
 name: Slow Test
 
 on:
-  push:
+  workflow_run:
+    workflows: [Build]
+    types:
+      - completed
     branches:
       - main
       - release-*
-    tags:
-      # YYYYMMDD
-      - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
-  schedule:
-    - cron: "0 0 * * 1"
-  pull_request:
   workflow_dispatch:
 
 concurrency:
