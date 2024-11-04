@@ -44,7 +44,7 @@ jobs:
         run: PATH="$PWD/target/release:$PATH"
 
       - name: 'Download bins'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             let allArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
