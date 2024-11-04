@@ -60,9 +60,9 @@ futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.79" }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.79" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.54" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.54" }
-marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.54" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.55" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.55" }
+marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.55" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.52" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.79" }
 hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.68" }
@@ -151,9 +151,19 @@ trait-set = "0.3.0"
 opt-level = 0
 # Skip compiling the debug information.
 debug = false
-# Skip linking debug information.
-strip = "debuginfo"
-[profile.dev.package."*"]
+# Skip linking symbols.
+strip = true
+[profile.test]
+opt-level = 1
+[profile.test.package.tests]
+opt-level = 0
+[profile.test.package.client]
+opt-level = 0
+[profile.test.package.hotshot-state-prover]
+opt-level = 3
+[profile.test.package.gen-vk-contract]
+opt-level = 3
+[profile.test.package.diff-test-hotshot]
 opt-level = 3
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]

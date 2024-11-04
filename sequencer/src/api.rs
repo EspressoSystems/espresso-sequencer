@@ -1020,13 +1020,23 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
 
-    use espresso_types::{Header, NamespaceId};
+    use espresso_types::{
+        traits::{EventConsumer, PersistenceOptions},
+        Header, Leaf, NamespaceId,
+    };
     use ethers::utils::Anvil;
-    use futures::stream::StreamExt;
-    use hotshot_query_service::availability::{BlockQueryData, VidCommonQueryData};
+    use futures::{future, stream::StreamExt};
+    use hotshot_query_service::availability::{
+        AvailabilityDataSource, BlockQueryData, UpdateAvailabilityData, VidCommonQueryData,
+    };
+    use hotshot_types::{
+        data::QuorumProposal, event::LeafInfo, simple_certificate::QuorumCertificate,
+        traits::node_implementation::ConsensusTime,
+    };
 
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
+    use std::fmt::Debug;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -1035,8 +1045,11 @@ mod api_tests {
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
 
-    use super::*;
-    use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
+    use super::{update::ApiEventConsumer, *};
+    use crate::{
+        persistence::no_storage::NoStorage,
+        testing::{wait_for_decide_on_handle, TestConfigBuilder},
+    };
 
     #[async_std::test]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
@@ -1158,6 +1171,123 @@ mod api_tests {
     pub(crate) async fn catchup_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub async fn test_non_consecutive_decide_with_failing_event_consumer<D>()
+    where
+        D: TestableSequencerDataSource + Debug + 'static,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityData<SeqTypes>,
+    {
+        #[derive(Clone, Copy, Debug)]
+        struct FailConsumer;
+
+        #[async_trait]
+        impl EventConsumer for FailConsumer {
+            async fn handle_event(&self, _: &Event<SeqTypes>) -> anyhow::Result<()> {
+                bail!("mock error injection");
+            }
+        }
+
+        setup_test();
+
+        let storage = D::create_storage().await;
+        let persistence = D::persistence_options(&storage).create().await.unwrap();
+        let data_source: Arc<StorageState<network::Memory, NoStorage, _, MockSequencerVersions>> =
+            Arc::new(StorageState::new(
+                D::create(D::persistence_options(&storage), Default::default(), false)
+                    .await
+                    .unwrap(),
+                ApiState::new(future::pending()),
+            ));
+
+        // Create two non-consecutive leaf chains.
+        let mut chain1 = vec![];
+
+        let mut quorum_proposal = QuorumProposal::<SeqTypes> {
+            block_header: Leaf::genesis(&Default::default(), &NodeState::mock())
+                .await
+                .block_header()
+                .clone(),
+            view_number: ViewNumber::genesis(),
+            justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
+                &ValidatedState::default(),
+                &NodeState::mock(),
+            )
+            .await,
+            upgrade_certificate: None,
+            proposal_certificate: None,
+        };
+        let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
+            &ValidatedState::default(),
+            &NodeState::mock(),
+        )
+        .await;
+
+        let mut justify_qc = qc.clone();
+        for i in 0..5 {
+            *quorum_proposal.block_header.height_mut() = i;
+            quorum_proposal.view_number = ViewNumber::new(i);
+            quorum_proposal.justify_qc = justify_qc;
+            let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+            qc.view_number = leaf.view_number();
+            qc.data.leaf_commit = Committable::commit(&leaf);
+            justify_qc = qc.clone();
+            chain1.push((leaf.clone(), qc.clone()));
+        }
+        // Split into two chains.
+        let mut chain2 = chain1.split_off(2);
+        // Make non-consecutive (i.e. we skip a leaf).
+        chain2.remove(0);
+
+        // Decide 2 leaves, but fail in event processing.
+        let leaf_chain = chain1
+            .iter()
+            .map(|(leaf, qc)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide with event handling failure");
+        persistence
+            .append_decided_leaves(
+                ViewNumber::new(1),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &FailConsumer,
+            )
+            .await
+            .unwrap();
+
+        // Now decide remaining leaves successfully. We should now process a decide event for all
+        // the leaves.
+        let consumer = ApiEventConsumer::from(data_source.clone());
+        let leaf_chain = chain2
+            .iter()
+            .map(|(leaf, qc)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide successfully");
+        persistence
+            .append_decided_leaves(
+                ViewNumber::new(4),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &consumer,
+            )
+            .await
+            .unwrap();
+
+        // Check that the leaves were moved to archive storage.
+        for (leaf, qc) in chain1.iter().chain(&chain2) {
+            tracing::info!(height = leaf.height(), "check archive");
+            let qd = data_source.get_leaf(leaf.height() as usize).await.await;
+            assert_eq!(qd.leaf(), leaf);
+            assert_eq!(qd.qc(), qc);
+        }
+    }
+
+    fn leaf_info(leaf: Leaf) -> LeafInfo<SeqTypes> {
+        LeafInfo {
+            leaf,
+            vid_share: None,
+            state: Default::default(),
+            delta: None,
+        }
     }
 }
 
