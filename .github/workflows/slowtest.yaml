@@ -80,7 +80,7 @@ jobs:
       - name: Unzip artifact
         run: unzip -v x86_64-unknown-linux-gnu-services.zip
 
-      -name: debug
+      - name: debug
         run: ls
 
       - name: Slow Test
