@@ -1,6 +1,16 @@
 name: Slow Test
 
 on:
+  workflow_run:
+    workflows: [Build]
+    types:
+      - completed
+    branches:
+      - main
+      - release-*
+  workflow_dispatch:
+
+on:
   push:
     branches:
       - main
@@ -46,19 +56,37 @@ jobs:
       - name: Configure Environment
         run: PATH="$PWD/target/release:$PATH"
 
-      - name: Enable Rust Caching
-        uses: Swatinem/rust-cache@v2
+      - name: 'Download bins'
+        uses: actions/github-script@v6
         with:
-          cache-all-crates: true
+          script: |
+            let allArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: context.payload.workflow_run.id,
+            });
+            let matchArtifact = allArtifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "x86_64-unknown-linux-gnu-services"
+            })[0];
+            let download = await github.rest.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            let fs = require('fs');
+            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/x86_64-unknown-linux-gnu-services.zip`, Buffer.from(download.data));
 
-      - name: Build
-        run: |
-          cargo build --locked --bin diff-test --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
-        timeout-minutes: 90
+      - name: Unzip artifact
+        run: unzip -v x86_64-unknown-linux-gnu-services.zip
+
+      -name: debug
+        run: ls
 
       - name: Slow Test
         env:
           NEXTEST_PROFILE: slow
-        run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast --nocapture
+        run: |
+          cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast \
+          --nocapture --workspace-remap $PWD
         timeout-minutes: 40
