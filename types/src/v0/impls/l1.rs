@@ -361,6 +361,7 @@ impl L1Client {
                     continue;
                 };
                 if head >= number {
+                    tracing::info!(number, head, "got L1 block");
                     return;
                 }
                 tracing::debug!(number, head, "waiting for L1 block");
@@ -402,14 +403,14 @@ impl L1Client {
                 let L1Event::NewFinalized { finalized } = event else {
                     continue;
                 };
-                if finalized.number < number {
-                    tracing::debug!(number, ?finalized, "waiting for L1 finalized block");
-                    continue;
+                if finalized.number >= number {
+                    tracing::info!(number, ?finalized, "got finalized block");
+                    return self
+                        .get_finalized_block(self.state.lock().await, number)
+                        .await
+                        .1;
                 }
-                return self
-                    .get_finalized_block(self.state.lock().await, number)
-                    .await
-                    .1;
+                tracing::debug!(number, ?finalized, "waiting for L1 finalized block");
             }
 
             // This should not happen: the event stream ended. All we can do is try again.
@@ -422,7 +423,7 @@ impl L1Client {
     /// `timestamp`.
     pub async fn wait_for_finalized_block_with_timestamp(&self, timestamp: U256) -> L1BlockInfo {
         // Wait until the finalized block has timestamp >= `timestamp`.
-        let (mut state, finalized) = 'outer: loop {
+        let (mut state, mut block) = 'outer: loop {
             // Subscribe to events before checking the current state, to ensure we don't miss a
             // relevant event.
             let mut events = self.receiver.activate_cloned();
@@ -447,11 +448,11 @@ impl L1Client {
                 let L1Event::NewFinalized { finalized } = event else {
                     continue;
                 };
-                if finalized.timestamp < timestamp {
-                    tracing::debug!(%timestamp, ?finalized, "waiting for L1 finalized block");
-                    continue;
+                if finalized.timestamp >= timestamp {
+                    tracing::info!(%timestamp, ?finalized, "got finalized block");
+                    break 'outer (self.state.lock().await, finalized);
                 }
-                break 'outer (self.state.lock().await, finalized);
+                tracing::debug!(%timestamp, ?finalized, "waiting for L1 finalized block");
             }
 
             // This should not happen: the event stream ended. All we can do is try again.
@@ -459,22 +460,8 @@ impl L1Client {
             sleep(self.retry_delay).await;
         };
 
-        // Find the earliest finalized block in our cache with timestamp greater or equal to
-        // `timestamp`.
-        let block = match state.finalized_by_timestamp.range(timestamp..).next() {
-            Some((_, number)) => {
-                let number = *number;
-                state.finalized.get(&number).copied()
-            }
-            None => None,
-        };
-        // There should almost always be something in the cache, but just in case (e.g. block
-        // getting evicted at just the wrong time), we can fall back to using the finalized
-        // snapshot, since we have previously verified that it is at least `timestamp`.
-        let mut block = block.unwrap_or(finalized);
-
-        // It is possible there is some earlier block that also has the proper timestamp; maybe we
-        // just didn't have it in cache. Work backwards until we find the true earliest block.
+        // It is possible there is some earlier block that also has the proper timestamp. Work
+        // backwards until we find the true earliest block.
         loop {
             let (state_lock, parent) = self.get_finalized_block(state, block.number - 1).await;
             if parent.timestamp < timestamp {
@@ -608,7 +595,6 @@ impl L1State {
         Self {
             snapshot: Default::default(),
             finalized: LruCache::new(cache_size),
-            finalized_by_timestamp: Default::default(),
         }
     }
 
@@ -627,17 +613,8 @@ impl L1State {
                     ?info,
                     "got different info for the same finalized height; something has gone very wrong with the L1",
                 );
-            } else {
-                // We have removed the entry `old_number` due to exceeding the size of the LRU
-                // cache. This is fine, but for consistency we must also remove this entry from the
-                // timestamp index.
-                self.finalized_by_timestamp.remove(&old_info.timestamp);
             }
         }
-
-        // Ensure everything we put in `finalized` is also indexed by timestamp.
-        self.finalized_by_timestamp
-            .insert(info.timestamp, info.number);
     }
 }
 

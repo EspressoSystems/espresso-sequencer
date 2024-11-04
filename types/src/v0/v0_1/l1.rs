@@ -8,7 +8,7 @@ use async_std::{sync::{Arc, Mutex}, task::JoinHandle};
 use clap::Parser;
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, time::Duration};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -112,7 +112,6 @@ pub(crate) enum RpcClient {
 pub(crate) struct L1State {
     pub(crate) snapshot: L1Snapshot,
     pub(crate) finalized: LruCache<u64, L1BlockInfo>,
-    pub(crate) finalized_by_timestamp: BTreeMap<U256, u64>,
 }
 
 #[derive(Clone, Debug)]
