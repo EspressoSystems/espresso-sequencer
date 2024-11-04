@@ -50,6 +50,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: v1-rust
+          cache-provider: buildjet
 
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
