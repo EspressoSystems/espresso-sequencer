@@ -304,6 +304,18 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
         Ok(payload)
     }
 
+    async fn claim_block_with_num_nodes(
+        &self,
+        block_hash: &BuilderCommitment,
+        view_number: u64,
+        sender: TYPES::SignatureKey,
+        signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+        _num_nodes: usize,
+    ) -> Result<AvailableBlockData<TYPES>, BuildError> {
+        self.claim_block(block_hash, view_number, sender, signature)
+            .await
+    }
+
     async fn claim_block_header_input(
         &self,
         block_hash: &BuilderCommitment,

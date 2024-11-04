@@ -1,3 +1,5 @@
+use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
+
 use async_trait::async_trait;
 use cbor4ii::core::error::DecodeError;
 use futures::prelude::*;
@@ -6,7 +8,6 @@ use libp2p::{
     StreamProtocol,
 };
 use serde::{de::DeserializeOwned, Serialize};
-use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
 
 /// `Behaviour` type alias for the `Cbor` codec
 pub type Behaviour<Req, Resp> = request_response::Behaviour<Cbor<Req, Resp>>;

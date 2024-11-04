@@ -185,6 +185,30 @@ pub mod v0_1 {
                 .await
                 .map_err(Into::into)
         }
+
+        /// Claim block and provide the number of nodes information to the builder for VID
+        /// computation.
+        ///
+        /// # Errors
+        /// - [`BuilderClientError::BlockNotFound`] if block isn't available
+        /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
+        pub async fn claim_block_with_num_nodes(
+            &self,
+            block_hash: BuilderCommitment,
+            view_number: u64,
+            sender: TYPES::SignatureKey,
+            signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+            num_nodes: usize,
+        ) -> Result<AvailableBlockData<TYPES>, BuilderClientError> {
+            let encoded_signature: TaggedBase64 = signature.clone().into();
+            self.client
+                .get(&format!(
+                    "{LEGACY_BUILDER_MODULE}/claimblockwithnumnodes/{block_hash}/{view_number}/{sender}/{encoded_signature}/{num_nodes}"
+                ))
+                .send()
+                .await
+                .map_err(Into::into)
+        }
     }
 }
 

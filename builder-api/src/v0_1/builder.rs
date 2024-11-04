@@ -158,6 +158,29 @@ where
             }
             .boxed()
         })?
+        .get("claim_block_with_num_nodes", |req, state| {
+            async move {
+                let block_hash: BuilderCommitment = req.blob_param("block_hash")?;
+                let view_number = req.integer_param("view_number")?;
+                let signature = try_extract_param(&req, "signature")?;
+                let sender = try_extract_param(&req, "sender")?;
+                let num_nodes = req.integer_param("num_nodes")?;
+                state
+                    .claim_block_with_num_nodes(
+                        &block_hash,
+                        view_number,
+                        sender,
+                        &signature,
+                        num_nodes,
+                    )
+                    .await
+                    .map_err(|source| Error::BlockClaim {
+                        source,
+                        resource: block_hash.to_string(),
+                    })
+            }
+            .boxed()
+        })?
         .get("claim_header_input", |req, state| {
             async move {
                 let block_hash: BuilderCommitment = req.blob_param("block_hash")?;
