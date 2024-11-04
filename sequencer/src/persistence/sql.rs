@@ -9,12 +9,19 @@ use espresso_types::{
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
-use hotshot_query_service::data_source::{
-    storage::{
-        pruning::PrunerCfg,
-        sql::{include_migrations, query_as, Config, SqlStorage},
+use hotshot_query_service::{
+    availability::LeafQueryData,
+    data_source::{
+        storage::{
+            pruning::PrunerCfg,
+            sql::{include_migrations, query_as, Config, SqlStorage, Transaction, TransactionMode},
+        },
+        Transaction as _, VersionedDataSource,
     },
-    Transaction as _, VersionedDataSource,
+    fetching::{
+        request::{LeafRequest, PayloadRequest, VidCommonRequest},
+        Provider,
+    },
 };
 use hotshot_types::{
     consensus::CommitmentMap,
@@ -27,10 +34,9 @@ use hotshot_types::{
         node_implementation::ConsensusTime,
     },
     utils::View,
-    vid::VidSchemeType,
+    vid::{VidCommitment, VidCommon},
     vote::HasViewNumber,
 };
-use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::sync::Arc;
@@ -444,10 +450,16 @@ impl Persistence {
             })
             .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
 
-            // Clean up old proposals. These are not part of the decide event we generate for the
-            // consumer, so we don't need to return them.
+            // Clean up old proposals and certificates. These are not part of the decide event we
+            // generate for the consumer, so we don't need to return them.
             tx.execute(
                 query("DELETE FROM quorum_proposals where view >= $1 AND view <= $2")
+                    .bind(from_view.u64() as i64)
+                    .bind(to_view.u64() as i64),
+            )
+            .await?;
+            tx.execute(
+                query("DELETE FROM quorum_certificate where view >= $1 AND view <= $2")
                     .bind(from_view.u64() as i64)
                     .bind(to_view.u64() as i64),
             )
@@ -554,7 +566,17 @@ impl Persistence {
             .await
             .context("deleting old quorum proposals")?;
         tracing::debug!(
-            "garbage collecting {} quorum_proposals",
+            "garbage collecting {} quorum proposals",
+            res.rows_affected()
+        );
+
+        let res = query("DELETE FROM quorum_certificate WHERE view < $1")
+            .bind(view)
+            .execute(tx.as_mut())
+            .await
+            .context("deleting old quorum certificates")?;
+        tracing::debug!(
+            "garbage collecting {} quorum certificates",
             res.rows_affected()
         );
 
@@ -791,24 +813,25 @@ impl SequencerPersistence for Persistence {
         &self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let data = &proposal.data;
-        let view = data.view_number().u64();
+        let view = proposal.data.view_number.u64();
+        let payload_hash = proposal.data.payload_commitment;
         let data_bytes = bincode::serialize(proposal).unwrap();
 
         let mut tx = self.db.write().await?;
         tx.upsert(
             "vid_share",
-            ["view", "data"],
+            ["view", "data", "payload_hash"],
             ["view"],
-            [(view as i64, data_bytes)],
+            [(view as i64, data_bytes, payload_hash.to_string())],
         )
         .await?;
         tx.commit().await
     }
+
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+        vid_commit: VidCommitment,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.view_number().u64();
@@ -817,13 +840,14 @@ impl SequencerPersistence for Persistence {
         let mut tx = self.db.write().await?;
         tx.upsert(
             "da_proposal",
-            ["view", "data"],
+            ["view", "data", "payload_hash"],
             ["view"],
-            [(view as i64, data_bytes)],
+            [(view as i64, data_bytes, vid_commit.to_string())],
         )
         .await?;
         tx.commit().await
     }
+
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         // Todo Remove this after https://github.com/EspressoSystems/espresso-sequencer/issues/1931
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
@@ -875,6 +899,22 @@ impl SequencerPersistence for Persistence {
             [(view_number as i64, leaf_hash.to_string(), proposal_bytes)],
         )
         .await?;
+
+        // We also keep track of any QC we see in case we need it to recover our archival storage.
+        let justify_qc = &proposal.data.justify_qc;
+        let justify_qc_bytes = bincode::serialize(&justify_qc).context("serializing QC")?;
+        tx.upsert(
+            "quorum_certificate",
+            ["view", "leaf_hash", "data"],
+            ["view"],
+            [(
+                justify_qc.view_number.u64() as i64,
+                justify_qc.data.leaf_commit.to_string(),
+                &justify_qc_bytes,
+            )],
+        )
+        .await?;
+
         tx.commit().await
     }
 
@@ -916,6 +956,146 @@ impl SequencerPersistence for Persistence {
         .await?;
         tx.commit().await
     }
+}
+
+#[async_trait]
+impl Provider<SeqTypes, VidCommonRequest> for Persistence {
+    #[tracing::instrument(skip(self))]
+    async fn fetch(&self, req: VidCommonRequest) -> Option<VidCommon> {
+        let mut tx = match self.db.read().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::warn!("could not open transaction: {err:#}");
+                return None;
+            }
+        };
+
+        let bytes = match query_as::<(Vec<u8>,)>(
+            "SELECT data FROM vid_share WHERE payload_hash = $1 LIMIT 1",
+        )
+        .bind(req.0.to_string())
+        .fetch_one(tx.as_mut())
+        .await
+        {
+            Ok((bytes,)) => bytes,
+            Err(err) => {
+                tracing::warn!("error loading VID share: {err:#}");
+                return None;
+            }
+        };
+
+        let share: Proposal<SeqTypes, VidDisperseShare<SeqTypes>> =
+            match bincode::deserialize(&bytes) {
+                Ok(share) => share,
+                Err(err) => {
+                    tracing::warn!("error decoding VID share: {err:#}");
+                    return None;
+                }
+            };
+
+        Some(share.data.common)
+    }
+}
+
+#[async_trait]
+impl Provider<SeqTypes, PayloadRequest> for Persistence {
+    #[tracing::instrument(skip(self))]
+    async fn fetch(&self, req: PayloadRequest) -> Option<Payload> {
+        let mut tx = match self.db.read().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::warn!("could not open transaction: {err:#}");
+                return None;
+            }
+        };
+
+        let bytes = match query_as::<(Vec<u8>,)>(
+            "SELECT data FROM da_proposal WHERE payload_hash = $1 LIMIT 1",
+        )
+        .bind(req.0.to_string())
+        .fetch_one(tx.as_mut())
+        .await
+        {
+            Ok((bytes,)) => bytes,
+            Err(err) => {
+                tracing::warn!("error loading DA proposal: {err:#}");
+                return None;
+            }
+        };
+
+        let proposal: Proposal<SeqTypes, DaProposal<SeqTypes>> = match bincode::deserialize(&bytes)
+        {
+            Ok(proposal) => proposal,
+            Err(err) => {
+                tracing::warn!("error decoding DA proposal: {err:#}");
+                return None;
+            }
+        };
+
+        Some(Payload::from_bytes(
+            &proposal.data.encoded_transactions,
+            &proposal.data.metadata,
+        ))
+    }
+}
+
+#[async_trait]
+impl Provider<SeqTypes, LeafRequest<SeqTypes>> for Persistence {
+    #[tracing::instrument(skip(self))]
+    async fn fetch(&self, req: LeafRequest<SeqTypes>) -> Option<LeafQueryData<SeqTypes>> {
+        let mut tx = match self.db.read().await {
+            Ok(tx) => tx,
+            Err(err) => {
+                tracing::warn!("could not open transaction: {err:#}");
+                return None;
+            }
+        };
+
+        let (leaf, qc) = match fetch_leaf_from_proposals(&mut tx, req).await {
+            Ok(res) => res,
+            Err(err) => {
+                tracing::info!("requested leaf not found in undecided proposals: {err:#}");
+                return None;
+            }
+        };
+
+        match LeafQueryData::new(leaf, qc) {
+            Ok(leaf) => Some(leaf),
+            Err(err) => {
+                tracing::warn!("fetched invalid leaf: {err:#}");
+                None
+            }
+        }
+    }
+}
+
+async fn fetch_leaf_from_proposals<Mode: TransactionMode>(
+    tx: &mut Transaction<Mode>,
+    req: LeafRequest<SeqTypes>,
+) -> anyhow::Result<(Leaf, QuorumCertificate<SeqTypes>)> {
+    // Look for a quorum proposal corresponding to this leaf.
+    let (proposal_bytes,) =
+        query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE leaf_hash = $1 LIMIT 1")
+            .bind(req.expected_leaf.to_string())
+            .fetch_one(tx.as_mut())
+            .await
+            .context("fetching proposal")?;
+
+    // Look for a QC corresponding to this leaf.
+    let (qc_bytes,) =
+        query_as::<(Vec<u8>,)>("SELECT data FROM quorum_certificate WHERE leaf_hash = $1 LIMIT 1")
+            .bind(req.expected_leaf.to_string())
+            .fetch_one(tx.as_mut())
+            .await
+            .context("fetching QC")?;
+
+    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+        bincode::deserialize(&proposal_bytes).context("deserializing quorum proposal")?;
+    let qc: QuorumCertificate<SeqTypes> =
+        bincode::deserialize(&qc_bytes).context("deserializing quorum certificate")?;
+
+    let leaf = Leaf::from_quorum_proposal(&proposal.data);
+    Ok((leaf, qc))
 }
 
 #[cfg(test)]
@@ -961,10 +1141,17 @@ mod test {
     use espresso_types::{NodeState, ValidatedState};
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::traits::signature_key::SignatureKey;
+    use hotshot_types::{
+        traits::{signature_key::SignatureKey, EncodeBytes},
+        vid::vid_scheme,
+    };
+    use jf_vid::VidScheme;
+    use sequencer_utils::test_utils::setup_test;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
+        setup_test();
+
         // Create some quorum proposals to test with.
         let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
         let privkey = BLSPubKey::generated_from_seed_indexed([0; 32], 1).1;
@@ -1030,5 +1217,111 @@ mod test {
                 Committable::commit(&Leaf::from_quorum_proposal(&qp.data)).to_string()
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_fetching_providers() {
+        setup_test();
+
+        let tmp = Persistence::tmp_storage().await;
+        let storage = Persistence::connect(&tmp).await;
+
+        // Mock up some data.
+        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf_payload = leaf.block_payload().unwrap();
+        let leaf_payload_bytes_arc = leaf_payload.encode();
+        let disperse = vid_scheme(2)
+            .disperse(leaf_payload_bytes_arc.clone())
+            .unwrap();
+        let payload_commitment = disperse.commit;
+        let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let vid_share = VidDisperseShare::<SeqTypes> {
+            view_number: ViewNumber::new(0),
+            payload_commitment,
+            share: disperse.shares[0].clone(),
+            common: disperse.common,
+            recipient_key: pubkey,
+        }
+        .to_proposal(&privkey)
+        .unwrap()
+        .clone();
+
+        let quorum_proposal = QuorumProposal::<SeqTypes> {
+            block_header: leaf.block_header().clone(),
+            view_number: leaf.view_number(),
+            justify_qc: leaf.justify_qc(),
+            upgrade_certificate: None,
+            proposal_certificate: None,
+        };
+        let quorum_proposal_signature =
+            BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
+                .expect("Failed to sign quorum proposal");
+        let quorum_proposal = Proposal {
+            data: quorum_proposal,
+            signature: quorum_proposal_signature,
+            _pd: Default::default(),
+        };
+
+        let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
+            .expect("Failed to sign block payload");
+        let da_proposal = Proposal {
+            data: DaProposal::<SeqTypes> {
+                encoded_transactions: leaf_payload_bytes_arc,
+                metadata: leaf_payload.ns_table().clone(),
+                view_number: ViewNumber::new(0),
+            },
+            signature: block_payload_signature,
+            _pd: Default::default(),
+        };
+
+        let mut next_quorum_proposal = quorum_proposal.clone();
+        next_quorum_proposal.data.view_number += 1;
+        next_quorum_proposal.data.justify_qc.view_number += 1;
+        next_quorum_proposal.data.justify_qc.data.leaf_commit = Committable::commit(&leaf);
+        let qc = &next_quorum_proposal.data.justify_qc;
+
+        // Add to database.
+        storage
+            .append_da(&da_proposal, payload_commitment)
+            .await
+            .unwrap();
+        storage.append_vid(&vid_share).await.unwrap();
+        storage
+            .append_quorum_proposal(&quorum_proposal)
+            .await
+            .unwrap();
+
+        // Add an extra quorum proposal so we have a QC pointing back at `leaf`.
+        storage
+            .append_quorum_proposal(&next_quorum_proposal)
+            .await
+            .unwrap();
+
+        // Fetch it as if we were rebuilding an archive.
+        assert_eq!(
+            vid_share.data.common,
+            storage
+                .fetch(VidCommonRequest(vid_share.data.payload_commitment))
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            leaf_payload,
+            storage
+                .fetch(PayloadRequest(vid_share.data.payload_commitment))
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            LeafQueryData::new(leaf.clone(), qc.clone()).unwrap(),
+            storage
+                .fetch(LeafRequest::new(
+                    leaf.block_header().block_number(),
+                    Committable::commit(&leaf),
+                    qc.commit()
+                ))
+                .await
+                .unwrap()
+        );
     }
 }
