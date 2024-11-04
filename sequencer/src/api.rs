@@ -1385,6 +1385,76 @@ mod api_tests {
             .unwrap();
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_decide_missing_data<D>()
+    where
+        D: TestableSequencerDataSource + Debug + 'static,
+    {
+        setup_test();
+
+        let storage = D::create_storage().await;
+        let persistence = D::persistence_options(&storage).create().await.unwrap();
+        let data_source: Arc<StorageState<network::Memory, NoStorage, _, MockSequencerVersions>> =
+            Arc::new(StorageState::new(
+                D::create(D::persistence_options(&storage), Default::default(), false)
+                    .await
+                    .unwrap(),
+                ApiState::new(future::pending()),
+            ));
+        let consumer = ApiEventConsumer::from(data_source.clone());
+
+        let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
+            &ValidatedState::default(),
+            &NodeState::mock(),
+        )
+        .await;
+        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+
+        // Append the genesis leaf. We don't use this for the test, because the update function will
+        // automatically fill in the missing data for genesis. We just append this to get into a
+        // consistent state to then append the leaf from view 1, which will have missing data.
+        tracing::info!(?leaf, ?qc, "decide genesis leaf");
+        persistence
+            .append_decided_leaves(
+                leaf.view_number(),
+                [(&leaf_info(leaf.clone()), qc.clone())],
+                &consumer,
+            )
+            .await
+            .unwrap();
+
+        // Create another leaf, with missing data.
+        let mut block_header = leaf.block_header().clone();
+        *block_header.height_mut() += 1;
+        let qp = QuorumProposal {
+            block_header,
+            view_number: leaf.view_number() + 1,
+            justify_qc: qc.clone(),
+            upgrade_certificate: None,
+            proposal_certificate: None,
+        };
+
+        let leaf = Leaf::from_quorum_proposal(&qp);
+        qc.view_number = leaf.view_number();
+        qc.data.leaf_commit = Committable::commit(&leaf);
+
+        // Decide a leaf without the corresponding payload or VID.
+        tracing::info!(?leaf, ?qc, "append leaf 1");
+        persistence
+            .append_decided_leaves(
+                leaf.view_number(),
+                [(&leaf_info(leaf.clone()), qc)],
+                &consumer,
+            )
+            .await
+            .unwrap();
+
+        // Check that we still processed the leaf.
+        assert_eq!(data_source.get_leaf(1).await.await.leaf(), &leaf);
+        assert!(data_source.get_vid_common(1).await.is_pending());
+        assert!(data_source.get_block(1).await.is_pending());
+    }
+
     fn leaf_info(leaf: Leaf) -> LeafInfo<SeqTypes> {
         LeafInfo {
             leaf,
