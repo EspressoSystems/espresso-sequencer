@@ -325,6 +325,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             saved_payloads,
             initializer.high_qc,
             Arc::clone(&consensus_metrics),
+            config.epoch_height,
         );
 
         let consensus = Arc::new(RwLock::new(consensus));
@@ -652,6 +653,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             storage: Arc::clone(&self.storage),
             network: Arc::clone(&self.network),
             memberships: Arc::clone(&self.memberships),
+            epoch_height: self.config.epoch_height,
         };
 
         add_network_tasks::<TYPES, I, V>(&mut handle).await;
@@ -765,6 +767,7 @@ where
         SystemContextHandle<TYPES, I, V>,
         SystemContextHandle<TYPES, I, V>,
     ) {
+        let epoch_height = config.epoch_height;
         let left_system_context = SystemContext::new(
             public_key.clone(),
             private_key.clone(),
@@ -832,6 +835,7 @@ where
             storage: Arc::clone(&left_system_context.storage),
             network: Arc::clone(&left_system_context.network),
             memberships: Arc::clone(&left_system_context.memberships),
+            epoch_height,
         };
 
         let mut right_handle = SystemContextHandle {
@@ -843,6 +847,7 @@ where
             storage: Arc::clone(&right_system_context.storage),
             network: Arc::clone(&right_system_context.network),
             memberships: Arc::clone(&right_system_context.memberships),
+            epoch_height,
         };
 
         // add consensus tasks to each handle, using their individual internal event streams

@@ -433,6 +433,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         None
     }
 
+    /// epochs view change handler
+    #[instrument(skip_all, fields(id = self.id, view_number = *self.cur_view))]
+    pub async fn handle_view_change_epochs(
+        &mut self,
+        event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
+        block_view: TYPES::View,
+    ) -> Option<HotShotTaskCompleted> {
+        if self.consensus.read().await.is_high_qc_forming_eqc() {
+            tracing::info!("Reached end of epoch. Not getting a new block until we form an eQC.");
+            None
+        } else {
+            self.handle_view_change_marketplace(event_stream, block_view)
+                .await
+        }
+    }
+
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction task", level = "error", target = "TransactionTaskState")]
     pub async fn handle(

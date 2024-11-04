@@ -267,4 +267,7 @@ pub trait Versions: Clone + Copy + Debug + Send + Sync + 'static {
 
     /// The version at which to switch over to marketplace logic
     type Marketplace: StaticVersionType;
+
+    /// The version at which to switch over to epochs logic
+    type Epochs: StaticVersionType;
 }

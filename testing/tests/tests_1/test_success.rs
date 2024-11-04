@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use hotshot_example_types::node_types::EpochsTestVersions;
 use hotshot_example_types::{
     node_types::{
         Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestTypes,
@@ -131,4 +132,23 @@ cross_tests!(
 
         metadata
     }
+);
+
+cross_tests!(
+    TestName: test_epoch_end,
+    Impls: [MemoryImpl],
+    Types: [TestTypes],
+    Versions: [EpochsTestVersions],
+    Ignore: false,
+    Metadata: {
+        TestDescription {
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                TimeBasedCompletionTaskDescription {
+                    duration: Duration::from_millis(100000),
+                },
+            ),
+            epoch_height: 10,
+            ..TestDescription::default()
+        }
+    },
 );

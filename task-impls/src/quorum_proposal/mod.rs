@@ -95,6 +95,9 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
 
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
+
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>

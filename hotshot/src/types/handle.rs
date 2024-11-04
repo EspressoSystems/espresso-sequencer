@@ -70,6 +70,9 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
 
     /// Memberships used by consensus
     pub memberships: Arc<Memberships<TYPES>>,
+
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>

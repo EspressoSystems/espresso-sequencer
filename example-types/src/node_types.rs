@@ -176,6 +176,8 @@ impl Versions for TestVersions {
     ];
 
     type Marketplace = StaticVersion<0, 3>;
+
+    type Epochs = StaticVersion<0, 4>;
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -190,6 +192,8 @@ impl Versions for MarketplaceUpgradeTestVersions {
     ];
 
     type Marketplace = StaticVersion<0, 3>;
+
+    type Epochs = StaticVersion<0, 4>;
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -204,6 +208,24 @@ impl Versions for MarketplaceTestVersions {
     ];
 
     type Marketplace = StaticVersion<0, 3>;
+
+    type Epochs = StaticVersion<0, 4>;
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct EpochsTestVersions {}
+
+impl Versions for EpochsTestVersions {
+    type Base = StaticVersion<0, 4>;
+    type Upgrade = StaticVersion<0, 4>;
+    const UPGRADE_HASH: [u8; 32] = [
+        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0,
+    ];
+
+    type Marketplace = StaticVersion<0, 3>;
+
+    type Epochs = StaticVersion<0, 4>;
 }
 
 #[cfg(test)]

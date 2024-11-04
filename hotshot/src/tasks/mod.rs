@@ -327,6 +327,7 @@ where
         storage: I::Storage,
         marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> SystemContextHandle<TYPES, I, V> {
+        let epoch_height = config.epoch_height;
         let hotshot = SystemContext::new(
             public_key,
             private_key,
@@ -355,6 +356,7 @@ where
             storage: Arc::clone(&hotshot.storage),
             network: Arc::clone(&hotshot.network),
             memberships: Arc::clone(&hotshot.memberships),
+            epoch_height,
         };
 
         add_consensus_tasks::<TYPES, I, V>(&mut handle).await;

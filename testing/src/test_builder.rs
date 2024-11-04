@@ -98,6 +98,8 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
     pub start_solver: bool,
     /// boxed closure used to validate the resulting transactions
     pub validate_transactions: TransactionValidator,
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 pub fn nonempty_block_threshold(threshold: (u64, u64)) -> TransactionValidator {
@@ -415,6 +417,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Default
             upgrade_view: None,
             start_solver: true,
             validate_transactions: Arc::new(|_| Ok(())),
+            epoch_height: 0,
         }
     }
 }
@@ -452,6 +455,7 @@ where
             timing_data,
             da_staked_committee_size,
             unreliable_network,
+            epoch_height,
             ..
         } = self.clone();
 
@@ -509,7 +513,7 @@ where
             stop_proposing_time: 0,
             start_voting_time: u64::MAX,
             stop_voting_time: 0,
-            epoch_height: 0,
+            epoch_height,
         };
         let TimingData {
             next_view_timeout,

@@ -9,6 +9,12 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
+    quorum_proposal::{UpgradeLock, Versions},
+};
+use anyhow::{ensure, Context, Result};
 use async_broadcast::{InactiveReceiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
@@ -28,12 +34,6 @@ use hotshot_types::{
 use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
-
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
-    quorum_proposal::{UpgradeLock, Versions},
-};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]
@@ -105,7 +105,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
     /// Publishes a proposal given the [`CommitmentAndMetadata`], [`VidDisperse`]
     /// and high qc [`hotshot_types::simple_certificate::QuorumCertificate`],
     /// with optional [`ViewChangeEvidence`].
-    #[instrument(skip_all, target = "ProposalDependencyHandle", fields(id = self.id, view_number = *self.view_number, latest_proposed_view = *self.latest_proposed_view))]
+    #[instrument(skip_all, fields(id = self.id, view_number = *self.view_number, latest_proposed_view = *self.latest_proposed_view))]
     async fn publish_proposal(
         &self,
         commitment_and_metadata: CommitmentAndMetadata<TYPES>,
@@ -166,14 +166,29 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
 
         let version = self.upgrade_lock.version(self.view_number).await?;
 
-        let block_header = if version < V::Marketplace::VERSION {
+        let high_qc = self.consensus.read().await.high_qc().clone();
+
+        let builder_commitment = commitment_and_metadata.builder_commitment.clone();
+        let metadata = commitment_and_metadata.metadata.clone();
+
+        let block_header = if version >= V::Epochs::VERSION
+            && self.consensus.read().await.is_high_qc_forming_eqc()
+        {
+            tracing::info!("Reached end of epoch. Proposing the same block again to form an eQC.");
+            let block_header = parent_leaf.block_header().clone();
+            tracing::debug!(
+                "Proposing block no. {} to form the eQC.",
+                block_header.block_number()
+            );
+            block_header
+        } else if version < V::Marketplace::VERSION {
             TYPES::BlockHeader::new_legacy(
                 state.as_ref(),
                 self.instance_state.as_ref(),
                 &parent_leaf,
                 commitment_and_metadata.commitment,
-                commitment_and_metadata.builder_commitment,
-                commitment_and_metadata.metadata,
+                builder_commitment,
+                metadata,
                 commitment_and_metadata.fees.first().clone(),
                 vid_share.data.common.clone(),
                 version,
@@ -202,7 +217,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let proposal = QuorumProposal {
             block_header,
             view_number: self.view_number,
-            justify_qc: self.consensus.read().await.high_qc().clone(),
+            justify_qc: high_qc,
             upgrade_certificate,
             proposal_certificate,
         };
