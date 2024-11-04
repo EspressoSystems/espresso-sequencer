@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["fs","no_storage","sql","testing"],"trait":["ChainConfigPersistence"]};
