@@ -113,7 +113,7 @@ impl PubsubClient for RpcClient {
     {
         match self {
             Self::Http(_) => Err(ProviderError::CustomError(
-                "subscriptions not supportedg with HTTP client".into(),
+                "subscriptions not supported with HTTP client".into(),
             )),
             Self::Ws(client) => Ok(client.unsubscribe(id)?),
         }
