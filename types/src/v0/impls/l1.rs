@@ -960,10 +960,6 @@ mod test {
     async fn test_get_stake_table() -> anyhow::Result<()> {
         setup_test();
 
-        // how many deposits will we make
-        let deposits = 5;
-        let deploy_txn_count = 2;
-
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
         let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
@@ -976,18 +972,24 @@ mod test {
             SignerMiddleware::new(provider.clone(), wallet.with_chain_id(anvil.chain_id()));
         let client = Arc::new(client);
 
-        // Initialize a contract with some deposits
+        // Initialize a contract with some stake TODO
 
-        // deploy the fee contract
-        let stake_table_contract =
-            contract_bindings::stake_table::StakeTable::deploy(client.clone(), ())
-                .unwrap()
-                .send()
-                .await?;
-        //     contract_bindings::fee_contract::FeeContract::deploy(Arc::new(client.clone()), ())
-        //         .unwrap()
-        //         .send()
-        //         .await?;
+        // deploy the stake_table contract
+        let stake_table_contract = contract_bindings::stake_table::StakeTable::deploy(
+            client.clone(),
+            (Address::default(), Address::default(), 64u64),
+        )
+        .unwrap()
+        .send()
+        .await?;
+
+        let epoch = stake_table_contract.current_epoch().call().await?;
+        assert_eq!(0, epoch);
+
+        let stake = stake_table_contract.total_stake().call().await?;
+        dbg!(&stake);
+
+        // let nodes = stake_table_contract.nodes.call().await?;
 
         Ok(())
     }
