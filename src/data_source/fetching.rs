@@ -718,7 +718,7 @@ where
         let fetch_vid = info.vid_common.is_none();
 
         // Trigger a fetch of the parent leaf, if we don't already have it.
-        leaf::trigger_fetch_for_parent(&self.fetcher, &info.leaf).await;
+        leaf::trigger_fetch_for_parent(&self.fetcher, &info.leaf);
 
         self.fetcher.store_and_notify(info).await;
 

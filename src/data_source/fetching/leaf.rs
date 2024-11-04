@@ -38,6 +38,8 @@ use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use std::sync::Arc;
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
+use tokio::spawn;
+use tracing::Instrument;
 
 pub(super) type LeafFetcher<Types, S, P> =
     fetching::Fetcher<request::LeafRequest<Types>, LeafCallback<Types, S, P>>;
@@ -208,7 +210,7 @@ where
 /// is not available. To ensure all these requests are eventually unblocked, and all leaves are
 /// eventually fetched, we call this function whenever we receive leaf `h + 1` to check if we need
 /// to then fetch leaf `h`.
-pub(super) async fn trigger_fetch_for_parent<Types, S, P>(
+pub(super) fn trigger_fetch_for_parent<Types, S, P>(
     fetcher: &Arc<Fetcher<Types, S, P>>,
     leaf: &LeafQueryData<Types>,
 ) where
@@ -221,49 +223,59 @@ pub(super) async fn trigger_fetch_for_parent<Types, S, P>(
 {
     let height = leaf.height();
     let parent = leaf.leaf().parent_commitment();
+    let parent_qc = leaf.leaf().justify_qc().commit();
 
     // Check that there is a parent to fetch.
     if height == 0 {
         return;
     }
 
-    // Check if we already have the parent.
-    match fetcher.storage.read().await {
-        Ok(mut tx) => {
-            if tx.get_leaf(((height - 1) as usize).into()).await.is_ok() {
-                return;
+    // Spawn an async task; we're triggering a fire-and-forget fetch of a leaf that might now be
+    // available; we don't need to block the caller on this.
+    let fetcher = fetcher.clone();
+    let span = tracing::info_span!("fetch parent leaf", height, %parent, %parent_qc);
+    spawn(
+        async move {
+            // Check if we already have the parent.
+            match fetcher.storage.read().await {
+                Ok(mut tx) => {
+                    if tx.get_leaf(((height - 1) as usize).into()).await.is_ok() {
+                        return;
+                    }
+                }
+                Err(err) => {
+                    // If we can't open a transaction, we can't be sure that we already have the parent, so
+                    // we fall through to fetching it just to be safe.
+                    tracing::warn!(
+                        height,
+                        %parent,
+                        "error opening transaction to check for parent leaf: {err:#}",
+                    );
+                }
             }
-        }
-        Err(err) => {
-            // If we can't open a transaction, we can't be sure that we already have the parent, so
-            // we fall through to fetching it just to be safe.
-            tracing::warn!(
-                height,
-                %parent,
-                "error opening transaction to check for parent leaf: {err:#}",
+
+            tracing::info!(height, %parent, "received new leaf; fetching missing parent");
+            fetcher.leaf_fetcher.clone().spawn_fetch(
+                request::LeafRequest::new(height - 1, parent, parent_qc),
+                fetcher.provider.clone(),
+                // After getting the leaf, grab the other data as well; that will be missing whenever the
+                // leaf was.
+                [
+                    LeafCallback::Leaf {
+                        fetcher: fetcher.clone(),
+                    },
+                    HeaderCallback::Payload {
+                        fetcher: fetcher.clone(),
+                    }
+                    .into(),
+                    HeaderCallback::VidCommon {
+                        fetcher: fetcher.clone(),
+                    }
+                    .into(),
+                ],
             );
         }
-    }
-
-    tracing::info!(height, %parent, "received new leaf; fetching missing parent");
-    fetcher.leaf_fetcher.clone().spawn_fetch(
-        request::LeafRequest::new(height - 1, parent, leaf.leaf().justify_qc().commit()),
-        fetcher.provider.clone(),
-        // After getting the leaf, grab the other data as well; that will be missing whenever the
-        // leaf was.
-        [
-            LeafCallback::Leaf {
-                fetcher: fetcher.clone(),
-            },
-            HeaderCallback::Payload {
-                fetcher: fetcher.clone(),
-            }
-            .into(),
-            HeaderCallback::VidCommon {
-                fetcher: fetcher.clone(),
-            }
-            .into(),
-        ],
+        .instrument(span),
     );
 }
 
@@ -361,7 +373,7 @@ where
             Self::Leaf { fetcher } => {
                 tracing::info!("fetched leaf {}", leaf.height());
                 // Trigger a fetch of the parent leaf, if we don't already have it.
-                trigger_fetch_for_parent(&fetcher, &leaf).await;
+                trigger_fetch_for_parent(&fetcher, &leaf);
                 fetcher.store_and_notify(leaf).await;
             }
             Self::Continuation { callback } => callback.run(leaf.leaf.block_header().clone()),
