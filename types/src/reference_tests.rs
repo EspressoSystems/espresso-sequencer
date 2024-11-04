@@ -180,7 +180,7 @@ fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Deb
     setup_test();
 
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let data_dir = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("../data")
         .join(version);
 

@@ -13,11 +13,12 @@ use jf_vid::VidScheme;
 use sha2::Digest;
 use thiserror::Error;
 
+use crate::Transaction;
 use crate::{
     v0::impls::{NodeState, ValidatedState},
     v0_1::ChainConfig,
     Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
-    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxProof,
+    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, TxProof,
 };
 
 #[derive(serde::Deserialize, serde::Serialize, Error, Debug, Eq, PartialEq)]
@@ -79,23 +80,16 @@ impl Payload {
         <Self as BlockPayload<SeqTypes>>::Error,
     > {
         // accounting for block byte length limit
-        let max_block_byte_len: usize = u64::from(chain_config.max_block_size)
-            .try_into()
-            .expect("too large max block size for architecture");
-        let mut block_byte_len = NsTableBuilder::header_byte_len();
+        let max_block_byte_len = u64::from(chain_config.max_block_size);
+        let mut block_byte_len = NsTableBuilder::header_byte_len() as u64;
 
         // add each tx to its namespace
         let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
-            let mut tx_size = tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
-            if !ns_builders.contains_key(&tx.namespace()) {
-                // each new namespace adds overhead
-                tx_size +=
-                    NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
-            }
+            let tx_size = tx.size_in_block(!ns_builders.contains_key(&tx.namespace()));
 
             if tx_size > max_block_byte_len {
-                // skip this transaction since it excceds the block size limit
+                // skip this transaction since it exceeds the block size limit
                 tracing::warn!(
                     "skip the transaction to fit in maximum block byte length {max_block_byte_len}, transaction size {tx_size}"
                 );

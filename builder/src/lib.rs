@@ -73,7 +73,7 @@ pub mod testing {
             node_implementation::{ConsensusTime, NodeType, Versions},
             signature_key::BuilderSignatureKey as _,
         },
-        ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+        HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use sequencer::{context::Consensus, network, SequencerApiVersion};
     use std::{
@@ -110,28 +110,16 @@ pub mod testing {
             let (
                 priv_keys_non_staking_nodes,
                 non_staking_nodes_state_key_pairs,
-                known_nodes_without_stake,
+                _known_nodes_without_stake,
             ) = generate_stake_table_entries(num_nodes_without_stake as u64, 0);
-
-            // get the pub key out of the stake table entry for the non-staking nodes
-            // Only pass the pub keys to the hotshot config
-            let known_nodes_without_stake_pub_keys = known_nodes_without_stake
-                .iter()
-                .map(|x| <BLSPubKey as SignatureKey>::public_key(&x.stake_table_entry))
-                .collect::<Vec<_>>();
 
             let builder_url = hotshot_builder_url();
 
             let config: HotShotConfig<PubKey> = HotShotConfig {
-                execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
-                known_nodes_without_stake: known_nodes_without_stake_pub_keys,
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
-                timeout_ratio: (10, 11),
-                round_start_delay: Duration::from_millis(1).as_millis() as u64,
-                start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes_with_stake,
                 my_own_validator_config: Default::default(),
@@ -233,7 +221,9 @@ pub mod testing {
                 }
             } else {
                 ValidatorConfig {
-                    public_key: self.config.known_nodes_without_stake[i],
+                    public_key: self.config.known_nodes_with_stake[i]
+                        .stake_table_entry
+                        .stake_key,
                     private_key: self.priv_keys_non_staking_nodes[i].clone(),
                     stake_value: 0,
                     state_key_pair: self.non_staking_nodes_state_key_pairs[i].clone(),

@@ -816,7 +816,6 @@ fn start_orchestrator(port: u16, nodes: &[NodeParams], builder_port: u16) -> Joi
     config.config.da_staked_committee_size = num_nodes;
     config.config.known_nodes_with_stake = vec![];
     config.config.known_da_nodes = vec![];
-    config.config.known_nodes_without_stake = vec![];
     config.config.next_view_timeout = view_timeout.as_millis() as u64;
     config.config.builder_timeout = builder_timeout;
     config.config.builder_urls = vec1![format!("http://localhost:{builder_port}").parse().unwrap()];
