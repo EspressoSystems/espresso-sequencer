@@ -53,7 +53,6 @@ csv = "1"
 derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
-dyn-clone = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }

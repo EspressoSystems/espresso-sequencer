@@ -5,7 +5,6 @@ use std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 use anyhow::{bail, ensure, Context};
 use async_trait::async_trait;
 use committable::Commitment;
-use dyn_clone::DynClone;
 use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
@@ -642,16 +641,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
 }
 
 #[async_trait]
-pub trait EventConsumer: Debug + DynClone + Send + Sync {
+pub trait EventConsumer: Debug + Send + Sync {
     async fn handle_event(&self, event: &Event) -> anyhow::Result<()>;
 }
-
-dyn_clone::clone_trait_object!(EventConsumer);
 
 #[async_trait]
 impl<T> EventConsumer for Box<T>
 where
-    Self: Clone,
     T: EventConsumer + ?Sized,
 {
     async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
