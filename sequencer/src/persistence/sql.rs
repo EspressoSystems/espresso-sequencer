@@ -291,6 +291,7 @@ impl PersistenceOptions for Options {
 }
 
 /// Postgres-backed persistence.
+#[derive(Debug)]
 pub struct Persistence {
     db: SqlStorage,
     store_undecided_state: bool,
