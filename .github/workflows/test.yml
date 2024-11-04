@@ -183,11 +183,11 @@ jobs:
 
       - name: Test Integration
         env:
-        NEXTEST_PROFILE: integration
-        INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
+          NEXTEST_PROFILE: integration
+          INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
         run: |
           cargo nextest run --archive-file nextest-archive.tar.zst --verbose --no-fail-fast \
-            --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "02" ]; then echo " smoke"; fi)
+          --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "02" ]; then echo " smoke"; fi)
         timeout-minutes: 40
 
       - name: Process Compose Down
