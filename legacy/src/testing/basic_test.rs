@@ -185,7 +185,7 @@ mod tests {
         };
 
         // generate num_test messages for each type and send it to the respective channels;
-        for round in 0..(num_test_messages - 1) as u32 {
+        for round in 0..num_test_messages as u32 {
             // Submit Transactions to the Builder
             {
                 // Prepare the transaction message
