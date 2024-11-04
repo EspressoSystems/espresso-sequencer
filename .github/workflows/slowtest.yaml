@@ -1,16 +1,6 @@
 name: Slow Test
 
 on:
-  workflow_run:
-    workflows: [Build]
-    types:
-      - completed
-    branches:
-      - main
-      - release-*
-  workflow_dispatch:
-
-on:
   push:
     branches:
       - main
