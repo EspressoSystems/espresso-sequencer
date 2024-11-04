@@ -9,9 +9,10 @@ use std::{
 use anyhow::{ensure, Context, Result as AnyhowResult};
 use async_compatibility_layer::art::async_timeout;
 use futures::{future::poll_fn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::traits::{
-    election::Membership, node_implementation::NodeType, signature_key::SignatureKey,
+    election::Membership,
+    node_implementation::{ConsensusTime, NodeType},
+    signature_key::SignatureKey,
 };
 use libp2p::{
     core::{muxing::StreamMuxerExt, transport::TransportEvent, StreamMuxer},
@@ -519,6 +520,7 @@ pub async fn write_length_delimited<S: AsyncWrite + Unpin>(
 mod test {
     use std::sync::Arc;
 
+    use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::{
         light_client::StateVerKey,
         signature_key::BLSPubKey,
@@ -529,7 +531,6 @@ mod test {
     use rand::Rng;
 
     use super::*;
-    use hotshot_example_types::node_types::TestTypes;
 
     /// A mock type to help with readability
     type MockStakeTableAuth = StakeTableAuthentication<DummyTransport, TestTypes, Connection>;

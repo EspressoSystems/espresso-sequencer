@@ -6,12 +6,6 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::quorum_vote::handlers::{submit_vote, update_shared_state};
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-    quorum_vote::handlers::handle_quorum_proposal_validated,
-};
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -22,10 +16,9 @@ use hotshot_task::{
     dependency_task::{DependencyTask, HandleDepOutput},
     task::TaskState,
 };
-use hotshot_types::data::QuorumProposal;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{Leaf, ViewNumber},
+    data::{Leaf, QuorumProposal, ViewNumber},
     event::Event,
     message::{Proposal, UpgradeLock},
     traits::{
@@ -44,6 +37,12 @@ use tokio::task::JoinHandle;
 use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
+
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+    quorum_vote::handlers::{handle_quorum_proposal_validated, submit_vote, update_shared_state},
+};
 
 /// Event handlers for `QuorumProposalValidated`.
 mod handlers;

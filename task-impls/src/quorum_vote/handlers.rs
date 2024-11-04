@@ -9,30 +9,29 @@ use std::sync::Arc;
 use async_broadcast::{InactiveReceiver, Sender};
 use async_lock::RwLock;
 use chrono::Utc;
-use hotshot_types::data::{Leaf, VidDisperseShare};
-use hotshot_types::message::{Proposal, UpgradeLock};
-use hotshot_types::simple_vote::{QuorumData, QuorumVote};
-use hotshot_types::traits::ValidatedState;
-use hotshot_types::traits::{election::Membership, signature_key::SignatureKey};
-use hotshot_types::utils::{View, ViewInner};
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::QuorumProposal,
+    data::{Leaf, QuorumProposal, VidDisperseShare},
     event::{Event, EventType},
+    message::{Proposal, UpgradeLock},
+    simple_vote::{QuorumData, QuorumVote},
     traits::{
+        election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        signature_key::SignatureKey,
         storage::Storage,
+        ValidatedState,
     },
+    utils::{View, ViewInner},
     vote::HasViewNumber,
 };
 use tracing::instrument;
 use utils::anytrace::*;
 
 use super::QuorumVoteTaskState;
-use crate::helpers::fetch_proposal;
 use crate::{
     events::HotShotEvent,
-    helpers::{broadcast_event, decide_from_proposal, LeafChainTraversalOutcome},
+    helpers::{broadcast_event, decide_from_proposal, fetch_proposal, LeafChainTraversalOutcome},
     quorum_vote::Versions,
 };
 

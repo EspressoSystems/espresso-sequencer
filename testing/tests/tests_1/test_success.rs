@@ -6,11 +6,10 @@
 
 use std::time::Duration;
 
-use hotshot_example_types::node_types::EpochsTestVersions;
 use hotshot_example_types::{
     node_types::{
-        Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestTypes,
-        TestTypesRandomizedLeader, TestVersions,
+        EpochsTestVersions, Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes,
+        TestTypes, TestTypesRandomizedLeader, TestVersions,
     },
     testable_delay::{DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay},
 };

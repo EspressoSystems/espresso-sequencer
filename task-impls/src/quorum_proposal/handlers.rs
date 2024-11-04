@@ -9,11 +9,6 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
-    quorum_proposal::{UpgradeLock, Versions},
-};
 use anyhow::{ensure, Context, Result};
 use async_broadcast::{InactiveReceiver, Sender};
 use async_compatibility_layer::art::async_spawn;
@@ -34,6 +29,12 @@ use hotshot_types::{
 use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
+
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
+    quorum_proposal::{UpgradeLock, Versions},
+};
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]

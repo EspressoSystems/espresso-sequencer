@@ -19,10 +19,7 @@ use tracing::instrument;
 use utils::anytrace::*;
 use vec1::Vec1;
 
-use crate::traits::block_contents::BlockHeader;
-use crate::utils::Terminator::Inclusive;
 pub use crate::utils::{View, ViewInner};
-use crate::vote::Certificate;
 use crate::{
     data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
     error::HotShotError,
@@ -30,15 +27,15 @@ use crate::{
     message::{Proposal, UpgradeLock},
     simple_certificate::{DaCertificate, QuorumCertificate},
     traits::{
-        block_contents::BuilderFee,
+        block_contents::{BlockHeader, BuilderFee},
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
-    utils::{BuilderCommitment, StateAndDelta, Terminator},
+    utils::{BuilderCommitment, StateAndDelta, Terminator, Terminator::Inclusive},
     vid::VidCommitment,
-    vote::HasViewNumber,
+    vote::{Certificate, HasViewNumber},
 };
 
 /// A type alias for `HashMap<Commitment<T>, T>`
@@ -492,7 +489,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_view(&mut self, view_number: TYPES::View) -> Result<()> {
         ensure!(
             view_number > self.cur_view,
-            "New view isn't newer than the current view."
+            debug!("New view isn't newer than the current view.")
         );
         self.cur_view = view_number;
         Ok(())
@@ -504,7 +501,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_epoch(&mut self, epoch_number: TYPES::Epoch) -> Result<()> {
         ensure!(
             epoch_number > self.cur_epoch,
-            "New epoch isn't newer than the current epoch."
+            debug!("New epoch isn't newer than the current epoch.")
         );
         self.cur_epoch = epoch_number;
         Ok(())
@@ -556,7 +553,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
                     .last_proposals
                     .last_key_value()
                     .map_or(TYPES::View::genesis(), |(k, _)| { *k }),
-            "New view isn't newer than the previously proposed view."
+            debug!("New view isn't newer than the previously proposed view.")
         );
         self.last_proposals
             .insert(proposal.data.view_number(), proposal);
@@ -570,7 +567,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_last_decided_view(&mut self, view_number: TYPES::View) -> Result<()> {
         ensure!(
             view_number > self.last_decided_view,
-            "New view isn't newer than the previously decided view."
+            debug!("New view isn't newer than the previously decided view.")
         );
         self.last_decided_view = view_number;
         Ok(())
@@ -583,7 +580,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_locked_view(&mut self, view_number: TYPES::View) -> Result<()> {
         ensure!(
             view_number > self.locked_view,
-            "New view isn't newer than the previously locked view."
+            debug!("New view isn't newer than the previously locked view.")
         );
         self.locked_view = view_number;
         Ok(())
@@ -612,7 +609,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
                 {
                     ensure!(
                          new_delta.is_some() || existing_delta.is_none(),
-                         "Skipping the state update to not override a `Leaf` view with `Some` state delta."
+                         debug!("Skipping the state update to not override a `Leaf` view with `Some` state delta.")
                      );
                 } else {
                     bail!("Skipping the state update to not override a `Leaf` view with a non-`Leaf` view.");
@@ -656,7 +653,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn update_high_qc(&mut self, high_qc: QuorumCertificate<TYPES>) -> Result<()> {
         ensure!(
             high_qc.view_number > self.high_qc.view_number || high_qc == self.high_qc,
-            "High QC with an equal or higher view exists."
+            debug!("High QC with an equal or higher view exists.")
         );
         tracing::debug!("Updating high QC");
         self.high_qc = high_qc;
