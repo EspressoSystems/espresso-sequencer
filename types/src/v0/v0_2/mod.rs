@@ -4,7 +4,7 @@ use vbs::version::Version;
 pub use super::v0_1::{
     AccountQueryData, BlockMerkleCommitment, BlockMerkleTree, BlockSize, BuilderSignature,
     ChainConfig, ChainId, Delta, FeeAccount, FeeAccountProof, FeeAmount, FeeInfo,
-    FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, Header, Index, Iter, L1BlockInfo, L1Client,
+    FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, Header, Index, Iter, L1BlockInfo, L1Client, L1ClientOptions,
     L1Snapshot, NamespaceId, NsIndex, NsIter, NsPayload, NsPayloadBuilder, NsPayloadByteLen,
     NsPayloadOwned, NsPayloadRange, NsProof, NsTable, NsTableBuilder, NsTableValidationError,
     NumNss, NumTxs, NumTxsRange, NumTxsUnchecked, Payload, PayloadByteLen, ResolvableChainConfig,

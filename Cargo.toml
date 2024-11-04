@@ -54,7 +54,7 @@ derive_more = "0.99.17"
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
 dotenvy = "0.15"
 dyn-clone = "1.0"
-ethers = { version = "2.0", features = ["solc"] }
+ethers = { version = "2.0", features = ["solc", "ws"] }
 futures = "0.3"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.79" }
@@ -114,6 +114,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 libp2p = { version = "0.53", default-features = false }
 log-panics = { version = "2.0", features = ["with-backtrace"] }
+lru = "0.12"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
 sqlx = "0.8"

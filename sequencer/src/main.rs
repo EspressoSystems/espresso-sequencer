@@ -150,7 +150,7 @@ where
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        events_max_block_range: opt.l1_events_max_block_range,
+        options: opt.l1_options,
     };
 
     let network_params = NetworkParams {
