@@ -220,6 +220,10 @@ impl L1Client {
         }
     }
 
+    pub fn provider(&self) -> &impl Middleware<Error: 'static> {
+        &self.provider
+    }
+
     fn update_loop(&self) -> impl Future<Output = ()> {
         let rpc = self.provider.clone();
         let retry_delay = self.retry_delay;
