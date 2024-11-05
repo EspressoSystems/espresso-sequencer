@@ -57,7 +57,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     sender_public_key: TYPES::SignatureKey,
     sender_private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: &UpgradeLock<TYPES, V>,
-) -> Result<Leaf<TYPES>> {
+) -> Result<(Leaf<TYPES>, View<TYPES>)> {
     // We need to be able to sign this request before submitting it to the network. Compute the
     // payload first.
     let signed_proposal_request = ProposalRequestPayload {
@@ -162,11 +162,11 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
         .await;
 
     broadcast_event(
-        HotShotEvent::ValidatedStateUpdated(view_number, view).into(),
+        HotShotEvent::ValidatedStateUpdated(view_number, view.clone()).into(),
         &event_sender,
     )
     .await;
-    Ok(leaf)
+    Ok((leaf, view))
 }
 
 /// Helper type to give names and to the output values of the leaf chain traversal operation.
@@ -371,6 +371,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     consensus: OuterConsensus<TYPES>,
     upgrade_lock: &UpgradeLock<TYPES, V>,
+    parent_view_number: TYPES::View,
 ) -> Result<(Leaf<TYPES>, Arc<<TYPES as NodeType>::ValidatedState>)> {
     let consensus_reader = consensus.read().await;
     let cur_epoch = consensus_reader.cur_epoch();
@@ -381,7 +382,6 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
             next_proposal_view_number
         )
     );
-    let parent_view_number = consensus_reader.high_qc().view_number();
     let vsm_contains_parent_view = consensus_reader
         .validated_state_map()
         .contains_key(&parent_view_number);
@@ -403,7 +403,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
     }
 
     let consensus_reader = consensus.read().await;
-    let parent_view_number = consensus_reader.high_qc().view_number();
+    //let parent_view_number = consensus_reader.high_qc().view_number();
     let parent_view = consensus_reader.validated_state_map().get(&parent_view_number).context(
         debug!("Couldn't find parent view in state map, waiting for replica to see proposal; parent_view_number: {}", *parent_view_number)
     )?;

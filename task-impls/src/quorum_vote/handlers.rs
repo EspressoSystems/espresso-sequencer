@@ -172,43 +172,69 @@ pub(crate) async fn update_shared_state<
     storage: Arc<RwLock<I::Storage>>,
     proposed_leaf: &Leaf<TYPES>,
     vid_share: &Proposal<TYPES, VidDisperseShare<TYPES>>,
+    parent_view_number: Option<TYPES::View>,
 ) -> Result<()> {
     let justify_qc = &proposed_leaf.justify_qc();
 
+    let consensus_reader = consensus.read().await;
+    // Try to find the validated vview within the validasted state map. This will be present
+    // if we have the saved leaf, but if not we'll get it when we fetch_proposal.
+    let mut maybe_validated_view = parent_view_number.and_then(|view_number| {
+        consensus_reader
+            .validated_state_map()
+            .get(&view_number)
+            .cloned()
+    });
+
     // Justify qc's leaf commitment should be the same as the parent's leaf commitment.
-    let mut maybe_parent = consensus
-        .read()
-        .await
+    let mut maybe_parent = consensus_reader
         .saved_leaves()
         .get(&justify_qc.data.leaf_commit)
         .cloned();
+
+    drop(consensus_reader);
+
     maybe_parent = match maybe_parent {
         Some(p) => Some(p),
-        None => fetch_proposal(
-            justify_qc.view_number(),
-            sender.clone(),
-            receiver.activate_cloned(),
-            Arc::clone(&quorum_membership),
-            OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
-            public_key.clone(),
-            private_key.clone(),
-            &upgrade_lock,
-        )
-        .await
-        .ok(),
+        None => {
+            match fetch_proposal(
+                justify_qc.view_number(),
+                sender.clone(),
+                receiver.activate_cloned(),
+                Arc::clone(&quorum_membership),
+                OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
+                public_key.clone(),
+                private_key.clone(),
+                &upgrade_lock,
+            )
+            .await
+            .ok()
+            {
+                Some((leaf, view)) => {
+                    maybe_validated_view = Some(view);
+                    Some(leaf)
+                }
+                None => None,
+            }
+        }
     };
+
     let parent = maybe_parent.context(info!(
         "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
         justify_qc.data.leaf_commit,
         proposed_leaf.view_number(),
     ))?;
-    let consensus_reader = consensus.read().await;
 
-    let (Some(parent_state), _) = consensus_reader.state_and_delta(parent.view_number()) else {
-        bail!("Parent state not found! Consensus internally inconsistent");
+    let Some(validated_view) = maybe_validated_view else {
+        bail!(
+            "Failed to fetch view for parent, parent view {:?}",
+            parent_view_number
+        );
     };
 
-    drop(consensus_reader);
+    let (Some(parent_state), _) = validated_view.state_and_delta() else {
+        bail!("Parent state not found! Consensus internally inconsistent");
+    };
 
     let version = upgrade_lock.version(view_number).await?;
 

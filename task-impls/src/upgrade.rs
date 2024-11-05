@@ -37,7 +37,7 @@ use crate::{
     vote_collection::{handle_vote, VoteCollectorsMap},
 };
 
-/// Tracks state of a DA task
+/// Tracks state of an upgrade task
 pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
@@ -50,6 +50,7 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ve
 
     /// Membership for Quorum Certs/votes
     pub quorum_membership: Arc<TYPES::Membership>,
+
     /// The underlying network
     pub network: Arc<I::Network>,
 
