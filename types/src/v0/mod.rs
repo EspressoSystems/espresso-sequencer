@@ -183,7 +183,7 @@ pub type NetworkConfig = hotshot_types::network::NetworkConfig<PubKey>;
 
 pub use self::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};
 pub use crate::v0_1::{
-    BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
-    NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+    BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_ARITY, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN,
+    NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 use crate::v0_3::SolverAuctionResults;

@@ -7,8 +7,11 @@ use std::{
 
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{FeeAccount, NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{
+    FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction, FEE_MERKLE_TREE_ARITY,
+};
 use futures::{try_join, FutureExt};
+use hotshot_query_service::merklized_state::Snapshot;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
     explorer::{self, ExplorerDataSource},
@@ -43,6 +46,41 @@ use crate::{SeqTypes, SequencerApiVersion, SequencerPersistence};
 pub struct NamespaceProofQueryData {
     pub proof: Option<NsProof>,
     pub transactions: Vec<Transaction>,
+}
+
+pub(super) fn get_balance<State, Ver>() -> Result<Api<State, merklized_state::Error, Ver>>
+where
+    State: 'static + Send + Sync + ReadState,
+    Ver: 'static + StaticVersionType,
+    <State as ReadState>::State: Send
+        + Sync
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, FEE_MERKLE_TREE_ARITY>
+        + MerklizedStateHeightPersistence,
+{
+    let mut options = merklized_state::Options::default();
+    let extension = toml::from_str(include_str!("../../api/merklized_state.toml"))?;
+    options.extensions.push(extension);
+
+    let mut api =
+        merklized_state::define_api::<State, SeqTypes, FeeMerkleTree, Ver, 256>(&options)?;
+
+    api.get("getfeebalance", move |req, state| {
+        async move {
+            let address = req.string_param("address")?;
+            let height = state.get_last_state_height().await?;
+            let snapshot = Snapshot::Index(height as u64);
+            let key = address
+                .parse()
+                .map_err(|_| merklized_state::Error::Custom {
+                    message: "failed to parse address".to_string(),
+                    status: StatusCode::BAD_REQUEST,
+                })?;
+            let path = state.get_path(snapshot, key).await?;
+            Ok(path.elem().copied())
+        }
+        .boxed()
+    })?;
+    Ok(api)
 }
 
 pub(super) type AvailState<N, P, D, ApiVer> = ApiState<StorageState<N, P, D, ApiVer>>;
