@@ -218,9 +218,9 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
 /// [HotStuff](https://arxiv.org/pdf/1803.05069) section 5:
 ///
 /// > When a node b* carries a QC that refers to a direct parent, i.e., b*.justify.node = b*.parent,
-/// we say that it forms a One-Chain. Denote by b'' = b*.justify.node. Node b* forms a Two-Chain,
-/// if in addition to forming a One-Chain, b''.justify.node = b''.parent.
-/// It forms a Three-Chain, if b'' forms a Two-Chain.
+/// > we say that it forms a One-Chain. Denote by b'' = b*.justify.node. Node b* forms a Two-Chain,
+/// > if in addition to forming a One-Chain, b''.justify.node = b''.parent.
+/// > It forms a Three-Chain, if b'' forms a Two-Chain.
 ///
 /// We follow this exact logic to determine if we are able to reach a commit and a decide. A commit
 /// is reached when we have a two chain, and a decide is reached when we have a three chain.

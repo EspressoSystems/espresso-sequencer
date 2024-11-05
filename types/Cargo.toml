@@ -48,7 +48,7 @@ serde_bytes = { workspace = true }
 tagged-base64 = { workspace = true }
 vbs = { workspace = true }
 displaydoc = { version = "0.2.5", default-features = false }
-dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.17" }
+dyn-clone = "1.0.17"
 url = { workspace = true }
 utils = { path = "../utils" }
 vec1 = { workspace = true }

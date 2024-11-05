@@ -373,7 +373,7 @@ pub struct QuorumProposal<TYPES: NodeType> {
     /// Possible timeout or view sync certificate.
     /// - A timeout certificate is only present if the justify_qc is not for the preceding view
     /// - A view sync certificate is only present if the justify_qc and timeout_cert are not
-    /// present.
+    ///   present.
     pub proposal_certificate: Option<ViewChangeEvidence<TYPES>>,
 }
 
@@ -817,7 +817,7 @@ pub mod null_block {
     #[memoize(SharedCache, Capacity: 10)]
     #[must_use]
     pub fn commitment(num_storage_nodes: usize) -> Option<VidCommitment> {
-        let vid_result = vid_scheme(num_storage_nodes).commit_only(&Vec::new());
+        let vid_result = vid_scheme(num_storage_nodes).commit_only(Vec::new());
 
         match vid_result {
             Ok(r) => Some(r),

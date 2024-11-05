@@ -472,9 +472,8 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
     ) -> Result<(), NetworkError> {
         self.broadcast_message(message, topic.into())
             .await
-            .map_err(|e| {
+            .inspect_err(|_e| {
                 self.metrics.num_failed_messages.add(1);
-                e
             })
     }
 
@@ -491,9 +490,8 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
     ) -> Result<(), NetworkError> {
         self.broadcast_message(message, Topic::Da)
             .await
-            .map_err(|e| {
+            .inspect_err(|_e| {
                 self.metrics.num_failed_messages.add(1);
-                e
             })
     }
 

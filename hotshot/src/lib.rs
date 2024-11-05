@@ -1029,9 +1029,9 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     ///
     /// # Arguments
     /// *  `start_view` - The minimum view number that we are confident won't lead to a double vote
-    /// after restart.
+    ///     after restart.
     /// * `validated_state` - Optional validated state that if given, will be used to construct the
-    /// `SystemContext`.
+    ///     `SystemContext`.
     #[allow(clippy::too_many_arguments)]
     pub fn from_reload(
         anchor_leaf: Leaf<TYPES>,

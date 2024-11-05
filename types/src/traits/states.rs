@@ -41,7 +41,8 @@ pub trait StateDelta:
 ///   * The type of block that modifies this type of state ([`BlockPayload`](`ValidatedStates::
 /// BlockPayload`))
 ///   * The ability to validate that a block header is actually a valid extension of this state and
-/// produce a new state, with the modifications from the block applied
+///     produce a new state, with the modifications from the block applied
+///
 /// ([`validate_and_apply_header`](`ValidatedState::validate_and_apply_header))
 pub trait ValidatedState<TYPES: NodeType>:
     Serialize + DeserializeOwned + Debug + Default + PartialEq + Eq + Send + Sync + Clone
