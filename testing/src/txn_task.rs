@@ -38,7 +38,6 @@ pub struct TxnTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Ver
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TxnTask<TYPES, I, V> {
     pub fn run(mut self) -> JoinHandle<()> {
         async_spawn(async move {
-            async_sleep(Duration::from_millis(100)).await;
             loop {
                 async_sleep(self.duration).await;
                 if let Ok(TestEvent::Shutdown) = self.shutdown_chan.try_recv() {

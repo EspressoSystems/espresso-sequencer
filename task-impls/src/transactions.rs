@@ -470,41 +470,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 .await;
             }
             HotShotEvent::ViewChange(view) => {
-                let view = *view;
-
-                tracing::debug!("view change in transactions to view {:?}", view);
+                let view = TYPES::View::new(std::cmp::max(1, **view));
                 ensure!(
-                  *view > *self.cur_view || *self.cur_view == 0,
-                  debug!(
-                    "Received a view change to an older view: tried to change view to {:?} though we are at view {:?}", view, self.cur_view
-                  )
-                );
-
-                let mut make_block = false;
-                if *view - *self.cur_view > 1 {
-                    tracing::info!("View changed by more than 1 going to view {:?}", view);
-                    make_block = self.membership.leader(view, self.cur_epoch)? == self.public_key;
-                }
-                self.cur_view = view;
-
-                let next_view = self.cur_view + 1;
-                let next_leader =
-                    self.membership.leader(next_view, self.cur_epoch)? == self.public_key;
-
-                ensure!(
-                    make_block || next_leader,
+                    *view > *self.cur_view,
                     debug!(
-                        "Not making the block because we are not leader for view {:?}",
-                        self.cur_view
+                      "Received a view change to an older view: tried to change view to {:?} though we are at view {:?}", view, self.cur_view
                     )
                 );
-
-                if make_block {
-                    self.handle_view_change(&event_stream, self.cur_view).await;
-                }
-
-                if next_leader {
-                    self.handle_view_change(&event_stream, next_view).await;
+                self.cur_view = view;
+                if self.membership.leader(view, self.cur_epoch)? == self.public_key {
+                    self.handle_view_change(&event_stream, view).await;
+                    return Ok(());
                 }
             }
             _ => {}
@@ -748,7 +724,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             ) {
                 Ok(request_signature) => request_signature,
                 Err(err) => {
-                    tracing::warn!(%err, "Failed to sign block hash");
+                    tracing::error!(%err, "Failed to sign block hash");
                     continue;
                 }
             };

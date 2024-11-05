@@ -309,15 +309,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     tracing::info!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-
-                // If we are not the next leader (DA leader for this view) immediately exit
-                ensure!(
-                    self.da_membership
-                        .leader(self.cur_view + 1, self.cur_epoch)?
-                        == self.public_key
-                );
-
-                tracing::debug!("Polling for DA votes for view {}", *self.cur_view + 1);
             }
             HotShotEvent::BlockRecv(packed_bundle) => {
                 let PackedBundle::<TYPES> {

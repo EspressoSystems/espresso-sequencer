@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
@@ -351,6 +351,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
             storage: Arc::clone(&handle.storage()),
             consensus: Arc::clone(&handle.consensus()),
             upgrade_lock: handle.hotshot.upgrade_lock.clone(),
+            transmit_tasks: BTreeMap::new(),
         };
         let modified_network_state = NetworkEventTaskStateModifier {
             network_event_task_state: network_state,

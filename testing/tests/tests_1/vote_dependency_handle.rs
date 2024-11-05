@@ -80,6 +80,7 @@ async fn test_vote_dependency_handle() {
         // The outputs are static here, but we re-make them since we use `into_iter` below
         let outputs = vec![
             exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
+            exact(ViewChange(ViewNumber::new(3))),
             validated_state_updated(),
             quorum_vote_send(),
         ];

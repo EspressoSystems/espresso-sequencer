@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use async_broadcast::{Receiver, Sender};
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
@@ -31,7 +32,7 @@ use utils::anytrace::Result;
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
 };
-use crate::{events::HotShotEvent, vote_collection::VoteCollectorsMap};
+use crate::{events::HotShotEvent, helpers::cancel_task, vote_collection::VoteCollectorsMap};
 
 /// Event handlers for use in the `handle` method.
 mod handlers;
@@ -170,5 +171,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
     }
 
     /// Joins all subtasks.
-    async fn cancel_subtasks(&mut self) {}
+    async fn cancel_subtasks(&mut self) {
+        // Cancel the old timeout task
+        cancel_task(std::mem::replace(
+            &mut self.timeout_task,
+            async_spawn(async {}),
+        ))
+        .await;
+    }
 }

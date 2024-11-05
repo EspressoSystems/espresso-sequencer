@@ -36,6 +36,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
 
     let current_view = ViewNumber::new(4);
     input.push(HotShotEvent::ViewChange(current_view));
+    input.push(HotShotEvent::ViewChange(current_view + 1));
     input.push(HotShotEvent::Shutdown);
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
 

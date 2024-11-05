@@ -439,7 +439,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
 
                     // Garbage collect old tasks
                     // We could put this into a separate async task, but that would require making several fields on ViewSyncTaskState thread-safe and harm readability.  In the common case this will have zero tasks to clean up.
-                    // cancel poll for votes
                     // run GC
                     for i in *self.last_garbage_collected_view..*self.cur_view {
                         self.replica_task_map
@@ -466,7 +465,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
             &HotShotEvent::Timeout(view_number) => {
                 // This is an old timeout and we can ignore it
                 ensure!(
-                    view_number > self.cur_view,
+                    view_number >= self.cur_view,
                     debug!("Discarding old timeout vote.")
                 );
 
@@ -495,7 +494,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     .await;
                 } else {
                     // If this is the first timeout we've seen advance to the next view
-                    self.cur_view = view_number;
+                    self.cur_view = view_number + 1;
                     broadcast_event(
                         Arc::new(HotShotEvent::ViewChange(TYPES::View::new(*self.cur_view))),
                         &event_stream,

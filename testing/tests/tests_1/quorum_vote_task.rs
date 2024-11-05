@@ -84,6 +84,7 @@ async fn test_quorum_vote_task_success() {
         exact(DaCertificateValidated(dacs[1].clone())),
         exact(VidShareValidated(vids[1].0[0].clone())),
         exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
+        exact(ViewChange(ViewNumber::new(3))),
         validated_state_updated(),
         quorum_vote_send(),
     ])];

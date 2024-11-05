@@ -498,6 +498,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             }
             if let Some((n_txn, _)) = self.num_txns_map.iter().last() {
                 if *n_txn < transaction_threshold {
+                    tracing::error!("not enough transactions for view {:?}", key.view_number());
                     self.status = ViewStatus::Failed;
                     return;
                 }

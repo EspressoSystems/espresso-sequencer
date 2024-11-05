@@ -51,7 +51,7 @@ async fn test_view_sync_task() {
 
     input.push(HotShotEvent::Shutdown);
 
-    output.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
+    output.push(HotShotEvent::ViewChange(ViewNumber::new(3)));
     output.push(HotShotEvent::ViewSyncPreCommitVoteSend(vote.clone()));
 
     let view_sync_state =
