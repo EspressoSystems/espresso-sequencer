@@ -183,21 +183,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     )
                 );
 
-                self.storage
-                    .write()
-                    .await
-                    .append_da(proposal)
-                    .await
-                    .wrap()
-                    .context(error!("Failed to append DA proposal to storage"))?;
-
                 let txns = Arc::clone(&proposal.data.encoded_transactions);
                 let num_nodes = self.quorum_membership.total_nodes(self.cur_epoch);
                 let payload_commitment =
                     spawn_blocking(move || vid_commitment(&txns, num_nodes)).await;
                 #[cfg(async_executor_impl = "tokio")]
                 let payload_commitment = payload_commitment.unwrap();
-
+                self.storage
+                    .write()
+                    .await
+                    .append_da(proposal, payload_commitment)
+                    .await
+                    .wrap()
+                    .context(error!("Failed to append DA proposal to storage"))?;
                 let view_number = proposal.data.view_number();
                 // Generate and send vote
                 let vote = DaVote::create_signed_vote(

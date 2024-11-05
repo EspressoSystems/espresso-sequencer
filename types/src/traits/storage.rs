@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use jf_vid::VidScheme;
 
 use super::node_implementation::NodeType;
 use crate::{
@@ -21,6 +22,7 @@ use crate::{
     event::HotShotAction,
     message::Proposal,
     simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    vid::VidSchemeType,
 };
 
 /// Abstraction for storing a variety of consensus payload datum.
@@ -29,7 +31,11 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     /// Add a proposal to the stored VID proposals.
     async fn append_vid(&self, proposal: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> Result<()>;
     /// Add a proposal to the stored DA proposals.
-    async fn append_da(&self, proposal: &Proposal<TYPES, DaProposal<TYPES>>) -> Result<()>;
+    async fn append_da(
+        &self,
+        proposal: &Proposal<TYPES, DaProposal<TYPES>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> Result<()>;
     /// Add a proposal we sent to the store
     async fn append_proposal(
         &self,

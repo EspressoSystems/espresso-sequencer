@@ -34,6 +34,7 @@ async-lock = { workspace = true }
 bitvec = { workspace = true }
 ethereum-types = { workspace = true }
 hotshot-task = { path = "../task" }
+jf-vid = { workspace = true }
 vbs = { workspace = true }
 url = { workspace = true }
 reqwest = { workspace = true }

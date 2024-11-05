@@ -9,6 +9,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
 use anyhow::{bail, Result};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -23,10 +24,10 @@ use hotshot_types::{
         storage::Storage,
     },
     utils::View,
+    vid::VidSchemeType,
     vote::HasViewNumber,
 };
-
-use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
+use jf_vid::VidScheme;
 
 type VidShares<TYPES> = HashMap<
     <TYPES as NodeType>::View,
@@ -117,7 +118,11 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         Ok(())
     }
 
-    async fn append_da(&self, proposal: &Proposal<TYPES, DaProposal<TYPES>>) -> Result<()> {
+    async fn append_da(
+        &self,
+        proposal: &Proposal<TYPES, DaProposal<TYPES>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append VID proposal to storage");
         }
