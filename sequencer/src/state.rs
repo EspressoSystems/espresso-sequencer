@@ -4,7 +4,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{bail, ensure, Context};
 use async_std::stream::StreamExt;
 use espresso_types::{
-    traits::StateCatchup, v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
+    traits::StateCatchup, v0_99::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
     Leaf, ValidatedState,
 };
 use futures::future::Future;

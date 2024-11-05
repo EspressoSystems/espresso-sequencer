@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use committable::Committable;
 use espresso_types::{
-    v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
+    v0_99::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
     MarketplaceVersion, SeqTypes, Update,
 };
 use hotshot::types::BLSPubKey;

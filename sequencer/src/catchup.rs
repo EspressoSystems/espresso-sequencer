@@ -6,7 +6,7 @@ use committable::Commitment;
 use committable::Committable;
 use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
-    v0_3::ChainConfig,
+    v0_99::ChainConfig,
     BackoffParams, BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment,
     FeeMerkleTree, Leaf, NodeState,
 };

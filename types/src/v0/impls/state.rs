@@ -31,7 +31,7 @@ use super::{
 };
 use crate::{
     traits::StateCatchup,
-    v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
+    v0_99::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
     BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,
@@ -1063,7 +1063,7 @@ mod test {
     use crate::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
         v0_1, v0_2,
-        v0_3::{self, BidTx},
+        v0_99::{self, BidTx},
         BlockSize, FeeAccountProof, FeeMerkleProof, Payload, Transaction,
     };
 
@@ -1098,7 +1098,9 @@ mod test {
                     timestamp: OffsetDateTime::now_utc().unix_timestamp() as u64,
                     ..parent.clone()
                 }),
-                Header::V3(_) => panic!("You called `Header.next()` on unimplemented version (v3)"),
+                Header::V99(_) => {
+                    panic!("You called `Header.next()` on unimplemented version (v3)")
+                }
             }
         }
         /// Replaces builder signature w/ invalid one.
@@ -1121,7 +1123,9 @@ mod test {
                     builder_signature: Some(sig),
                     ..header.clone()
                 }),
-                Header::V3(_) => panic!("You called `Header.sign()` on unimplemented version (v3)"),
+                Header::V99(_) => {
+                    panic!("You called `Header.sign()` on unimplemented version (v3)")
+                }
             }
         }
 
@@ -1148,7 +1152,7 @@ mod test {
                     builder_signature: Some(sig),
                     ..parent.clone()
                 }),
-                Header::V3(_) => panic!(
+                Header::V99(_) => panic!(
                     "You called `Header.invalid_builder_signature()` on unimplemented version (v3)"
                 ),
             }
@@ -1777,7 +1781,7 @@ mod test {
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            Header::V3(header) => Header::V3(v0_3::Header {
+            Header::V99(header) => Header::V99(v0_99::Header {
                 builder_signature: vec![sig],
                 fee_info: vec![FeeInfo::new(account, data)],
                 ..header
@@ -1830,7 +1834,7 @@ mod test {
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            Header::V3(header) => Header::V3(v0_3::Header {
+            Header::V99(header) => Header::V99(v0_99::Header {
                 builder_signature: vec![sig],
                 fee_info: vec![FeeInfo::new(account, data)],
                 ..header

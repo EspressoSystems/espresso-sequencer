@@ -8,7 +8,7 @@ use committable::{Commitment, Committable};
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
+    retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
     BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
     PubKey, Transaction, ValidatedState,
 };

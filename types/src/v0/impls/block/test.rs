@@ -9,7 +9,7 @@ use rand::RngCore;
 use sequencer_utils::test_utils::setup_test;
 
 use crate::{
-    v0_3::ChainConfig, BlockSize, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
+    v0_99::ChainConfig, BlockSize, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
     ValidatedState,
 };
 

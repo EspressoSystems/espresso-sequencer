@@ -24,7 +24,7 @@ use hotshot_types::{
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    v0::impls::ValidatedState, v0_3::ChainConfig, BackoffParams, BlockMerkleTree, Event,
+    v0::impls::ValidatedState, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, Event,
     FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf, NetworkConfig, SeqTypes,
 };
 

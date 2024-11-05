@@ -9,7 +9,7 @@
 //! persistence which is _required_ to run a node.
 
 use async_trait::async_trait;
-use espresso_types::v0_3::ChainConfig;
+use espresso_types::v0_99::ChainConfig;
 use hotshot_query_service::data_source::fetching;
 
 use crate::SeqTypes;

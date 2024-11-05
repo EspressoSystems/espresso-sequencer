@@ -92,8 +92,8 @@ fn reference_l1_block() -> L1BlockInfo {
 
 const REFERENCE_L1_BLOCK_COMMITMENT: &str = "L1BLOCK~4HpzluLK2Isz3RdPNvNrDAyQcWOF2c9JeLZzVNLmfpQ9";
 
-fn reference_chain_config() -> crate::v0_3::ChainConfig {
-    crate::v0_3::ChainConfig {
+fn reference_chain_config() -> crate::v0_99::ChainConfig {
+    crate::v0_99::ChainConfig {
         chain_id: 0x8a19.into(),
         max_block_size: 10240.into(),
         base_fee: 0.into(),

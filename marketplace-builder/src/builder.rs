@@ -12,7 +12,7 @@ use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair,
-    v0_3::{ChainConfig, RollupRegistration},
+    v0_99::{ChainConfig, RollupRegistration},
     FeeAmount, L1Client, MarketplaceVersion, MockSequencerVersions, NamespaceId, NodeState,
     Payload, SeqTypes, SequencerVersions, ValidatedState, V0_1,
 };
@@ -285,7 +285,7 @@ mod test {
     use committable::Committable;
     use espresso_types::{
         mock::MockStateCatchup,
-        v0_3::{RollupRegistration, RollupRegistrationBody},
+        v0_99::{RollupRegistration, RollupRegistrationBody},
         Event, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, SequencerVersions,
         Transaction,
     };

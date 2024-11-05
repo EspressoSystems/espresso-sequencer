@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    v0_3::BidTxBody,
+    v0_99::BidTxBody,
     FeeVersion, MarketplaceVersion, SeqTypes, SequencerVersions,
 };
 use ethers::{

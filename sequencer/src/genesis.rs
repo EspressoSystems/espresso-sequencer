@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use espresso_types::{
-    v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, L1Client, Timestamp,
+    v0_99::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, L1Client, Timestamp,
     Upgrade, UpgradeType,
 };
 use ethers::types::H160;
