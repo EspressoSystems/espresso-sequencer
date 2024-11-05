@@ -1,0 +1,40 @@
+name: Build without committed Cargo.lock
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+    tags:
+      # YYYYMMDD
+      - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
+  schedule:
+    - cron: "0 0 * * 1"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+
+jobs:
+  build-ignore-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust
+
+      - name: Build without committed Cargo.lock
+        run: |
+          cargo generate-lockfile
+          cargo check --all-features --all-targets
