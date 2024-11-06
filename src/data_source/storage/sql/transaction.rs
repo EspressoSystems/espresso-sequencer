@@ -38,9 +38,8 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
-use anyhow::{bail, ensure, Context};
+use anyhow::{bail, Context};
 use ark_serialize::CanonicalSerialize;
-use async_std::task::sleep;
 use async_trait::async_trait;
 use committable::Committable;
 use derive_more::{Deref, DerefMut};
@@ -54,13 +53,12 @@ use hotshot_types::traits::{
 use itertools::Itertools;
 use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};
 use sqlx::{
-    pool::Pool, query_builder::Separated, types::BitVec, Encode, Execute, FromRow, QueryBuilder,
-    Type,
+    pool::Pool, query_builder::Separated, types::BitVec, Encode, FromRow, QueryBuilder, Type,
 };
 use std::{
     collections::{HashMap, HashSet},
     marker::PhantomData,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 pub use sqlx::Executor;

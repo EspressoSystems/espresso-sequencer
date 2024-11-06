@@ -24,18 +24,24 @@ use crate::{
 };
 use async_trait::async_trait;
 use chrono::Utc;
-use futures::future::FutureExt;
+
 use hotshot_types::traits::metrics::Metrics;
 use itertools::Itertools;
 use log::LevelFilter;
+
+#[cfg(not(feature = "embedded-db"))]
+use futures::future::FutureExt;
+#[cfg(not(feature = "embedded-db"))]
+use sqlx::postgres::{
+    Postgres, {PgConnectOptions, PgSslMode},
+};
+#[cfg(feature = "embedded-db")]
+use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{
     pool::{Pool, PoolOptions},
-    postgres::{PgConnectOptions, PgSslMode},
-    sqlite::{SqliteAutoVacuum, SqliteConnectOptions},
-    ConnectOptions, Connection, Postgres, Row,
+    ConnectOptions, Connection, Row,
 };
-use std::{cmp::min, fmt::Debug, path::PathBuf, str::FromStr, time::Duration};
-
+use std::{cmp::min, fmt::Debug, str::FromStr, time::Duration};
 pub extern crate sqlx;
 pub use sqlx::{Database, Sqlite};
 
@@ -200,7 +206,7 @@ where
     #[cfg(not(feature = "embedded-db"))]
     schema: String,
     #[cfg(feature = "embedded-db")]
-    path: PathBuf,
+    db_path: std::path::PathBuf,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
@@ -224,7 +230,8 @@ impl Default for Config<Postgres> {
 impl Default for Config<sqlx::Sqlite> {
     fn default() -> Self {
         SqliteConnectOptions::default()
-            .auto_vacuum(SqliteAutoVacuum::Incremental)
+            .busy_timeout(Duration::from_secs(30))
+            .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
             .into()
     }
 }
@@ -236,7 +243,7 @@ impl From<SqliteConnectOptions> for Config<Sqlite> {
         Self {
             db_opt,
             pool_opt: PoolOptions::default(),
-            path: db_path,
+            db_path,
             reset: false,
             migrations: vec![],
             no_migrations: false,
@@ -284,6 +291,11 @@ impl FromStr for Config<Sqlite> {
 impl Config<Sqlite> {
     pub fn busy_timeout(mut self, timeout: Duration) -> Self {
         self.db_opt = self.db_opt.busy_timeout(timeout);
+        self
+    }
+
+    pub fn db_path(mut self, path: std::path::PathBuf) -> Self {
+        self.db_path = path;
         self
     }
 }
@@ -342,6 +354,7 @@ impl Config<Postgres> {
         self
     }
 }
+
 impl<DB: Database> Config<DB> {
     /// Reset the schema on connection.
     ///
@@ -481,7 +494,7 @@ impl SqlStorage {
 
         #[cfg(feature = "embedded-db")]
         if config.reset {
-            std::fs::remove_file(config.path)?;
+            std::fs::remove_file(config.db_path)?;
         }
 
         let pool = pool.connect(config.db_opt.to_url_lossy().as_ref()).await?;
@@ -491,13 +504,13 @@ impl SqlStorage {
 
         #[cfg(not(feature = "embedded-db"))]
         if config.reset {
-            query(&format!("DROP SCHEMA IF EXISTS {} CASCADE", config.schema))
+            query(&format!("DROP SCHEMA IF EXISTS {} CASCADE", schema))
                 .execute(conn.as_mut())
                 .await?;
         }
 
         #[cfg(not(feature = "embedded-db"))]
-        query(&format!("CREATE SCHEMA IF NOT EXISTS {}", config.schema))
+        query(&format!("CREATE SCHEMA IF NOT EXISTS {}", schema))
             .execute(conn.as_mut())
             .await?;
 
@@ -642,7 +655,6 @@ impl PruneStorage for SqlStorage {
         let row = tx.fetch_one(query).await?;
         let size: i64 = row.get(0);
 
-        #[cfg(feature = "embedded-db")]
         Ok(size as u64)
     }
 
@@ -766,6 +778,7 @@ impl VersionedDataSource for SqlStorage {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
+    #![allow(unused_imports)]
     use crate::data_source::storage::sql::sqlx::ConnectOptions;
     use async_compatibility_layer::art::async_timeout;
     use async_std::net::TcpStream;
@@ -774,7 +787,7 @@ pub mod testing {
     use sqlx::sqlite::SqliteConnectOptions;
     use std::{
         env, fs,
-        path::{Path, PathBuf},
+        path::Path,
         process::{Command, Stdio},
         str::{self, FromStr},
         time::Duration,
@@ -794,14 +807,14 @@ pub mod testing {
         #[cfg(not(feature = "embedded-db"))]
         container_id: String,
         #[cfg(feature = "embedded-db")]
-        db_path: PathBuf,
+        db_path: std::path::PathBuf,
         #[cfg(not(feature = "embedded-db"))]
         persistent: bool,
     }
     impl TmpDb {
         #[cfg(feature = "embedded-db")]
         pub fn init_sqlite_db() -> Self {
-            let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tmp");
+            let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tmp");
 
             // Create the tmp directory if it doesn't exist
             if !dir.exists() {
@@ -877,6 +890,11 @@ pub mod testing {
         #[cfg(not(feature = "embedded-db"))]
         pub fn port(&self) -> u16 {
             self.port
+        }
+
+        #[cfg(feature = "embedded-db")]
+        pub fn path(&self) -> std::path::PathBuf {
+            self.db_path.clone()
         }
 
         pub fn config(&self) -> Config<Db> {

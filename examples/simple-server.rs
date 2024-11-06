@@ -85,15 +85,20 @@ async fn init_db() -> Db {
 }
 
 #[cfg(not(target_os = "windows"))]
-async fn init_data_source(db: &Db) -> DataSource {
-    data_source::sql::Config::default()
-        .user("postgres")
-        .password("password")
-        .host(db.host())
-        .port(db.port())
-        .connect(Default::default())
-        .await
-        .unwrap()
+async fn init_data_source(#[allow(unused_variables)] db: &Db) -> DataSource {
+    let mut cfg = data_source::sql::Config::default();
+
+    #[cfg(not(feature = "embedded-db"))]
+    {
+        cfg = cfg.host(db.host()).port(db.port());
+    }
+
+    #[cfg(feature = "embedded-db")]
+    {
+        cfg = cfg.db_path(db.path());
+    }
+
+    cfg.connect(Default::default()).await.unwrap()
 }
 
 #[cfg(target_os = "windows")]
