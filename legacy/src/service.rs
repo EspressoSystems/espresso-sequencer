@@ -405,10 +405,13 @@ impl<Types: NodeType> GlobalState<Types> {
         &mut self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
         txn_status: TransactionStatus,
-    ) -> Result<(), BuildError>{
+    ) -> Result<(), BuildError> {
         if self.tx_status.contains_key(&txn_hash) {
-            tracing::debug!("change status of transaction {txn_hash} from {:?} to {:?}",
-            self.tx_status.get(&txn_hash), txn_status);
+            tracing::debug!(
+                "change status of transaction {txn_hash} from {:?} to {:?}",
+                self.tx_status.get(&txn_hash),
+                txn_status
+            );
         }
         self.tx_status.insert(txn_hash, txn_status);
         Ok(())
@@ -1056,7 +1059,8 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             txns.iter().map(|txn| txn.commit()).collect::<Vec<_>>()
         );
         for txn in txns.clone() {
-            let _ = self.global_state
+            let _ = self
+                .global_state
                 .write_arc()
                 .await
                 .set_tx_status(txn.commit(), TransactionStatus::Pending);
@@ -1068,17 +1072,20 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             .submit_client_txns(txns.clone())
             .await;
 
-            
-        let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..txns.len()).map(|i| (txns[i].clone(), response[i].clone())).collect();
+        let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..txns.len())
+            .map(|i| (txns[i].clone(), response[i].clone()))
+            .collect();
         for (txn, res) in pairs {
             if let Err(some) = res {
-                let _ = self.global_state
-                .write_arc()
-                .await
-                .set_tx_status(txn.commit(), TransactionStatus::Rejected{reason: some.to_string()});
+                let _ = self.global_state.write_arc().await.set_tx_status(
+                    txn.commit(),
+                    TransactionStatus::Rejected {
+                        reason: some.to_string(),
+                    },
+                );
             }
         }
-        
+
         tracing::debug!(
             "Transaction submitted to the builder states, sending response: {:?}",
             response
@@ -1094,10 +1101,7 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        self.global_state
-            .read_arc()
-            .await
-            .claim_tx_status(txn_hash)
+        self.global_state.read_arc().await.claim_tx_status(txn_hash)
     }
 }
 #[async_trait]
@@ -1172,13 +1176,18 @@ pub async fn run_non_permissioned_standalone_builder_service<
                     max_block_size,
                 )
                 .await;
-                let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..transactions.len()).map(|i| (transactions[i].clone(), results[i].clone())).collect();
+                let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0
+                    ..transactions.len())
+                    .map(|i| (transactions[i].clone(), results[i].clone()))
+                    .collect();
                 for (txn, res) in pairs {
                     if let Err(some) = res {
-                        let _ = global_state
-                        .write_arc()
-                        .await
-                        .set_tx_status(txn.commit(), TransactionStatus::Rejected{reason: some.to_string()});
+                        let _ = global_state.write_arc().await.set_tx_status(
+                            txn.commit(),
+                            TransactionStatus::Rejected {
+                                reason: some.to_string(),
+                            },
+                        );
                     }
                 }
             }
