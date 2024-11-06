@@ -154,7 +154,7 @@ async fn reference_header(version: Version) -> Header {
 
 const REFERENCE_V1_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
 const REFERENCE_V2_HEADER_COMMITMENT: &str = "BLOCK~V0GJjL19nCrlm9n1zZ6gaOKEekSMCT6uR5P-h7Gi6UJR";
-const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~BGlAadiwOlxmhQxdp2HS7mHpG-ifDOx9ocBkTEJXx05_";
+const REFERENCE_V99_HEADER_COMMITMENT: &str = "BLOCK~BGlAadiwOlxmhQxdp2HS7mHpG-ifDOx9ocBkTEJXx05_";
 
 fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
 where
@@ -387,12 +387,12 @@ async fn test_reference_header_v2() {
 }
 
 #[async_std::test]
-async fn test_reference_header_v3() {
+async fn test_reference_header_v99() {
     reference_test(
-        "v3",
+        "v99",
         "header",
-        reference_header(StaticVersion::<0, 3>::version()).await,
-        REFERENCE_V3_HEADER_COMMITMENT,
+        reference_header(StaticVersion::<0, 99>::version()).await,
+        REFERENCE_V99_HEADER_COMMITMENT,
     );
 }
 #[test]

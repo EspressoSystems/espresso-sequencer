@@ -1588,7 +1588,7 @@ mod test_headers {
         let deserialized: Header = serde_json::from_str(&serialized).unwrap();
         assert_eq!(v2_header, deserialized);
 
-        let v3_header = Header::create(
+        let v99_header = Header::create(
             genesis.instance_state.chain_config,
             1,
             2,
@@ -1604,12 +1604,15 @@ mod test_headers {
                 account: fee_account,
             }],
             Default::default(),
-            Version { major: 0, minor: 3 },
+            Version {
+                major: 0,
+                minor: 99,
+            },
         );
 
-        let serialized = serde_json::to_string(&v3_header).unwrap();
+        let serialized = serde_json::to_string(&v99_header).unwrap();
         let deserialized: Header = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(v3_header, deserialized);
+        assert_eq!(v99_header, deserialized);
 
         let v1_bytes = BincodeSerializer::<StaticVersion<0, 1>>::serialize(&v1_header).unwrap();
         let deserialized: Header =
@@ -1621,9 +1624,9 @@ mod test_headers {
             BincodeSerializer::<StaticVersion<0, 2>>::deserialize(&v2_bytes).unwrap();
         assert_eq!(v2_header, deserialized);
 
-        let v3_bytes = BincodeSerializer::<StaticVersion<0, 3>>::serialize(&v3_header).unwrap();
+        let v3_bytes = BincodeSerializer::<StaticVersion<0, 3>>::serialize(&v99_header).unwrap();
         let deserialized: Header =
             BincodeSerializer::<StaticVersion<0, 3>>::deserialize(&v3_bytes).unwrap();
-        assert_eq!(v3_header, deserialized);
+        assert_eq!(v99_header, deserialized);
     }
 }
