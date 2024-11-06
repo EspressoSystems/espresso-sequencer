@@ -132,12 +132,12 @@ jobs:
     needs: [build-test-artifacts, build-test-bins]
     strategy:
       matrix:
-        version: [02,03]
+        version: [02,99]
         include:
           - version: 02
             compose: "-f process-compose.yaml -D"
             
-          - version: 03
+          - version: 99
             compose: "-f process-compose.yaml -f process-compose-mp.yml -D"
     runs-on: ubuntu-latest
     steps:
