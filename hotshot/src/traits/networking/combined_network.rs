@@ -462,11 +462,8 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
             // Calculate hash of the message
             let message_hash = calculate_hash_of(&message);
 
-            // Check if the hash is in the cache
-            if !self.message_cache.read().contains(&message_hash) {
-                // Add the hash to the cache
-                self.message_cache.write().put(message_hash, ());
-
+            // Check if the hash is in the cache and update the cache
+            if self.message_cache.write().put(message_hash, ()).is_none() {
                 break Ok(message);
             }
         }

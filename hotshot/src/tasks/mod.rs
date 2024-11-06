@@ -119,6 +119,7 @@ pub fn add_queue_len_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Vers
 }
 
 /// Add the network task to handle messages and publish events.
+#[allow(clippy::missing_panics_doc)]
 pub fn add_network_message_task<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
