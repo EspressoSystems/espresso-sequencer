@@ -19,9 +19,12 @@ use derivative::Derivative;
 use futures::stream::StreamExt;
 use futures::{future::BoxFuture, Stream};
 use hotshot::types::Event;
-use hotshot_builder_api::v0_3::{
-    builder::{define_api, submit_api, BuildError, Error as BuilderApiError},
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+use hotshot_builder_api::{
+    v0_2::builder::TransactionStatus,
+    v0_3::{
+        builder::{define_api, submit_api, BuildError, Error as BuilderApiError},
+        data_source::{AcceptsTxnSubmits, BuilderDataSource},
+    },
 };
 use hotshot_types::bundle::Bundle;
 use hotshot_types::traits::block_contents::BuilderFee;
@@ -135,6 +138,9 @@ pub struct GlobalState<Types: NodeType> {
 
     // highest view running builder task
     pub highest_view_num_builder_id: BuilderStateId<Types>,
+
+    // A mapping from transaction hash to its status
+    pub tx_status: HashMap<Commitment<Types::Transaction>, TransactionStatus>,
 }
 
 impl<Types: NodeType> GlobalState<Types> {
@@ -158,6 +164,7 @@ impl<Types: NodeType> GlobalState<Types> {
             last_garbage_collected_view_num: bootstrapped_view_num,
             builder_state_to_last_built_block: Default::default(),
             highest_view_num_builder_id: bootstrap_id,
+            tx_status: HashMap::new(),
         }
     }
 
@@ -232,6 +239,19 @@ impl<Types: NodeType> GlobalState<Types> {
         txns: Vec<<Types as NodeType>::Transaction>,
     ) -> Vec<Result<Commitment<<Types as NodeType>::Transaction>, BuildError>> {
         handle_received_txns(&self.tx_sender, txns, TransactionSource::External).await
+    }
+
+    // get transaction status
+    // return one of "pending", "sequenced", "rejected" or "unknown"
+    pub async fn claim_tx_status(
+        &self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError> {
+        if let Some(status) = self.tx_status.get(&txn_hash) {
+            Ok(status.clone())
+        } else {
+            Ok(TransactionStatus::Unknown)
+        }
     }
 
     pub fn get_channel_for_matching_builder_or_highest_view_buider(
@@ -357,7 +377,7 @@ where
         &self,
         parent_view: u64,
         parent_hash: &VidCommitment,
-        _view_number: u64,
+        view_number: u64,
     ) -> Result<Bundle<Types>, BuildError> {
         let start = Instant::now();
 
@@ -449,6 +469,7 @@ where
                 <Types::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
                     &self.builder_keys.1,
                     response.offered_fee,
+                    view_number,
                 )
                 .map_err(|e| BuildError::Error(e.to_string()))?;
 
@@ -523,6 +544,17 @@ where
         // instead of Result<Vec> not to loose any information,
         //  but this requires changes to builder API
         response.into_iter().collect()
+    }
+
+    async fn claim_tx_status(
+        &self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError> {
+        self.global_state
+            .read_arc()
+            .await
+            .claim_tx_status(txn_hash)
+            .await
     }
 }
 #[async_trait]

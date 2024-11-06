@@ -1,8 +1,11 @@
 use hotshot::types::Event;
-use hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::BuildError,
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+use hotshot_builder_api::{
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        builder::BuildError,
+        data_source::{AcceptsTxnSubmits, BuilderDataSource},
+    },
+    v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
     data::{DaProposal, Leaf, QuorumProposal},
@@ -180,6 +183,9 @@ pub struct GlobalState<Types: NodeType> {
     pub highest_view_num_builder_id: BuilderStateId<Types>,
 
     pub block_size_limits: BlockSizeLimits,
+
+    // A mapping from transaction hash to its status
+    pub tx_status: HashMap<Commitment<Types::Transaction>, TransactionStatus>,
 }
 
 /// `GetChannelForMatchingBuilderError` is an error enum that represents the
@@ -239,6 +245,7 @@ impl<Types: NodeType> GlobalState<Types> {
                 protocol_max_block_size,
                 max_block_size_increment_period,
             ),
+            tx_status: HashMap::new(),
         }
     }
 
@@ -379,6 +386,19 @@ impl<Types: NodeType> GlobalState<Types> {
             self.block_size_limits.max_block_size,
         )
         .await
+    }
+
+    // get transaction status
+    // return one of "pending", "sequenced", "rejected" or "unknown"
+    pub async fn claim_tx_status(
+        &self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError> {
+        if let Some(status) = self.tx_status.get(&txn_hash) {
+            Ok(status.clone())
+        } else {
+            Ok(TransactionStatus::Unknown)
+        }
     }
 
     /// Helper function that attempts to retrieve the broadcast sender for the given
@@ -1038,6 +1058,17 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
         // instead of Result<Vec> not to loose any information,
         //  but this requires changes to builder API
         response.into_iter().collect()
+    }
+
+    async fn claim_tx_status(
+        &self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError> {
+        self.global_state
+            .read_arc()
+            .await
+            .claim_tx_status(txn_hash)
+            .await
     }
 }
 #[async_trait]
