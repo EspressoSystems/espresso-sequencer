@@ -460,7 +460,7 @@ where
         }
         if !rows.is_empty() {
             self.upsert(
-                "transaction",
+                "transactions",
                 ["hash", "block_height", "idx"],
                 ["block_height", "idx"],
                 rows,

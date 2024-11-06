@@ -1061,7 +1061,7 @@ pub mod testing {
     impl TestMerkleTreeMigration {
         fn create(name: &str) -> String {
             #[cfg(feature = "embedded-db")]
-            let binary_data_type = "JSONB";
+            let binary_data_type = "BLOB";
             #[cfg(not(feature = "embedded-db"))]
             let binary_data_type = "BYTEA";
 
@@ -1087,7 +1087,7 @@ pub mod testing {
                 created BIGINT NOT NULL,
                 hash_id INT NOT NULL,
                 children JSONB,
-                children_bitvec JSONB,
+                children_bitvec {binary_data_type},
                 idx JSONB,
                 entry JSONB,
                 PRIMARY KEY (path, created)
