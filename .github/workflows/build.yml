@@ -478,7 +478,7 @@ jobs:
           labels: ${{ steps.dev-rollup.outputs.labels }}
 
   test-demo:
-    if: ${{ github.event_name != 'pull_request' }}
+    # if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     needs: [build-dockers]
     steps:
@@ -531,4 +531,5 @@ jobs:
       - name: Test docker demo
         run: |
           just demo &
+          set -o pipefail
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
