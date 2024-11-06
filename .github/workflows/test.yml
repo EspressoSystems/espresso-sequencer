@@ -18,12 +18,88 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg hotshot_example'
   RUST_LOG: info,libp2p=off,node=error
   CARGO_TERM_COLOR: always
 
 jobs:
+  build-test-artifacts:
+    name: Build test artifacts
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - uses: rui314/setup-mold@v1
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          cache-provider: buildjet
+
+      - name: Build and archive tests
+        run: cargo nextest archive --locked --workspace --all-features --archive-file nextest-archive.tar.zst
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+
+  build-test-bins:
+    name: Build test binaries
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - uses: rui314/setup-mold@v1
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          cache-provider: buildjet
+
+      - name: Build Bins
+        run: cargo build --locked --profile test --bins
+        timeout-minutes: 30
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-binaries
+          path: |
+            target/debug/orchestrator
+            target/debug/cdn-broker
+            target/debug/cdn-marshal
+            target/debug/cdn-whitelist
+            target/debug/state-relay-server
+            target/debug/state-prover
+            target/debug/sequencer
+            target/debug/cli
+            target/debug/submit-transactions
+            target/debug/reset-storage
+            target/debug/utils
+            target/debug/deploy
+            target/debug/keygen
+            target/debug/permissionless-builder
+            target/debug/nasty-client
+            target/debug/espresso-dev-node
+            target/debug/pub-key
+            target/debug/espresso-bridge
+            target/debug/marketplace-solver
+            target/debug/marketplace-builder
+            target/debug/node-metrics
+            target/debug/dev-rollup
+
   test:
+    needs: build-test-artifacts
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
@@ -35,35 +111,66 @@ jobs:
         with:
           version: nightly
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@V27
-
-      - uses: taiki-e/install-action@nextest
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Enable Rust Caching
-        uses: Swatinem/rust-cache@v2
-
-      - name: Configure Environment
-        run: |
-          RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          PATH="$PWD/target/release:$PATH"
-
-      - name: Build
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: |
-          cargo build --locked --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
-        timeout-minutes: 90
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+      - name: Download archive
+        uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive
 
       - name: Test
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
+        run: |
+          cargo nextest run --archive-file nextest-archive.tar.zst  --verbose --no-fail-fast \
+          --workspace-remap $PWD
         timeout-minutes: 20
+
+  test-integration:
+    needs: [build-test-artifacts, build-test-bins]
+    strategy:
+      matrix:
+        version: [02,03]
+        include:
+          - version: 02
+            compose: "-f process-compose.yaml -D"
+            
+          - version: 03
+            compose: "-f process-compose.yaml -f process-compose-mp.yml -D"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Nix
+        uses: cachix/install-nix-action@V27
+
+      - name: Configure PATH
+        run: PATH="$PWD/target/debug:$PATH"
+
+      - name: Fix submodule permissions check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: Download archive
+        uses: actions/download-artifact@v4
+
+      - name: Move files
+        run: |
+          mv nextest-archive/* .
+          mkdir -p target/debug
+          mv test-binaries/* target/debug
+          chmod -c +x target/debug/*
 
       - name: Install process-compose
         run: nix profile install nixpkgs#process-compose
@@ -71,28 +178,53 @@ jobs:
       - name: Pull Docker Images
         run: docker compose pull || docker-compose pull
 
-      - name: Run Demo-Native
-        run: bash -x scripts/demo-native -D
+      - name: Run Demo-Native ${{matrix.version}}
+        run: bash -x scripts/demo-native ${{matrix.compose}}
 
       - name: Test Integration
         env:
           NEXTEST_PROFILE: integration
-          INTEGRATION_TEST_SEQUENCER_VERSION: 02
-        run: cargo nextest run --locked --release --all-features --verbose --nocapture
+          INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
+        run: |
+          cargo nextest run --archive-file nextest-archive.tar.zst --verbose --no-fail-fast \
+          --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
         timeout-minutes: 40
 
       - name: Process Compose Down
         run: process-compose down
 
-      - name: Run Demo-Native Marketplace
-        run: bash -x scripts/demo-native  -f process-compose.yaml -f process-compose-mp.yml -D
+  demo-native:
+    needs: build-test-bins
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Test Marketplace Integration
-        env:
-          NEXTEST_PROFILE: integration
-          INTEGRATION_TEST_SEQUENCER_VERSION: 03
-        run: cargo nextest run --locked --release --all-features --verbose --nocapture
-        timeout-minutes: 40
+      - name: Install Nix
+        uses: cachix/install-nix-action@V27
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download archive
+        uses: actions/download-artifact@v4
+        with:
+          name: test-binaries
+          path: target/debug
+
+      - name: chmod +x
+        run: chmod -c +x target/debug/*
+
+      - name: Install process-compose
+        run: nix profile install nixpkgs#process-compose
+
+      - name: Test Demo
+        run: |
+          export PATH="$PWD/target/debug:$PATH"
+          set -o pipefail
+          scripts/demo-native --tui=false &
+          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
 
       - name: Process Compose Down
         run: process-compose down

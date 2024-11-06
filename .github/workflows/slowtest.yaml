@@ -17,8 +17,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !contains(github.ref, 'main')}}
 
+# Build test binary with `testing` feature, which requires `hotshot_example` config
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg hotshot_example'
+  CARGO_TERM_COLOR: always
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
@@ -41,25 +43,22 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Configure Environment
+        run: PATH="$PWD/target/release:$PATH"
+
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
 
       - name: Build
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
           cargo build --locked --bin diff-test --release
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
       - name: Slow Test
         env:
-          CARGO_TERM_COLOR: always
           NEXTEST_PROFILE: slow
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast --nocapture
+        run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast --nocapture
         timeout-minutes: 40

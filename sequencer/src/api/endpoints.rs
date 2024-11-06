@@ -7,8 +7,9 @@ use std::{
 
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
+use hotshot_query_service::merklized_state::Snapshot;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
     explorer::{self, ExplorerDataSource},
@@ -24,6 +25,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, Versions},
     },
 };
+use jf_merkle_tree::MerkleTreeScheme;
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
@@ -32,8 +34,8 @@ use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
-        SubmitDataSource,
+        CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource, SequencerDataSource,
+        StateSignatureDataSource, SubmitDataSource,
     },
     StorageState,
 };
@@ -43,6 +45,41 @@ use crate::{SeqTypes, SequencerApiVersion, SequencerPersistence};
 pub struct NamespaceProofQueryData {
     pub proof: Option<NsProof>,
     pub transactions: Vec<Transaction>,
+}
+
+pub(super) fn get_balance<State, Ver>() -> Result<Api<State, merklized_state::Error, Ver>>
+where
+    State: 'static + Send + Sync + ReadState,
+    Ver: 'static + StaticVersionType,
+    <State as ReadState>::State: Send
+        + Sync
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+        + MerklizedStateHeightPersistence,
+{
+    let mut options = merklized_state::Options::default();
+    let extension = toml::from_str(include_str!("../../api/merklized_state.toml"))?;
+    options.extensions.push(extension);
+
+    let mut api =
+        merklized_state::define_api::<State, SeqTypes, FeeMerkleTree, Ver, 256>(&options)?;
+
+    api.get("getfeebalance", move |req, state| {
+        async move {
+            let address = req.string_param("address")?;
+            let height = state.get_last_state_height().await?;
+            let snapshot = Snapshot::Index(height as u64);
+            let key = address
+                .parse()
+                .map_err(|_| merklized_state::Error::Custom {
+                    message: "failed to parse address".to_string(),
+                    status: StatusCode::BAD_REQUEST,
+                })?;
+            let path = state.get_path(snapshot, key).await?;
+            Ok(path.elem().copied())
+        }
+        .boxed()
+    })?;
+    Ok(api)
 }
 
 pub(super) type AvailState<N, P, D, ApiVer> = ApiState<StorageState<N, P, D, ApiVer>>;
@@ -215,7 +252,7 @@ pub(super) fn catchup<S, ApiVer: StaticVersionType + 'static>(
 ) -> Result<Api<S, Error, ApiVer>>
 where
     S: 'static + Send + Sync + ReadState,
-    S::State: Send + Sync + CatchupDataSource,
+    S::State: Send + Sync + NodeStateDataSource + CatchupDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/catchup.toml"))?;
     let mut api = Api::<S, Error, ApiVer>::new(toml)?;
@@ -239,9 +276,47 @@ where
             })?;
 
             state
-                .get_account(height, ViewNumber::new(view), account)
+                .get_account(
+                    state.node_state().await,
+                    height,
+                    ViewNumber::new(view),
+                    account,
+                )
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+        }
+        .boxed()
+    })?
+    .at("accounts", |req, state| {
+        async move {
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
+            let accounts = req
+                .body_auto::<Vec<FeeAccount>, ApiVer>(ApiVer::instance())
+                .map_err(Error::from_request_error)?;
+
+            state
+                .read(|state| {
+                    async move {
+                        state
+                            .get_accounts(
+                                state.node_state().await,
+                                height,
+                                ViewNumber::new(view),
+                                &accounts,
+                            )
+                            .await
+                            .map_err(|err| {
+                                Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}"))
+                            })
+                    }
+                    .boxed()
+                })
+                .await
         }
         .boxed()
     })?
@@ -255,7 +330,7 @@ where
                 .map_err(Error::from_request_error)?;
 
             state
-                .get_frontier(height, ViewNumber::new(view))
+                .get_frontier(state.node_state().await, height, ViewNumber::new(view))
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }

@@ -1,7 +1,9 @@
 # Espresso Sequencer
 
 [![Build](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml)
-[![Docs](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc.yml)
+[![Test](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/test.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/test.yml)
+[![Docs rust](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc-rust.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc-rust.yml)
+[![Docs contracts](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc-contracts.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc-contracts.yml)
 [![Contracts](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml)
 [![Lint](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml)
 [![Audit](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml)
@@ -65,7 +67,7 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 ## Documentation
 
 The rust code documentation can be found at
-[http://sequencer.docs.espressosys.com](http://sequencer.docs.espressosys.com). Please note the disclaimer about API
+[sequencer.docs.espressosys.com](https://sequencer.docs.espressosys.com). Please note the disclaimer about API
 stability at the end of the readme.
 
 To generate the documentation locally and view it in the browser, run

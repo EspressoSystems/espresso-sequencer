@@ -305,20 +305,21 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice updates the stateHistoryCommitments array each time a new
-    /// finalized state is added to the LightClient contract.
-    /// Ensures that the time difference between the most recent and oldest
-    /// elements in this array does not exceed the stateHistoryRetentionPeriod (in seconds).
+    /// @notice Updates the `stateHistoryCommitments` array when a new finalized state is added
+    /// and ensures that the array does not retain states older than the
+    /// `stateHistoryRetentionPeriod`.
     /// @dev the block timestamp is used to determine if the stateHistoryCommitments array
-    /// should be pruned, based on the stateHistoryRetentionPeriod.
+    /// should be pruned, based on the stateHistoryRetentionPeriod (seconds).
     /// @dev a FIFO approach is used to delete elements from the start of the array,
-    /// ensuring that only the most recent states are retained within the
-    /// stateHistoryRetentionPeriod
+    /// ensuring that only the most recent states that only recent states are kept within
+    /// the retention window.
     /// @dev the `delete` method does not reduce the array length but resets the value at the
-    /// specified index to zero.
-    /// the stateHistoryFirstIndex variable acts as an offset to indicate the starting point for
-    /// reading the array,
-    /// since the length of the array is not reduced even after deletion.
+    /// specified index to zero. the stateHistoryFirstIndex variable acts as an offset to indicate
+    /// the starting point for reading the array, since the length of the array is not reduced
+    /// even after deletion.
+    /// @param blockNumber The block number of the new finalized state.
+    /// @param blockTimestamp The block timestamp used to check the retention period.
+    /// @param state The new `LightClientState` being added to the array.
     function updateStateHistory(
         uint64 blockNumber,
         uint64 blockTimestamp,
@@ -326,9 +327,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ) internal {
         if (
             stateHistoryCommitments.length != 0
-                && stateHistoryCommitments[stateHistoryCommitments.length - 1].l1BlockTimestamp
-                    - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
-                    >= stateHistoryRetentionPeriod
+                && blockTimestamp - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
+                    > stateHistoryRetentionPeriod
         ) {
             // The stateHistoryCommitments array has reached the maximum retention period
             // delete the oldest (first) non-empty element to maintain the FIFO structure.
@@ -349,6 +349,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice checks if the state updates lag behind the specified block threshold based on the
     /// provided block number.
+    /// @dev Reverts if there isn't enough state history to make an accurate comparison.
+    /// Reverts if the blockThreshold is zero
     /// @param blockNumber The block number to compare against the latest state updates.
     /// @param blockThreshold The number of blocks updates this contract is allowed to lag behind.
     /// @return bool returns true if the lag exceeds the blockThreshold; otherwise, false.
@@ -360,46 +362,48 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     {
         uint256 updatesCount = stateHistoryCommitments.length;
 
-        // Handling Edge Cases
-        // Edgecase 1: blockNumber is greater than current block.number or
-        // less than 3 updates exist which means the history is insufficient to determine a lag.
-        if (blockNumber > block.number || updatesCount < 3) {
+        // Edge Case Handling:
+        // 1. Provided block number is greater than the current block (invalid)
+        // 2. No updates have occurred (i.e., state history is empty)
+        // 3. Provided block number is earlier than the first recorded state update
+        // the stateHistoryFirstIndex is used to check for the first nonZero element
+        if (
+            blockNumber > block.number || updatesCount == 0
+                || blockNumber < stateHistoryCommitments[stateHistoryFirstIndex].l1BlockHeight
+        ) {
             revert InsufficientSnapshotHistory();
         }
 
-        uint256 prevBlock;
-        bool prevUpdateFound;
+        uint256 eligibleStateUpdateBlockNumber; // the eligibleStateUpdateBlockNumber is <=
+            // blockNumber
+        bool stateUpdateFound; // if an eligible block number is found in the state update history,
+            // then this variable is set to true
 
-        // Start searching from the latest update
+        // Search from the most recent state update back to find the first update <= blockNumber
         uint256 i = updatesCount - 1;
-        while (!prevUpdateFound) {
-            // Skip the first two updates as per logic mentioned above.
-            if (i < 2) {
-                break;
-            }
-
-            // Stop if we've already assessed the first recorded state in the history.
+        while (!stateUpdateFound) {
+            // Stop searching if we've exhausted the recorded state history
             if (i < stateHistoryFirstIndex) {
                 break;
             }
 
-            // Find the first update where the block height is less than or equal to the given
-            // blockNumber.
+            // Find the first update with a block height <= blockNumber
             if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
-                prevUpdateFound = true;
-                prevBlock = stateHistoryCommitments[i].l1BlockHeight;
+                stateUpdateFound = true;
+                eligibleStateUpdateBlockNumber = stateHistoryCommitments[i].l1BlockHeight;
+                break;
             }
 
             i--;
         }
 
-        // If no snapshot is found, there is insufficient history to determine the lag.
-        if (!prevUpdateFound) {
+        // If no snapshot is found, we don't have enough history stored
+        // to tell whether HotShot was down.
+        if (!stateUpdateFound) {
             revert InsufficientSnapshotHistory();
         }
 
-        // If the lag exceeds the user specified, blockThreshold, return true.
-        return blockNumber - prevBlock > blockThreshold;
+        return blockNumber - eligibleStateUpdateBlockNumber > blockThreshold;
     }
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at

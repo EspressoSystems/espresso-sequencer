@@ -4,14 +4,14 @@ use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use committable::Commitment;
+use committable::{Commitment, Committable};
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, MockSequencerVersions, NodeState, PubKey, Transaction,
+    retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
+    PubKey, Transaction, ValidatedState,
 };
-use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::BoxStream,
@@ -19,21 +19,24 @@ use futures::{
 use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
-use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
     light_client::StateSignatureRequestBody,
-    traits::{network::ConnectedNetwork, node_implementation::Versions},
+    network::NetworkConfig,
+    traits::{network::ConnectedNetwork, node_implementation::Versions, ValidatedState as _},
+    utils::{View, ViewInner},
 };
 use jf_merkle_tree::MerkleTreeScheme;
 
-use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
+use self::data_source::{
+    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
+};
 use crate::{
-    context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
-    SequencerContext,
+    catchup::CatchupStorage, context::Consensus, network, state_signature::StateSigner, SeqTypes,
+    SequencerApiVersion, SequencerContext,
 };
 
 pub mod data_source;
@@ -103,10 +106,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
 
     async fn consensus(&self) -> Arc<RwLock<Consensus<N, P, V>>> {
         Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
-    }
-
-    async fn node_state(&self) -> &NodeState {
-        &self.consensus.as_ref().get().await.get_ref().node_state
     }
 
     async fn network_config(&self) -> NetworkConfig<PubKey> {
@@ -189,36 +188,120 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> SubmitDa
     }
 }
 
+impl<N, P, D, V> NodeStateDataSource for StorageState<N, P, D, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+    D: Sync,
+{
+    async fn node_state(&self) -> &NodeState {
+        self.as_ref().node_state().await
+    }
+}
+
 impl<
         N: ConnectedNetwork<PubKey>,
         V: Versions,
         P: SequencerPersistence,
-        D: CatchupDataSource + Send + Sync,
+        D: CatchupStorage + Send + Sync,
     > CatchupDataSource for StorageState<N, P, D, V>
 {
-    #[tracing::instrument(skip(self))]
-    async fn get_account(
+    #[tracing::instrument(skip(self, instance))]
+    async fn get_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_account(height, view, account).await {
-            Ok(account) => return Ok(account),
+        match self
+            .as_ref()
+            .get_accounts(instance, height, view, accounts)
+            .await
+        {
+            Ok(accounts) => return Ok(accounts),
             Err(err) => {
-                tracing::info!("account is not in memory, trying storage: {err:#}");
+                tracing::info!("accounts not in memory, trying storage: {err:#}");
             }
         }
 
         // Try storage.
-        self.inner().get_account(height, view, account).await
+        let (tree, leaf) = self
+            .inner()
+            .get_accounts(instance, height, view, accounts)
+            .await
+            .context("accounts not in memory, and could not fetch from storage")?;
+        // If we successfully fetched accounts from storage, try to add them back into the in-memory
+        // state.
+        let handle = self.as_ref().consensus().await;
+        let handle = handle.read().await;
+        let consensus = handle.consensus();
+        let mut consensus = consensus.write().await;
+        let (state, delta, leaf_commit) = match consensus.validated_state_map().get(&view) {
+            Some(View {
+                view_inner: ViewInner::Leaf { state, delta, leaf },
+            }) => {
+                let mut state = (**state).clone();
+
+                // Add the fetched accounts to the state.
+                for account in accounts {
+                    if let Some((proof, _)) = FeeAccountProof::prove(&tree, (*account).into()) {
+                        if let Err(err) = proof.remember(&mut state.fee_merkle_tree) {
+                            tracing::warn!(
+                                ?view,
+                                %account,
+                                "cannot update fetched account state: {err:#}"
+                            );
+                        }
+                    } else {
+                        tracing::warn!(?view, %account, "cannot update fetched account state because account is not in the merkle tree");
+                    };
+                }
+
+                (Arc::new(state), delta.clone(), *leaf)
+            }
+            _ => {
+                // If we don't already have a leaf for this view, or if we don't have the view
+                // at all, we can create a new view based on the recovered leaf and add it to
+                // our state map. In this case, we must also add the leaf to the saved leaves
+                // map to ensure consistency.
+                let mut state = ValidatedState::from_header(leaf.block_header());
+                state.fee_merkle_tree = tree.clone();
+                let res = (Arc::new(state), None, Committable::commit(&leaf));
+                consensus
+                    .update_saved_leaves(leaf, &handle.hotshot.upgrade_lock)
+                    .await;
+                res
+            }
+        };
+        if let Err(err) = consensus.update_validated_state_map(
+            view,
+            View {
+                view_inner: ViewInner::Leaf {
+                    state,
+                    delta,
+                    leaf: leaf_commit,
+                },
+            },
+        ) {
+            tracing::warn!(?view, "cannot update fetched account state: {err:#}");
+        }
+        tracing::info!(?view, "updated with fetched account state");
+
+        Ok(tree)
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_frontier(height, view).await {
+        match self.as_ref().get_frontier(instance, height, view).await {
             Ok(frontier) => return Ok(frontier),
             Err(err) => {
                 tracing::info!("frontier is not in memory, trying storage: {err:#}");
@@ -226,7 +309,7 @@ impl<
         }
 
         // Try storage.
-        self.inner().get_frontier(height, view).await
+        self.inner().get_frontier(instance, height, view).await
     }
 
     async fn get_chain_config(
@@ -265,16 +348,28 @@ impl<
 //     }
 // }
 
+impl<N, V, P> NodeStateDataSource for ApiState<N, P, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+{
+    async fn node_state(&self) -> &NodeState {
+        &self.consensus.as_ref().get().await.get_ref().node_state
+    }
+}
+
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupDataSource
     for ApiState<N, P, V>
 {
-    #[tracing::instrument(skip(self))]
-    async fn get_account(
+    #[tracing::instrument(skip(self, _instance))]
+    async fn get_accounts(
         &self,
+        _instance: &NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         let state = self
             .consensus()
             .await
@@ -285,14 +380,16 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
             .context(format!(
                 "state not available for height {height}, view {view:?}"
             ))?;
-        let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
-            format!("account {account} not available for height {height}, view {view:?}"),
-        )?;
-        Ok(AccountQueryData { balance, proof })
+        retain_accounts(&state.fee_merkle_tree, accounts.iter().copied())
     }
 
     #[tracing::instrument(skip(self))]
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+    async fn get_frontier(
+        &self,
+        _instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
         let state = self
             .consensus()
             .await
@@ -923,13 +1020,23 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
 
-    use espresso_types::{Header, NamespaceId};
+    use espresso_types::{
+        traits::{EventConsumer, PersistenceOptions},
+        Header, Leaf, NamespaceId,
+    };
     use ethers::utils::Anvil;
-    use futures::stream::StreamExt;
-    use hotshot_query_service::availability::{BlockQueryData, VidCommonQueryData};
+    use futures::{future, stream::StreamExt};
+    use hotshot_query_service::availability::{
+        AvailabilityDataSource, BlockQueryData, UpdateAvailabilityData, VidCommonQueryData,
+    };
+    use hotshot_types::{
+        data::QuorumProposal, event::LeafInfo, simple_certificate::QuorumCertificate,
+        traits::node_implementation::ConsensusTime,
+    };
 
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
+    use std::fmt::Debug;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -938,8 +1045,11 @@ mod api_tests {
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
 
-    use super::*;
-    use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
+    use super::{update::ApiEventConsumer, *};
+    use crate::{
+        persistence::no_storage::NoStorage,
+        testing::{wait_for_decide_on_handle, TestConfigBuilder},
+    };
 
     #[async_std::test]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
@@ -1061,6 +1171,123 @@ mod api_tests {
     pub(crate) async fn catchup_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
+    }
+
+    #[async_std::test]
+    pub async fn test_non_consecutive_decide_with_failing_event_consumer<D>()
+    where
+        D: TestableSequencerDataSource + Debug + 'static,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityData<SeqTypes>,
+    {
+        #[derive(Clone, Copy, Debug)]
+        struct FailConsumer;
+
+        #[async_trait]
+        impl EventConsumer for FailConsumer {
+            async fn handle_event(&self, _: &Event<SeqTypes>) -> anyhow::Result<()> {
+                bail!("mock error injection");
+            }
+        }
+
+        setup_test();
+
+        let storage = D::create_storage().await;
+        let persistence = D::persistence_options(&storage).create().await.unwrap();
+        let data_source: Arc<StorageState<network::Memory, NoStorage, _, MockSequencerVersions>> =
+            Arc::new(StorageState::new(
+                D::create(D::persistence_options(&storage), Default::default(), false)
+                    .await
+                    .unwrap(),
+                ApiState::new(future::pending()),
+            ));
+
+        // Create two non-consecutive leaf chains.
+        let mut chain1 = vec![];
+
+        let mut quorum_proposal = QuorumProposal::<SeqTypes> {
+            block_header: Leaf::genesis(&Default::default(), &NodeState::mock())
+                .await
+                .block_header()
+                .clone(),
+            view_number: ViewNumber::genesis(),
+            justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
+                &ValidatedState::default(),
+                &NodeState::mock(),
+            )
+            .await,
+            upgrade_certificate: None,
+            proposal_certificate: None,
+        };
+        let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
+            &ValidatedState::default(),
+            &NodeState::mock(),
+        )
+        .await;
+
+        let mut justify_qc = qc.clone();
+        for i in 0..5 {
+            *quorum_proposal.block_header.height_mut() = i;
+            quorum_proposal.view_number = ViewNumber::new(i);
+            quorum_proposal.justify_qc = justify_qc;
+            let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+            qc.view_number = leaf.view_number();
+            qc.data.leaf_commit = Committable::commit(&leaf);
+            justify_qc = qc.clone();
+            chain1.push((leaf.clone(), qc.clone()));
+        }
+        // Split into two chains.
+        let mut chain2 = chain1.split_off(2);
+        // Make non-consecutive (i.e. we skip a leaf).
+        chain2.remove(0);
+
+        // Decide 2 leaves, but fail in event processing.
+        let leaf_chain = chain1
+            .iter()
+            .map(|(leaf, qc)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide with event handling failure");
+        persistence
+            .append_decided_leaves(
+                ViewNumber::new(1),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &FailConsumer,
+            )
+            .await
+            .unwrap();
+
+        // Now decide remaining leaves successfully. We should now process a decide event for all
+        // the leaves.
+        let consumer = ApiEventConsumer::from(data_source.clone());
+        let leaf_chain = chain2
+            .iter()
+            .map(|(leaf, qc)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide successfully");
+        persistence
+            .append_decided_leaves(
+                ViewNumber::new(4),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &consumer,
+            )
+            .await
+            .unwrap();
+
+        // Check that the leaves were moved to archive storage.
+        for (leaf, qc) in chain1.iter().chain(&chain2) {
+            tracing::info!(height = leaf.height(), "check archive");
+            let qd = data_source.get_leaf(leaf.height() as usize).await.await;
+            assert_eq!(qd.leaf(), leaf);
+            assert_eq!(qd.qc(), qc);
+        }
+    }
+
+    fn leaf_info(leaf: Leaf) -> LeafInfo<SeqTypes> {
+        LeafInfo {
+            leaf,
+            vid_share: None,
+            state: Default::default(),
+            delta: None,
+        }
     }
 }
 
@@ -1229,6 +1456,17 @@ mod test {
             assert_eq!(*path.index(), account);
             assert!(*path.elem().unwrap() > 0.into(), "{:?}", path.elem());
         }
+
+        // testing fee_balance api
+        let account = TestConfig::<5>::builder_key().fee_account();
+        let amount = client
+            .get::<Option<FeeAmount>>(&format!("fee-state/fee-balance/latest/{}", account))
+            .send()
+            .await
+            .unwrap()
+            .unwrap();
+        let expected = ethers::types::U256::max_value();
+        assert_eq!(expected, amount.0);
     }
 
     #[async_std::test]
@@ -1925,7 +2163,7 @@ mod test {
 
         // Fetch the config from node 1, a different node than the one running the service.
         let validator = ValidatorConfig::generated_from_seed_indexed([0; 32], 1, 1, false);
-        let mut config = peers.fetch_config(validator.clone()).await;
+        let mut config = peers.fetch_config(validator.clone()).await.unwrap();
 
         // Check the node-specific information in the recovered config is correct.
         assert_eq!(config.node_index, 1);

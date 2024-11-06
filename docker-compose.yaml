@@ -31,7 +31,7 @@ services:
 
   deploy-prover-contracts:
     image: ghcr.io/espressosystems/espresso-sequencer/deploy:main
-    command: deploy --use-mock-contract --only hotshot,light-client
+    command: deploy --use-mock-contract --only light-client
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
@@ -287,7 +287,7 @@ services:
       - ESPRESSO_SEQUENCER_POSTGRES_USER=root
       - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
       - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_PROVIDER=$ESPRESSO_SEQUENCER_L1_WS_PROVIDER
       - ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_1
@@ -388,7 +388,7 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_MAX_CONNECTIONS
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer4:$ESPRESSO_SEQUENCER_API_PORT
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_L1_PROVIDER=$ESPRESSO_SEQUENCER_L1_WS_PROVIDER
       - ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_3
@@ -471,28 +471,6 @@ services:
       marshal-0:
         condition: service_healthy
       deploy-sequencer-contracts:
-        condition: service_completed_successfully
-
-  commitment-task:
-    image: ghcr.io/espressosystems/espresso-sequencer/commitment-task:main
-    ports:
-      - "$ESPRESSO_COMMITMENT_TASK_PORT:$ESPRESSO_COMMITMENT_TASK_PORT"
-    environment:
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
-      - ESPRESSO_SEQUENCER_HOTSHOT_ACCOUNT_INDEX
-      - ESPRESSO_COMMITMENT_TASK_PORT
-      - ESPRESSO_SEQUENCER_URL
-      - ESPRESSO_SEQUENCER_L1_PROVIDER
-      - ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS
-      - RUST_LOG
-      - RUST_LOG_FORMAT
-      - ASYNC_STD_THREAD_COUNT
-    depends_on:
-      sequencer0:
-        condition: service_healthy
-      demo-l1-network:
-        condition: service_healthy
-      deploy-prover-contracts:
         condition: service_completed_successfully
 
   submit-transactions-public:

@@ -4,7 +4,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion,
-    NamespaceId, SequencerVersions, V0_0, V0_1,
+    NamespaceId, SequencerVersions, V0_0,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -81,14 +81,6 @@ struct NonPermissionedBuilderOptions {
     )]
     max_api_timeout_duration: Duration,
 
-    /// The number of views to buffer before a builder garbage collects its state
-    #[clap(
-        long,
-        env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
-        default_value = "15"
-    )]
-    buffer_view_num_count: usize,
-
     /// Path to TOML file containing genesis state.
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
@@ -131,13 +123,9 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
-        }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
         }
-        (V0_1::VERSION, _) => run::<SequencerVersions<V0_1, V0_0>>(genesis, opt).await,
         (FeeVersion::VERSION, _) => run::<SequencerVersions<FeeVersion, V0_0>>(genesis, opt).await,
         (MarketplaceVersion::VERSION, _) => {
             run::<SequencerVersions<MarketplaceVersion, V0_0>>(genesis, opt).await
@@ -154,7 +142,7 @@ async fn run<V: Versions>(
 ) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        events_max_block_range: 10000,
+        options: Default::default(),
     };
 
     let is_reserve = opt.is_reserve;
@@ -173,7 +161,9 @@ async fn run<V: Versions>(
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
     let instance_state =
-        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers)
+            .await
+            .unwrap();
 
     let base_fee = genesis.max_base_fee();
     tracing::info!(?base_fee, "base_fee");
@@ -185,20 +175,17 @@ async fn run<V: Versions>(
     // make the txn timeout as 1/4 of the api_response_timeout_duration
     let txn_timeout_duration = api_response_timeout_duration / 4;
 
-    let buffer_view_num_count = opt.buffer_view_num_count;
-
     let _builder_config = BuilderConfig::init(
         is_reserve,
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
-        instance_state,
+        instance_state.clone(),
         validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
-        buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
         bid_config,

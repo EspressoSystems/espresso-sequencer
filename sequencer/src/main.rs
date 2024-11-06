@@ -3,7 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use espresso_types::{
     traits::NullEventConsumer, FeeVersion, MarketplaceVersion, SequencerVersions,
-    SolverAuctionResultsProvider, V0_0, V0_1,
+    SolverAuctionResultsProvider, V0_0,
 };
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
@@ -39,30 +39,12 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<V0_1, FeeVersion>::new(),
-            )
-            .await
-        }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run(
                 genesis,
                 modules,
                 opt,
                 SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
-        }
-        (V0_1::VERSION, _) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<V0_1, V0_0>::new(),
             )
             .await
         }
@@ -150,7 +132,7 @@ where
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        events_max_block_range: opt.l1_events_max_block_range,
+        options: opt.l1_options,
     };
 
     let network_params = NetworkParams {
@@ -166,6 +148,26 @@ where
         state_peers: opt.state_peers,
         config_peers: opt.config_peers,
         catchup_backoff: opt.catchup_backoff,
+        libp2p_history_gossip: opt.libp2p_history_gossip,
+        libp2p_history_length: opt.libp2p_history_length,
+        libp2p_max_ihave_length: opt.libp2p_max_ihave_length,
+        libp2p_max_ihave_messages: opt.libp2p_max_ihave_messages,
+        libp2p_max_transmit_size: opt.libp2p_max_transmit_size,
+        libp2p_mesh_n: opt.libp2p_mesh_n,
+        libp2p_mesh_n_high: opt.libp2p_mesh_n_high,
+        libp2p_heartbeat_interval: opt.libp2p_heartbeat_interval,
+        libp2p_mesh_n_low: opt.libp2p_mesh_n_low,
+        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
+        libp2p_published_message_ids_cache_time: opt.libp2p_published_message_ids_cache_time,
+        libp2p_iwant_followup_time: opt.libp2p_iwant_followup_time,
+        libp2p_max_messages_per_rpc: opt.libp2p_max_messages_per_rpc,
+        libp2p_gossip_retransmission: opt.libp2p_gossip_retransmission,
+        libp2p_flood_publish: opt.libp2p_flood_publish,
+        libp2p_duplicate_cache_time: opt.libp2p_duplicate_cache_time,
+        libp2p_fanout_ttl: opt.libp2p_fanout_ttl,
+        libp2p_heartbeat_initial_delay: opt.libp2p_heartbeat_initial_delay,
+        libp2p_gossip_factor: opt.libp2p_gossip_factor,
+        libp2p_gossip_lazy: opt.libp2p_gossip_lazy,
     };
 
     let marketplace_config = MarketplaceConfig {
