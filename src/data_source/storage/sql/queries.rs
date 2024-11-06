@@ -94,7 +94,12 @@ impl<'q> QueryBuilder<'q> {
         self.arguments.add(arg).map_err(|err| QueryError::Error {
             message: format!("{err:#}"),
         })?;
-        Ok(format!("${}", self.arguments.len()))
+
+        if cfg!(feature = "embedded-db") {
+            Ok("?".to_string())
+        } else {
+            Ok(format!("${}", self.arguments.len()))
+        }
     }
 
     /// Finalize the query with a constructed SQL statement.

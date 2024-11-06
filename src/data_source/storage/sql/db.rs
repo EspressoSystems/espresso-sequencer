@@ -37,4 +37,8 @@
 /// {}
 /// ```
 /// etc.
+
+#[cfg(feature = "embedded-db")]
+pub type Db = sqlx::Sqlite;
+#[cfg(not(feature = "embedded-db"))]
 pub type Db = sqlx::Postgres;

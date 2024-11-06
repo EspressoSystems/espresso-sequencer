@@ -221,12 +221,12 @@ where
         // ORDER BY ASC ensures that if there are duplicate transactions, we return the first
         // one.
         let sql = format!(
-            "SELECT {BLOCK_COLUMNS}, t.index AS tx_index
+            "SELECT {BLOCK_COLUMNS}, t.idx AS tx_index
                 FROM header AS h
                 JOIN payload AS p ON h.height = p.height
-                JOIN transaction AS t ON t.block_height = h.height
+                JOIN \"transaction\" AS t ON t.block_height = h.height
                 WHERE t.hash = {hash_param}
-                ORDER BY (t.block_height, t.index) ASC
+                ORDER BY t.block_height ASC, t.idx ASC
                 LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;

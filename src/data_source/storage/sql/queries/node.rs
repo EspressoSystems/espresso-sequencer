@@ -51,7 +51,7 @@ where
     }
 
     async fn count_transactions(&mut self) -> QueryResult<usize> {
-        let (count,) = query_as::<(i64,)>("SELECT count(*) FROM transaction")
+        let (count,) = query_as::<(i64,)>("SELECT count(*) FROM \"transaction\"")
             .fetch_one(self.as_mut())
             .await?;
         Ok(count as usize)
@@ -117,7 +117,7 @@ where
                 (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL) AS p,
                 (SELECT count(*) AS total_vid FROM vid) AS v,
                 (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,
-                coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
+                (SELECT(SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1) as pruned_height)
             ";
         let row = query(sql)
             .fetch_optional(self.as_mut())

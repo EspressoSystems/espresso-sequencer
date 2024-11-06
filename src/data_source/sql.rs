@@ -26,9 +26,15 @@ pub use anyhow::Error;
 use hotshot_types::traits::node_implementation::NodeType;
 pub use refinery::Migration;
 
-pub use sql::{Config, Transaction};
+pub use sql::Transaction;
 
 pub type Builder<Types, Provider> = fetching::Builder<Types, SqlStorage, Provider>;
+
+#[cfg(feature = "embedded-db")]
+pub type Config = sql::Config<sqlx::Sqlite>;
+
+#[cfg(not(feature = "embedded-db"))]
+pub type Config = sql::Config<sqlx::Postgres>;
 
 impl Config {
     /// Connect to the database with this config.
