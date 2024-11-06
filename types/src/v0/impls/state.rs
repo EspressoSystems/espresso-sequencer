@@ -1799,7 +1799,7 @@ mod test {
         let max_block_size = 10;
 
         let validated_state = ValidatedState::default();
-        let instance_state = NodeState::mock_v3().with_chain_config(ChainConfig {
+        let instance_state = NodeState::mock_v99().with_chain_config(ChainConfig {
             base_fee: 1000.into(), // High base fee
             max_block_size: max_block_size.into(),
             ..validated_state.chain_config.resolve().unwrap()
@@ -1815,7 +1815,7 @@ mod test {
 
         let data = header.fee_info()[0].amount().as_u64().unwrap();
 
-        // test v3 sig
+        // test Marketplace sig
         let sig = FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data).unwrap();
         // test dedicated marketplace validation function
         account

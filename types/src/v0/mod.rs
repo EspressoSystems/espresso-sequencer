@@ -177,7 +177,7 @@ pub type V0_0 = StaticVersion<0, 0>;
 pub type V0_1 = StaticVersion<0, 1>;
 pub type FeeVersion = StaticVersion<0, 2>;
 pub type ProofOfStake = StaticVersion<0, 3>;
-pub type MarketplaceVersion = StaticVersion<0, 5>;
+pub type MarketplaceVersion = StaticVersion<0, 99>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Event = hotshot::types::Event<SeqTypes>;

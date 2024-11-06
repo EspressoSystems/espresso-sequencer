@@ -47,7 +47,7 @@ use crate::{
 
 type V1Serializer = vbs::Serializer<StaticVersion<0, 1>>;
 type V2Serializer = vbs::Serializer<StaticVersion<0, 2>>;
-type V3Serializer = vbs::Serializer<StaticVersion<0, 3>>;
+type V99Serializer = vbs::Serializer<StaticVersion<0, 99>>;
 
 async fn reference_payload() -> Payload {
     const NUM_NS_IDS: usize = 3;
@@ -106,7 +106,7 @@ fn reference_chain_config() -> crate::v0_99::ChainConfig {
 const REFERENCE_V1_CHAIN_CONFIG_COMMITMENT: &str =
     "CHAIN_CONFIG~L6HmMktJbvnEGgpmRrsiYvQmIBstSj9UtDM7eNFFqYFO";
 
-const REFERENCE_V3_CHAIN_CONFIG_COMMITMENT: &str =
+const REFERENCE_V99_CHAIN_CONFIG_COMMITMENT: &str =
     "CHAIN_CONFIG~1mJTBiaJ0Nyuu4Ir5IZTamyI8CjexbktPkRr6R1rtnGh";
 
 fn reference_fee_info() -> FeeInfo {
@@ -231,7 +231,7 @@ change in the serialization of this data structure.
     let actual = match version {
         "v1" => V1Serializer::serialize(&reference).unwrap(),
         "v2" => V2Serializer::serialize(&reference).unwrap(),
-        "v3" => V3Serializer::serialize(&reference).unwrap(),
+        "v99" => V99Serializer::serialize(&reference).unwrap(),
         _ => panic!("invalid version"),
     };
     if actual != expected {
@@ -260,7 +260,7 @@ change in the serialization of this data structure.
     let parsed: T = match version {
         "v1" => V1Serializer::deserialize(&expected).unwrap(),
         "v2" => V2Serializer::deserialize(&expected).unwrap(),
-        "v3" => V3Serializer::deserialize(&expected).unwrap(),
+        "v99" => V99Serializer::deserialize(&expected).unwrap(),
         _ => panic!("invalid version"),
     };
 
@@ -347,12 +347,12 @@ fn test_reference_v1_chain_config() {
 }
 
 #[test]
-fn test_reference_v3_chain_config() {
+fn test_reference_v99_chain_config() {
     reference_test(
-        "v3",
+        "v99",
         "chain_config",
         reference_chain_config(),
-        REFERENCE_V3_CHAIN_CONFIG_COMMITMENT,
+        REFERENCE_V99_CHAIN_CONFIG_COMMITMENT,
     );
 }
 

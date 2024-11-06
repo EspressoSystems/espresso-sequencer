@@ -103,7 +103,10 @@ impl Serialize for Header {
             }
             .serialize(serializer),
             Self::V99(fields) => VersionedHeader {
-                version: EitherOrVersion::Version(Version { major: 0, minor: 3 }),
+                version: EitherOrVersion::Version(Version {
+                    major: 0,
+                    minor: 99,
+                }),
                 fields: fields.clone(),
             }
             .serialize(serializer),
@@ -183,12 +186,12 @@ impl<'de> Deserialize<'de> for Header {
                         EitherOrVersion::Version(Version { major: 0, minor: 2 }) => Ok(Header::V2(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
-                        EitherOrVersion::Version(Version { major: 0, minor: 3 }) => {
-                            Ok(Header::V99(
-                                serde_json::from_value(fields.clone())
-                                    .map_err(de::Error::custom)?,
-                            ))
-                        }
+                        EitherOrVersion::Version(Version {
+                            major: 0,
+                            minor: 99,
+                        }) => Ok(Header::V99(
+                            serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
+                        )),
                         EitherOrVersion::Version(v) => {
                             Err(de::Error::custom(format!("invalid version {v:?}")))
                         }
@@ -307,7 +310,7 @@ impl Header {
                 fee_info: fee_info[0], // NOTE this is asserted to exist above
                 builder_signature: builder_signature.first().copied(),
             }),
-            3 => Self::V99(v0_99::Header {
+            99 => Self::V99(v0_99::Header {
                 chain_config: v0_99::ResolvableChainConfig::from(chain_config),
                 height,
                 timestamp,
@@ -1624,9 +1627,9 @@ mod test_headers {
             BincodeSerializer::<StaticVersion<0, 2>>::deserialize(&v2_bytes).unwrap();
         assert_eq!(v2_header, deserialized);
 
-        let v3_bytes = BincodeSerializer::<StaticVersion<0, 3>>::serialize(&v99_header).unwrap();
+        let v99_bytes = BincodeSerializer::<StaticVersion<0, 99>>::serialize(&v99_header).unwrap();
         let deserialized: Header =
-            BincodeSerializer::<StaticVersion<0, 3>>::deserialize(&v3_bytes).unwrap();
+            BincodeSerializer::<StaticVersion<0, 99>>::deserialize(&v99_bytes).unwrap();
         assert_eq!(v99_header, deserialized);
     }
 }
