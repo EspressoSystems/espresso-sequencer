@@ -51,7 +51,7 @@ where
     }
 
     async fn count_transactions(&mut self) -> QueryResult<usize> {
-        let (count,) = query_as::<(i64,)>("SELECT count(*) FROM \"transaction\"")
+        let (count,) = query_as::<(i64,)>("SELECT count(*) FROM transactions")
             .fetch_one(self.as_mut())
             .await?;
         Ok(count as usize)

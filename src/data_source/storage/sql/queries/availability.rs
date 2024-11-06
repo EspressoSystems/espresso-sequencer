@@ -224,7 +224,7 @@ where
             "SELECT {BLOCK_COLUMNS}, t.idx AS tx_index
                 FROM header AS h
                 JOIN payload AS p ON h.height = p.height
-                JOIN \"transaction\" AS t ON t.block_height = h.height
+                JOIN transactions AS t ON t.block_height = h.height
                 WHERE t.hash = {hash_param}
                 ORDER BY t.block_height ASC, t.idx ASC
                 LIMIT 1"

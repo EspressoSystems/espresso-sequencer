@@ -217,14 +217,14 @@ where
         // returned results based on.
         let transaction_target_query = match target {
             TransactionIdentifier::Latest => query(
-                "SELECT t.block_height AS height, t.idx AS \"index\" FROM \"transaction\" AS t ORDER BY t.block_height DESC, t.idx DESC LIMIT 1",
+                "SELECT t.block_height AS height, t.idx AS \"index\" FROM transactions AS t ORDER BY t.block_height DESC, t.idx DESC LIMIT 1",
             ),
             TransactionIdentifier::HeightAndOffset(height, _) => query(
-                "SELECT t.block_height AS height, t.idx AS \"index\" FROM \"transaction\" AS t WHERE t.block_height = $1 ORDER BY t.block_height DESC, t.idx DESC LIMIT 1",
+                "SELECT t.block_height AS height, t.idx AS \"index\" FROM transactions AS t WHERE t.block_height = $1 ORDER BY t.block_height DESC, t.idx DESC LIMIT 1",
             )
             .bind(*height as i64),
             TransactionIdentifier::Hash(hash) => query(
-                "SELECT t.block_height AS height, t.idx AS \"index\" FROM \"transaction\" AS t WHERE t.hash = $1 ORDER BY t.block_height DESC, t.idx DESC LIMIT 1",
+                "SELECT t.block_height AS height, t.idx AS \"index\" FROM transactions AS t WHERE t.hash = $1 ORDER BY t.block_height DESC, t.idx DESC LIMIT 1",
             )
             .bind(hash.to_string()),
         };
@@ -263,7 +263,7 @@ where
                         JOIN payload AS p ON h.height = p.height
                         WHERE h.height IN (
                             SELECT t.block_height
-                                FROM \"transaction\" AS t
+                                FROM transactions AS t
                                 WHERE (t.block_height, t.idx) <= ({}, {})
                                 ORDER BY t.block_height DESC, t.idx DESC
                                 LIMIT {}
@@ -339,7 +339,7 @@ where
                     JOIN payload AS p ON h.height = p.height
                     WHERE h.height = (
                         SELECT MAX(t1.block_height)
-                            FROM \"transaction\" AS t1
+                            FROM transactions AS t1
                     )
                     ORDER BY h.height DESC"
             ),
@@ -349,7 +349,7 @@ where
                     JOIN payload AS p ON h.height = p.height
                     WHERE h.height = (
                         SELECT t1.block_height
-                            FROM \"transaction\" AS t1
+                            FROM transactions AS t1
                             WHERE t1.block_height = {}
                             ORDER BY t1.block_height, t1.idx
                             OFFSET {}
@@ -365,7 +365,7 @@ where
                     JOIN payload AS p ON h.height = p.height
                     WHERE h.height = (
                         SELECT t1.block_height
-                            FROM \"transaction\" AS t1
+                            FROM transactions AS t1
                             WHERE t1.hash = {}
                             ORDER BY t1.block_height DESC, t1.idx DESC
                             LIMIT 1
@@ -415,7 +415,7 @@ where
                     h.timestamp AS timestamp,
                     h.timestamp - lead(timestamp) OVER (ORDER BY h.height DESC) AS time,
                     p.size AS size,
-                    (SELECT COUNT(*) AS transactions FROM \"transaction\" AS t WHERE t.block_height = h.height) as transactions
+                    (SELECT COUNT(*) AS transactions FROM transactions AS t WHERE t.block_height = h.height) as transactions
                 FROM header AS h
                 JOIN payload AS p ON
                     p.height = h.height
@@ -463,7 +463,7 @@ where
             let row = query(
                 "SELECT
                     (SELECT MAX(height) + 1 FROM header) AS blocks,
-                    (SELECT COUNT(*) FROM \"transaction\") AS transactions",
+                    (SELECT COUNT(*) FROM transactions) AS transactions",
             )
             .fetch_one(self.as_mut())
             .await?;
@@ -552,7 +552,7 @@ where
                 "SELECT {BLOCK_COLUMNS}
                     FROM header AS h
                     JOIN payload AS p ON h.height = p.height
-                    JOIN \"transaction\" AS t ON h.height = t.block_height
+                    JOIN transactions AS t ON h.height = t.block_height
                     WHERE t.hash = $1
                     ORDER BY h.height DESC
                     LIMIT 5"

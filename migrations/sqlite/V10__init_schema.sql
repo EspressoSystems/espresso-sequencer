@@ -47,7 +47,7 @@ CREATE TABLE leaf
     qc   JSONB NOT NULL
 );
 
-CREATE TABLE `transaction`
+CREATE TABLE transactions
 (
     hash TEXT NOT NULL,
     -- Block containing this transaction.
@@ -59,7 +59,7 @@ CREATE TABLE `transaction`
     PRIMARY KEY (block_height, idx)
 );
 -- This index is not unique, because nothing stops HotShot from sequencing duplicate transactions.
-CREATE INDEX transaction_hash ON `transaction` (hash);
+CREATE INDEX transaction_hash ON transactions (hash);
 
 CREATE TABLE pruned_height (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
