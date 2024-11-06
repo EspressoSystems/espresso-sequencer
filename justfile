@@ -12,7 +12,7 @@ demo-native:
     scripts/demo-native
 
 demo-native-mp:
-    cargo build --release
+    cargo build --profile test
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml
 
 demo-native-benchmark:
