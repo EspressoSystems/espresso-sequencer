@@ -55,11 +55,11 @@ ulimit -n 4096
 
 In these tests, there are three types of nodes. `Regular` nodes that limit the number of incoming connections, `Bootstrap` nodes that allow all connections, and `Conductor` nodes that all nodes (bootstrap and regular) connect to and periodically ping with their state. This "conductor" node instructs nodes in the swarm to increment their state either via broadcast or direct messages in the same fashion as the single machine tests.
 
-In the direct message case, the conductor will increment the state of a randomly chosen node, `i`. Then the conductor will direct message all other nodes to request node `i`'s counter and increment their counter to the value in `i`'s node. In the broadcast case, the conductor will increment the state of a randomly chose node, `i`, and tell `i` to broadcast this incremented state.
+In the direct message case, the conductor will increment the state of a randomly chosen node, `i`. Then the conductor will direct message all other nodes to request node `i`'s counter and increment their counter to the value in `i`'s node. In the broadcast case, the conductor will increment the state of a randomly chosen node, `i`, and tell `i` to broadcast this incremented state.
 
 In both cases, the test terminates as successful when the conductor receives the incremented state from all other nodes. Then, the conductor sends a special "kill" message to all known nodes and waits for them to disconnect.
 
-Metadata about the toplogy is currently read from an `identity_mapping.json` file that manually labels the type of node (bootstrap, regular, conductor). The conductor uses this to figure out information about all nodes in the network. The regular nodes use this to learn about their ip address and the addresses necessary to bootstrap onto the network. The boostrap nodes only use this to learn about their ip addresses.
+Metadata about the topology is currently read from an `identity_mapping.json` file that manually labels the type of node (bootstrap, regular, conductor). The conductor uses this to figure out information about all nodes in the network. The regular nodes use this to learn about their ip address and the addresses necessary to bootstrap onto the network. The bootstrap nodes only use this to learn about their ip addresses.
 
 ### Running counter multi-machine tests
 
@@ -75,7 +75,7 @@ nix develop -c cargo run --features webui,async-std-executor --release --example
 ```
 
 ### Network Emulation
-One may introduce simulated network latency via the network emulationn queueing discipline. This is implemented in two ways: on what is assumed to be a AWS EC2 instance, and in a docker container. Example usage on AWS EC2 instance:
+One may introduce simulated network latency via the network emulation queueing discipline. This is implemented in two ways: on what is assumed to be a AWS EC2 instance, and in a docker container. Example usage on AWS EC2 instance:
 
 ```bash
 # run each line in a separate AWS instance
