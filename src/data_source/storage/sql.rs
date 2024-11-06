@@ -63,7 +63,7 @@ pub use transaction::*;
 
 use self::{migrate::Migrator, transaction::PoolMetrics};
 
-/// Embed migrations from the given directory into the current binary.
+/// Embed migrations from the given directory into the current binary for PostgreSQL or SQLite.
 ///
 /// The macro invocation `include_migrations!(path)` evaluates to an expression of type `impl
 /// Iterator<Item = Migration>`. Each migration must be a text file which is an immediate child of
@@ -78,15 +78,30 @@ use self::{migrate::Migrator, transaction::PoolMetrics};
 ///
 /// As an example, this is the invocation used to load the default migrations from the
 /// `hotshot-query-service` crate. The migrations are located in a directory called `migrations` at
-/// the root of the crate.
+/// - PostgreSQL migrations are in `/migrations/postgres`.
+/// - SQLite migrations are in `/migrations/sqlite`.
 ///
 /// ```
 /// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
-/// let mut migrations: Vec<Migration> =
-///     include_migrations!("$CARGO_MANIFEST_DIR/migrations").collect();
-/// migrations.sort();
-/// assert_eq!(migrations[0].version(), 10);
-/// assert_eq!(migrations[0].name(), "init_schema");
+/// // For PostgreSQL
+/// #[cfg(not(feature = "embedded-db"))]
+/// {   
+///     let mut postgres_migrations: Vec<Migration> =
+///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/postgres").collect();
+///     postgres_migrations.sort();
+///     assert_eq!(postgres_migrations[0].version(), 10);
+///     assert_eq!(postgres_migrations[0].name(), "init_schema");
+/// }
+///
+/// // For SQLite
+/// #[cfg(feature = "embedded-db")]
+/// {
+///     let mut sqlite_migrations: Vec<Migration> =
+///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/sqlite").collect();
+///     sqlite_migrations.sort();
+///     assert_eq!(sqlite_migrations[0].version(), 10);
+///     assert_eq!(sqlite_migrations[0].name(), "init_schema");
+/// }
 /// ```
 ///
 /// Note that a similar macro is available from Refinery:

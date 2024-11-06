@@ -84,9 +84,11 @@ impl Config {
 ///
 /// ## Initialization
 ///
-/// When creating a [`SqlDataSource`], the caller can use [`Config`] to specify the host, user, and
-/// database to connect to. As such, [`SqlDataSource`] is not very opinionated about how the
-/// Postgres instance is set up. The administrator must simply ensure that there is a database
+/// When creating a PostgreSQL [`SqlDataSource`], the caller can use [`Config`] to specify the host, user, and
+/// database for the connection. If the `embedded-db` feature is enabled, the caller can instead specify the
+/// file path for an SQLite database.
+/// As such, [`SqlDataSource`] is not very opinionated about how the
+/// database instance is set up. The administrator must simply ensure that there is a database
 /// dedicated to the [`SqlDataSource`] and a user with appropriate permissions (all on `SCHEMA` and
 /// all on `DATABASE`) over that database.
 ///
@@ -102,10 +104,13 @@ impl Config {
 /// GRANT ALL ON DATABASE hotshot_query_service TO hotshot_user WITH GRANT OPTION;
 /// ```
 ///
-/// One could then connect to this database with the following [`Config`]:
+/// For SQLite, simply provide the file path, and the file will be created if it does not already exist.
+///
+/// One could then connect to this database with the following [`Config`] for postgres:
 ///
 /// ```
 /// # use hotshot_query_service::data_source::sql::Config;
+/// #[cfg(not(feature= "embedded-db"))]
 /// Config::default()
 ///     .host("postgres.database.hostname")
 ///     .database("hotshot_query_service")
@@ -113,7 +118,15 @@ impl Config {
 ///     .password("password")
 /// # ;
 /// ```
+/// Or, if the `embedded-db` feature is enabled, configure it as follows for SQLite:
 ///
+/// ```
+/// # use hotshot_query_service::data_source::sql::Config;
+/// #[cfg(feature= "embedded-db")]
+/// Config::default()
+///     .db_path("temp.db".into())
+/// # ;
+/// ```
 /// ## Resetting
 ///
 /// In general, resetting the database when necessary is left up to the administrator. However, for
