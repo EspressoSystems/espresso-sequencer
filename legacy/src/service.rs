@@ -1056,7 +1056,7 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             txns.iter().map(|txn| txn.commit()).collect::<Vec<_>>()
         );
         for txn in txns.clone() {
-            self.global_state
+            let _ = self.global_state
                 .write_arc()
                 .await
                 .set_tx_status(txn.commit(), TransactionStatus::Pending);
@@ -1072,7 +1072,7 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
         let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..txns.len()).map(|i| (txns[i].clone(), response[i].clone())).collect();
         for (txn, res) in pairs {
             if let Err(some) = res {
-                self.global_state
+                let _ = self.global_state
                 .write_arc()
                 .await
                 .set_tx_status(txn.commit(), TransactionStatus::Rejected{reason: some.to_string()});
@@ -1098,7 +1098,6 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             .read_arc()
             .await
             .claim_tx_status(txn_hash)
-            .await
     }
 }
 #[async_trait]
@@ -1166,13 +1165,22 @@ pub async fn run_non_permissioned_standalone_builder_service<
                         .max_block_size
                 };
 
-                handle_received_txns(
+                let results = handle_received_txns(
                     &tx_sender,
-                    transactions,
+                    transactions.clone(),
                     TransactionSource::HotShot,
                     max_block_size,
                 )
                 .await;
+                let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..transactions.len()).map(|i| (transactions[i].clone(), results[i].clone())).collect();
+                for (txn, res) in pairs {
+                    if let Err(some) = res {
+                        let _ = global_state
+                        .write_arc()
+                        .await
+                        .set_tx_status(txn.commit(), TransactionStatus::Rejected{reason: some.to_string()});
+                    }
+                }
             }
             // decide event
             EventType::Decide {
