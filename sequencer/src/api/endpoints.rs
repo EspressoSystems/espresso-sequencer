@@ -7,9 +7,7 @@ use std::{
 
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{
-    FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction, FEE_MERKLE_TREE_ARITY,
-};
+use espresso_types::{FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::merklized_state::Snapshot;
 use hotshot_query_service::{
@@ -27,6 +25,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, Versions},
     },
 };
+use jf_merkle_tree::MerkleTreeScheme;
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
@@ -54,7 +53,7 @@ where
     Ver: 'static + StaticVersionType,
     <State as ReadState>::State: Send
         + Sync
-        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, FEE_MERKLE_TREE_ARITY>
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
         + MerklizedStateHeightPersistence,
 {
     let mut options = merklized_state::Options::default();

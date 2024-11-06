@@ -20,7 +20,7 @@ pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
 
 pub const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
 pub const FEE_MERKLE_TREE_HEIGHT: usize = 20;
-pub const FEE_MERKLE_TREE_ARITY: usize = 256;
+const FEE_MERKLE_TREE_ARITY: usize = 256;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Delta {
