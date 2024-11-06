@@ -48,6 +48,12 @@ jobs:
           cargo test --workspace --release --all-features --no-run
           cargo test --workspace --release --all-features --verbose -- --test-threads 2
         timeout-minutes: 60
+
+      - name: Test with embedded db
+        run: |
+          cargo test --workspace --release --features "embedded-db, no-storage" --no-run
+          cargo test --workspace --release --features "embedded-db, no-storage" --verbose -- --test-threads 2
+        timeout-minutes: 60
         
       - name: Generate Documentation
         run: |
