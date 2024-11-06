@@ -157,13 +157,13 @@ strip = "debuginfo"
 opt-level = 3
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
-libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", tag = "0.5.78-patch10" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.78-patch10" }
+hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-task ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-task-impls ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-testing ={ git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
+libp2p-networking = { git = "https://github.com/EspressoSystems//HotShot.git", branch = "0.5.78-patch10-more-logging" }
+hotshot-example-types = { git = "https://www.github.com/EspressoSystems/HotShot.git", branch = "0.5.78-patch10-more-logging" }
