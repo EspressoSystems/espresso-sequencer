@@ -390,7 +390,7 @@ impl<Types: NodeType> GlobalState<Types> {
 
     // get transaction status
     // return one of "pending", "sequenced", "rejected" or "unknown"
-    pub async fn claim_tx_status(
+    pub fn claim_tx_status(
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
@@ -399,6 +399,19 @@ impl<Types: NodeType> GlobalState<Types> {
         } else {
             Ok(TransactionStatus::Unknown)
         }
+    }
+
+    pub fn set_tx_status(
+        &mut self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+        txn_status: TransactionStatus,
+    ) -> Result<(), BuildError>{
+        if self.tx_status.contains_key(&txn_hash) {
+            tracing::debug!("change status of transaction {txn_hash} from {:?} to {:?}",
+            self.tx_status.get(&txn_hash), txn_status);
+        }
+        self.tx_status.insert(txn_hash, txn_status);
+        Ok(())
     }
 
     /// Helper function that attempts to retrieve the broadcast sender for the given
@@ -1042,13 +1055,30 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             txns.len(),
             txns.iter().map(|txn| txn.commit()).collect::<Vec<_>>()
         );
+        for txn in txns.clone() {
+            self.global_state
+                .write_arc()
+                .await
+                .set_tx_status(txn.commit(), TransactionStatus::Pending);
+        }
         let response = self
             .global_state
             .read_arc()
             .await
-            .submit_client_txns(txns)
+            .submit_client_txns(txns.clone())
             .await;
 
+            
+        let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..txns.len()).map(|i| (txns[i].clone(), response[i].clone())).collect();
+        for (txn, res) in pairs {
+            if let Err(some) = res {
+                self.global_state
+                .write_arc()
+                .await
+                .set_tx_status(txn.commit(), TransactionStatus::Rejected{reason: some.to_string()});
+            }
+        }
+        
         tracing::debug!(
             "Transaction submitted to the builder states, sending response: {:?}",
             response
