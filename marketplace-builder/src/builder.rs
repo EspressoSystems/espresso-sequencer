@@ -526,6 +526,8 @@ mod test {
         parent_view_number: u64,
         parent_commitment: VidCommitment,
     ) -> Bundle<SeqTypes> {
+        // FIXME error here:
+        // `{ status: StatusCode(400), message: "Version Mismatch! Expected 0.3, got 0.99"}`
         builder_client
             .get::<Bundle<SeqTypes>>(
                 format!(
