@@ -42,7 +42,7 @@ jobs:
       # don't compile with all combinations of features.
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
-      
+
       - name: Test
         run: |
           cargo test --workspace --release --all-features --no-run
@@ -51,10 +51,10 @@ jobs:
 
       - name: Test with embedded db
         run: |
-          cargo test --workspace --release --features "embedded-db, no-storage" --no-run
-          cargo test --workspace --release --features "embedded-db, no-storage" --verbose -- --test-threads 2
+          cargo test --workspace --release --features "embedded-db, no-storage, testing" --no-run
+          cargo test --workspace --release --features "embedded-db, no-storage, testing" --verbose -- --test-threads 2
         timeout-minutes: 60
-        
+
       - name: Generate Documentation
         run: |
           cargo doc --no-deps --lib --release --all-features
