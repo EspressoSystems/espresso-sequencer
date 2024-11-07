@@ -1,0 +1,40 @@
+[package]
+name = "inscriptions"
+description = "A toy program to demonstrate the liveness and interactivity within the Espresso mainnet"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[features]
+testing = ["serde_json"]
+
+[dependencies]
+alloy = { version = "0.5.3", features = ["dyn-abi", "signers", "signer-local", "signer-mnemonic", "sol-types"] }
+alloy-dyn-abi = { version = "0.8.5", features = [ "std", "eip712" ] }
+async-compatibility-layer = { workspace = true }
+async-std = { workspace = true }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+circular-buffer = { workspace = true }
+clap = { workspace = true }
+const-hex = { version = "^1.10" }
+espresso-types = { path = "../types", features = ["testing"] }
+futures = { workspace = true }
+governor = { version = "^0.7.0" }
+hotshot = { workspace = true }
+hotshot-builder-api = { workspace = true }
+hotshot-query-service = { workspace = true }
+serde = { workspace = true }
+sqlx = "0.8"
+surf-disco = { workspace = true }
+tide-disco = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+
+# Dependencies for feature `testing`
+hotshot-types = { workspace = true }
+serde_json = { version = "^1.0.113", optional = true }
+vbs = { workspace = true }
+# reqwest = { workspace = true }
+# time = { workspace = true }

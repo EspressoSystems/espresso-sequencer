@@ -1,0 +1,626 @@
+use crate::api::inscriptions::v0::Version01;
+
+use super::{
+    client_id::ClientId,
+    client_message::InternalClientMessage,
+    data_state::DataState,
+    espresso_inscription::{
+        EspressoInscription, HexSignature, InscriptionAndChainDetails,
+        InscriptionAndSignatureFromService,
+    },
+    server_message::ServerMessage,
+    ESPRESSO_EIP712_DOMAIN,
+};
+use alloy::{
+    signers::{local::PrivateKeySigner, SignerSync},
+    sol_types::SolStruct,
+};
+use async_std::{
+    sync::{RwLock, RwLockWriteGuard},
+    task::JoinHandle,
+};
+use espresso_types::{NamespaceId, Transaction};
+use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
+use governor::{
+    clock,
+    state::{InMemoryState, NotKeyed},
+    RateLimiter,
+};
+use std::{collections::HashMap, sync::Arc};
+use surf_disco::Client;
+use url::Url;
+
+/// ClientState represents the service state of the connected clients.
+/// It maintains and represents the connected clients, and their subscriptions.
+// This state is meant to be managed in a separate thread that assists with
+// processing and updating of individual client states.
+pub struct ClientState<K> {
+    client_id: ClientId,
+    sender: K,
+}
+
+impl<K> ClientState<K> {
+    /// Create a new ClientState with the given client_id and receiver.
+    pub fn new(client_id: ClientId, sender: K) -> Self {
+        Self { client_id, sender }
+    }
+
+    pub fn client_id(&self) -> ClientId {
+        self.client_id
+    }
+
+    pub fn sender(&self) -> &K {
+        &self.sender
+    }
+}
+
+/// [ClientThreadState] represents the state of all of the active client
+/// connections connected to the service. This state governs which clients
+/// are connected, and what subscriptions they have setup.
+pub struct ClientThreadState<K> {
+    clients: HashMap<ClientId, ClientState<K>>,
+    connection_id_counter: ClientId,
+}
+
+impl<K> ClientThreadState<K> {
+    pub fn new(
+        clients: HashMap<ClientId, ClientState<K>>,
+        connection_id_counter: ClientId,
+    ) -> Self {
+        Self {
+            clients,
+            connection_id_counter,
+        }
+    }
+}
+
+/// [drop_client_client_thread_state_write_guard] is a utility function for
+/// cleaning up the [ClientThreadState]
+fn drop_client_client_thread_state_write_guard<K>(
+    client_id: &ClientId,
+    client_thread_state_write_guard: &mut RwLockWriteGuard<ClientThreadState<K>>,
+) -> Option<ClientState<K>> {
+    client_thread_state_write_guard.clients.remove(client_id)
+}
+
+/// [drop_client_no_lock_guard] is a utility function for cleaning up the [ClientThreadState]
+/// when a client is detected as disconnected.
+async fn drop_client_no_lock_guard<K>(
+    client_id: &ClientId,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Option<ClientState<K>> {
+    let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
+
+    drop_client_client_thread_state_write_guard(
+        client_id,
+        &mut client_thread_state_write_lock_guard,
+    )
+}
+
+/// [HandleConnectedError] represents the scope of errors that can be
+/// returned from the [handle_client_message_connected] function.
+#[derive(Debug)]
+pub enum HandleConnectedError {
+    ClientSendError(SendError),
+}
+
+impl std::fmt::Display for HandleConnectedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HandleConnectedError::ClientSendError(err) => {
+                write!(f, "handle connected error: client send error: {}", err)
+            }
+        }
+    }
+}
+
+impl std::error::Error for HandleConnectedError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            HandleConnectedError::ClientSendError(err) => Some(err),
+        }
+    }
+}
+
+/// [handle_client_message_connected] is a function that processes the client
+/// message to connect a client to the service.
+pub async fn handle_client_message_connected<K>(
+    mut sender: K,
+    data_state: Arc<RwLock<DataState>>,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<ClientId, HandleConnectedError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
+    let client_id = {
+        let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
+
+        client_thread_state_write_lock_guard.connection_id_counter += 1;
+        let client_id = client_thread_state_write_lock_guard.connection_id_counter;
+
+        client_thread_state_write_lock_guard.clients.insert(
+            client_id,
+            ClientState {
+                client_id,
+                sender: sender.clone(),
+            },
+        );
+
+        client_id
+    };
+
+    // Send the client their new id.
+    if let Err(err) = sender.send(ServerMessage::YouAre(client_id)).await {
+        // We need to remove drop the client now.
+        drop_client_no_lock_guard(&client_id, client_thread_state.clone()).await;
+        return Err(HandleConnectedError::ClientSendError(err));
+    }
+
+    let current_inscriptions = {
+        let data_state_read_lock_guard = data_state.read().await;
+        data_state_read_lock_guard.current_inscriptions()
+    };
+
+    for inscription_and_chain_details in current_inscriptions {
+        if let Err(err) = sender
+            .send(ServerMessage::LatestInscription(Arc::new(
+                inscription_and_chain_details,
+            )))
+            .await
+        {
+            // We need to remove drop the client now.
+            drop_client_no_lock_guard(&client_id, client_thread_state.clone()).await;
+            return Err(HandleConnectedError::ClientSendError(err));
+        }
+    }
+
+    Ok(client_id)
+}
+
+/// [handle_client_message_disconnected] is a function that processes the client
+/// message to disconnect a client from the service.
+pub async fn handle_client_message_disconnected<K>(
+    client_id: ClientId,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) {
+    // We might receive an implicit disconnect when attempting to
+    // send a message, as the receiving channel might be closed.
+    drop_client_no_lock_guard(&client_id, client_thread_state.clone()).await;
+}
+
+pub enum HandlePutInscriptionError {
+    ClientSendError(SendError),
+}
+
+/// [ProcessClientMessageError] represents the scope of errors that can be
+/// returned from the [process_client_message] function.
+#[derive(Debug)]
+pub enum ProcessClientMessageError {
+    Connected(HandleConnectedError),
+}
+
+impl From<HandleConnectedError> for ProcessClientMessageError {
+    fn from(err: HandleConnectedError) -> Self {
+        ProcessClientMessageError::Connected(err)
+    }
+}
+
+impl std::fmt::Display for ProcessClientMessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProcessClientMessageError::Connected(err) => {
+                write!(f, "process client message error: connected: {}", err)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ProcessClientMessageError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ProcessClientMessageError::Connected(err) => Some(err),
+        }
+    }
+}
+
+/// [drop_failed_client_sends] is a function that will drop all of the failed
+/// client sends from the client thread state.
+async fn drop_failed_client_sends<K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+    failed_client_sends: Vec<ClientId>,
+) {
+    // Let's acquire our write lock
+    let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
+
+    // We want to drop all of the failed clients.
+    // There's an optimization to be had here
+    for client_id in failed_client_sends {
+        drop_client_client_thread_state_write_guard(
+            &client_id,
+            &mut client_thread_state_write_lock_guard,
+        );
+    }
+}
+
+/// [process_client_message] is a function that processes the client message
+/// and processes the message accordingly.
+///
+/// The [DataState] is provided and is used only as a Read lock to distribute
+/// the current state of the system to the clients upon request.
+///
+/// The [ClientThreadState] is provided as it needs to be updated with new
+/// subscriptions / new connections depending on the incoming
+/// [InternalClientMessage]
+pub async fn process_client_message<K>(
+    message: InternalClientMessage<K>,
+    data_state: Arc<RwLock<DataState>>,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<(), ProcessClientMessageError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
+    match message {
+        InternalClientMessage::Connected(sender) => {
+            handle_client_message_connected(sender, data_state, client_thread_state).await?;
+            Ok(())
+        }
+
+        InternalClientMessage::Disconnected(client_id) => {
+            handle_client_message_disconnected(client_id, client_thread_state).await;
+            Ok(())
+        }
+    }
+}
+
+/// InternalClientMessageProcessingTask represents an async task for
+/// InternalClientMessages, and making the appropriate updates to the
+/// [ClientThreadState] and [DataState].
+pub struct InternalClientMessageProcessingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl InternalClientMessageProcessingTask {
+    /// new creates a new [InternalClientMessageProcessingTask] with the
+    /// given internal_client_message_receiver, data_state, and
+    /// client_thread_state.
+    ///
+    /// Calling this function will start an async task that will start
+    /// processing.  The handle for the async task is stored within the
+    /// returned state.
+    pub fn new<S, K>(
+        internal_client_message_receiver: S,
+        data_state: Arc<RwLock<DataState>>,
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+    ) -> Self
+    where
+        S: Stream<Item = InternalClientMessage<K>> + Send + Sync + Unpin + 'static,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_internal_client_message_stream(
+            internal_client_message_receiver,
+            data_state.clone(),
+            client_thread_state.clone(),
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_internal_client_message_stream] is a function that processes the
+    /// client handling stream. This stream is responsible for managing the state
+    /// of the connected clients, and their subscriptions.
+    async fn process_internal_client_message_stream<S, K>(
+        mut stream: S,
+        data_state: Arc<RwLock<DataState>>,
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+    ) where
+        S: Stream<Item = InternalClientMessage<K>> + Unpin,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let message_result = stream.next().await;
+            let message = if let Some(message) = message_result {
+                message
+            } else {
+                tracing::error!("internal client message handler closed.");
+                panic!("InternalClientMessageProcessingTask stream closed, unable to process new requests from clients.");
+            };
+
+            if let Err(err) =
+                process_client_message(message, data_state.clone(), client_thread_state.clone())
+                    .await
+            {
+                tracing::info!(
+                    "internal client message processing encountered an error: {}",
+                    err,
+                );
+                return;
+            }
+        }
+    }
+}
+
+/// [drop] implementation for [InternalClientMessageProcessingTask] that will
+/// cancel the task if it is still running.
+impl Drop for InternalClientMessageProcessingTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
+    }
+}
+
+/// [handle_received_inscription] is a function that processes received
+/// inscriptions and will attempt to distribute the message to all of the
+/// clients that are connected.
+async fn handle_received_inscription<K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+    inscription_and_chain_details: InscriptionAndChainDetails,
+) where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
+    tracing::debug!("received inscription, beginning to distribute to connected clients");
+    let client_senders: Vec<(ClientId, K)> = {
+        let client_thread_state_read_lock_guard = client_thread_state.read().await;
+        client_thread_state_read_lock_guard
+            .clients
+            .iter()
+            .map(|(client_id, client_state)| (*client_id, client_state.sender.clone()))
+            .collect()
+    };
+
+    let arc_inscription_and_chain_details = Arc::new(inscription_and_chain_details);
+    // We collect the results of sending the latest block to the clients.
+
+    let client_send_result_future = client_senders.into_iter().map(|(client_id, sender)| {
+        let arc_inscription = arc_inscription_and_chain_details.clone();
+        async move {
+            let mut sender = sender;
+            let send_result = sender
+                .send(ServerMessage::LatestInscription(arc_inscription))
+                .await;
+
+            (client_id, send_result)
+        }
+    });
+
+    let client_send_results = futures::future::join_all(client_send_result_future).await;
+
+    // These are the clients we failed to send the message to.  We copy these
+    // here so we can drop our read lock.
+    let failed_client_sends = client_send_results
+        .into_iter()
+        .filter(|(_, send_result)| send_result.is_err())
+        .map(|(client_id, _)| client_id)
+        .collect::<Vec<_>>();
+
+    if failed_client_sends.is_empty() {
+        return;
+    }
+
+    drop_failed_client_sends(client_thread_state, failed_client_sends).await;
+}
+
+/// [ProcessDistributeInscriptionHandlingTask] represents an async task for
+/// processing the incoming [Inscription] and distributing them to all clients.
+pub struct ProcessDistributeInscriptionHandlingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl ProcessDistributeInscriptionHandlingTask {
+    /// [new] creates a new [ProcessDistributeInscriptionHandlingTask] with the
+    /// given client_thread_state and block_detail_receiver.
+    ///
+    /// Calling this function will start an async task that will start
+    /// processing.  The handle for the async task is stored within the
+    /// returned state.
+    pub fn new<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        inscription_receiver: S,
+    ) -> Self
+    where
+        S: Stream<Item = InscriptionAndChainDetails> + Send + Sync + Unpin + 'static,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle =
+            async_std::task::spawn(Self::process_distribute_inscription_handling_stream(
+                client_thread_state.clone(),
+                inscription_receiver,
+            ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_distribute_inscription_handling_stream] is a function that
+    /// processes the the [Stream] of incoming [EspressoInscription] and
+    /// distributes them to all connected clients.
+    async fn process_distribute_inscription_handling_stream<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        mut stream: S,
+    ) where
+        S: Stream<Item = InscriptionAndChainDetails> + Unpin,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let inscription_and_block_details = match stream.next().await {
+                Some(inscription_and_block_details) => inscription_and_block_details,
+                None => {
+                    tracing::error!(
+                        "block detail stream closed.  shutting down client handling stream.",
+                    );
+                    return;
+                }
+            };
+
+            handle_received_inscription(client_thread_state.clone(), inscription_and_block_details)
+                .await
+        }
+    }
+}
+
+/// [drop] implementation for [ProcessDistributeInscriptionHandlingTask] that will
+/// cancel the task if it is still running.
+impl Drop for ProcessDistributeInscriptionHandlingTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
+    }
+}
+
+pub struct ProcessRecordInscriptionHandlingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl ProcessRecordInscriptionHandlingTask {
+    pub fn new<S>(
+        rate_limiter: RateLimiter<NotKeyed, InMemoryState, clock::DefaultClock>,
+        inscription_namespace_id: NamespaceId,
+        signer: PrivateKeySigner,
+        inscription_receiver: S,
+        base_url: Url,
+    ) -> Self
+    where
+        S: Stream<Item = EspressoInscription> + Send + Sync + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_record_inscription(
+            rate_limiter,
+            inscription_namespace_id,
+            signer,
+            inscription_receiver,
+            base_url,
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    async fn process_record_inscription<S>(
+        rate_limiter: RateLimiter<NotKeyed, InMemoryState, clock::DefaultClock>,
+        inscription_namespace_id: NamespaceId,
+        signer: PrivateKeySigner,
+        mut stream: S,
+        base_url: Url,
+    ) where
+        S: Stream<Item = EspressoInscription> + Unpin,
+    {
+        let client = Client::<hotshot_query_service::Error, Version01>::new(base_url);
+
+        loop {
+            // Wait for the Rate Limiter
+            tracing::debug!("waiting for rate limiter");
+            rate_limiter.until_ready().await;
+            tracing::debug!("ready to submit next inscription");
+
+            let Some(inscription) = stream.next().await else {
+                tracing::error!(
+                    "inscription detail stream closed.  shutting down client handling stream.",
+                );
+                panic!("Inscription detail stream closed, unable to process new requests from clients.");
+            };
+            tracing::debug!("have inscription to submit to mempool");
+
+            // Sign the message using the server key
+
+            let signature_result =
+                signer.sign_hash_sync(&inscription.eip712_signing_hash(&ESPRESSO_EIP712_DOMAIN));
+            let signature = match signature_result {
+                Ok(signature) => signature,
+                Err(err) => {
+                    tracing::error!("error signing inscription: {}", err);
+                    panic!("Error signing inscription: {}", err);
+                }
+            };
+
+            // We create the new inscription and signature
+            let inscription_and_signature = InscriptionAndSignatureFromService {
+                inscription,
+                signature: HexSignature(signature),
+            };
+
+            // Next we encode the object.
+            let serialize_result = bincode::serialize(&inscription_and_signature);
+
+            let serialized = match serialize_result {
+                Ok(serialized) => {
+                    // We have the serialized object, we can now send it to the
+                    // next stage.
+                    serialized
+                }
+                Err(err) => {
+                    tracing::error!("error serializing inscription and signature: {}", err);
+                    panic!("Error serializing inscription and signature: {}", err);
+                }
+            };
+
+            let transaction = Transaction::new(inscription_namespace_id, serialized);
+
+            let send_result = client
+                .post::<()>("submit")
+                .body_binary(&transaction)
+                .unwrap()
+                .send()
+                .await;
+
+            if let Err(err) = send_result {
+                tracing::error!("error sending inscription to service: {}", err);
+                panic!("Error sending inscription to service: {}", err);
+            }
+
+            tracing::debug!("successfully submitted inscription to mempool");
+        }
+    }
+}
+
+impl Drop for ProcessRecordInscriptionHandlingTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::{ClientThreadState, InternalClientMessageProcessingTask};
+    use crate::service::{
+        client_id::ClientId, data_state::DataState, server_message::ServerMessage,
+    };
+    use alloy::signers::local::PrivateKeySigner;
+    use async_std::sync::RwLock;
+    use futures::channel::mpsc::{self, Sender};
+    use std::sync::Arc;
+
+    pub fn create_test_client_thread_state() -> ClientThreadState<Sender<ServerMessage>> {
+        ClientThreadState {
+            clients: Default::default(),
+            connection_id_counter: ClientId::from_count(1),
+        }
+    }
+
+    pub fn create_test_data_state() -> DataState {
+        let signer = PrivateKeySigner::random();
+        DataState::new(Default::default(), signer.address())
+    }
+
+    #[async_std::test]
+    async fn test_client_handling_stream_task_shutdown() {
+        let data_state = create_test_data_state();
+        let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
+        let data_state = Arc::new(RwLock::new(data_state));
+
+        let (_internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state,
+            client_thread_state,
+        );
+    }
+}

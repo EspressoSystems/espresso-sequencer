@@ -1,0 +1,50 @@
+# Copyright (c) 2022 Espresso Systems (espressosys.com)
+# This file is part of the HotShot Query Service library.
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+# even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program. If not,
+# see <https://www.gnu.org/licenses/>.
+
+[meta]
+FORMAT_VERSION = "0.1.0"
+NAME = "inscriptions"
+DESCRIPTION = """
+The inscriptions  API provides an endpoint that allows for the near real-time
+streaming of confirmed Inscriptions coming from an Espresso Block Chain.
+
+The data that is provided by this API can be used to submit new inscriptions
+to the Inscriptions demo, as well as stream incoming inscriptions to other
+users in near real-time.
+"""
+
+[route.stream_inscriptions]
+PATH = ["inscriptions"]
+METHOD = "SOCKET"
+DOC = """
+The inscriptions endpoint will stream committed inscriptions to the users
+who open it.  All inscriptions as they are confirmed in near real-time will
+be sent to any user who has connected via this endpoint.
+"""
+
+[route.put_inscription]
+PATH = ["put_inscription"]
+METHOD = "POST"
+DOC = """
+The put_inscription endpoint allows users to submit new Inscriptions to the
+Inscriptions service.  These submissions are meant to have a body that can
+be decoded into an InscriptionAndSignature structure.
+
+This InscriptionAndSignature structures will be accepted and recorded in the
+Block Chain provided they meet the following criteria:
+
+- The message in the structure matches what is expected
+- The signature is valid for the contents of the Inscription with the
+  appropriate configuration.
+- The Inscription service is not currently over capacity for submitting
+  data to the Block Chain.
+"""
