@@ -91,11 +91,13 @@ impl Genesis {
             .context("connecting L1 client")?;
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
+            tracing::info!("validating fee contract at {fee_contract_address:x}");
+
             if !is_proxy_contract(l1.provider(), fee_contract_address)
                 .await
                 .context("checking if fee contract is a proxy")?
             {
-                anyhow::bail!("Fee contract's address is not a proxy");
+                anyhow::bail!("Fee contract address {fee_contract_address:x} is not a proxy");
             }
         }
 
@@ -597,10 +599,7 @@ mod test {
 
         // check if the result from the validation is an error
         if let Err(e) = result {
-            // assert that the error message contains "Fee contract's address is not a proxy"
-            assert!(e
-                .to_string()
-                .contains("Fee contract's address is not a proxy"));
+            assert!(e.to_string().contains("is not a proxy"));
         } else {
             panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
         }
