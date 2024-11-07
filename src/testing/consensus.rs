@@ -66,7 +66,7 @@ pub struct MockNetwork<D: DataSourceLifeCycle> {
 pub type MockDataSource = FileSystemDataSource<MockTypes, NoFetching>;
 pub type MockSqlDataSource = SqlDataSource<MockTypes, NoFetching>;
 
-pub const NUM_NODES: usize = 2;
+pub const NUM_NODES: usize = 6;
 
 impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
