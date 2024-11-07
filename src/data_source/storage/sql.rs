@@ -672,14 +672,14 @@ impl VersionedDataSource for SqlStorage {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
-    use tokio::time::timeout;
-    use tokio::net::TcpStream;
     use std::{
         env,
         process::{Command, Stdio},
         str,
         time::Duration,
     };
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
 
     use portpicker::pick_unused_port;
     use refinery::Migration;
@@ -912,12 +912,12 @@ pub mod testing {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use tokio::time::sleep;
     use hotshot_example_types::{
         node_types::TestVersions,
         state_types::{TestInstanceState, TestValidatedState},
     };
     use std::time::Duration;
+    use tokio::time::sleep;
 
     use super::{testing::TmpDb, *};
     use crate::{

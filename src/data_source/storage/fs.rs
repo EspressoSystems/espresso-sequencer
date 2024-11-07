@@ -33,7 +33,6 @@ use crate::{
     types::HeightIndexed,
     ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use committable::Committable;
@@ -48,6 +47,7 @@ use std::collections::{
 use std::hash::Hash;
 use std::ops::{Bound, Deref, RangeBounds};
 use std::path::Path;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 const CACHED_LEAVES_COUNT: usize = 100;
 const CACHED_BLOCKS_COUNT: usize = 100;

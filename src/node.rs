@@ -174,6 +174,7 @@ mod test {
         },
         ApiState, Error, Header, VidShare,
     };
+    use async_std::sync::RwLock;
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
     use hotshot_types::event::EventType;
@@ -183,8 +184,7 @@ mod test {
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::App;
-    use async_std::sync::RwLock;
-    use tokio::{time::sleep};
+    use tokio::time::sleep;
     use toml::toml;
 
     #[tokio::test]

@@ -459,11 +459,11 @@ mod test {
         types::HeightIndexed,
         ApiState, Error, Header,
     };
+    use async_std::sync::RwLock;
     use committable::Committable;
     use futures::future::FutureExt;
     use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
     use portpicker::pick_unused_port;
-    use async_std::sync::RwLock;
     use std::time::Duration;
     use surf_disco::Client;
     use tempfile::TempDir;

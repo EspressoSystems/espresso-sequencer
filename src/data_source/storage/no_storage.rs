@@ -28,12 +28,12 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
+use std::sync::Arc;
 use std::{cmp::max, ops::RangeBounds};
+use tokio::sync::RwLock;
 
 /// Mock storage implementation which doesn't actually store anything.
 ///

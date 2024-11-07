@@ -118,6 +118,7 @@ mod test {
         },
         ApiState, Error,
     };
+    use async_std::sync::RwLock;
     use futures::FutureExt;
     use portpicker::pick_unused_port;
     use reqwest::redirect::Policy;
@@ -126,7 +127,6 @@ mod test {
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::{App, Url};
-    use async_std::sync::RwLock;
     use toml::toml;
 
     #[tokio::test]

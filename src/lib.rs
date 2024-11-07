@@ -579,6 +579,7 @@ mod test {
             mocks::{MockHeader, MockPayload, MockTypes},
         },
     };
+    use async_std::sync::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
@@ -590,7 +591,6 @@ mod test {
     use tempfile::TempDir;
     use testing::mocks::MockBase;
     use tide_disco::App;
-    use async_std::sync::RwLock;
     use toml::toml;
 
     struct CompositeState {

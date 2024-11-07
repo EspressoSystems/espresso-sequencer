@@ -15,15 +15,15 @@
 use super::Provider;
 use crate::fetching::Request;
 // use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
-use tokio::sync::{broadcast, RwLock};
-use std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
+use std::sync::Arc;
 use std::{
     fmt::Debug,
     sync::atomic::{AtomicBool, Ordering},
 };
+use tokio::sync::{broadcast, RwLock};
 
 /// Adaptor to add test-only functionality to an existing [`Provider`].
 ///
@@ -98,12 +98,12 @@ where
         }
 
         // Block the request if the user has called `block`.
-        let handle = {
-            match self.unblock.read().await.as_ref() {
-                Some(unblock) => Some(unblock.subscribe()),
-                None => None,
-            }
-        };
+        let handle = self
+            .unblock
+            .read()
+            .await
+            .as_ref()
+            .map(|unblock| unblock.subscribe());
         if let Some(mut handle) = handle {
             tracing::info!("request for {req:?} will block until manually unblocked");
             handle.recv().await.ok();
