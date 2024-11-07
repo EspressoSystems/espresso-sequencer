@@ -1,8 +1,10 @@
 #[macro_export]
 /// Print the file and line number of the location this macro is invoked
+///
+/// Note: temporarily prints only a null string to reduce verbosity of logging
 macro_rules! line_info {
     () => {
-        format!("{}:{}", file!(), line!())
+        format!("")
     };
 }
 pub use line_info;

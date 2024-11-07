@@ -8,8 +8,7 @@
 
 /// Provides trait to create task states from a `SystemContextHandle`
 pub mod task_state;
-use std::collections::BTreeMap;
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fmt::Debug, sync::Arc, time::Duration};
 
 use async_broadcast::{broadcast, RecvError};
 use async_compatibility_layer::art::{async_sleep, async_spawn};

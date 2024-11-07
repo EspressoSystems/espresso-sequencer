@@ -9,7 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
 use anyhow::{bail, Result};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -28,6 +27,8 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use jf_vid::VidScheme;
+
+use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
 
 type VidShares<TYPES> = HashMap<
     <TYPES as NodeType>::View,

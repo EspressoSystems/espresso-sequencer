@@ -9,10 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, cancel_task},
-};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
@@ -44,6 +40,11 @@ use hotshot_types::{
 use tokio::task::JoinHandle;
 use tracing::instrument;
 use utils::anytrace::*;
+
+use crate::{
+    events::{HotShotEvent, HotShotTaskCompleted},
+    helpers::{broadcast_event, cancel_task},
+};
 
 /// the network message task state
 #[derive(Clone)]

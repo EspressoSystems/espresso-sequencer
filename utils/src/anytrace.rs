@@ -6,7 +6,7 @@ mod macros;
 pub use macros::*;
 
 /// Default log level for the crate
-pub const DEFAULT_LOG_LEVEL: Level = Level::Info;
+pub const DEFAULT_LOG_LEVEL: Level = Level::Debug;
 
 /// Trait for logging errors
 pub trait Log {

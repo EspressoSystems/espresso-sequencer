@@ -23,7 +23,7 @@ use hotshot_types::{
     message::UpgradeLock,
     simple_certificate::UpgradeCertificate,
     traits::{
-        node_implementation::{NodeImplementation, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vote::HasViewNumber,
@@ -39,7 +39,6 @@ use crate::{
     events::{HotShotEvent, ProposalMissing},
     helpers::{broadcast_event, cancel_task, parent_leaf_and_state},
 };
-use hotshot_types::traits::node_implementation::ConsensusTime;
 /// Event handlers for this task.
 mod handlers;
 
