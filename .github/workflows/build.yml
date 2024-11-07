@@ -43,13 +43,13 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
-      - name: Test
+      - name: Test with embedded-db
         run: |
           cargo test --workspace --release --all-features --no-run
           cargo test --workspace --release --all-features --verbose -- --test-threads 2
         timeout-minutes: 60
 
-      - name: Test with embedded db
+      - name: Test with postgres
         run: |
           cargo test --workspace --release --features "no-storage, testing" --no-run
           cargo test --workspace --release --features "no-storage, testing" --verbose -- --test-threads 2
