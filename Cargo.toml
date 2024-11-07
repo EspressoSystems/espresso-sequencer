@@ -15,6 +15,7 @@ members = [
   "contracts/rust/diff-test",
   "contracts/rust/gen-vk-contract",
   "hotshot-state-prover",
+  "inscriptions",
   "marketplace-builder",
   "marketplace-solver",
   "node-metrics",
