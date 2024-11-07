@@ -71,7 +71,10 @@ where
         for node in nodes.iter() {
             hash_ids.insert(node.hash_id);
             if let Some(children) = &node.children {
-                let children: Vec<i32> = serde_json::from_value(children.clone()).unwrap();
+                let children: Vec<i32> =
+                    serde_json::from_value(children.clone()).map_err(|e| QueryError::Error {
+                        message: format!("Error deserializing 'children' into Vec<i32>: {e}"),
+                    })?;
                 hash_ids.extend(children);
             }
         }
@@ -107,7 +110,14 @@ where
                 match (children, children_bitvec, idx, entry) {
                     // If the row has children then its a branch
                     (Some(children), Some(children_bitvec), None, None) => {
-                        let children: Vec<i32> = serde_json::from_value(children.clone()).unwrap();
+                        let children: Vec<i32> =
+                            serde_json::from_value(children.clone()).map_err(|e| {
+                                QueryError::Error {
+                                    message: format!(
+                                        "Error deserializing 'children' into Vec<i32>: {e}"
+                                    ),
+                                }
+                            })?;
                         let mut children = children.iter();
                         let children_bitvec: BitVec =
                             BitVec::from_bytes(children_bitvec.clone().as_slice());
