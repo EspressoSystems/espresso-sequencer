@@ -378,11 +378,9 @@ where
 impl Node {
     pub(crate) async fn upsert(
         name: &str,
-        nodes: impl IntoIterator<Item = Self> + std::fmt::Debug,
+        nodes: impl IntoIterator<Item = Self>,
         tx: &mut Transaction<Write>,
     ) -> anyhow::Result<()> {
-        println!("nodes {nodes:?} \n\n");
-
         tx.upsert(
             name,
             [
