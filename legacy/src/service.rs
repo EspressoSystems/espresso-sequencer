@@ -412,6 +412,8 @@ impl<Types: NodeType> GlobalState<Types> {
                 self.tx_status.get(&txn_hash),
                 txn_status
             );
+        } else {
+            tracing::debug!("insert status of transaction {txn_hash} : {:?}", txn_status);
         }
         self.tx_status.insert(txn_hash, txn_status);
         Ok(())

@@ -254,6 +254,25 @@ impl<Types: NodeType> GlobalState<Types> {
         }
     }
 
+    // set transaction status
+    pub fn set_tx_status(
+        &mut self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+        txn_status: TransactionStatus,
+    ) -> Result<(), BuildError> {
+        if self.tx_status.contains_key(&txn_hash) {
+            tracing::debug!(
+                "change status of transaction {txn_hash} from {:?} to {:?}",
+                self.tx_status.get(&txn_hash),
+                txn_status
+            );
+        } else {
+            tracing::debug!("insert status of transaction {txn_hash} : {:?}", txn_status);
+        }
+        self.tx_status.insert(txn_hash, txn_status);
+        Ok(())
+    }
+
     pub fn get_channel_for_matching_builder_or_highest_view_buider(
         &self,
         key: &BuilderStateId<Types>,
@@ -528,12 +547,33 @@ where
             txns.iter().map(|txn| txn.commit()).collect::<Vec<_>>()
         );
         let txns = self.hooks.process_transactions(txns).await;
+        for txn in txns.clone() {
+            let _ = self
+                .global_state
+                .write_arc()
+                .await
+                .set_tx_status(txn.commit(), TransactionStatus::Pending);
+        }
         let response = self
             .global_state
             .read_arc()
             .await
-            .submit_client_txns(txns)
+            .submit_client_txns(txns.clone())
             .await;
+
+        let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..txns.len())
+            .map(|i| (txns[i].clone(), response[i].clone()))
+            .collect();
+        for (txn, res) in pairs {
+            if let Err(some) = res {
+                let _ = self.global_state.write_arc().await.set_tx_status(
+                    txn.commit(),
+                    TransactionStatus::Rejected {
+                        reason: some.to_string(),
+                    },
+                );
+            }
+        }
 
         tracing::debug!(
             "Transaction submitted to the builder states, sending response: {:?}",

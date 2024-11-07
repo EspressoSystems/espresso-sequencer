@@ -1,3 +1,4 @@
+use hotshot_builder_api::v0_2::builder::TransactionStatus;
 use hotshot_types::{
     data::{Leaf, QuorumProposal},
     message::Proposal,
@@ -634,6 +635,14 @@ impl<Types: NodeType> BuilderState<Types> {
 
         for tx in da_proposal_info.txn_commitments.iter() {
             self.txn_commits_in_queue.remove(tx);
+
+            let _ = self.global_state.write_arc().await.set_tx_status(
+                *tx,
+                TransactionStatus::Sequenced {
+                    block: self.parent_block_references.view_number.u64(),
+                    offset: 0_u64,
+                },
+            );
         }
 
         // We add the included transactions to the included_txns set, so we can
