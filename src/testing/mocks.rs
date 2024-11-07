@@ -150,6 +150,7 @@ impl Versions for MockVersions {
     ];
 
     type Marketplace = StaticVersion<0, 3>;
+    type Epochs = StaticVersion<0, 4>;
 }
 
 /// A type alias for the mock base version

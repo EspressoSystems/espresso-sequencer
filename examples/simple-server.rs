@@ -44,7 +44,7 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{election::Membership, network::Topic},
-    HotShotConfig, PeerConfig, ValidatorConfig,
+    HotShotConfig, PeerConfig,
 };
 use std::{num::NonZeroUsize, str::FromStr, sync::Arc, time::Duration};
 use url::Url;
@@ -201,7 +201,6 @@ async fn init_consensus(
         num_bootstrap: 0,
         known_da_nodes: known_nodes_with_stake.clone(),
         da_staked_committee_size: pub_keys.len(),
-        my_own_validator_config: Default::default(),
         data_request_delay: Duration::from_millis(200),
         view_sync_timeout: Duration::from_millis(250),
         start_threshold: (
@@ -223,24 +222,11 @@ async fn init_consensus(
     let nodes = join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
         |(node_id, (priv_key, data_source))| {
             let pub_keys = pub_keys.clone();
-            let known_nodes_with_stake = known_nodes_with_stake.clone();
-            let state_key_pairs = state_key_pairs.clone();
-            let mut config = config.clone();
+            let config = config.clone();
             let master_map = master_map.clone();
 
             let memberships = memberships.clone();
             async move {
-                config.my_own_validator_config = ValidatorConfig {
-                    public_key: pub_keys[node_id],
-                    private_key: priv_key.clone(),
-                    stake_value: known_nodes_with_stake[node_id]
-                        .stake_table_entry
-                        .stake_amount
-                        .as_u64(),
-                    state_key_pair: state_key_pairs[node_id].clone(),
-                    is_da: true,
-                };
-
                 let network = Arc::new(MemoryNetwork::new(
                     &pub_keys[node_id],
                     &master_map.clone(),

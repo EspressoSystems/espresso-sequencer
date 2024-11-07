@@ -118,7 +118,7 @@ mod test {
         },
         ApiState, Error,
     };
-    use async_lock::sync::RwLock;
+    use async_lock::RwLock;
     use futures::FutureExt;
     use portpicker::pick_unused_port;
     use reqwest::redirect::Policy;
