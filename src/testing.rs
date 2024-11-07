@@ -17,8 +17,6 @@ pub mod consensus;
 pub mod mocks;
 
 pub async fn sleep(dur: Duration) {
-    // For some reason, `async_std::task::sleep` doesn't work on the GitHub Windows runners (it
-    // hangs forever). `spin_sleep::sleep` works fine.
     tokio::time::sleep(dur).await;
 }
 

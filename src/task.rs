@@ -124,11 +124,9 @@ impl<T: Send + 'static> Drop for Task<T> {
             // `drop` runs in a synchronous context, so this is the best we can do. In effect we are
             // replacing a long-lived background task with a short-lived detached task which will
             // exit quickly: as soon as the background task has been successfully cancelled.
-            spawn(async move {
-                tracing::info!(name = inner.name, "cancelling task");
-                inner.handle.abort();
-                tracing::info!(name = inner.name, "cancelled task");
-            });
+            tracing::info!(name = inner.name, "cancelling task");
+            inner.handle.abort();
+            tracing::info!(name = inner.name, "cancelled task");
         }
     }
 }
