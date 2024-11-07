@@ -290,7 +290,7 @@ pub fn build_where_in<'a, I>(
 ) -> QueryResult<(queries::QueryBuilder<'a>, String)>
 where
     I: IntoIterator,
-    I::Item: 'a + Encode<'a, Db> + Type<Db> + std::fmt::Display,
+    I::Item: 'a + Encode<'a, Db> + Type<Db>,
 {
     let mut builder = queries::QueryBuilder::default();
     let params = values
