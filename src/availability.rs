@@ -459,7 +459,7 @@ mod test {
         types::HeightIndexed,
         ApiState, Error, Header,
     };
-    use async_std::sync::RwLock;
+    use async_lock::sync::RwLock;
     use committable::Committable;
     use futures::future::FutureExt;
     use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};

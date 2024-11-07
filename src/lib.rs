@@ -579,7 +579,7 @@ mod test {
             mocks::{MockHeader, MockPayload, MockTypes},
         },
     };
-    use async_std::sync::RwLock;
+    use async_lock::sync::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
