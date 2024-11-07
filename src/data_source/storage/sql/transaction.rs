@@ -298,6 +298,12 @@ where
         .map(|v| Ok(format!("{} ", builder.bind(v)?)))
         .collect::<QueryResult<Vec<String>>>()?;
 
+    if params.is_empty() {
+        return Err(QueryError::Error {
+            message: "failed to build WHERE IN query. No parameter found ".to_string(),
+        });
+    }
+
     let sql = format!(
         "{query} where {column} IN ({}) ",
         params.into_iter().join(",")

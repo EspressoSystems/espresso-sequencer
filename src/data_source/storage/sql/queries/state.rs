@@ -78,12 +78,17 @@ where
 
         // Find all the hash values and create a hashmap
         // Hashmap will be used to get the hash value of the nodes children and the node itself.
-        let (query, sql) = build_where_in("id", "SELECT id, value FROM hash", hash_ids)?;
-        let hashes: HashMap<i32, Vec<u8>> = query
-            .query_as(&sql)
-            .fetch(self.as_mut())
-            .try_collect()
-            .await?;
+        let hashes = if !hash_ids.is_empty() {
+            let (query, sql) = build_where_in("id", "SELECT id, value FROM hash", hash_ids)?;
+            query
+                .query_as(&sql)
+                .fetch(self.as_mut())
+                .try_collect::<HashMap<i32, Vec<u8>>>()
+                .await?
+        } else {
+            HashMap::new()
+        };
+
         let mut proof_path = VecDeque::with_capacity(State::tree_height());
         for Node {
             hash_id,
