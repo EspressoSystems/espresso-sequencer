@@ -40,7 +40,7 @@ typenum = { workspace = true }
 derivative = "2"
 jf-vid = { workspace = true }
 jf-pcs = { workspace = true }
-jf-signature = { workspace = true, features = ["schnorr"] }
+jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }

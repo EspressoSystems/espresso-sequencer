@@ -29,9 +29,6 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     /// Total number of staked nodes in the network
     pub num_nodes_with_stake: NonZeroUsize,
     #[serde(skip)]
-    /// My own public key, secret key, stake value
-    pub my_own_validator_config: ValidatorConfig<KEY>,
-    #[serde(skip)]
     /// The known nodes' public key and stake value
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     #[serde(skip)]
@@ -67,7 +64,6 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
             num_nodes_with_stake: val.num_nodes_with_stake,
             known_da_nodes: val.known_da_nodes,
             known_nodes_with_stake: val.known_nodes_with_stake,
-            my_own_validator_config: val.my_own_validator_config,
             da_staked_committee_size: val.staked_da_nodes,
             fixed_leader_for_gpuvid: val.fixed_leader_for_gpuvid,
             next_view_timeout: val.next_view_timeout,
@@ -120,7 +116,6 @@ impl<KEY: SignatureKey> HotShotConfigFile<KEY> {
         Self {
             num_nodes_with_stake: NonZeroUsize::new(10).unwrap(),
             start_threshold: (1, 1),
-            my_own_validator_config: ValidatorConfig::default(),
             known_nodes_with_stake: gen_known_nodes_with_stake,
             staked_da_nodes,
             known_da_nodes,

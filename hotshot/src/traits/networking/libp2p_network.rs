@@ -51,7 +51,7 @@ use hotshot_types::{
         metrics::{Counter, Gauge, Metrics, NoMetrics},
         network::{ConnectedNetwork, NetworkError, Topic},
         node_implementation::{ConsensusTime, NodeType},
-        signature_key::SignatureKey,
+        signature_key::{PrivateSignatureKey, SignatureKey},
     },
     BoxSyncFuture,
 };
@@ -310,7 +310,7 @@ pub fn derive_libp2p_keypair<K: SignatureKey>(
     private_key: &K::PrivateKey,
 ) -> anyhow::Result<Keypair> {
     // Derive a secondary key from our primary private key
-    let derived_key = blake3::derive_key("libp2p key", &(bincode::serialize(&private_key)?));
+    let derived_key = blake3::derive_key("libp2p key", &private_key.to_bytes());
     let derived_key = SecretKey::try_from_bytes(derived_key)?;
 
     // Create an `ed25519` keypair from the derived key

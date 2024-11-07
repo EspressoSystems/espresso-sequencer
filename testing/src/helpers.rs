@@ -92,7 +92,7 @@ pub async fn build_system_handle_from_launcher<
     let network = (launcher.resource_generator.channel_generator)(node_id).await;
     let storage = (launcher.resource_generator.storage)(node_id);
     let marketplace_config = (launcher.resource_generator.marketplace_config)(node_id);
-    let mut config = launcher.resource_generator.config.clone();
+    let config = launcher.resource_generator.config.clone();
 
     let initializer = HotShotInitializer::<TYPES>::from_genesis::<V>(TestInstanceState::new(
         launcher.metadata.async_delay_config.clone(),
@@ -104,11 +104,10 @@ pub async fn build_system_handle_from_launcher<
     let is_da = node_id < config.da_staked_committee_size as u64;
 
     // We assign node's public key and stake value rather than read from config file since it's a test
-    let validator_config =
+    let validator_config: ValidatorConfig<TYPES::SignatureKey> =
         ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
-    config.my_own_validator_config = validator_config;
-    let private_key = config.my_own_validator_config.private_key.clone();
-    let public_key = config.my_own_validator_config.public_key.clone();
+    let private_key = validator_config.private_key.clone();
+    let public_key = validator_config.public_key.clone();
 
     let all_nodes = config.known_nodes_with_stake.clone();
     let da_nodes = config.known_da_nodes.clone();

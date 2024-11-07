@@ -8,7 +8,6 @@
 use std::{fmt::Debug, future::Future, num::NonZeroUsize, pin::Pin, time::Duration};
 
 use bincode::Options;
-use derivative::Derivative;
 use displaydoc::Display;
 use light_client::StateVerKey;
 use tracing::error;
@@ -64,15 +63,12 @@ where
     assert_future::<F::Output, _>(Box::pin(fut))
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Derivative, Display)]
-#[serde(bound(deserialize = ""))]
-#[derivative(Debug(bound = ""))]
+#[derive(Clone, Debug, Display)]
 /// config for validator, including public key, private key, stake value
 pub struct ValidatorConfig<KEY: SignatureKey> {
     /// The validator's public key and stake value
     pub public_key: KEY,
     /// The validator's private key, should be in the mempool, not public
-    #[derivative(Debug = "ignore")]
     pub private_key: KEY::PrivateKey,
     /// The validator's stake
     pub stake_value: u64,
@@ -176,8 +172,6 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     pub known_nodes_with_stake: Vec<PeerConfig<KEY>>,
     /// All public keys known to be DA nodes
     pub known_da_nodes: Vec<PeerConfig<KEY>>,
-    /// My own validator config, including my public key, private key, stake value, serving as private parameter
-    pub my_own_validator_config: ValidatorConfig<KEY>,
     /// List of DA committee (staking)nodes for static DA committee
     pub da_staked_committee_size: usize,
     /// Number of fixed leaders for GPU VID, normally it will be 0, it's only used when running GPU VID

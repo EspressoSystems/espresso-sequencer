@@ -168,14 +168,14 @@ pub struct MultiValidatorArgs {
 /// If we are unable to get the configuration from the orchestrator
 pub async fn get_complete_config<K: SignatureKey>(
     client: &OrchestratorClient,
-    my_own_validator_config: ValidatorConfig<K>,
+    mut validator_config: ValidatorConfig<K>,
     libp2p_advertise_address: Option<Multiaddr>,
     libp2p_public_key: Option<PeerId>,
-) -> anyhow::Result<(NetworkConfig<K>, NetworkConfigSource)> {
+) -> anyhow::Result<(NetworkConfig<K>, ValidatorConfig<K>, NetworkConfigSource)> {
     // get the configuration from the orchestrator
     let run_config: NetworkConfig<K> = client
         .post_and_wait_all_public_keys::<K>(
-            my_own_validator_config,
+            &mut validator_config,
             libp2p_advertise_address,
             libp2p_public_key,
         )
@@ -183,9 +183,13 @@ pub async fn get_complete_config<K: SignatureKey>(
 
     info!(
         "Retrieved config; our node index is {}. DA committee member: {}",
-        run_config.node_index, run_config.config.my_own_validator_config.is_da
+        run_config.node_index, validator_config.is_da
     );
-    Ok((run_config, NetworkConfigSource::Orchestrator))
+    Ok((
+        run_config,
+        validator_config,
+        NetworkConfigSource::Orchestrator,
+    ))
 }
 
 impl ValidatorArgs {
@@ -393,7 +397,7 @@ impl OrchestratorClient {
     #[instrument(skip(self), name = "orchestrator public keys")]
     pub async fn post_and_wait_all_public_keys<K: SignatureKey>(
         &self,
-        mut validator_config: ValidatorConfig<K>,
+        validator_config: &mut ValidatorConfig<K>,
         libp2p_advertise_address: Option<Multiaddr>,
         libp2p_public_key: Option<PeerId>,
     ) -> NetworkConfig<K> {
@@ -445,7 +449,6 @@ impl OrchestratorClient {
         let mut network_config = self.get_config_after_collection().await;
 
         network_config.node_index = node_index;
-        network_config.config.my_own_validator_config = validator_config;
 
         network_config
     }

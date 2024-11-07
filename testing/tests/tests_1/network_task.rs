@@ -55,7 +55,8 @@ async fn test_network_task() {
     let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
     let consensus = handle.hotshot.consensus();
     let config = launcher.resource_generator.config.clone();
-    let public_key = config.my_own_validator_config.public_key;
+    let validator_config = launcher.resource_generator.validator_config.clone();
+    let public_key = validator_config.public_key;
 
     let all_nodes = config.known_nodes_with_stake.clone();
 
@@ -239,7 +240,8 @@ async fn test_network_storage_fail() {
     let storage = Arc::new(RwLock::new((launcher.resource_generator.storage)(node_id)));
     storage.write().await.should_return_err = true;
     let config = launcher.resource_generator.config.clone();
-    let public_key = config.my_own_validator_config.public_key;
+    let validator_config = launcher.resource_generator.validator_config.clone();
+    let public_key = validator_config.public_key;
     let all_nodes = config.known_nodes_with_stake.clone();
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
 

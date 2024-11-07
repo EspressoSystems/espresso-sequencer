@@ -20,7 +20,7 @@ use committable::Committable;
 use ethereum_types::U256;
 use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use tagged_base64::TaggedBase64;
+use tagged_base64::{TaggedBase64, Tb64Error};
 
 use super::EncodeBytes;
 use crate::{
@@ -34,6 +34,24 @@ pub trait StakeTableEntryType<K> {
     fn stake(&self) -> U256;
     /// Get the public key
     fn public_key(&self) -> K;
+}
+
+/// Trait for abstracting private signature key
+pub trait PrivateSignatureKey:
+    Send + Sync + Sized + Clone + Debug + Eq + Hash + for<'a> TryFrom<&'a TaggedBase64>
+{
+    /// Serialize the private key into bytes
+    fn to_bytes(&self) -> Vec<u8>;
+
+    /// Deserialize the private key from bytes
+    /// # Errors
+    /// If deserialization fails.
+    fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self>;
+
+    /// Serialize the private key into TaggedBase64 blob.
+    /// # Errors
+    /// If serialization fails.
+    fn to_tagged_base64(&self) -> Result<TaggedBase64, Tb64Error>;
 }
 
 /// Trait for abstracting public key signatures
@@ -56,15 +74,7 @@ pub trait SignatureKey:
     + Into<TaggedBase64>
 {
     /// The private key type for this signature algorithm
-    type PrivateKey: Send
-        + Sync
-        + Sized
-        + Clone
-        + Debug
-        + Eq
-        + Serialize
-        + for<'a> Deserialize<'a>
-        + Hash;
+    type PrivateKey: PrivateSignatureKey;
     /// The type of the entry that contain both public key and stake value
     type StakeTableEntry: StakeTableEntryType<Self>
         + Send
@@ -179,15 +189,7 @@ pub trait BuilderSignatureKey:
     + Display
 {
     /// The type of the keys builder would use to sign its messages
-    type BuilderPrivateKey: Send
-        + Sync
-        + Sized
-        + Clone
-        + Debug
-        + Eq
-        + Serialize
-        + for<'a> Deserialize<'a>
-        + Hash;
+    type BuilderPrivateKey: PrivateSignatureKey;
 
     /// The type of the signature builder would use to sign its messages
     type BuilderSignature: Send

@@ -23,7 +23,7 @@ use crate::{
     stake_table::StakeTableEntry,
     traits::{
         qc::QuorumCertificateScheme,
-        signature_key::{BuilderSignatureKey, SignatureKey},
+        signature_key::{BuilderSignatureKey, PrivateSignatureKey, SignatureKey},
     },
 };
 
@@ -33,6 +33,20 @@ pub type BLSPrivKey = SignKey;
 pub type BLSPubKey = VerKey;
 /// Public parameters for BLS signature scheme
 pub type BLSPublicParam = ();
+
+impl PrivateSignatureKey for BLSPrivKey {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
+
+    fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        Ok(Self::from_bytes(bytes))
+    }
+
+    fn to_tagged_base64(&self) -> Result<tagged_base64::TaggedBase64, tagged_base64::Tb64Error> {
+        self.to_tagged_base64()
+    }
+}
 
 impl SignatureKey for BLSPubKey {
     type PrivateKey = BLSPrivKey;

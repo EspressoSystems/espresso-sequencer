@@ -481,7 +481,7 @@ where
             })
             .collect();
         // But now to test validator's config, we input the info of my_own_validator from config file when node_id == 0.
-        let my_own_validator_config = ValidatorConfig::generated_from_seed_indexed(
+        let validator_config = ValidatorConfig::<TYPES::SignatureKey>::generated_from_seed_indexed(
             [0u8; 32],
             node_id,
             1,
@@ -496,7 +496,6 @@ where
             known_da_nodes,
             num_bootstrap: num_bootstrap_nodes,
             known_nodes_with_stake,
-            my_own_validator_config,
             da_staked_committee_size,
             fixed_leader_for_gpuvid: 1,
             next_view_timeout: 500,
@@ -548,6 +547,7 @@ where
                     storage
                 }),
                 config,
+                validator_config,
                 marketplace_config: Box::new(|_| MarketplaceConfig::<TYPES, I> {
                     auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
                     fallback_builder_url: Url::parse("http://localhost:9999").unwrap(),

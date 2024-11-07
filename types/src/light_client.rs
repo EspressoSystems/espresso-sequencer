@@ -36,7 +36,7 @@ pub type StateSignKey = schnorr::SignKey<ark_ed_on_bn254::Fr>;
 /// Concrete for circuit's public input
 pub type PublicInput = GenericPublicInput<CircuitField>;
 /// Key pairs for signing/verifying a light client state
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone)]
 pub struct StateKeyPair(pub schnorr::KeyPair<Config>);
 
 /// Request body to send to the state relay server

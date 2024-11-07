@@ -16,7 +16,7 @@ use hotshot_types::{
         network::{AsyncGenerator, ConnectedNetwork},
         node_implementation::{NodeType, Versions},
     },
-    HotShotConfig,
+    HotShotConfig, ValidatorConfig,
 };
 
 use super::{test_builder::TestDescription, test_runner::TestRunner};
@@ -36,6 +36,8 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
     pub storage: Generator<TestStorage<TYPES>>,
     /// configuration used to generate each hotshot node
     pub config: HotShotConfig<TYPES::SignatureKey>,
+    /// config that contains the signature keys
+    pub validator_config: ValidatorConfig<TYPES::SignatureKey>,
     /// generate a new marketplace config for each node
     pub marketplace_config: Generator<MarketplaceConfig<TYPES, I>>,
 }
