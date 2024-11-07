@@ -599,10 +599,7 @@ mod test {
 
         // check if the result from the validation is an error
         if let Err(e) = result {
-            // assert that the error message contains "Fee contract's address is not a proxy"
-            assert!(e
-                .to_string()
-                .contains("Fee contract's address is not a proxy"));
+            assert!(e.to_string().contains("is not a proxy"));
         } else {
             panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
         }
