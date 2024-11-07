@@ -1580,11 +1580,13 @@ mod test {
     use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
     use committable::Commitment;
+    use committable::Committable;
     use futures::StreamExt;
     use hotshot::{
         traits::BlockPayload,
         types::{BLSPubKey, SignatureKey},
     };
+    use hotshot_builder_api::v0_1::data_source::AcceptsTxnSubmits;
     use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
     use hotshot_example_types::{
         block_types::{TestBlockPayload, TestMetadata, TestTransaction},
@@ -1614,6 +1616,7 @@ mod test {
             TriggerStatus,
         },
         service::{BlockSizeLimits, HandleReceivedTxnsError},
+        testing::finalization_test::setup_builder_for_test,
         LegacyCommit,
     };
 
@@ -4553,6 +4556,34 @@ mod test {
                 }
             }
         }
+    }
+
+    /// This test checks builder does save the status of transactions correctly
+    #[async_std::test]
+    async fn test_get_txn_status() {
+        let (proxy_global_state, _, _da_proposal_sender, _quorum_proposal_sender, _) =
+            setup_builder_for_test();
+
+        let num_transactions = 10;
+        let mut txns = Vec::with_capacity(num_transactions);
+        for index in 0..num_transactions {
+            txns.push(TestTransaction::new(vec![index as u8]));
+        }
+        let txns = txns;
+        proxy_global_state
+            .submit_txns(txns.clone())
+            .await
+            .expect("should submit transaction without issue");
+
+        // Test status Pending
+        for tx in txns {
+            let x = proxy_global_state.claim_tx_status(tx.commit()).await;
+            tracing::debug!("status of tx {:?} is {:?}", tx, x);
+        }
+
+        // Test status Sequenced
+        // Test status Rejected with correct error message
+        // Test status Unknown when the txn is unknown
     }
 
     #[test]

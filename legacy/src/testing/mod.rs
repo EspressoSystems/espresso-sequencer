@@ -40,7 +40,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 mod basic_test;
-mod finalization_test;
+pub mod finalization_test;
 
 pub async fn create_builder_state(
     channel_capacity: usize,

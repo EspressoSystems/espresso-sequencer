@@ -54,7 +54,7 @@ type TestSetup = (
 /// [`setup_builder_for_test`] sets up a test environment for the builder state.
 /// It returns a tuple containing the proxy global state, the sender for decide
 /// messages, the sender for data availability proposals,
-fn setup_builder_for_test() -> TestSetup {
+pub fn setup_builder_for_test() -> TestSetup {
     let (req_sender, req_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
     let (tx_sender, tx_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
 
