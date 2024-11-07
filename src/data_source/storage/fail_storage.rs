@@ -27,7 +27,8 @@ use crate::{
     status::HasMetrics,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
-use async_std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;

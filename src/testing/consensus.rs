@@ -20,7 +20,6 @@ use crate::{
     task::BackgroundTask,
     SignatureKey,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use futures::{
     future::{join_all, Future},
@@ -44,8 +43,10 @@ use hotshot_types::{
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt::Display, str::FromStr};
+use tokio::{runtime::Handle, task::yield_now};
 use tracing::{info_span, Instrument};
 use url::Url;
 
@@ -293,7 +294,7 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
                         {
                             ds.handle_event(&event).await;
                         }
-                        async_std::task::yield_now().await;
+                        yield_now().await;
                     }
                 },
             ));
@@ -310,7 +311,8 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
 
 impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
     fn drop(&mut self) {
-        async_std::task::block_on(self.shut_down_impl())
+        let handle = Handle::current();
+        handle.block_on(self.shut_down_impl());
     }
 }
 

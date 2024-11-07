@@ -8,7 +8,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
       RUST_MIN_STACK: "3145728"
     steps:

@@ -12,13 +12,14 @@
 
 //! Async task utilites.
 
-use async_std::{
-    sync::Arc,
-    task::{spawn, JoinHandle},
-};
 use derivative::Derivative;
 use futures::future::Future;
 use std::fmt::Display;
+use std::sync::Arc;
+use tokio::{
+    spawn,
+    task::{JoinError, JoinHandle},
+};
 use tracing::{info_span, Instrument};
 
 /// A background task which is cancelled on [`Drop`]
@@ -105,7 +106,7 @@ impl<T: Send + 'static> Task<T> {
     }
 
     /// Wait for the task to complete and get its output.
-    pub async fn join(mut self) -> T {
+    pub async fn join(mut self) -> Result<T, JoinError> {
         // We take here so that we will not attempt to cancel the joined task when this handle is
         // dropped at the end of the function. We can unwrap here because `inner` is only `None`
         // during `join` or `drop`. Since `join` consumes `self`, it is not possible that `join`
@@ -125,7 +126,7 @@ impl<T: Send + 'static> Drop for Task<T> {
             // exit quickly: as soon as the background task has been successfully cancelled.
             spawn(async move {
                 tracing::info!(name = inner.name, "cancelling task");
-                inner.handle.cancel().await;
+                inner.handle.abort();
                 tracing::info!(name = inner.name, "cancelled task");
             });
         }

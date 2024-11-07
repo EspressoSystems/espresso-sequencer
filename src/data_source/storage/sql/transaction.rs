@@ -39,7 +39,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::CanonicalSerialize;
-use async_std::task::sleep;
+use tokio::time::sleep;
 use async_trait::async_trait;
 use committable::Committable;
 use derive_more::{Deref, DerefMut};

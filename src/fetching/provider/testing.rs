@@ -14,8 +14,9 @@
 
 use super::Provider;
 use crate::fetching::Request;
-use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
-use async_std::sync::{Arc, RwLock};
+// use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
+use tokio::sync::{broadcast, RwLock};
+use std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -32,7 +33,7 @@ use std::{
 #[derivative(Clone(bound = ""), Debug(bound = "P: Debug"))]
 pub struct TestProvider<P> {
     inner: Arc<P>,
-    unblock: Arc<RwLock<Option<BroadcastSender<()>>>>,
+    unblock: Arc<RwLock<Option<broadcast::Sender<()>>>>,
     fail: Arc<AtomicBool>,
 }
 
@@ -54,7 +55,7 @@ impl<P> TestProvider<P> {
     pub async fn block(&self) {
         let mut unblock = self.unblock.write().await;
         if unblock.is_none() {
-            *unblock = Some(channel().0);
+            *unblock = Some(broadcast::channel(1000).0);
         }
     }
 
@@ -65,7 +66,7 @@ impl<P> TestProvider<P> {
     pub async fn unblock(&self) {
         let mut unblock = self.unblock.write().await;
         if let Some(unblock) = unblock.take() {
-            unblock.send_async(()).await.ok();
+            unblock.send(()).ok();
         }
     }
 
@@ -99,13 +100,13 @@ where
         // Block the request if the user has called `block`.
         let handle = {
             match self.unblock.read().await.as_ref() {
-                Some(unblock) => Some(unblock.handle_async().await),
+                Some(unblock) => Some(unblock.subscribe()),
                 None => None,
             }
         };
         if let Some(mut handle) = handle {
             tracing::info!("request for {req:?} will block until manually unblocked");
-            handle.recv_async().await.ok();
+            handle.recv().await.ok();
             tracing::info!("request for {req:?} unblocked");
         }
 

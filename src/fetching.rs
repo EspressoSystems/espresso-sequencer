@@ -22,17 +22,15 @@
 //!
 
 use async_lock::Semaphore;
-use async_std::{
-    sync::{Arc, Mutex},
-    task::{sleep, spawn},
-};
 use backoff::{backoff::Backoff, ExponentialBackoff};
 use derivative::Derivative;
 use std::{
     collections::{hash_map::Entry, BTreeSet, HashMap},
     fmt::Debug,
+    sync::Arc,
     time::Duration,
 };
+use tokio::{spawn, sync::Mutex, time::sleep};
 
 pub mod provider;
 pub mod request;

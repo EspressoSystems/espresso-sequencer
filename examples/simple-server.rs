@@ -16,8 +16,6 @@
 //! consensus network with two nodes and connects a query service to each node. It runs each query
 //! server on local host. The program continues until it is manually killed.
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::sync::Arc;
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
@@ -48,7 +46,7 @@ use hotshot_types::{
     traits::{election::Membership, network::Topic},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use std::{num::NonZeroUsize, str::FromStr, time::Duration};
+use std::{num::NonZeroUsize, str::FromStr, sync::Arc, time::Duration};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -103,10 +101,9 @@ async fn init_data_source(db: &Db) -> DataSource {
         .unwrap()
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Error> {
-    setup_logging();
-    setup_backtrace();
+    // BFTODO: Call HotShot logging here
 
     let opt = Options::parse();
 

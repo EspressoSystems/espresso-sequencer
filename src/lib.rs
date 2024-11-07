@@ -418,7 +418,6 @@ pub mod types;
 pub use error::Error;
 pub use resolvable::Resolvable;
 
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use derive_more::{Deref, From, Into};
 use futures::{future::BoxFuture, stream::StreamExt};
@@ -429,6 +428,7 @@ use hotshot_types::traits::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::sync::Arc;
 use task::BackgroundTask;
 use tide_disco::{method::ReadState, App, StatusCode};
 use vbs::version::StaticVersionType;
@@ -579,7 +579,6 @@ mod test {
             mocks::{MockHeader, MockPayload, MockTypes},
         },
     };
-    use async_std::sync::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
@@ -591,6 +590,7 @@ mod test {
     use tempfile::TempDir;
     use testing::mocks::MockBase;
     use tide_disco::App;
+    use async_std::sync::RwLock;
     use toml::toml;
 
     struct CompositeState {
@@ -725,7 +725,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_composition() {
         use hotshot_example_types::node_types::TestVersions;
 

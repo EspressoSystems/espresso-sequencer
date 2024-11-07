@@ -3238,7 +3238,6 @@ version = "0.1.62"
 dependencies = [
  "anyhow",
  "ark-serialize",
- "async-compatibility-layer",
  "async-lock 3.4.0",
  "async-std",
  "async-trait",
@@ -3281,6 +3280,7 @@ dependencies = [
  "tempfile",
  "tide-disco",
  "time 0.3.36",
+ "tokio",
  "toml",
  "tracing",
  "trait-variant",
@@ -7083,8 +7083,6 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4d8060b456358185f7d50c55d9b5066ad956956fddec42ee2e8567134a8936e"
 dependencies = [
- "async-io 1.13.0",
- "async-std",
  "atoi",
  "bit-vec",
  "byteorder",
@@ -7140,7 +7138,6 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1804e8a7c7865599c9c79be146dc8a9fd8cc86935fa641d3ea58e5f0688abaa5"
 dependencies = [
- "async-std",
  "dotenvy",
  "either",
  "heck 0.5.0",

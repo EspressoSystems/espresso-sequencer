@@ -17,11 +17,11 @@ use crate::{
     fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
     Payload, VidCommon,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 /// Blanket trait combining [`Debug`] and [`Provider`].
 ///
@@ -222,7 +222,7 @@ mod test {
 
     type Provider = AnyProvider<MockTypes>;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_fetch_first_provider_fails() {
         setup_test();
 

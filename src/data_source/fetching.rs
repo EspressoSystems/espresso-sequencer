@@ -102,7 +102,6 @@ use crate::{
 };
 use anyhow::Context;
 use async_lock::Semaphore;
-use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
 use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
 use derivative::Derivative;
@@ -115,6 +114,7 @@ use hotshot_types::traits::{
     node_implementation::NodeType,
 };
 use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
+use std::sync::Arc;
 use std::{
     cmp::min,
     fmt::{Debug, Display},
@@ -123,6 +123,7 @@ use std::{
     time::Duration,
 };
 use tagged_base64::TaggedBase64;
+use tokio::time::sleep;
 use tracing::Instrument;
 
 mod block;

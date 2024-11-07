@@ -70,16 +70,15 @@
 //! spawned to fetch missing resources and send them through the [`Notifier`], but these should be
 //! relatively few and rare.
 
-use async_compatibility_layer::channel::{
-    oneshot, unbounded, OneShotReceiver, OneShotSender, UnboundedReceiver, UnboundedSender,
-};
-use async_std::sync::{Arc, Mutex};
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
+use log::warn;
+use std::sync::Arc;
 use std::{
     future::IntoFuture,
     sync::atomic::{AtomicBool, Ordering},
 };
+use tokio::sync::{oneshot, Mutex};
 
 /// A predicate on a type `<T>`.
 ///
@@ -95,7 +94,7 @@ struct Subscriber<T> {
     #[derivative(Debug = "ignore")]
     predicate: Box<dyn Predicate<T>>,
     #[derivative(Debug = "ignore")]
-    sender: Option<OneShotSender<T>>,
+    sender: Option<oneshot::Sender<T>>,
     closed: Arc<AtomicBool>,
 }
 
@@ -126,7 +125,10 @@ impl<T: Clone> Subscriber<T> {
         // the sender. We need to check for closed again in case the subscriber was closed since the
         // previous check.
         if let Some(sender) = self.sender.take() {
-            sender.send(msg.clone());
+            if sender.send(msg.clone()).is_err() {
+                // This is equivalent to the previous behavior in `async-compatibility-layer`
+                warn!("Failed to send notification: channel closed");
+            }
         }
     }
 }
@@ -160,18 +162,15 @@ pub struct Notifier<T> {
     // concurrent subscriptions go through the high-throughput multi-producer stream implementation,
     // and do not contend for the lock on `FilterSender::subscribers`.
     #[derivative(Debug = "ignore")]
-    pending: UnboundedReceiver<Subscriber<T>>,
-    #[derivative(Debug = "ignore")]
-    subscribe: UnboundedSender<Subscriber<T>>,
+    pending: Arc<Mutex<Vec<Subscriber<T>>>>,
 }
 
 impl<T> Notifier<T> {
     pub fn new() -> Self {
-        let (subscribe, pending) = unbounded();
+        let pending = Arc::new(Mutex::new(Vec::new()));
         Self {
             active: Default::default(),
             pending,
-            subscribe,
         }
     }
 }
@@ -190,8 +189,8 @@ impl<T: Clone> Notifier<T> {
         // just sent it its message. Remove these from the `active` list.
         active.retain(|subscriber| !subscriber.is_closed());
 
-        // Promote pending subscribers to active and send them the message.
-        for mut subscriber in self.pending.drain().unwrap_or_default() {
+        // Promote pending subscribers to active and send them the
+        for mut subscriber in self.pending.lock().await.drain(..) {
             subscriber.notify(msg);
             if !subscriber.is_closed() {
                 // If that message didn't satisfy the subscriber, or it was dropped, at it to the
@@ -206,7 +205,7 @@ impl<T> Notifier<T> {
     /// Wait for a message satisfying `predicate`.
     pub async fn wait_for(&self, predicate: impl Predicate<T>) -> WaitFor<T> {
         // Create a oneshot channel for receiving the notification.
-        let (sender, receiver) = oneshot();
+        let (sender, receiver) = oneshot::channel();
         let sender = Some(sender);
         let closed = Arc::new(AtomicBool::new(false));
 
@@ -226,7 +225,7 @@ impl<T> Notifier<T> {
         // fails when the receive end of the channel has been dropped, which means the notifier has
         // been dropped, and thus the send end of the oneshot handle has been dropped. The caller
         // will discover this when they try to await a notification and get [`None`].
-        self.subscribe.send(subscriber).await.ok();
+        self.pending.lock().await.push(subscriber);
         WaitFor { handle, receiver }
     }
 }
@@ -252,7 +251,7 @@ impl Drop for ReceiveHandle {
 /// resources in the [`Notifier`].
 pub struct WaitFor<T> {
     handle: ReceiveHandle,
-    receiver: OneShotReceiver<T>,
+    receiver: oneshot::Receiver<T>,
 }
 
 impl<T> IntoFuture for WaitFor<T>
@@ -264,7 +263,7 @@ where
 
     fn into_future(self) -> Self::IntoFuture {
         async move {
-            let res = self.receiver.recv().await.ok();
+            let res = self.receiver.await.ok();
 
             // Explicitly drop `handle` _after_ we're done with `receiver`. If the compiler decides
             // that it can drop `handle` earlier, we might never get a notification.
@@ -278,12 +277,13 @@ where
 
 #[cfg(test)]
 mod test {
+    use tokio::time::timeout;
+
     use super::*;
     use crate::testing::setup_test;
-    use async_std::future::timeout;
     use std::time::Duration;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_notify_drop() {
         setup_test();
         let n = Notifier::new();
@@ -309,7 +309,7 @@ mod test {
         assert!(active[0].is_closed());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_notify_active() {
         setup_test();
         let n = Notifier::new();
@@ -344,7 +344,7 @@ mod test {
         assert_eq!(s1.await.unwrap(), 1);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_pending_dropped() {
         setup_test();
         let n = Notifier::new();
@@ -357,7 +357,7 @@ mod test {
         assert_eq!(n.active.lock().await.len(), 0);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_notifier_dropped() {
         setup_test();
 
