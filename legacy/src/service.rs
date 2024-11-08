@@ -4716,6 +4716,18 @@ mod test {
             )
             .await;
         }
+        for tx in txns.clone() {
+            match proxy_global_state.claim_tx_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    tracing::error!("tx {:?} has status {:?}", tx, txn_status);
+                    matches!(txn_status, TransactionStatus::Sequenced { .. });
+                    // assert_eq!(txn_status, TransactionStatus::Sequenced { block: 2 });
+                }
+                e => {
+                    panic!("transaction status should be Sequenced instead of {:?}", e);
+                }
+            }
+        }
 
         // round 3
         let mut txns_3 = Vec::with_capacity(num_transactions);
@@ -4733,7 +4745,6 @@ mod test {
         for tx in txns.clone() {
             match proxy_global_state.claim_tx_status(tx.commit()).await {
                 Ok(txn_status) => {
-                    tracing::error!("tx {:?} has status {:?}", tx, txn_status);
                     matches!(txn_status, TransactionStatus::Sequenced { .. });
                     // assert_eq!(txn_status, TransactionStatus::Sequenced { block: 2 });
                 }
@@ -4761,7 +4772,7 @@ mod test {
                 round,
             )
             .await;
-            current_builder_state_id = progress_round_with_available_block_info(
+            progress_round_with_available_block_info(
                 &proxy_global_state,
                 available_available_blocks_result.unwrap()[0].clone(),
                 current_builder_state_id,
