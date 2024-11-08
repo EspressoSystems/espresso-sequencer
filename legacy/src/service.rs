@@ -4720,7 +4720,9 @@ mod test {
         // round 3
         let mut txns_3 = Vec::with_capacity(num_transactions);
         for index in 0..num_transactions {
-            txns_3.push(TestTransaction::new(vec![(num_transactions * 2 + index) as u8]));
+            txns_3.push(TestTransaction::new(vec![
+                (num_transactions * 2 + index) as u8,
+            ]));
         }
         let txns_3 = txns_3;
         proxy_global_state
