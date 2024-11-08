@@ -20,8 +20,6 @@ COPY zkevm-node-additions /app/zkevm-node-additions
 COPY .env .envrc Cargo.toml Cargo.lock /app/
 WORKDIR /app
 
-# RUN apk add --no-cache g++ openssl-dev
-
 RUN RUSTFLAGS="--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"" cargo build  --release --all-targets --all-features
 
 FROM ubuntu:jammy
