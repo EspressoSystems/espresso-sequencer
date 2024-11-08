@@ -591,7 +591,48 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// # Errors
     /// Can return an error when the new view contains less information than the exisiting view
     /// with the same view number.
-    pub fn update_validated_state_map(
+    pub fn update_da_view(
+        &mut self,
+        view_number: TYPES::View,
+        payload_commitment: VidCommitment,
+    ) -> Result<()> {
+        let view = View {
+            view_inner: ViewInner::Da { payload_commitment },
+        };
+        self.update_validated_state_map(view_number, view)
+    }
+
+    /// Update the validated state map with a new view_number/view combo.
+    ///
+    /// # Errors
+    /// Can return an error when the new view contains less information than the exisiting view
+    /// with the same view number.
+    pub async fn update_leaf<V: Versions>(
+        &mut self,
+        leaf: Leaf<TYPES>,
+        state: Arc<TYPES::ValidatedState>,
+        delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Result<()> {
+        let view_number = leaf.view_number();
+        let view = View {
+            view_inner: ViewInner::Leaf {
+                leaf: leaf.commit(upgrade_lock).await,
+                state,
+                delta,
+            },
+        };
+        self.update_validated_state_map(view_number, view)?;
+        self.update_saved_leaves(leaf, upgrade_lock).await;
+        Ok(())
+    }
+
+    /// Update the validated state map with a new view_number/view combo.
+    ///
+    /// # Errors
+    /// Can return an error when the new view contains less information than the exisiting view
+    /// with the same view number.
+    fn update_validated_state_map(
         &mut self,
         view_number: TYPES::View,
         new_view: View<TYPES>,
@@ -621,7 +662,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Update the saved leaves with a new leaf.
-    pub async fn update_saved_leaves<V: Versions>(
+    async fn update_saved_leaves<V: Versions>(
         &mut self,
         leaf: Leaf<TYPES>,
         upgrade_lock: &UpgradeLock<TYPES, V>,

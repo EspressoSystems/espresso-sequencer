@@ -3,18 +3,19 @@ use std::time::Duration;
 use async_broadcast::broadcast;
 use futures::StreamExt;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
+use hotshot_example_types::state_types::TestValidatedState;
 use hotshot_task::dependency_task::HandleDepOutput;
 use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::VoteDependencyHandle};
 use hotshot_testing::{
-    helpers::{build_fake_view_with_leaf, build_system_handle},
+    helpers::build_system_handle,
     predicates::{event::*, Predicate, PredicateResult},
     view_generator::TestViewGenerator,
 };
+use hotshot_types::data::Leaf;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{EpochNumber, ViewNumber},
     traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
-    vote::HasViewNumber,
 };
 use itertools::Itertools;
 use tokio::time::timeout;
@@ -52,14 +53,14 @@ async fn test_vote_dependency_handle() {
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
         consensus_writer
-            .update_validated_state_map(
-                view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
+            .update_leaf(
+                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Arc::new(TestValidatedState::default()),
+                None,
+                &handle.hotshot.upgrade_lock,
             )
+            .await
             .unwrap();
-        consensus_writer
-            .update_saved_leaves(view.leaf.clone(), &handle.hotshot.upgrade_lock)
-            .await;
     }
     drop(consensus_writer);
 
@@ -79,7 +80,6 @@ async fn test_vote_dependency_handle() {
         let outputs = vec![
             exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
             exact(ViewChange(ViewNumber::new(3))),
-            validated_state_updated(),
             quorum_vote_send(),
         ];
 

@@ -28,7 +28,7 @@ use hotshot_types::{
         block_contents::BuilderFee, network::DataRequest, node_implementation::NodeType,
         signature_key::SignatureKey, BlockPayload,
     },
-    utils::{BuilderCommitment, View},
+    utils::BuilderCommitment,
     vid::VidCommitment,
     vote::HasViewNumber,
 };
@@ -204,9 +204,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
 
     /* Consensus State Update Events */
-    /// A undecided view has been created and added to the validated state storage.
-    ValidatedStateUpdated(TYPES::View, View<TYPES>),
-
     /// A new locked view has been created (2-chain)
     LockedViewUpdated(TYPES::View),
 
@@ -323,8 +320,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::Timeout(view_number)
             | HotShotEvent::BlockReady(_, view_number)
             | HotShotEvent::LockedViewUpdated(view_number)
-            | HotShotEvent::LastDecidedViewUpdated(view_number)
-            | HotShotEvent::ValidatedStateUpdated(view_number, _) => Some(*view_number),
+            | HotShotEvent::LastDecidedViewUpdated(view_number) => Some(*view_number),
             HotShotEvent::DaCertificateRecv(cert) | HotShotEvent::DacSend(cert, _) => {
                 Some(cert.view_number())
             }
@@ -571,9 +567,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     "QuorumProposalResponseRecv(view_number={:?})",
                     proposal.data.view_number
                 )
-            }
-            HotShotEvent::ValidatedStateUpdated(view_number, _) => {
-                write!(f, "ValidatedStateUpdated(view_number={view_number:?})")
             }
             HotShotEvent::LockedViewUpdated(view_number) => {
                 write!(f, "LockedViewUpdated(view_number={view_number:?})")

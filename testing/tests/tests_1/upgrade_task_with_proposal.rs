@@ -95,16 +95,13 @@ async fn test_upgrade_task_with_proposal() {
         leaders.push(view.leader_public_key);
         views.push(view.clone());
         consensus_writer
-            .update_saved_leaves(
+            .update_leaf(
                 Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Arc::new(TestValidatedState::default()),
+                None,
                 &handle.hotshot.upgrade_lock,
             )
-            .await;
-        consensus_writer
-            .update_validated_state_map(
-                view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
-            )
+            .await
             .unwrap();
     }
 
@@ -119,25 +116,18 @@ async fn test_upgrade_task_with_proposal() {
         leaves.push(view.leaf.clone());
         views.push(view.clone());
         consensus_writer
-            .update_saved_leaves(
+            .update_leaf(
                 Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Arc::new(TestValidatedState::default()),
+                None,
                 &handle.hotshot.upgrade_lock,
             )
-            .await;
-        consensus_writer
-            .update_validated_state_map(
-                view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
-            )
+            .await
             .unwrap();
     }
     drop(consensus_writer);
 
-    let (validated_state, _ /* state delta */) = <TestValidatedState as ValidatedState<
-        TestTypes,
-    >>::genesis(&*handle.hotshot.instance_state());
     let genesis_cert = proposals[0].data.justify_qc.clone();
-    let genesis_leaf = Leaf::genesis(&validated_state, &*handle.hotshot.instance_state()).await;
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
         quorum_membership.total_nodes(EpochNumber::new(1)),
@@ -180,10 +170,6 @@ async fn test_upgrade_task_with_proposal() {
                 None,
             ),
             VidDisperseSend(vid_dispersals[0].clone(), handle.public_key()),
-            ValidatedStateUpdated(
-                genesis_cert.view_number(),
-                build_fake_view_with_leaf(genesis_leaf.clone(), &handle.hotshot.upgrade_lock).await,
-            ),
         ],
         random![
             QuorumProposalPreliminarilyValidated(proposals[0].clone()),
@@ -201,10 +187,6 @@ async fn test_upgrade_task_with_proposal() {
                 None,
             ),
             VidDisperseSend(vid_dispersals[1].clone(), handle.public_key()),
-            ValidatedStateUpdated(
-                proposals[0].data.view_number(),
-                build_fake_view_with_leaf(leaves[0].clone(), &handle.hotshot.upgrade_lock).await,
-            ),
         ],
         InputOrder::Random(upgrade_vote_recvs),
         random![
@@ -223,10 +205,6 @@ async fn test_upgrade_task_with_proposal() {
                 None,
             ),
             VidDisperseSend(vid_dispersals[2].clone(), handle.public_key()),
-            ValidatedStateUpdated(
-                proposals[1].data.view_number(),
-                build_fake_view_with_leaf(leaves[1].clone(), &handle.hotshot.upgrade_lock).await,
-            ),
         ],
     ];
 

@@ -11,17 +11,18 @@ use std::time::Duration;
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
+use hotshot_example_types::state_types::TestValidatedState;
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_testing::{
     all_predicates,
-    helpers::{build_fake_view_with_leaf, vid_share},
+    helpers::vid_share,
     predicates::event::all_predicates,
     random,
     script::{Expectations, InputOrder, TaskScript},
 };
-use hotshot_types::{
-    data::ViewNumber, traits::node_implementation::ConsensusTime, vote::HasViewNumber,
-};
+use hotshot_types::data::Leaf;
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use std::sync::Arc;
 
 const TIMEOUT: Duration = Duration::from_millis(35);
 
@@ -31,7 +32,7 @@ async fn test_quorum_vote_task_success() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
         helpers::build_system_handle,
-        predicates::event::{exact, quorum_vote_send, validated_state_updated},
+        predicates::event::{exact, quorum_vote_send},
         view_generator::TestViewGenerator,
     };
 
@@ -59,14 +60,14 @@ async fn test_quorum_vote_task_success() {
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
         consensus_writer
-            .update_validated_state_map(
-                view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
+            .update_leaf(
+                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Arc::new(TestValidatedState::default()),
+                None,
+                &handle.hotshot.upgrade_lock,
             )
+            .await
             .unwrap();
-        consensus_writer
-            .update_saved_leaves(view.leaf.clone(), &handle.hotshot.upgrade_lock)
-            .await;
     }
     drop(consensus_writer);
 
@@ -83,7 +84,6 @@ async fn test_quorum_vote_task_success() {
         exact(VidShareValidated(vids[1].0[0].clone())),
         exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
         exact(ViewChange(ViewNumber::new(3))),
-        validated_state_updated(),
         quorum_vote_send(),
     ])];
 
@@ -133,14 +133,14 @@ async fn test_quorum_vote_task_miss_dependency() {
         leaves.push(view.leaf.clone());
 
         consensus_writer
-            .update_validated_state_map(
-                view.quorum_proposal.data.view_number(),
-                build_fake_view_with_leaf(view.leaf.clone(), &handle.hotshot.upgrade_lock).await,
+            .update_leaf(
+                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Arc::new(TestValidatedState::default()),
+                None,
+                &handle.hotshot.upgrade_lock,
             )
+            .await
             .unwrap();
-        consensus_writer
-            .update_saved_leaves(view.leaf.clone(), &handle.hotshot.upgrade_lock)
-            .await;
     }
     drop(consensus_writer);
 

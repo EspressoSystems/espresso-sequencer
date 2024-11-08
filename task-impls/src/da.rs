@@ -11,7 +11,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    consensus::{Consensus, OuterConsensus, View},
+    consensus::{Consensus, OuterConsensus},
     data::{DaProposal, PackedBundle},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
@@ -25,7 +25,6 @@ use hotshot_types::{
         signature_key::SignatureKey,
         storage::Storage,
     },
-    utils::ViewInner,
     vote::HasViewNumber,
 };
 use sha2::{Digest, Sha256};
@@ -210,12 +209,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let mut consensus_writer = self.consensus.write().await;
 
                 // Ensure this view is in the view map for garbage collection.
-                let view = View {
-                    view_inner: ViewInner::Da { payload_commitment },
-                };
-                if let Err(e) =
-                    consensus_writer.update_validated_state_map(view_number, view.clone())
-                {
+
+                if let Err(e) = consensus_writer.update_da_view(view_number, payload_commitment) {
                     tracing::trace!("{e:?}");
                 }
 

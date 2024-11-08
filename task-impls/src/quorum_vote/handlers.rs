@@ -22,7 +22,6 @@ use hotshot_types::{
         storage::Storage,
         ValidatedState,
     },
-    utils::{View, ViewInner},
     vote::HasViewNumber,
 };
 use tracing::instrument;
@@ -253,37 +252,25 @@ pub(crate) async fn update_shared_state<
     let state = Arc::new(validated_state);
     let delta = Arc::new(state_delta);
 
-    // Now that we've rounded everyone up, we need to update the shared state and broadcast our events.
-    // We will defer broadcast until all states are updated to avoid holding onto the lock during a network call.
+    // Now that we've rounded everyone up, we need to update the shared state
     let mut consensus_writer = consensus.write().await;
 
-    let view = View {
-        view_inner: ViewInner::Leaf {
-            leaf: proposed_leaf.commit(&upgrade_lock).await,
-            state: Arc::clone(&state),
-            delta: Some(Arc::clone(&delta)),
-        },
-    };
-    if let Err(e) =
-        consensus_writer.update_validated_state_map(proposed_leaf.view_number(), view.clone())
+    if let Err(e) = consensus_writer
+        .update_leaf(
+            proposed_leaf.clone(),
+            Arc::clone(&state),
+            Some(Arc::clone(&delta)),
+            &upgrade_lock,
+        )
+        .await
     {
         tracing::trace!("{e:?}");
     }
-    consensus_writer
-        .update_saved_leaves(proposed_leaf.clone(), &upgrade_lock)
-        .await;
 
     // Kick back our updated structures for downstream usage.
     let new_leaves = consensus_writer.saved_leaves().clone();
     let new_state = consensus_writer.validated_state_map().clone();
     drop(consensus_writer);
-
-    // Broadcast now that the lock is dropped.
-    broadcast_event(
-        HotShotEvent::ValidatedStateUpdated(proposed_leaf.view_number(), view).into(),
-        &sender,
-    )
-    .await;
 
     // Send the new state up to the sequencer.
     storage

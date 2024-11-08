@@ -136,6 +136,12 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(&proposal.data.block_header),
     );
 
+    if let Err(e) = consensus_writer
+        .update_leaf(leaf.clone(), Arc::clone(&state), None, upgrade_lock)
+        .await
+    {
+        tracing::trace!("{e:?}");
+    }
     let view = View {
         view_inner: ViewInner::Leaf {
             leaf: leaf.commit(upgrade_lock).await,
@@ -143,19 +149,6 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
             delta: None,
         },
     };
-    if let Err(e) = consensus_writer.update_validated_state_map(view_number, view.clone()) {
-        tracing::trace!("{e:?}");
-    }
-
-    consensus_writer
-        .update_saved_leaves(leaf.clone(), upgrade_lock)
-        .await;
-
-    broadcast_event(
-        HotShotEvent::ValidatedStateUpdated(view_number, view.clone()).into(),
-        &event_sender,
-    )
-    .await;
     Ok((leaf, view))
 }
 
@@ -450,22 +443,20 @@ pub async fn validate_proposal_safety_and_liveness<
     let state = Arc::new(
         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(&proposal.data.block_header),
     );
-    let view = View {
-        view_inner: ViewInner::Leaf {
-            leaf: proposed_leaf.commit(&validation_info.upgrade_lock).await,
-            state,
-            delta: None, // May be updated to `Some` in the vote task.
-        },
-    };
 
     {
         let mut consensus_writer = validation_info.consensus.write().await;
-        if let Err(e) = consensus_writer.update_validated_state_map(view_number, view.clone()) {
+        if let Err(e) = consensus_writer
+            .update_leaf(
+                proposed_leaf.clone(),
+                state,
+                None,
+                &validation_info.upgrade_lock,
+            )
+            .await
+        {
             tracing::trace!("{e:?}");
         }
-        consensus_writer
-            .update_saved_leaves(proposed_leaf.clone(), &validation_info.upgrade_lock)
-            .await;
 
         // Update our internal storage of the proposal. The proposal is valid, so
         // we swallow this error and just log if it occurs.
@@ -473,13 +464,6 @@ pub async fn validate_proposal_safety_and_liveness<
             tracing::debug!("Internal proposal update failed; error = {e:#}");
         };
     }
-
-    // Broadcast that we've updated our consensus state so that other tasks know it's safe to grab.
-    broadcast_event(
-        Arc::new(HotShotEvent::ValidatedStateUpdated(view_number, view)),
-        &event_stream,
-    )
-    .await;
 
     let cur_epoch = validation_info.cur_epoch;
     UpgradeCertificate::validate(
