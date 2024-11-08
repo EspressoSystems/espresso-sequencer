@@ -4679,12 +4679,7 @@ mod test {
         for tx in txns.clone() {
             match proxy_global_state.claim_tx_status(tx.commit()).await {
                 Ok(txn_status) => {
-                    assert_eq!(
-                        txn_status,
-                        TransactionStatus::Sequenced {
-                            block: 2,
-                        }
-                    );
+                    assert_eq!(txn_status, TransactionStatus::Sequenced { block: 2 });
                 }
                 e => {
                     panic!("transaction status should be Sequenced instead of {:?}", e);
