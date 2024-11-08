@@ -1,5 +1,6 @@
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
+use super::basic_test::{BuilderState, MessageType};
 use crate::{
     builder_state::{DaProposalMessage, QuorumProposalMessage, ALLOW_EMPTY_BLOCK_PERIOD},
     service::{GlobalState, ProxyGlobalState, ReceivedTransaction},
@@ -7,6 +8,7 @@ use crate::{
 use async_broadcast::{broadcast, Sender};
 use async_lock::RwLock;
 use committable::Commitment;
+use committable::Committable;
 use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
@@ -40,8 +42,6 @@ use marketplace_builder_shared::{
     block::ParentBlockReferences, testing::constants::TEST_PROTOCOL_MAX_BLOCK_SIZE,
 };
 use sha2::{Digest, Sha256};
-
-use super::basic_test::{BuilderState, MessageType};
 
 type TestSetup = (
     ProxyGlobalState<TestTypes>,
@@ -123,7 +123,7 @@ pub fn setup_builder_for_test() -> TestSetup {
 ///
 /// By default Consensus will retry 3-4 times to get available blocks from the
 /// Builder.
-async fn process_available_blocks_round(
+pub async fn process_available_blocks_round(
     proxy_global_state: &ProxyGlobalState<TestTypes>,
     builder_state_id: BuilderStateId<TestTypes>,
     round: u64,
@@ -172,7 +172,7 @@ async fn process_available_blocks_round(
 ///
 /// This is the workflow that happens if the builder has a block to propose,
 /// and the block is included by consensus.
-async fn progress_round_with_available_block_info(
+pub async fn progress_round_with_available_block_info(
     proxy_global_state: &ProxyGlobalState<TestTypes>,
     available_block_info: AvailableBlockInfo<TestTypes>,
     builder_state_id: BuilderStateId<TestTypes>,
@@ -222,7 +222,7 @@ async fn progress_round_with_available_block_info(
 /// This is the workflow that happens if the builder does not have a block to
 /// propose, and consensus must continue to progress without a block built by
 /// any builder.
-async fn progress_round_without_available_block_info(
+pub async fn progress_round_without_available_block_info(
     builder_state_id: BuilderStateId<TestTypes>,
     round: u64,
     da_proposal_sender: &Sender<MessageType<TestTypes>>,
@@ -527,7 +527,12 @@ async fn test_eager_block_rate() {
         )
         .await;
     }
-
+    let tx = TestTransaction::new(vec![1]);
+    tracing::error!(
+        "In finalization_test, status of transaction {:?} is {:?}",
+        tx,
+        proxy_global_state.claim_tx_status(tx.commit()).await
+    );
     // rounds 2 + ALLOW_EMPTY_BLOCK_PERIOD through 9 should not propose empty
     for round in (2 + ALLOW_EMPTY_BLOCK_PERIOD)..10 {
         let (attempts, available_blocks_result) = process_available_blocks_round(

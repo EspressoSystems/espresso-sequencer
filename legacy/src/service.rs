@@ -1618,7 +1618,10 @@ mod test {
             TriggerStatus,
         },
         service::{BlockSizeLimits, HandleReceivedTxnsError},
-        testing::finalization_test::setup_builder_for_test,
+        testing::finalization_test::{
+            process_available_blocks_round, progress_round_with_available_block_info,
+            progress_round_without_available_block_info, setup_builder_for_test,
+        },
         LegacyCommit,
     };
 
@@ -4563,10 +4566,24 @@ mod test {
     /// This test checks builder does save the status of transactions correctly
     #[async_std::test]
     async fn test_get_txn_status() {
-        let (proxy_global_state, _, _da_proposal_sender, _quorum_proposal_sender, _) =
+        let (proxy_global_state, _, da_proposal_sender, quorum_proposal_sender, _) =
             setup_builder_for_test();
-        tracing::error!("start===========");
-        // round 0: test status Pending
+        tracing::debug!("start tests on correctly setting transaction status.");
+
+        let mut round = 0;
+        let mut current_builder_state_id = BuilderStateId::<TestTypes> {
+            parent_commitment: vid_commitment(&[], 8), // Sishan TODO: change 8 to num_nodes defined earlier
+            parent_view: ViewNumber::genesis(),
+        };
+        current_builder_state_id = progress_round_without_available_block_info(
+            current_builder_state_id,
+            round,
+            &da_proposal_sender,
+            &quorum_proposal_sender,
+        )
+        .await;
+
+        // round 1: test status Pending
         let num_transactions = 10;
         let mut txns = Vec::with_capacity(num_transactions);
         for index in 0..num_transactions {
@@ -4587,50 +4604,133 @@ mod test {
                     panic!("transaction status should be Pending instead of {:?}", e);
                 }
             }
-            
         }
 
-        // Test status Sequenced
-        
-
-        // round 2: test status Rejected with correct error message
-        let mut big_txns = Vec::with_capacity(num_transactions + 1);
-        for index in 0..(num_transactions - 1) {
-            big_txns.push(TestTransaction::new(vec![(num_transactions + index) as u8]));
-        }
-        big_txns.push(TestTransaction::new(vec![0; TEST_PROTOCOL_MAX_BLOCK_SIZE as usize + 1]));
-        let big_txns = big_txns;
-        let _ = proxy_global_state
-            .submit_txns(big_txns.clone())
+        // advance the round
+        {
+            round = 1;
+            let (_attempts, available_available_blocks_result) = process_available_blocks_round(
+                &proxy_global_state,
+                current_builder_state_id.clone(),
+                round,
+            )
             .await;
+            current_builder_state_id = progress_round_with_available_block_info(
+                &proxy_global_state,
+                available_available_blocks_result.unwrap()[0].clone(),
+                current_builder_state_id,
+                round,
+                &da_proposal_sender,
+                &quorum_proposal_sender,
+            )
+            .await;
+        }
+
+        // round 2: test status Sequenced
+        let mut txns_2 = Vec::with_capacity(num_transactions);
+        for index in 0..num_transactions {
+            txns_2.push(TestTransaction::new(vec![(num_transactions + index) as u8]));
+        }
+        let txns_2 = txns_2;
+        proxy_global_state
+            .submit_txns(txns_2.clone())
+            .await
+            .expect("should submit transaction without issue");
+        // tx submitted in round 1 should be sequenced
+        for tx in txns.clone() {
+            match proxy_global_state.claim_tx_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(
+                        txn_status,
+                        TransactionStatus::Sequenced {
+                            block: 2,
+                            offset: 0
+                        }
+                    );
+                }
+                e => {
+                    panic!("transaction status should be Sequenced instead of {:?}", e);
+                }
+            }
+        }
+        for tx in txns_2.clone() {
+            match proxy_global_state.claim_tx_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Pending);
+                }
+                e => {
+                    panic!("transaction status should be Pending instead of {:?}", e);
+                }
+            }
+        }
+        // advance the round
+        {
+            round = 2;
+            let (_attempts, available_available_blocks_result) = process_available_blocks_round(
+                &proxy_global_state,
+                current_builder_state_id.clone(),
+                round,
+            )
+            .await;
+            current_builder_state_id = progress_round_with_available_block_info(
+                &proxy_global_state,
+                available_available_blocks_result.unwrap()[0].clone(),
+                current_builder_state_id,
+                round,
+                &da_proposal_sender,
+                &quorum_proposal_sender,
+            )
+            .await;
+        }
+
+        // round 3: test status Rejected with correct error message
+        let mut big_txns = Vec::with_capacity(1);
+        big_txns.push(TestTransaction::new(vec![
+            0;
+            TEST_PROTOCOL_MAX_BLOCK_SIZE
+                as usize
+                + 1
+        ]));
+        let big_txns = big_txns;
+        let _ = proxy_global_state.submit_txns(big_txns.clone()).await;
         for tx in big_txns {
             match proxy_global_state.claim_tx_status(tx.commit()).await {
                 Ok(txn_status) => {
                     if tx.minimum_block_size() > TEST_PROTOCOL_MAX_BLOCK_SIZE {
+                        tracing::debug!(
+                            "In test_get_txn_status(), txn_status of large tx = {:?}",
+                            txn_status
+                        );
                         matches!(txn_status, TransactionStatus::Rejected { .. });
+                        if let TransactionStatus::Rejected { reason } = txn_status {
+                            assert!(reason.contains("Transaction too big"));
+                        }
                     } else {
                         assert_eq!(txn_status, TransactionStatus::Pending);
                     }
                 }
                 e => {
-                    panic!("transaction status should be a valid status instead of {:?}", e);
+                    panic!(
+                        "transaction status should be a valid status instead of {:?}",
+                        e
+                    );
                 }
             }
-            
         }
-
 
         // Test status Unknown when the txn is unknown
         let unknown_tx = TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
-            match proxy_global_state.claim_tx_status(unknown_tx.commit()).await {
-                Ok(txn_status) => {
-                    assert_eq!(txn_status, TransactionStatus::Unknown);
-                }
-                e => {
-                    panic!("transaction status should be Unknown instead of {:?}", e);
-                }
+        match proxy_global_state
+            .claim_tx_status(unknown_tx.commit())
+            .await
+        {
+            Ok(txn_status) => {
+                assert_eq!(txn_status, TransactionStatus::Unknown);
             }
-
+            e => {
+                panic!("transaction status should be Unknown instead of {:?}", e);
+            }
+        }
     }
 
     #[test]
