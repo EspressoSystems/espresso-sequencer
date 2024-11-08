@@ -106,3 +106,21 @@ impl SequencerClient {
         Ok(balance)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // Regression test for a bug where the block number underflowed. This test would panic
+    // on the previous implementation, as long as overflow checks are enabled.
+    #[async_std::test]
+    async fn test_regression_block_number_underflow() {
+        let client = SequencerClient::new("http://dummy-url:3030".parse().unwrap());
+        assert_eq!(
+            client
+                .get_espresso_balance(Address::zero(), Some(0))
+                .await
+                .unwrap(),
+            0.into()
+        )
+    }
+}
