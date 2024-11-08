@@ -3,6 +3,7 @@ pub mod create_inscriptions_api;
 use crate::service::client_message::InternalClientMessage;
 use crate::service::espresso_inscription::{EspressoInscription, InscriptionAndSignature};
 use crate::service::server_message::ServerMessage;
+use crate::service::storage::InscriptionPersistence;
 use crate::service::{validate_inscription_and_signature, InscriptionVerificationError};
 use async_std::task::JoinHandle;
 use espresso_types::{BackoffParams, SeqTypes};
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use tide_disco::socket::Connection;
 use tide_disco::RequestError;
@@ -343,7 +345,8 @@ where
 ///
 /// This allows us to swap the implementation of the [BlockStreamRetriever] for
 /// testing purposes, or for newer sources in the future.
-pub trait BlockStreamRetriever: Send {
+#[async_trait::async_trait]
+pub trait BlockStreamRetriever {
     type Item;
     type ItemError: std::error::Error + Send;
     type Error: std::error::Error + Send;
@@ -459,7 +462,12 @@ impl ProcessProduceBlockStreamTask {
     /// Calling this function will create an async task that will start
     /// processing immediately.  The task's handle will be stored in the
     /// returned state.
-    pub fn new<R, K>(block_stream_retriever: R, block_sender: K) -> Self
+    pub fn new<R, Persistence, K>(
+        block_stream_retriever: R,
+        persistence: Arc<Persistence>,
+        minimum_start_block_height: u64,
+        block_sender: K,
+    ) -> Self
     where
         R: BlockStreamRetriever<Item = BlockQueryData<SeqTypes>> + Send + Sync + 'static,
         K: Sink<BlockQueryData<SeqTypes>, Error = SendError>
@@ -468,9 +476,12 @@ impl ProcessProduceBlockStreamTask {
             + Sync
             + Unpin
             + 'static,
+        Persistence: InscriptionPersistence + Send + Sync + 'static,
     {
         let task_handle = async_std::task::spawn(Self::connect_and_process_blocks(
             block_stream_retriever,
+            persistence,
+            minimum_start_block_height,
             block_sender,
         ));
 
@@ -479,8 +490,12 @@ impl ProcessProduceBlockStreamTask {
         }
     }
 
-    async fn connect_and_process_blocks<R, K>(block_stream_retriever: R, block_sender: K)
-    where
+    async fn connect_and_process_blocks<R, Persistence, K>(
+        block_stream_retriever: R,
+        persistence: Arc<Persistence>,
+        minimum_start_block_height: u64,
+        block_sender: K,
+    ) where
         R: BlockStreamRetriever<Item = BlockQueryData<SeqTypes>>,
         K: Sink<BlockQueryData<SeqTypes>, Error = SendError>
             + Clone
@@ -488,6 +503,7 @@ impl ProcessProduceBlockStreamTask {
             + Sync
             + Unpin
             + 'static,
+        Persistence: InscriptionPersistence,
     {
         // We want to try and ensure that we are connected to the HotShot Query
         // Service, and are consuming blocks.
@@ -503,7 +519,13 @@ impl ProcessProduceBlockStreamTask {
 
         loop {
             // Retrieve a stream
-            let Ok(stream) = Self::retrieve_block_stream(&block_stream_retriever).await else {
+            let Ok(stream) = Self::retrieve_block_stream(
+                &block_stream_retriever,
+                persistence.clone(),
+                minimum_start_block_height,
+            )
+            .await
+            else {
                 panic!("failed to retrieve block stream");
             };
 
@@ -522,17 +544,27 @@ impl ProcessProduceBlockStreamTask {
     ///
     /// This function also implements exponential backoff with a maximum
     /// delay of 5 seconds.
-    async fn retrieve_block_stream<R>(
+    async fn retrieve_block_stream<R, Persistence>(
         block_stream_receiver: &R,
+        persistence: Arc<Persistence>,
+        minimum_start_block_height: u64,
     ) -> Result<R::Stream, RetrieveBlockStreamError>
     where
         R: BlockStreamRetriever<Item = BlockQueryData<SeqTypes>>,
+        Persistence: InscriptionPersistence,
     {
         let backoff_params = BackoffParams::default();
         let mut delay = Duration::ZERO;
 
         for attempt in 1..=100 {
-            let block_stream_result = block_stream_receiver.retrieve_stream(None).await;
+            let block_height = persistence
+                .retrieve_last_received_block()
+                .await
+                .ok()
+                // we want to start **after** the last block we received.
+                .map(|height| std::cmp::max(height + 1, minimum_start_block_height));
+
+            let block_stream_result = block_stream_receiver.retrieve_stream(block_height).await;
 
             let block_stream = match block_stream_result {
                 Err(error) => {

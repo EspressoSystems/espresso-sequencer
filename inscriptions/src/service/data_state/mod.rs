@@ -13,12 +13,13 @@ use super::{
     espresso_inscription::{
         ChainDetails, InscriptionAndChainDetails, InscriptionAndSignatureFromService,
     },
+    storage::InscriptionPersistence,
     validate_inscription_and_signature_from_service,
 };
 
 /// MAX_LOCAL_INSCRIPTION_HISTORY represents the last N records that are stored within the
 /// DataState structure for the various different sample types.
-const MAX_LOCAL_INSCRIPTION_HISTORY: usize = 100;
+pub const MAX_LOCAL_INSCRIPTION_HISTORY: usize = 100;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SubmitInscriptionError {
@@ -27,13 +28,15 @@ pub enum SubmitInscriptionError {
 
 /// [DataState] represents the state of the data that is being stored within
 /// the service.
-pub struct DataState {
+pub struct DataState<Persistence> {
     latest_inscriptions: CircularBuffer<MAX_LOCAL_INSCRIPTION_HISTORY, InscriptionAndChainDetails>,
+
+    persistence: Arc<Persistence>,
 
     address: Address,
 }
 
-impl DataState {
+impl<Persistence> DataState<Persistence> {
     /// [new] creates a new [DataState] structure that will store the latest
     /// inscriptions that are being processed by the service.
     pub fn new(
@@ -41,10 +44,12 @@ impl DataState {
             MAX_LOCAL_INSCRIPTION_HISTORY,
             InscriptionAndChainDetails,
         >,
+        persistence: Arc<Persistence>,
         address: Address,
     ) -> Self {
         Self {
             latest_inscriptions,
+            persistence,
             address,
         }
     }
@@ -70,6 +75,10 @@ impl DataState {
     /// within the [DataState].
     pub fn current_inscriptions(&self) -> Vec<InscriptionAndChainDetails> {
         self.latest_inscriptions.iter().cloned().collect()
+    }
+
+    pub fn persistence(&self) -> &Persistence {
+        &self.persistence
     }
 }
 
@@ -103,16 +112,17 @@ impl std::error::Error for ProcessBlockError {
 /// Additionally, the block that is contained within the [Block] will be
 /// computed into a [BlockDetail] and sent to the [Sink] so that it can be
 /// processed for real-time considerations.
-async fn process_incoming_block<BDSink, E>(
+async fn process_incoming_block<BDSink, Persistence, E>(
     inscription_namespace: NamespaceId,
     block: BlockQueryData<SeqTypes>,
-    data_state: Arc<RwLock<DataState>>,
+    data_state: Arc<RwLock<DataState<Persistence>>>,
     mut inscription_sender: BDSink,
 ) -> Result<(), ProcessBlockError>
 where
     Payload: QueryablePayload<SeqTypes>,
     E: std::fmt::Display + std::fmt::Debug,
     BDSink: Sink<InscriptionAndChainDetails, Error = E> + Unpin,
+    Persistence: InscriptionPersistence,
 {
     let mut inscriptions = Vec::<InscriptionAndChainDetails>::new();
 
@@ -180,6 +190,20 @@ where
 
     let inscriptions_count = inscriptions.len();
     for inscription in inscriptions {
+        {
+            let state = data_state.read_arc().await;
+            if let Err(err) = state
+                .persistence()
+                .record_confirmed_inscription_and_chain_details(&inscription)
+                .await
+            {
+                tracing::error!(
+                    "failed to record confirmed inscription and chain details, encountered error: {:?}",
+                    err
+                );
+            }
+        }
+
         let feed_result = inscription_sender.feed(inscription).await;
         if let Err(err) = feed_result {
             tracing::error!(
@@ -220,10 +244,10 @@ impl ProcessBlockStreamTask {
     /// Calling this function will create an asynchronous task that will start
     /// processing immediately. The handle for the task will be stored within
     /// the returned structure.
-    pub fn new<S, K>(
+    pub fn new<S, Persistence, K>(
         inscription_namespace_id: NamespaceId,
         block_receiver: S,
-        data_state: Arc<RwLock<DataState>>,
+        data_state: Arc<RwLock<DataState<Persistence>>>,
         inscription_sender: K,
     ) -> Self
     where
@@ -234,6 +258,7 @@ impl ProcessBlockStreamTask {
             + Sync
             + Unpin
             + 'static,
+        Persistence: InscriptionPersistence + Send + Sync + 'static,
     {
         let task_handle = async_std::task::spawn(Self::process_block_stream(
             block_receiver,
@@ -249,14 +274,15 @@ impl ProcessBlockStreamTask {
 
     /// [process_block_stream] allows for the consumption of a [Stream] when
     /// attempting to process new incoming [Block]s.
-    async fn process_block_stream<S, ISink>(
+    async fn process_block_stream<S, Persistence, ISink>(
         mut stream: S,
         inscription_namespace_id: NamespaceId,
-        data_state: Arc<RwLock<DataState>>,
+        data_state: Arc<RwLock<DataState<Persistence>>>,
         inscription_sender: ISink,
     ) where
         S: Stream<Item = BlockQueryData<SeqTypes>> + Unpin,
         ISink: Sink<InscriptionAndChainDetails, Error = SendError> + Clone + Unpin,
+        Persistence: InscriptionPersistence,
     {
         loop {
             let block_result = stream.next().await;
@@ -264,9 +290,21 @@ impl ProcessBlockStreamTask {
                 block
             } else {
                 // We have reached the end of the stream
-                tracing::error!("process leaf stream: end of stream reached for leaf stream.");
+                tracing::error!("process block stream: end of stream reached for leaf stream.");
                 return;
             };
+
+            {
+                // Record the last received block
+                let state = data_state.read_arc().await;
+                if let Err(err) = state
+                    .persistence()
+                    .record_last_received_block(block.header().block_number())
+                    .await
+                {
+                    tracing::error!("failed to record last received block: {:?}", err);
+                }
+            }
 
             let now_timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
             let block_timestamp = block.header().timestamp();

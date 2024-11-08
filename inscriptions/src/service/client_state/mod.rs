@@ -9,6 +9,7 @@ use super::{
         InscriptionAndSignatureFromService,
     },
     server_message::ServerMessage,
+    storage::InscriptionPersistence,
     ESPRESSO_EIP712_DOMAIN,
 };
 use alloy::{
@@ -124,9 +125,9 @@ impl std::error::Error for HandleConnectedError {
 
 /// [handle_client_message_connected] is a function that processes the client
 /// message to connect a client to the service.
-pub async fn handle_client_message_connected<K>(
+pub async fn handle_client_message_connected<K, Persistence>(
     mut sender: K,
-    data_state: Arc<RwLock<DataState>>,
+    data_state: Arc<RwLock<DataState<Persistence>>>,
     client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
 ) -> Result<ClientId, HandleConnectedError>
 where
@@ -251,9 +252,9 @@ async fn drop_failed_client_sends<K>(
 /// The [ClientThreadState] is provided as it needs to be updated with new
 /// subscriptions / new connections depending on the incoming
 /// [InternalClientMessage]
-pub async fn process_client_message<K>(
+pub async fn process_client_message<K, Persistence>(
     message: InternalClientMessage<K>,
-    data_state: Arc<RwLock<DataState>>,
+    data_state: Arc<RwLock<DataState<Persistence>>>,
     client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
 ) -> Result<(), ProcessClientMessageError>
 where
@@ -287,14 +288,15 @@ impl InternalClientMessageProcessingTask {
     /// Calling this function will start an async task that will start
     /// processing.  The handle for the async task is stored within the
     /// returned state.
-    pub fn new<S, K>(
+    pub fn new<S, Persistence, K>(
         internal_client_message_receiver: S,
-        data_state: Arc<RwLock<DataState>>,
+        data_state: Arc<RwLock<DataState<Persistence>>>,
         client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     ) -> Self
     where
         S: Stream<Item = InternalClientMessage<K>> + Send + Sync + Unpin + 'static,
         K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+        Persistence: Send + Sync + 'static,
     {
         let task_handle = async_std::task::spawn(Self::process_internal_client_message_stream(
             internal_client_message_receiver,
@@ -310,9 +312,9 @@ impl InternalClientMessageProcessingTask {
     /// [process_internal_client_message_stream] is a function that processes the
     /// client handling stream. This stream is responsible for managing the state
     /// of the connected clients, and their subscriptions.
-    async fn process_internal_client_message_stream<S, K>(
+    async fn process_internal_client_message_stream<S, Persistence, K>(
         mut stream: S,
-        data_state: Arc<RwLock<DataState>>,
+        data_state: Arc<RwLock<DataState<Persistence>>>,
         client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     ) where
         S: Stream<Item = InternalClientMessage<K>> + Unpin,
@@ -473,13 +475,75 @@ impl Drop for ProcessDistributeInscriptionHandlingTask {
     }
 }
 
-pub struct ProcessRecordInscriptionHandlingTask {
+/// [ProcessRecordPutInscriptionRequestTask] represents an async task for
+/// processing the incoming put_inscription requests and recording them to the
+/// persistence layer.
+pub struct ProcessRecordPutInscriptionRequestTask {
     pub task_handle: Option<JoinHandle<()>>,
 }
 
-impl ProcessRecordInscriptionHandlingTask {
-    pub fn new<S>(
+impl ProcessRecordPutInscriptionRequestTask {
+    pub fn new<S, Persistence>(
+        data_state: Arc<RwLock<DataState<Persistence>>>,
+        inscription_receiver: S,
+    ) -> Self
+    where
+        S: Stream<Item = EspressoInscription> + Send + Sync + Unpin + 'static,
+        Persistence: InscriptionPersistence + Send + Sync + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_record_put_inscription_request(
+            data_state,
+            inscription_receiver,
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    async fn process_record_put_inscription_request<S, Persistence>(
+        data_state: Arc<RwLock<DataState<Persistence>>>,
+        mut stream: S,
+    ) where
+        S: Stream<Item = EspressoInscription> + Unpin,
+        Persistence: InscriptionPersistence,
+    {
+        loop {
+            let inscription = match stream.next().await {
+                Some(inscription) => inscription,
+                None => {
+                    tracing::error!(
+                        "inscription detail stream closed.  shutting down client handling stream.",
+                    );
+                    return;
+                }
+            };
+
+            {
+                let read_lock = data_state.read_arc().await;
+                if let Err(err) = read_lock
+                    .persistence()
+                    .record_pending_put_inscription(&inscription)
+                    .await
+                {
+                    tracing::error!("error recording inscription: {:?}", err);
+                }
+            }
+        }
+    }
+}
+
+/// [ProcessPutInscriptionToChainTask] represents an async task for processing
+/// the incoming [EspressoInscription] and submitting them to the chain.
+/// This process is rate limited.
+pub struct ProcessPutInscriptionToChainTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl ProcessPutInscriptionToChainTask {
+    pub fn new<S, Persistence>(
         rate_limiter: RateLimiter<NotKeyed, InMemoryState, clock::DefaultClock>,
+        data_state: Arc<RwLock<DataState<Persistence>>>,
         inscription_namespace_id: NamespaceId,
         signer: PrivateKeySigner,
         inscription_receiver: S,
@@ -487,9 +551,11 @@ impl ProcessRecordInscriptionHandlingTask {
     ) -> Self
     where
         S: Stream<Item = EspressoInscription> + Send + Sync + Unpin + 'static,
+        Persistence: InscriptionPersistence + Send + Sync + 'static,
     {
         let task_handle = async_std::task::spawn(Self::process_record_inscription(
             rate_limiter,
+            data_state,
             inscription_namespace_id,
             signer,
             inscription_receiver,
@@ -501,14 +567,16 @@ impl ProcessRecordInscriptionHandlingTask {
         }
     }
 
-    async fn process_record_inscription<S>(
+    async fn process_record_inscription<S, Persistence>(
         rate_limiter: RateLimiter<NotKeyed, InMemoryState, clock::DefaultClock>,
+        data_state: Arc<RwLock<DataState<Persistence>>>,
         inscription_namespace_id: NamespaceId,
         signer: PrivateKeySigner,
         mut stream: S,
         base_url: Url,
     ) where
         S: Stream<Item = EspressoInscription> + Unpin,
+        Persistence: InscriptionPersistence,
     {
         let client = Client::<hotshot_query_service::Error, Version01>::new(base_url);
 
@@ -549,6 +617,16 @@ impl ProcessRecordInscriptionHandlingTask {
 
             let serialized = match serialize_result {
                 Ok(serialized) => {
+                    {
+                        let read_lock = data_state.read_arc().await;
+                        if let Err(err) = read_lock
+                            .persistence()
+                            .record_submit_put_inscription(&inscription_and_signature.inscription)
+                            .await
+                        {
+                            tracing::error!("error recording inscription and signature: {:?}", err);
+                        }
+                    }
                     // We have the serialized object, we can now send it to the
                     // next stage.
                     serialized
@@ -578,7 +656,7 @@ impl ProcessRecordInscriptionHandlingTask {
     }
 }
 
-impl Drop for ProcessRecordInscriptionHandlingTask {
+impl Drop for ProcessPutInscriptionToChainTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
@@ -591,12 +669,21 @@ impl Drop for ProcessRecordInscriptionHandlingTask {
 pub mod tests {
     use super::{ClientThreadState, InternalClientMessageProcessingTask};
     use crate::service::{
-        client_id::ClientId, data_state::DataState, server_message::ServerMessage,
+        client_id::ClientId,
+        data_state::DataState,
+        espresso_inscription::{EspressoInscription, InscriptionAndChainDetails},
+        server_message::ServerMessage,
+        storage::{
+            InscriptionPersistence, RecordConfirmedInscriptionAndChainDetailsError,
+            RecordLastReceivedBlockError, RecordPendingPutInscriptionError,
+            ResolvePendingPutInscriptionError, RetrieveLastReceivedBlockError,
+            RetrieveLatestInscriptionAndChainDetailsError, RetrievePendingPutInscriptionsError,
+        },
     };
     use alloy::signers::local::PrivateKeySigner;
     use async_std::sync::RwLock;
     use futures::channel::mpsc::{self, Sender};
-    use std::sync::Arc;
+    use std::{num::NonZero, sync::Arc};
 
     pub fn create_test_client_thread_state() -> ClientThreadState<Sender<ServerMessage>> {
         ClientThreadState {
@@ -605,9 +692,64 @@ pub mod tests {
         }
     }
 
-    pub fn create_test_data_state() -> DataState {
+    #[derive(Default)]
+    pub struct TestPersistence {}
+
+    #[async_trait::async_trait]
+    impl InscriptionPersistence for TestPersistence {
+        async fn record_pending_put_inscription(
+            &self,
+            _inscription: &EspressoInscription,
+        ) -> Result<(), RecordPendingPutInscriptionError> {
+            todo!();
+        }
+
+        async fn record_submit_put_inscription(
+            &self,
+            _inscription: &EspressoInscription,
+        ) -> Result<(), ResolvePendingPutInscriptionError> {
+            todo!();
+        }
+
+        async fn retrieve_pending_put_inscriptions(
+            &self,
+        ) -> Result<Vec<EspressoInscription>, RetrievePendingPutInscriptionsError> {
+            todo!();
+        }
+
+        async fn record_confirmed_inscription_and_chain_details(
+            &self,
+            _inscription_and_block_details: &InscriptionAndChainDetails,
+        ) -> Result<(), RecordConfirmedInscriptionAndChainDetailsError> {
+            todo!();
+        }
+
+        async fn retrieve_latest_inscription_and_chain_details(
+            &self,
+            _number_of_inscriptions: NonZero<usize>,
+        ) -> Result<Vec<InscriptionAndChainDetails>, RetrieveLatestInscriptionAndChainDetailsError>
+        {
+            todo!();
+        }
+
+        async fn record_last_received_block(
+            &self,
+            _block: u64,
+        ) -> Result<(), RecordLastReceivedBlockError> {
+            todo!();
+        }
+
+        async fn retrieve_last_received_block(
+            &self,
+        ) -> Result<u64, RetrieveLastReceivedBlockError> {
+            todo!();
+        }
+    }
+
+    pub fn create_test_data_state() -> DataState<TestPersistence> {
         let signer = PrivateKeySigner::random();
-        DataState::new(Default::default(), signer.address())
+        let persistence = TestPersistence::default();
+        DataState::new(Default::default(), Arc::new(persistence), signer.address())
     }
 
     #[async_std::test]

@@ -3,8 +3,7 @@ pub mod service;
 
 use api::inscriptions::v0::{
     create_inscriptions_api::{create_inscriptions_processing, InscriptionsConfig},
-    Error, HotshotQueryServiceBlockStreamRetriever, ProcessProduceBlockStreamTask,
-    StateClientMessageSender, STATIC_VER_0_1,
+    Error, StateClientMessageSender, STATIC_VER_0_1,
 };
 use async_std::sync::RwLock;
 use clap::Parser;
@@ -93,9 +92,49 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_INSCRIPTIONS_NAMESPACE_ID",
-        default_value = "0x5349474e"
+        default_value = "1397311310"
     )]
     inscriptions_namespace_id: u32,
+
+    /// postgres_host is the host that is used to connect to the PostgreSQL
+    /// database that is used to store the inscriptions service persistent
+    /// state.
+    #[clap(long, env = "POSTGRES_HOST", default_value = "localhost")]
+    postgres_host: String,
+
+    /// postgres_port is the port that is used to connect to the PostgreSQL
+    /// database that is used to store the inscriptions service persistent
+    /// state.
+    #[clap(long, env = "POSTGRES_PORT", default_value = "5432")]
+    postgres_port: u16,
+
+    /// postgres_database is the name of the PostgreSQL database that is used
+    /// to store the inscriptions services persistent state.
+    #[clap(long, env = "POSTGRES_DATABASE", default_value = "postgres")]
+    postgres_database: String,
+
+    /// postgres_user is the user that is used to connect to the PostgreSQL
+    /// database that is used to store the inscriptions services persistent
+    /// state.
+    #[clap(long, env = "POSTGRES_USER", default_value = "postgres")]
+    postgres_user: String,
+
+    /// postgres_password is the password that is used to connect to the
+    /// PostgreSQL database that is used to store the inscriptions services
+    /// persistent state.
+    #[clap(long, env = "POSTGRES_PASSWORD", default_value = "password")]
+    postgres_password: String,
+
+    /// minimum_block_height is the minimum block height that the service will
+    /// start processing inscriptions from.  This is used to ensure that the
+    /// service does not process inscriptions that are older than the block
+    /// height that is specified.
+    #[clap(
+        long,
+        env = "ESPRESSO_INSCRIPTIONS_MINIMUM_BLOCK_HEIGHT",
+        default_value = "0"
+    )]
+    minimum_block_height: u64,
 }
 
 impl Options {
@@ -146,14 +185,53 @@ impl Options {
     pub fn inscriptions_namespace_id(&self) -> NamespaceId {
         NamespaceId::from(self.inscriptions_namespace_id)
     }
+
+    /// postgres_host returns the host that is used to connect to the PostgreSQL
+    /// database that is used to store the inscriptions service persistent state.
+    pub fn postgres_host(&self) -> String {
+        self.postgres_host.clone()
+    }
+
+    /// postgres_port returns the port that is used to connect to the PostgreSQL
+    /// database that is used to store the inscriptions service persistent state.
+    pub fn postgres_port(&self) -> u16 {
+        self.postgres_port
+    }
+
+    /// postgres_database returns the name of the PostgreSQL database that is
+    /// used to store the inscriptions services persistent state.
+    pub fn postgres_database(&self) -> String {
+        self.postgres_database.clone()
+    }
+
+    /// postgres_user returns the user that is used to connect to the PostgreSQL
+    /// database that is used to store the inscriptions services persistent state.
+    pub fn postgres_user(&self) -> String {
+        self.postgres_user.clone()
+    }
+
+    /// postgres_password returns the password that is used to connect to the
+    /// PostgreSQL database that is used to store the inscriptions services
+    /// persistent state.
+    pub fn postgres_password(&self) -> String {
+        self.postgres_password.clone()
+    }
+
+    /// minimum_block_height returns the minimum block height that the service
+    /// will start processing inscriptions from.  This is used to ensure that
+    /// the service does not process inscriptions that are older than the block
+    /// height that is specified.
+    pub fn minimum_block_height(&self) -> u64 {
+        self.minimum_block_height
+    }
 }
 
 /// MainState represents the State of the application this is available to
 /// tide_disco.
 struct MainState<K> {
     internal_client_message_sender: Sender<InternalClientMessage<K>>,
-
-    put_inscription_sender: Arc<RwLock<Sender<EspressoInscription>>>,
+    put_inscription_record_sender: Sender<EspressoInscription>,
+    put_inscription_to_chain_sender: Arc<RwLock<Sender<EspressoInscription>>>,
 }
 
 #[async_trait::async_trait]
@@ -166,14 +244,19 @@ where
     }
 
     async fn put_inscription(&self, inscription: EspressoInscription) -> Result<(), Error> {
-        let mut sender = self.put_inscription_sender.write_arc().await;
+        let mut sender1 = self.put_inscription_record_sender.clone();
+        let mut sender2 = self.put_inscription_to_chain_sender.write_arc().await;
 
-        match sender.try_send(inscription) {
+        if let Err(err) = sender1.try_send(inscription.clone()) {
+            tracing::error!("error sending put inscription to first sender: {:?}", err);
+        }
+
+        match sender2.try_send(inscription) {
             Ok(_) => {
                 return Ok(());
             }
             Err(err) => {
-                tracing::error!("error sending inscription: {:?}", err);
+                tracing::error!("error sending put inscription to second sender: {:?}", err);
                 Err(Error::TooManyRequests)
             }
         }
@@ -187,11 +270,17 @@ where
 /// effectively.
 pub async fn run_standalone_service(options: Options) {
     let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(32);
-    let (put_inscription_sender, put_inscription_receiver) =
+    let (put_inscription_record_sender, put_inscription_record_receiver) =
         mpsc::channel(options.put_inscription_buffer_size);
+    let (put_inscription_to_chain_sender, put_inscription_to_chain_receiver) =
+        mpsc::channel(options.put_inscription_buffer_size);
+
     let state = MainState {
         internal_client_message_sender,
-        put_inscription_sender: Arc::new(RwLock::new(put_inscription_sender)),
+        put_inscription_record_sender,
+        put_inscription_to_chain_sender: Arc::new(RwLock::new(
+            put_inscription_to_chain_sender.clone(),
+        )),
     };
 
     let mut app: App<_, api::inscriptions::v0::Error> = App::with_state(state);
@@ -204,13 +293,6 @@ pub async fn run_standalone_service(options: Options) {
             panic!("error registering inscriptions api: {:?}", err);
         }
     }
-
-    let (block_sender, block_receiver) = mpsc::channel(10);
-
-    let _process_consume_blocks = ProcessProduceBlockStreamTask::new(
-        HotshotQueryServiceBlockStreamRetriever::new(options.block_stream_source_base_url()),
-        block_sender,
-    );
 
     let signer = match alloy::signers::local::MnemonicBuilder::<
         alloy::signers::local::coins_bip39::English,
@@ -228,10 +310,11 @@ pub async fn run_standalone_service(options: Options) {
     };
 
     let _inscriptions_task_state = match create_inscriptions_processing(
-        InscriptionsConfig::from(&options),
+        InscriptionsConfig::try_from(&options).expect("successfully create InscriptionsConfig"),
         internal_client_message_receiver,
-        block_receiver,
-        put_inscription_receiver,
+        put_inscription_record_receiver,
+        put_inscription_to_chain_receiver,
+        put_inscription_to_chain_sender,
         signer,
     )
     .await
