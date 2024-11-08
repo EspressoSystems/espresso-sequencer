@@ -14,7 +14,7 @@ use hotshot_types::{
 
 use super::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::BuildError,
+    builder::{BuildError, TransactionStatus},
 };
 
 #[async_trait]
@@ -70,4 +70,9 @@ where
         &self,
         txns: Vec<<I as NodeType>::Transaction>,
     ) -> Result<Vec<Commitment<<I as NodeType>::Transaction>>, BuildError>;
+
+    async fn txn_status(
+        &self,
+        txn_hash: Commitment<<I as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError>;
 }

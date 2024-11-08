@@ -24,8 +24,8 @@ use hotshot::{
     types::{Event, EventType, SignatureKey},
 };
 use hotshot_builder_api::{
-    v0_1,
     v0_1::{
+        self,
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::{BuildError, Error, Options},
     },

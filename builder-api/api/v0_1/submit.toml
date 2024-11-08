@@ -44,3 +44,13 @@ Submit a list of transactions to builder's private mempool."
 
 Returns the corresponding list of transaction hashes
 """
+
+[route.get_status]
+PATH = ["status/:transaction_hash"]
+METHOD = "GET"
+":transaction_hash" = "TaggedBase64"
+DOC = """
+Get the transaction's status.
+
+Returns "pending", "sequenced" or "rejected" with error.
+"""

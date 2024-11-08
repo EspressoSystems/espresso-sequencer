@@ -50,6 +50,15 @@ pub enum BuildError {
     Error(String),
 }
 
+/// Enum to keep track on status of a transaction
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub enum TransactionStatus {
+    Pending,
+    Sequenced { leaf: u64 },
+    Rejected { reason: String }, // Rejection reason is in the String format
+    Unknown,
+}
+
 #[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum Error {
     #[error("Error processing request: {0}")]
@@ -70,6 +79,8 @@ pub enum Error {
     TxnSubmit(BuildError),
     #[error("Error getting builder address: {0}")]
     BuilderAddress(#[from] BuildError),
+    #[error("Error getting transaction status: {0}")]
+    TxnStat(BuildError),
     #[error("Custom error {status}: {message}")]
     Custom { message: String, status: StatusCode },
 }
@@ -95,6 +106,7 @@ impl tide_disco::error::Error for Error {
             Error::TxnSubmit { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Custom { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             Error::BuilderAddress { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::TxnStat { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -237,6 +249,17 @@ where
                 let hashes = txns.iter().map(|tx| tx.commit()).collect::<Vec<_>>();
                 state.submit_txns(txns).await.map_err(Error::TxnSubmit)?;
                 Ok(hashes)
+            }
+            .boxed()
+        })?
+        .at("get_status", |req: RequestParams, state| {
+            async move {
+                let tx = req
+                    .body_auto::<<Types as NodeType>::Transaction, Ver>(Ver::instance())
+                    .map_err(Error::TxnUnpack)?;
+                let hash = tx.commit();
+                state.txn_status(hash).await.map_err(Error::TxnStat)?;
+                Ok(hash)
             }
             .boxed()
         })?;
