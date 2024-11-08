@@ -4664,7 +4664,6 @@ mod test {
             }
         }
 
-
         // round 2: test status Sequenced
         let mut txns_2 = Vec::with_capacity(num_transactions);
         for index in 0..num_transactions {
