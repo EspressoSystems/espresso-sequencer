@@ -9,7 +9,6 @@
 use std::sync::Arc;
 
 use async_broadcast::{broadcast, Receiver, Sender};
-use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLockUpgradableReadGuard;
 use committable::Committable;
 use hotshot_types::{
@@ -27,6 +26,7 @@ use hotshot_types::{
     utils::{View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
+use tokio::spawn;
 use tracing::instrument;
 use utils::anytrace::*;
 
@@ -114,7 +114,7 @@ fn spawn_fetch_proposal<TYPES: NodeType, V: Versions>(
     sender_private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: UpgradeLock<TYPES, V>,
 ) {
-    async_spawn(async move {
+    spawn(async move {
         let lock = upgrade_lock;
 
         let _ = fetch_proposal(

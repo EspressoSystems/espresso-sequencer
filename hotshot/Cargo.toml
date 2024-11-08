@@ -24,7 +24,6 @@ hotshot-testing = []
 [dependencies]
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
-async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 bimap = "0.6"
@@ -51,6 +50,7 @@ thiserror = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 vbs = { workspace = true }
 jf-signature.workspace = true
 blake3.workspace = true
@@ -60,24 +60,10 @@ num_enum = "0.7"
 parking_lot = "0.12"
 utils = { path = "../utils" }
 
-[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
 cdn-client = { workspace = true }
 cdn-broker = { workspace = true, features = ["global-permits"] }
 cdn-marshal = { workspace = true }
-
-[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
-async-std = { workspace = true }
-cdn-client = { workspace = true, features = ["runtime-async-std"] }
-cdn-broker = { workspace = true, features = [
-  "runtime-async-std",
-  "global-permits",
-] }
-cdn-marshal = { workspace = true, features = [
-  "runtime-async-std",
-  "global-permits",
-] }
-
 
 [dev-dependencies]
 blake3 = { workspace = true }

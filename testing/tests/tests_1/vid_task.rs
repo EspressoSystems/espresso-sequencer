@@ -33,13 +33,11 @@ use jf_vid::{precomputable::Precomputable, VidScheme};
 use vbs::version::StaticVersionType;
 use vec1::vec1;
 
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_vid_task() {
     use hotshot_types::message::Proposal;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     // Build the API for node 2.
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)

@@ -12,10 +12,7 @@ use std::{
 };
 
 use async_broadcast::{broadcast, Receiver, Sender};
-use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use futures::future::join_all;
 use hotshot::{
     traits::TestableNodeImplementation,
@@ -43,7 +40,7 @@ use hotshot_types::{
     HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
-#[cfg(async_executor_impl = "tokio")]
+use tokio::spawn;
 use tokio::task::JoinHandle;
 #[allow(deprecated)]
 use tracing::info;
@@ -280,53 +277,29 @@ where
 
         let mut error_list = vec![];
 
-        #[cfg(async_executor_impl = "async-std")]
-        {
-            let results = join_all(task_futs).await;
-            for result in results {
-                match result {
+        let results = join_all(task_futs).await;
+
+        for result in results {
+            match result {
+                Ok(res) => match res {
                     TestResult::Pass => {
                         info!("Task shut down successfully");
                     }
                     TestResult::Fail(e) => error_list.push(e),
+                },
+                Err(e) => {
+                    tracing::error!("Error Joining the test task {:?}", e);
                 }
-            }
-            if let Some(handle) = txn_handle {
-                handle.cancel().await;
-            }
-            // Shutdown all of the servers at the end
-            // Aborting here doesn't cause any problems because we don't maintain any state
-            if let Some(solver_server) = solver_server {
-                solver_server.1.cancel().await;
             }
         }
 
-        #[cfg(async_executor_impl = "tokio")]
-        {
-            let results = join_all(task_futs).await;
-
-            for result in results {
-                match result {
-                    Ok(res) => match res {
-                        TestResult::Pass => {
-                            info!("Task shut down successfully");
-                        }
-                        TestResult::Fail(e) => error_list.push(e),
-                    },
-                    Err(e) => {
-                        tracing::error!("Error Joining the test task {:?}", e);
-                    }
-                }
-            }
-
-            if let Some(handle) = txn_handle {
-                handle.abort();
-            }
-            // Shutdown all of the servers at the end
-            // Aborting here doesn't cause any problems because we don't maintain any state
-            if let Some(solver_server) = solver_server {
-                solver_server.1.abort();
-            }
+        if let Some(handle) = txn_handle {
+            handle.abort();
+        }
+        // Shutdown all of the servers at the end
+        // Aborting here doesn't cause any problems because we don't maintain any state
+        if let Some(solver_server) = solver_server {
+            solver_server.1.abort();
         }
 
         let mut nodes = handles.write().await;
@@ -336,9 +309,6 @@ where
         }
         tracing::info!("Nodes shtudown");
 
-        #[cfg(async_executor_impl = "async-std")]
-        completion_handle.cancel().await;
-        #[cfg(async_executor_impl = "tokio")]
         completion_handle.abort();
 
         assert!(
@@ -406,7 +376,7 @@ where
         // Then, fire it up as a background thread.
         self.solver_server = Some((
             solver_url.clone(),
-            async_spawn(async move {
+            spawn(async move {
                 solver_state
                     .run::<TYPES>(solver_url)
                     .await

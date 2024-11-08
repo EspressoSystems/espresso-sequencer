@@ -18,11 +18,7 @@ use std::{
     time::Duration,
 };
 
-use async_compatibility_layer::{
-    art::async_spawn,
-    channel::{unbounded, UnboundedReceiver, UnboundedRecvError, UnboundedSender},
-};
-use futures::{channel::mpsc, select, FutureExt, SinkExt, StreamExt};
+use futures::{channel::mpsc, SinkExt, StreamExt};
 use hotshot_types::{
     constants::KAD_DEFAULT_REPUB_INTERVAL_SEC, traits::node_implementation::NodeType,
 };
@@ -47,6 +43,10 @@ use libp2p::{
 };
 use libp2p_identity::PeerId;
 use rand::{prelude::SliceRandom, thread_rng};
+use tokio::{
+    select, spawn,
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+};
 use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
 
 pub use self::{
@@ -300,9 +300,6 @@ impl<T: NodeType> NetworkNode<T> {
 
             // build swarm
             let swarm = SwarmBuilder::with_existing_identity(keypair.clone());
-            #[cfg(async_executor_impl = "async-std")]
-            let swarm = swarm.with_async_std();
-            #[cfg(async_executor_impl = "tokio")]
             let swarm = swarm.with_tokio();
 
             swarm
@@ -377,11 +374,11 @@ impl<T: NodeType> NetworkNode<T> {
     #[instrument(skip(self))]
     async fn handle_client_requests(
         &mut self,
-        msg: Result<ClientRequest, UnboundedRecvError>,
+        msg: Option<ClientRequest>,
     ) -> Result<bool, NetworkError> {
         let behaviour = self.swarm.behaviour_mut();
         match msg {
-            Ok(msg) => {
+            Some(msg) => {
                 match msg {
                     ClientRequest::BeginBootstrap => {
                         debug!("Beginning Libp2p bootstrap");
@@ -491,8 +488,8 @@ impl<T: NodeType> NetworkNode<T> {
                     }
                 }
             }
-            Err(e) => {
-                error!("Error receiving msg in main behaviour loop: {:?}", e);
+            None => {
+                error!("Error receiving msg in main behaviour loop: channel closed");
             }
         }
         Ok(false)
@@ -534,7 +531,6 @@ impl<T: NodeType> NetworkNode<T> {
                 // Send the number of connected peers to the client
                 send_to_client
                     .send(NetworkEvent::ConnectedPeersUpdate(self.num_connected()))
-                    .await
                     .map_err(|err| NetworkError::ChannelSendError(err.to_string()))?;
             }
             SwarmEvent::ConnectionClosed {
@@ -559,7 +555,6 @@ impl<T: NodeType> NetworkNode<T> {
                 // Send the number of connected peers to the client
                 send_to_client
                     .send(NetworkEvent::ConnectedPeersUpdate(self.num_connected()))
-                    .await
                     .map_err(|err| NetworkError::ChannelSendError(err.to_string()))?;
             }
             SwarmEvent::Dialing {
@@ -668,7 +663,6 @@ impl<T: NodeType> NetworkNode<T> {
                     // forward messages directly to Client
                     send_to_client
                         .send(event)
-                        .await
                         .map_err(|err| NetworkError::ChannelSendError(err.to_string()))?;
                 }
             }
@@ -725,16 +719,15 @@ impl<T: NodeType> NetworkNode<T> {
         ),
         NetworkError,
     > {
-        let (s_input, s_output) = unbounded::<ClientRequest>();
-        let (r_input, r_output) = unbounded::<NetworkEvent>();
+        let (s_input, mut s_output) = unbounded_channel::<ClientRequest>();
+        let (r_input, r_output) = unbounded_channel::<NetworkEvent>();
         let (mut bootstrap_tx, bootstrap_rx) = mpsc::channel(100);
         self.resend_tx = Some(s_input.clone());
         self.dht_handler.set_bootstrap_sender(bootstrap_tx.clone());
 
         DHTBootstrapTask::run(bootstrap_rx, s_input.clone());
-        async_spawn(
+        spawn(
             async move {
-                let mut fuse = s_output.recv().boxed().fuse();
                 loop {
                     select! {
                         event = self.swarm.next() => {
@@ -744,14 +737,13 @@ impl<T: NodeType> NetworkNode<T> {
                                 self.handle_swarm_events(event, &r_input).await?;
                             }
                         },
-                        msg = fuse => {
+                        msg = s_output.recv() => {
                             debug!("peerid {:?}\t\thandling msg {:?}", self.peer_id, msg);
                             let shutdown = self.handle_client_requests(msg).await?;
                             if shutdown {
                                 let _ = bootstrap_tx.send(InputEvent::ShutdownBootstrap).await;
                                 break
                             }
-                            fuse = s_output.recv().boxed().fuse();
                         }
                     }
                 }

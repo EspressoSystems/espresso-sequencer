@@ -6,7 +6,6 @@
 
 use std::{net::SocketAddr, time::Duration};
 
-use async_compatibility_layer::art::async_sleep;
 use clap::Parser;
 use futures::{Future, FutureExt};
 use hotshot_types::{
@@ -17,6 +16,7 @@ use hotshot_types::{
 use libp2p::{Multiaddr, PeerId};
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
+use tokio::time::sleep;
 use tracing::{info, instrument};
 use vbs::BinarySerializer;
 
@@ -427,7 +427,7 @@ impl OrchestratorClient {
                 break (index, is_da);
             }
 
-            async_sleep(Duration::from_millis(250)).await;
+            sleep(Duration::from_millis(250)).await;
         };
 
         validator_config.is_da = is_da;
@@ -513,7 +513,7 @@ impl OrchestratorClient {
                 Ok(x) => break x,
                 Err(err) => {
                     tracing::info!("{err}");
-                    async_sleep(Duration::from_millis(250)).await;
+                    sleep(Duration::from_millis(250)).await;
                 }
             }
         }

@@ -9,7 +9,6 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
 };
 
-use async_compatibility_layer::art::async_spawn;
 use async_trait::async_trait;
 use chrono::Utc;
 use hotshot_task_impls::{
@@ -26,6 +25,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
 };
+use tokio::spawn;
 
 use crate::{types::SystemContextHandle, Versions};
 
@@ -319,7 +319,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             cur_view_time: Utc::now().timestamp(),
             cur_epoch: handle.cur_epoch().await,
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
-            timeout_task: async_spawn(async {}),
+            timeout_task: spawn(async {}),
             timeout: handle.hotshot.config.next_view_timeout,
             consensus: OuterConsensus::new(consensus),
             last_decided_view: handle.cur_view().await,

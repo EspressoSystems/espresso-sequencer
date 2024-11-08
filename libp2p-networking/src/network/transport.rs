@@ -7,7 +7,6 @@ use std::{
 };
 
 use anyhow::{ensure, Context, Result as AnyhowResult};
-use async_compatibility_layer::art::async_timeout;
 use futures::{future::poll_fn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use hotshot_types::traits::{
     election::Membership,
@@ -21,6 +20,7 @@ use libp2p::{
 };
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
+use tokio::time::timeout;
 use tracing::warn;
 
 /// The maximum size of an authentication message. This is used to prevent
@@ -162,7 +162,7 @@ impl<T: Transport, Types: NodeType, C: StreamMuxer + Unpin> StakeTableAuthentica
             let mut stream = original_future.await?;
 
             // Time out the authentication block
-            async_timeout(AUTH_HANDSHAKE_TIMEOUT, async {
+            timeout(AUTH_HANDSHAKE_TIMEOUT, async {
                 // Open a substream for the handshake.
                 // The handshake order depends on whether the connection is incoming or outgoing.
                 let mut substream = if outgoing {
@@ -630,8 +630,7 @@ mod test {
         assert!(public_key.is_err());
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     async fn valid_authentication() {
         // Create a new identity
         let (keypair, peer_id, auth_message) = new_identity!();
@@ -664,8 +663,7 @@ mod test {
         );
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     async fn key_not_in_stake_table() {
         // Create a new identity
         let (_, peer_id, auth_message) = new_identity!();
@@ -694,8 +692,7 @@ mod test {
         );
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     async fn peer_id_mismatch() {
         // Create a new identity and authentication message
         let (keypair, _, auth_message) = new_identity!();
@@ -735,8 +732,7 @@ mod test {
         );
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     async fn read_and_write_length_delimited() {
         // Create a message
         let message = b"Hello, world!";

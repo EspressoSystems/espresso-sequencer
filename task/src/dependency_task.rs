@@ -4,10 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::{spawn, JoinHandle};
 use futures::Future;
-#[cfg(async_executor_impl = "tokio")]
 use tokio::task::{spawn, JoinHandle};
 
 use crate::dependency::Dependency;
@@ -57,10 +54,7 @@ mod test {
     use std::time::Duration;
 
     use async_broadcast::{broadcast, Receiver, Sender};
-    #[cfg(async_executor_impl = "async-std")]
-    use async_std::task::sleep;
     use futures::{stream::FuturesOrdered, StreamExt};
-    #[cfg(async_executor_impl = "tokio")]
     use tokio::time::sleep;
 
     use super::*;
@@ -89,8 +83,7 @@ mod test {
         EventDependency::new(rx, Box::new(move |v| *v == val))
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     // allow unused for tokio because it's a test
     #[allow(unused_must_use)]
     async fn it_works() {
@@ -105,8 +98,7 @@ mod test {
         join_handle.await;
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     async fn many_works() {
         let (tx, rx) = broadcast(20);
         let (res_tx, mut res_rx) = broadcast(20);

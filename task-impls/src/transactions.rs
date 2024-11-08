@@ -10,7 +10,6 @@ use std::{
 };
 
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_timeout};
 use async_trait::async_trait;
 use futures::{future::join_all, stream::FuturesUnordered, StreamExt};
 use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
@@ -31,6 +30,7 @@ use hotshot_types::{
     utils::ViewInner,
     vid::{VidCommitment, VidPrecomputeData},
 };
+use tokio::time::{sleep, timeout};
 use tracing::instrument;
 use url::Url;
 use utils::anytrace::*;
@@ -274,7 +274,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
 
         let start = Instant::now();
 
-        let maybe_auction_result = async_timeout(
+        let maybe_auction_result = timeout(
             self.builder_timeout,
             self.auction_results_provider
                 .fetch_auction_result(block_view),
@@ -293,7 +293,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         builder_urls.push(self.fallback_builder_url.clone());
 
         for url in builder_urls {
-            futures.push(async_timeout(
+            futures.push(timeout(
                 self.builder_timeout.saturating_sub(start.elapsed()),
                 async {
                     let client = BuilderClientMarketplace::new(url);
@@ -502,7 +502,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 Err(e) if task_start_time.elapsed() >= self.builder_timeout => break Err(e),
                 _ => {
                     // We still have time, will re-try in a bit
-                    async_sleep(RETRY_DELAY).await;
+                    sleep(RETRY_DELAY).await;
                     continue;
                 }
             }
@@ -577,7 +577,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         };
 
         while task_start_time.elapsed() < self.builder_timeout {
-            match async_timeout(
+            match timeout(
                 self.builder_timeout
                     .saturating_sub(task_start_time.elapsed()),
                 self.block_from_builder(parent_comm, parent_view, &parent_comm_sig),
@@ -593,7 +593,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 Ok(Err(err)) => {
                     tracing::info!("Couldn't get a block: {err:#}");
                     // pause a bit
-                    async_sleep(RETRY_DELAY).await;
+                    sleep(RETRY_DELAY).await;
                     continue;
                 }
 
@@ -648,7 +648,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 break;
             }
         }
-        let timeout = async_sleep(std::cmp::max(
+        let timeout = sleep(std::cmp::max(
             query_start
                 .elapsed()
                 .mul_f32(BUILDER_ADDITIONAL_TIME_MULTIPLIER),

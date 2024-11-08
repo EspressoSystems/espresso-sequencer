@@ -26,6 +26,9 @@ pub mod types;
 
 pub mod tasks;
 
+/// Contains helper functions for the crate
+pub mod helpers;
+
 use std::{
     collections::{BTreeMap, HashMap},
     num::NonZeroUsize,
@@ -34,12 +37,12 @@ use std::{
 };
 
 use async_broadcast::{broadcast, InactiveReceiver, Receiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::join;
 use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry};
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
+use tokio::{spawn, time::sleep};
 // Internal
 /// Reexport error type
 pub use hotshot_types::error::HotShotError;
@@ -388,9 +391,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
 
         // Spawn a task that will sleep for the next view timeout and then send a timeout event
         // if not cancelled
-        async_spawn({
+        spawn({
             async move {
-                async_sleep(Duration::from_millis(next_view_timeout)).await;
+                sleep(Duration::from_millis(next_view_timeout)).await;
                 broadcast_event(
                     Arc::new(HotShotEvent::Timeout(start_view + 1)),
                     &event_stream,
@@ -496,7 +499,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             HotShotError::FailedToSerialize(format!("failed to serialize transaction: {err}"))
         })?;
 
-        async_spawn(async move {
+        spawn(async move {
             let da_membership = &api.memberships.da_membership.clone();
             join! {
                 // TODO We should have a function that can return a network error if there is one
@@ -707,7 +710,7 @@ where
         let (network_task_sender, mut receiver_from_network): Channel<HotShotEvent<TYPES>> =
             broadcast(EVENT_CHANNEL_SIZE);
 
-        let _recv_loop_handle = async_spawn(async move {
+        let _recv_loop_handle = spawn(async move {
             loop {
                 let msg = match select(left_receiver.recv(), right_receiver.recv()).await {
                     Either::Left(msg) => Either::Left(msg.0.unwrap().as_ref().clone()),
@@ -723,7 +726,7 @@ where
             }
         });
 
-        let _send_loop_handle = async_spawn(async move {
+        let _send_loop_handle = spawn(async move {
             loop {
                 if let Ok(msg) = receiver_from_network.recv().await {
                     let mut state = send_state.write().await;

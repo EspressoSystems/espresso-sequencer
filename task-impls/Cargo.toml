@@ -14,7 +14,6 @@ test-srs = ["jf-vid/test-srs"]
 [dependencies]
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
-async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
@@ -42,11 +41,7 @@ url = { workspace = true }
 utils = { path = "../utils" }
 vbs = { workspace = true }
 vec1 = { workspace = true }
-
-[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }
-[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
-async-std = { workspace = true }
 
 [lints]
 workspace = true

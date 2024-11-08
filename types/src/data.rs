@@ -18,8 +18,6 @@ use std::{
 };
 
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::spawn_blocking;
 use bincode::Options;
 use committable::{Commitment, CommitmentBoundsArkless, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
@@ -27,7 +25,6 @@ use jf_vid::{precomputable::Precomputable, VidDisperse as JfVidDisperse, VidSche
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-#[cfg(async_executor_impl = "tokio")]
 use tokio::task::spawn_blocking;
 use tracing::error;
 use utils::anytrace::*;
@@ -226,8 +223,6 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
                 )
                 .unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()))
         }).await;
-        #[cfg(async_executor_impl = "tokio")]
-        // Tokio's JoinHandle's `Output` is `Result<T, JoinError>`, while in async-std it's just `T`
         // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
         let vid_disperse = vid_disperse.unwrap();
 

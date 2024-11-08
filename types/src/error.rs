@@ -14,8 +14,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{data::Leaf, traits::node_implementation::NodeType};
-#[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
-compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 
 /// Error type for `HotShot`
 #[derive(Debug, Error)]

@@ -6,12 +6,9 @@
 
 use std::collections::HashMap;
 
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::UnboundedSender,
-};
 use libp2p::request_response::{Event, Message, OutboundRequestId, ResponseChannel};
 use libp2p_identity::PeerId;
+use tokio::{spawn, sync::mpsc::UnboundedSender, time::sleep};
 use tracing::{debug, error, warn};
 
 use super::exponential_backoff::ExponentialBackoff;
@@ -75,15 +72,13 @@ impl DMBehaviour {
                     }
                     req.retry_count -= 1;
                     if let Some(retry_tx) = retry_tx {
-                        async_spawn(async move {
-                            async_sleep(req.backoff.next_timeout(false)).await;
-                            let _ = retry_tx
-                                .send(ClientRequest::DirectRequest {
-                                    pid: peer,
-                                    contents: req.data,
-                                    retry_count: req.retry_count,
-                                })
-                                .await;
+                        spawn(async move {
+                            sleep(req.backoff.next_timeout(false)).await;
+                            let _ = retry_tx.send(ClientRequest::DirectRequest {
+                                pid: peer,
+                                contents: req.data,
+                                retry_count: req.retry_count,
+                            });
                         });
                     }
                 }

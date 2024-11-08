@@ -19,10 +19,6 @@ use std::{
 };
 
 use async_broadcast::{broadcast, InactiveReceiver, Sender};
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::TrySendError,
-};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{join, select, FutureExt};
@@ -45,6 +41,7 @@ use hotshot_types::{
 };
 use lru::LruCache;
 use parking_lot::RwLock as PlRwLock;
+use tokio::{spawn, sync::mpsc::error::TrySendError, time::sleep};
 use tracing::{debug, info, warn};
 
 use super::{push_cdn_network::PushCdnNetwork, NetworkError};
@@ -183,8 +180,8 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
                 .1
                 .activate_cloned();
             // Spawn a task that sleeps for `duration` and then sends the message if it wasn't cancelled
-            async_spawn(async move {
-                async_sleep(duration).await;
+            spawn(async move {
+                sleep(duration).await;
                 if receiver.try_recv().is_ok() {
                     // The task has been cancelled because the view progressed, it means the primary is working fine
                     debug!(
@@ -483,7 +480,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
         T: NodeType<SignatureKey = TYPES::SignatureKey> + 'a,
     {
         let delayed_tasks_channels = Arc::clone(&self.delayed_tasks_channels);
-        async_spawn(async move {
+        spawn(async move {
             let mut map_lock = delayed_tasks_channels.write().await;
             while let Some((first_view, _)) = map_lock.first_key_value() {
                 // Broadcast a cancelling signal to all the tasks related to each view older than the new one

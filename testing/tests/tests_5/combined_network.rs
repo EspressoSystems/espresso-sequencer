@@ -19,14 +19,13 @@ use tracing::instrument;
 
 /// A run with both the CDN and libp2p functioning properly
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_combined_network() {
     use hotshot_testing::block_builder::SimpleBuilderImplementation;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
         timing_data: TimingData {
             next_view_timeout: 10_000,
@@ -54,12 +53,12 @@ async fn test_combined_network() {
 }
 
 // A run where the CDN crashes part-way through
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_combined_network_cdn_crash() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
         timing_data: TimingData {
             next_view_timeout: 10_000,
@@ -100,12 +99,12 @@ async fn test_combined_network_cdn_crash() {
 
 // A run where the CDN crashes partway through
 // and then comes back up
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_combined_network_reup() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
         timing_data: TimingData {
             next_view_timeout: 10_000,
@@ -151,12 +150,12 @@ async fn test_combined_network_reup() {
 }
 
 // A run where half of the nodes disconnect from the CDN
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_combined_network_half_dc() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
         timing_data: TimingData {
             next_view_timeout: 10_000,
@@ -224,13 +223,13 @@ fn generate_random_node_changes(
 }
 
 // A fuzz test, where random network events take place on all nodes
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 #[ignore]
 async fn test_stress_combined_network_fuzzy() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let mut metadata: TestDescription<TestTypes, CombinedImpl, TestVersions> = TestDescription {
         num_bootstrap_nodes: 10,
         num_nodes_with_stake: 20,

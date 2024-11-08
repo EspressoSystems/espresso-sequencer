@@ -40,14 +40,12 @@ use vec1::vec1;
 const TIMEOUT: Duration = Duration::from_millis(35);
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     use hotshot_testing::script::{Expectations, TaskScript};
     use vbs::version::StaticVersionType;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let node_id = 1;
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
@@ -143,13 +141,11 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     use vbs::version::StaticVersionType;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let node_id = 3;
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
@@ -355,13 +351,11 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_quorum_proposal_task_qc_timeout() {
     use vbs::version::StaticVersionType;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let node_id = 3;
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
@@ -446,15 +440,13 @@ async fn test_quorum_proposal_task_qc_timeout() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_quorum_proposal_task_view_sync() {
     use hotshot_example_types::block_types::TestMetadata;
     use hotshot_types::data::null_block;
     use vbs::version::StaticVersionType;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let node_id = 2;
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
@@ -541,13 +533,11 @@ async fn test_quorum_proposal_task_view_sync() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_quorum_proposal_task_liveness_check() {
     use vbs::version::StaticVersionType;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let node_id = 3;
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
@@ -750,11 +740,9 @@ async fn test_quorum_proposal_task_liveness_check() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_quorum_proposal_task_with_incomplete_events() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await

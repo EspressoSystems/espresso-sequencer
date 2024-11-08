@@ -15,7 +15,6 @@ use std::{
     time::Instant,
 };
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_trait::async_trait;
 use cdn_broker::reexports::crypto::signature::KeyPair;
 use chrono::Utc;
@@ -917,8 +916,8 @@ pub async fn main_entry_point<
     <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
     Leaf<TYPES>: TestableLeaf,
 {
-    setup_logging();
-    setup_backtrace();
+    // Initialize logging
+    hotshot::helpers::initialize_logging();
 
     info!("Starting validator");
 

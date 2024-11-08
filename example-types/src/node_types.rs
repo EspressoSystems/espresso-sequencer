@@ -252,8 +252,7 @@ mod tests {
         }
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     /// Test that the view number affects the commitment post-marketplace
     async fn test_versioned_commitment_includes_view() {
         let upgrade_lock = UpgradeLock::new();

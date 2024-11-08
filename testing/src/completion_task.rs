@@ -7,12 +7,9 @@
 use std::time::Duration;
 
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::{async_spawn, async_timeout};
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use hotshot_task_impls::helpers::broadcast_event;
-#[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
+use tokio::{spawn, time::timeout};
 
 use crate::test_task::TestEvent;
 
@@ -27,8 +24,8 @@ pub struct CompletionTask {
 
 impl CompletionTask {
     pub fn run(mut self) -> JoinHandle<()> {
-        async_spawn(async move {
-            if async_timeout(self.duration, self.wait_for_shutdown())
+        spawn(async move {
+            if timeout(self.duration, self.wait_for_shutdown())
                 .await
                 .is_err()
             {

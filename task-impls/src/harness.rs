@@ -7,9 +7,9 @@
 use std::{sync::Arc, time::Duration};
 
 use async_broadcast::broadcast;
-use async_compatibility_layer::art::async_timeout;
 use hotshot_task::task::{ConsensusTaskRegistry, Task, TaskState};
 use hotshot_types::traits::node_implementation::NodeType;
+use tokio::time::timeout;
 
 use crate::events::{HotShotEvent, HotShotTaskCompleted};
 
@@ -69,12 +69,10 @@ pub async fn run_harness<TYPES, S: TaskState<Event = HotShotEvent<TYPES>> + Send
         to_task.broadcast_direct(Arc::new(event)).await.unwrap();
     }
 
-    if async_timeout(Duration::from_secs(2), test_future)
-        .await
-        .is_err()
-    {
-        panic!("Test timeout out before all all expected outputs received");
-    }
+    assert!(
+        timeout(Duration::from_secs(2), test_future).await.is_ok(),
+        "Test timeout out before all all expected outputs received"
+    );
 }
 
 /// Handles an event for the Test Harness Task.  If the event is expected, remove it from

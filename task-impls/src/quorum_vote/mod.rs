@@ -8,8 +8,6 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use hotshot_task::{
     dependency::{AndDependency, EventDependency},
@@ -32,7 +30,6 @@ use hotshot_types::{
     vote::{Certificate, HasViewNumber},
 };
 use jf_vid::VidScheme;
-#[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
 use utils::anytrace::*;
@@ -725,9 +722,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
 
     async fn cancel_subtasks(&mut self) {
         while let Some((_, handle)) = self.vote_dependencies.pop_last() {
-            #[cfg(async_executor_impl = "async-std")]
-            handle.cancel().await;
-            #[cfg(async_executor_impl = "tokio")]
             handle.abort();
         }
     }

@@ -23,20 +23,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Context};
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::{
-        self, bounded, unbounded, Receiver as BoundedReceiver, Sender as BoundedSender,
-        TrySendError, UnboundedReceiver, UnboundedSender,
-    },
-};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use bimap::BiHashMap;
-use futures::{
-    future::{join_all, Either},
-    FutureExt,
-};
+use futures::future::join_all;
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{
     AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
@@ -73,6 +63,14 @@ use libp2p_networking::{
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
+use tokio::{
+    select, spawn,
+    sync::{
+        mpsc::{channel, error::TrySendError, Receiver, Sender},
+        Mutex,
+    },
+    time::sleep,
+};
 use tracing::{error, info, instrument, trace, warn};
 
 use crate::BroadcastDelay;
@@ -149,11 +147,11 @@ struct Libp2pNetworkInner<T: NodeType> {
     /// handle to control the network
     handle: Arc<NetworkNodeHandle<T>>,
     /// Message Receiver
-    receiver: UnboundedReceiver<Vec<u8>>,
+    receiver: Mutex<Receiver<Vec<u8>>>,
     /// Sender for broadcast messages
-    sender: UnboundedSender<Vec<u8>>,
+    sender: Sender<Vec<u8>>,
     /// Sender for node lookup (relevant view number, key of node) (None for shutdown)
-    node_lookup_send: BoundedSender<Option<(ViewNumber, T::SignatureKey)>>,
+    node_lookup_send: Sender<Option<(ViewNumber, T::SignatureKey)>>,
     /// this is really cheating to enable local tests
     /// hashset of (bootstrap_addr, peer_id)
     bootstrap_addrs: PeerInfoVec,
@@ -175,7 +173,7 @@ struct Libp2pNetworkInner<T: NodeType> {
     /// reliability_config
     reliability_config: Option<Box<dyn NetworkReliability>>,
     /// Killswitch sender
-    kill_switch: channel::Sender<()>,
+    kill_switch: Sender<()>,
 }
 
 /// Networking implementation that uses libp2p
@@ -494,7 +492,7 @@ impl<T: NodeType> Libp2pNetwork<T> {
             if self.is_ready() {
                 break;
             }
-            async_sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1)).await;
         }
     }
 
@@ -537,15 +535,15 @@ impl<T: NodeType> Libp2pNetwork<T> {
 
         // unbounded channels may not be the best choice (spammed?)
         // if bounded figure out a way to log dropped msgs
-        let (sender, receiver) = unbounded();
-        let (node_lookup_send, node_lookup_recv) = bounded(10);
-        let (kill_tx, kill_rx) = bounded(1);
+        let (sender, receiver) = channel(1000);
+        let (node_lookup_send, node_lookup_recv) = channel(10);
+        let (kill_tx, kill_rx) = channel(1);
         rx.set_kill_switch(kill_rx);
 
         let mut result = Libp2pNetwork {
             inner: Arc::new(Libp2pNetworkInner {
                 handle: Arc::new(network_handle),
-                receiver,
+                receiver: Mutex::new(receiver),
                 sender: sender.clone(),
                 pk,
                 bootstrap_addrs,
@@ -580,16 +578,16 @@ impl<T: NodeType> Libp2pNetwork<T> {
     #[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
     fn spawn_node_lookup(
         &self,
-        mut node_lookup_recv: BoundedReceiver<Option<(ViewNumber, T::SignatureKey)>>,
+        mut node_lookup_recv: Receiver<Option<(ViewNumber, T::SignatureKey)>>,
     ) {
         let handle = Arc::clone(&self.inner.handle);
         let dht_timeout = self.inner.dht_timeout;
         let latest_seen_view = Arc::clone(&self.inner.latest_seen_view);
 
         // deals with handling lookup queue. should be infallible
-        async_spawn(async move {
+        spawn(async move {
             // cancels on shutdown
-            while let Ok(Some((view_number, pk))) = node_lookup_recv.recv().await {
+            while let Some(Some((view_number, pk))) = node_lookup_recv.recv().await {
                 /// defines lookahead threshold based on the constant
                 #[allow(clippy::cast_possible_truncation)]
                 const THRESHOLD: u64 = (LOOK_AHEAD as f64 * 0.8) as u64;
@@ -615,19 +613,19 @@ impl<T: NodeType> Libp2pNetwork<T> {
         let is_bootstrapped = Arc::clone(&self.inner.is_bootstrapped);
         let inner = Arc::clone(&self.inner);
 
-        async_spawn({
+        spawn({
             let is_ready = Arc::clone(&self.inner.is_ready);
             async move {
                 let bs_addrs = bootstrap_ref.read().await.clone();
 
                 // Add known peers to the network
-                handle.add_known_peers(bs_addrs).await.unwrap();
+                handle.add_known_peers(bs_addrs).unwrap();
 
                 // Begin the bootstrap process
-                handle.begin_bootstrap().await?;
+                handle.begin_bootstrap()?;
                 while !is_bootstrapped.load(Ordering::Relaxed) {
-                    async_sleep(Duration::from_secs(1)).await;
-                    handle.begin_bootstrap().await?;
+                    sleep(Duration::from_secs(1)).await;
+                    handle.begin_bootstrap()?;
                 }
 
                 // Subscribe to the QC topic
@@ -643,7 +641,7 @@ impl<T: NodeType> Libp2pNetwork<T> {
                     .await
                     .is_err()
                 {
-                    async_sleep(Duration::from_secs(1)).await;
+                    sleep(Duration::from_secs(1)).await;
                 }
 
                 // Wait for the network to connect to the required number of peers
@@ -663,19 +661,19 @@ impl<T: NodeType> Libp2pNetwork<T> {
     }
 
     /// Handle events
-    async fn handle_recvd_events(
+    fn handle_recvd_events(
         &self,
         msg: NetworkEvent,
-        sender: &UnboundedSender<Vec<u8>>,
+        sender: &Sender<Vec<u8>>,
     ) -> Result<(), NetworkError> {
         match msg {
             GossipMsg(msg) => {
-                sender.send(msg).await.map_err(|err| {
+                sender.try_send(msg).map_err(|err| {
                     NetworkError::ChannelSendError(format!("failed to send gossip message: {err}"))
                 })?;
             }
             DirectRequest(msg, _pid, chan) => {
-                sender.send(msg).await.map_err(|err| {
+                sender.try_send(msg).map_err(|err| {
                     NetworkError::ChannelSendError(format!(
                         "failed to send direct request message: {err}"
                     ))
@@ -691,7 +689,6 @@ impl<T: NodeType> Libp2pNetwork<T> {
                             ))
                         })?,
                     )
-                    .await
                     .is_err()
                 {
                     error!("failed to ack!");
@@ -708,48 +705,39 @@ impl<T: NodeType> Libp2pNetwork<T> {
 
     /// task to propagate messages to handlers
     /// terminates on shut down of network
-    fn handle_event_generator(
-        &self,
-        sender: UnboundedSender<Vec<u8>>,
-        mut network_rx: NetworkNodeReceiver,
-    ) {
+    fn handle_event_generator(&self, sender: Sender<Vec<u8>>, mut network_rx: NetworkNodeReceiver) {
         let handle = self.clone();
         let is_bootstrapped = Arc::clone(&self.inner.is_bootstrapped);
-        async_spawn(async move {
+        spawn(async move {
             let Some(mut kill_switch) = network_rx.take_kill_switch() else {
                 tracing::error!(
                     "`spawn_handle` was called on a network handle that was already closed"
                 );
                 return;
             };
-            let mut kill_switch = kill_switch.recv().boxed();
-            let mut next_msg = network_rx.recv().boxed();
 
             loop {
-                let msg_or_killed = futures::future::select(next_msg, kill_switch).await;
-                match msg_or_killed {
-                    Either::Left((Ok(message), other_stream)) => {
-                        match &message {
+                select! {
+                    msg = network_rx.recv() => {
+                        let Ok(message) = msg else {
+                            warn!("Network receiver shut down!");
+                            return;
+                        };
+
+                        match message {
                             NetworkEvent::IsBootstrapped => {
                                 is_bootstrapped.store(true, Ordering::Relaxed);
                             }
                             GossipMsg(_) | DirectRequest(_, _, _) | DirectResponse(_, _) => {
-                                let _ = handle.handle_recvd_events(message, &sender).await;
+                                let _ = handle.handle_recvd_events(message, &sender);
                             }
                             NetworkEvent::ConnectedPeersUpdate(num_peers) => {
-                                handle.inner.metrics.num_connected_peers.set(*num_peers);
+                                handle.inner.metrics.num_connected_peers.set(num_peers);
                             }
                         }
-                        // re-set the `kill_switch` for the next loop
-                        kill_switch = other_stream;
-                        // re-set `receiver.recv()` for the next loop
-                        next_msg = network_rx.recv().boxed();
                     }
-                    Either::Left((Err(_), _)) => {
-                        warn!("Network receiver shut down!");
-                        return;
-                    }
-                    Either::Right(_) => {
+
+                    _kill_switch = kill_switch.recv() => {
                         warn!("Event Handler shutdown");
                         return;
                     }
@@ -805,7 +793,7 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
         let topic = topic.to_string();
         if self.inner.subscribed_topics.contains(&topic) {
             // Short-circuit-send the message to ourselves
-            self.inner.sender.send(message.clone()).await.map_err(|_| {
+            self.inner.sender.try_send(message.clone()).map_err(|_| {
                 self.inner.metrics.num_failed_messages.add(1);
                 NetworkError::ShutDown
             })?;
@@ -825,19 +813,19 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
                         let handle_2 = Arc::clone(&handle);
                         let metrics_2 = metrics.clone();
                         boxed_sync(async move {
-                            if let Err(e) = handle_2.gossip_no_serialize(topic_2, msg).await {
+                            if let Err(e) = handle_2.gossip_no_serialize(topic_2, msg) {
                                 metrics_2.num_failed_messages.add(1);
                                 warn!("Failed to broadcast to libp2p: {:?}", e);
                             }
                         })
                     }),
                 );
-                async_spawn(fut);
+                spawn(fut);
                 return Ok(());
             }
         }
 
-        if let Err(e) = self.inner.handle.gossip(topic, &message).await {
+        if let Err(e) = self.inner.handle.gossip(topic, &message) {
             self.inner.metrics.num_failed_messages.add(1);
             return Err(e);
         }
@@ -893,7 +881,7 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
         // short circuit if we're dming ourselves
         if recipient == self.inner.pk {
             // panic if we already shut down?
-            self.inner.sender.send(message).await.map_err(|_x| {
+            self.inner.sender.try_send(message).map_err(|_x| {
                 self.inner.metrics.num_failed_messages.add(1);
                 NetworkError::ShutDown
             })?;
@@ -927,19 +915,19 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
                         let handle_2 = Arc::clone(&handle);
                         let metrics_2 = metrics.clone();
                         boxed_sync(async move {
-                            if let Err(e) = handle_2.direct_request_no_serialize(pid, msg).await {
+                            if let Err(e) = handle_2.direct_request_no_serialize(pid, msg) {
                                 metrics_2.num_failed_messages.add(1);
                                 warn!("Failed to broadcast to libp2p: {:?}", e);
                             }
                         })
                     }),
                 );
-                async_spawn(fut);
+                spawn(fut);
                 return Ok(());
             }
         }
 
-        match self.inner.handle.direct_request(pid, &message).await {
+        match self.inner.handle.direct_request(pid, &message) {
             Ok(()) => Ok(()),
             Err(e) => {
                 self.inner.metrics.num_failed_messages.add(1);
@@ -957,9 +945,11 @@ impl<T: NodeType> ConnectedNetwork<T::SignatureKey> for Libp2pNetwork<T> {
         let result = self
             .inner
             .receiver
+            .lock()
+            .await
             .recv()
             .await
-            .map_err(|_x| NetworkError::ShutDown)?;
+            .ok_or(NetworkError::ShutDown)?;
 
         Ok(result)
     }

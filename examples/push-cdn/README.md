@@ -28,27 +28,27 @@ Examples:
 
 **Run Locally** 
 
-`just async_std example all-push-cdn -- --config_file ./crates/orchestrator/run-config.toml`
+`just example all-push-cdn -- --config_file ./crates/orchestrator/run-config.toml`
 
 OR
 
 ```
 docker run --rm -p 0.0.0.0:6379:6379 eqalpha/keydb
-just async_std example cdn-marshal -- -d redis://localhost:6379 -b 9000
-just async_std example cdn-broker -- -d redis://localhost:6379 --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740 --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741
-just async_std example orchestrator -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://0.0.0.0:4444
-just async_std example multi-validator-push-cdn -- 10 http://127.0.0.1:4444
+just example cdn-marshal -- -d redis://localhost:6379 -b 9000
+just example cdn-broker -- -d redis://localhost:6379 --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740 --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741
+just example orchestrator -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://0.0.0.0:4444
+just example multi-validator-push-cdn -- 10 http://127.0.0.1:4444
 ```
 
 **Run with GPU-VID** 
 ```
 docker run --rm -p 0.0.0.0:6379:6379 eqalpha/keydb
-just async_std example cdn-marshal -- -d redis://localhost:6379 -b 9000
-just async_std example cdn-broker -- -d redis://localhost:6379 --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740 --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741
-just async_std example_fixed_leader orchestrator -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://0.0.0.0:4444 --fixed_leader_for_gpuvid 1
-just async_std example_gpuvid_leader multi-validator-push-cdn -- 1 http://127.0.0.1:4444
+just example cdn-marshal -- -d redis://localhost:6379 -b 9000
+just example cdn-broker -- -d redis://localhost:6379 --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740 --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741
+just example_fixed_leader orchestrator -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://0.0.0.0:4444 --fixed_leader_for_gpuvid 1
+just example_gpuvid_leader multi-validator-push-cdn -- 1 http://127.0.0.1:4444
 sleep 1m
-just async_std example_fixed_leader multi-validator-push-cdn -- 9 http://127.0.0.1:4444
+just example_fixed_leader multi-validator-push-cdn -- 9 http://127.0.0.1:4444
 ```
 
 Where ones using `example_gpuvid_leader` could be the leader and should be running on a nvidia GPU, and other validators using `example_fixed_leader` will never be a leader. In practice, these url should be changed to the corresponding ip and port.
@@ -57,12 +57,12 @@ Where ones using `example_gpuvid_leader` could be the leader and should be runni
 If you don't have a gpu but want to test out fixed leader, you can run:
 ```
 docker run --rm -p 0.0.0.0:6379:6379 eqalpha/keydb
-just async_std example cdn-marshal -- -d redis://localhost:6379 -b 9000
-just async_std example cdn-broker -- -d redis://localhost:6379 --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740 --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741
-just async_std example_fixed_leader orchestrator -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://0.0.0.0:4444 --fixed_leader_for_gpuvid 1
-just async_std example_fixed_leader multi-validator-push-cdn -- 1 http://127.0.0.1:4444
+just example cdn-marshal -- -d redis://localhost:6379 -b 9000
+just example cdn-broker -- -d redis://localhost:6379 --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740 --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741
+just example_fixed_leader orchestrator -- --config_file ./crates/orchestrator/run-config.toml --orchestrator_url http://0.0.0.0:4444 --fixed_leader_for_gpuvid 1
+just example_fixed_leader multi-validator-push-cdn -- 1 http://127.0.0.1:4444
 sleep 1m
-just async_std example_fixed_leader multi-validator-push-cdn -- 9 http://127.0.0.1:4444
+just example_fixed_leader multi-validator-push-cdn -- 9 http://127.0.0.1:4444
 ```
 
 Remember, you have to run leaders first, then other validators, so that leaders will have lower index.

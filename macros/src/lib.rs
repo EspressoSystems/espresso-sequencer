@@ -127,15 +127,11 @@ impl TestData {
         quote! {
             #[cfg(test)]
             #slow_attribute
-            #[cfg_attr(
-                async_executor_impl = "tokio",
-                tokio::test(flavor = "multi_thread")
-            )]
-            #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+            #[tokio::test(flavor = "multi_thread")]
             #[tracing::instrument]
             async fn #test_name() {
-                async_compatibility_layer::logging::setup_logging();
-                async_compatibility_layer::logging::setup_backtrace();
+                hotshot::helpers::initialize_logging();
+
                 hotshot_testing::test_builder::TestDescription::<#ty, #imply, #version>::gen_launcher((#metadata), 0).launch().run_test::<#builder_impl>().await;
             }
         }
@@ -364,7 +360,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
     use hotshot_testing::{predicates::{Predicate, PredicateResult}};
     use async_broadcast::broadcast;
     use hotshot_task_impls::events::HotShotEvent;
-    use async_compatibility_layer::art::async_timeout;
+    use tokio::time::timeout;
     use hotshot_task::task::{Task, TaskState};
     use hotshot_types::traits::node_implementation::NodeType;
     use std::sync::Arc;
@@ -403,7 +399,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
 
                 let mut result = PredicateResult::Incomplete;
 
-                while let Ok(Ok(received_output)) = async_timeout(#scripts.timeout, from_task.recv_direct()).await {
+                while let Ok(Ok(received_output)) = timeout(#scripts.timeout, from_task.recv_direct()).await {
                     tracing::debug!("Test received: {:?}", received_output);
 
                     let output_asserts = &mut #task_expectations[stage_number].output_asserts;
@@ -446,7 +442,7 @@ pub fn test_scripts(input: proc_macro::TokenStream) -> TokenStream {
                 while from_test.try_recv().is_ok() {}
 
                 let mut result = PredicateResult::Incomplete;
-                while let Ok(Ok(received_output)) = async_timeout(#scripts.timeout, from_task.recv_direct()).await {
+                while let Ok(Ok(received_output)) = timeout(#scripts.timeout, from_task.recv_direct()).await {
                     tracing::debug!("Test received: {:?}", received_output);
 
                     let output_asserts = &mut #task_expectations[stage_number].output_asserts;

@@ -7,9 +7,6 @@
 use std::{sync::Arc, time::Duration};
 
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn};
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use committable::Committable;
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState, OuterConsensus},
@@ -21,8 +18,7 @@ use hotshot_types::{
     },
 };
 use sha2::{Digest, Sha256};
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
+use tokio::{spawn, task::JoinHandle, time::sleep};
 use tracing::instrument;
 
 use crate::{events::HotShotEvent, helpers::broadcast_event};
@@ -164,7 +160,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         .is_none()
         {
             // Sleep in hope we receive txns in the meantime
-            async_sleep(TXNS_TIMEOUT).await;
+            sleep(TXNS_TIMEOUT).await;
             Consensus::calculate_and_update_vid(
                 OuterConsensus::new(Arc::clone(&self.consensus)),
                 view,
@@ -209,5 +205,5 @@ pub fn run_response_task<TYPES: NodeType>(
     event_stream: Receiver<Arc<HotShotEvent<TYPES>>>,
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
 ) -> JoinHandle<()> {
-    async_spawn(task_state.run_response_loop(event_stream, sender))
+    spawn(task_state.run_response_loop(event_stream, sender))
 }

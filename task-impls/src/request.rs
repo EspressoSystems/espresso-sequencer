@@ -14,9 +14,6 @@ use std::{
 };
 
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use hotshot_task::{
     dependency::{Dependency, EventDependency},
@@ -34,8 +31,11 @@ use hotshot_types::{
 };
 use rand::{seq::SliceRandom, thread_rng};
 use sha2::{Digest, Sha256};
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
+use tokio::{
+    spawn,
+    task::JoinHandle,
+    time::{sleep, timeout},
+};
 use tracing::instrument;
 use utils::anytrace::Result;
 
@@ -132,9 +132,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
             };
 
             for handle in handles {
-                #[cfg(async_executor_impl = "async-std")]
-                handle.cancel().await;
-                #[cfg(async_executor_impl = "tokio")]
                 handle.abort();
             }
         }
@@ -204,10 +201,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
             view,
             signature,
         };
-        let handle = async_spawn(async move {
+        let handle: JoinHandle<()> = spawn(async move {
             // Do the delay only if primary is up and then start sending
             if !network.is_primary_down() {
-                async_sleep(delay).await;
+                sleep(delay).await;
             }
 
             let mut recipients_it = recipients.iter();
@@ -280,7 +277,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         .await;
 
         // Wait for a response
-        let result = async_timeout(
+        let result = timeout(
             REQUEST_TIMEOUT,
             Self::handle_event_dependency(receiver, da_committee_for_view.clone(), view),
         )

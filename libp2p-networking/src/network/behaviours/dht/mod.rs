@@ -13,7 +13,6 @@ use std::{
     time::Duration,
 };
 
-use async_compatibility_layer::{art, channel::UnboundedSender};
 /// a local caching layer for the DHT key value pairs
 use futures::{
     channel::{mpsc, oneshot::Sender},
@@ -30,6 +29,7 @@ use libp2p::kad::{
 };
 use libp2p_identity::PeerId;
 use store::ValidatedStore;
+use tokio::{spawn, sync::mpsc::UnboundedSender, time::sleep};
 use tracing::{debug, error, warn};
 
 /// Additional DHT record functionality
@@ -222,9 +222,9 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
             retry_count: query.retry_count,
         };
         let backoff = query.backoff.next_timeout(false);
-        art::async_spawn(async move {
-            art::async_sleep(backoff).await;
-            let _ = tx.send(req).await;
+        spawn(async move {
+            sleep(backoff).await;
+            let _ = tx.send(req);
         });
     }
 
@@ -238,9 +238,9 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
             value: query.value,
             notify: query.notify,
         };
-        art::async_spawn(async move {
-            art::async_sleep(query.backoff.next_timeout(false)).await;
-            let _ = tx.send(req).await;
+        spawn(async move {
+            sleep(query.backoff.next_timeout(false)).await;
+            let _ = tx.send(req);
         });
     }
 
@@ -397,9 +397,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     /// Send that the bootsrap suceeded
     fn finish_bootstrap(&mut self) {
         if let Some(mut tx) = self.bootstrap_tx.clone() {
-            art::async_spawn(
-                async move { tx.send(bootstrap::InputEvent::BootstrapFinished).await },
-            );
+            spawn(async move { tx.send(bootstrap::InputEvent::BootstrapFinished).await });
         }
     }
     #[allow(clippy::too_many_lines)]

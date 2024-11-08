@@ -1,8 +1,8 @@
 use std::{collections::HashMap, time::Duration};
 
-use async_compatibility_layer::art::async_sleep;
 use async_trait::async_trait;
 use rand::Rng;
+use tokio::time::sleep;
 
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
 /// What type of delay we want to apply to
@@ -87,13 +87,13 @@ pub trait TestableDelay {
         match settings.delay_option {
             DelayOptions::None => {}
             DelayOptions::Fixed => {
-                async_sleep(Duration::from_millis(settings.fixed_time_in_milliseconds)).await;
+                sleep(Duration::from_millis(settings.fixed_time_in_milliseconds)).await;
             }
             DelayOptions::Random => {
                 let sleep_in_millis = rand::thread_rng().gen_range(
                     settings.min_time_in_milliseconds..=settings.max_time_in_milliseconds,
                 );
-                async_sleep(Duration::from_millis(sleep_in_millis)).await;
+                sleep(Duration::from_millis(sleep_in_millis)).await;
             }
         }
     }

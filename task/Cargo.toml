@@ -11,20 +11,15 @@ edition = { workspace = true }
 futures = { workspace = true }
 async-broadcast = { workspace = true }
 tracing = { workspace = true }
-async-compatibility-layer = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 utils = { path = "../utils" }
-
-[target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true, features = [
     "time",
     "rt-multi-thread",
     "macros",
     "sync",
 ] }
-[target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
-async-std = { workspace = true, features = ["attributes"] }
 
 [lints]
 workspace = true

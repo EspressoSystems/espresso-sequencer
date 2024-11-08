@@ -1,4 +1,3 @@
-use async_compatibility_layer::art::async_spawn;
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResult, node_types::TestTypes,
 };
@@ -9,12 +8,12 @@ use tracing::instrument;
 use url::Url;
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_fake_solver_fetch_non_permissioned_no_error() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    use tokio::spawn;
+
+    hotshot::helpers::initialize_logging();
 
     let solver_state = FakeSolverState::new(
         None, /* 0% error rate */
@@ -33,7 +32,7 @@ async fn test_fake_solver_fetch_non_permissioned_no_error() {
     .parse()
     .unwrap();
     let url = solver_url.clone();
-    let solver_handle = async_spawn(async move {
+    let solver_handle = spawn(async move {
         solver_state.run::<TestTypes>(url).await.unwrap();
     });
 
@@ -49,9 +48,6 @@ async fn test_fake_solver_fetch_non_permissioned_no_error() {
         .await
         .unwrap();
 
-    #[cfg(async_executor_impl = "async-std")]
-    solver_handle.cancel().await;
-    #[cfg(async_executor_impl = "tokio")]
     solver_handle.abort();
 
     assert_eq!(resp.urls[0], Url::parse("http://localhost:1111/").unwrap());
@@ -60,12 +56,12 @@ async fn test_fake_solver_fetch_non_permissioned_no_error() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_fake_solver_fetch_non_permissioned_with_errors() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    use tokio::spawn;
+
+    hotshot::helpers::initialize_logging();
 
     let solver_state =
         FakeSolverState::new(Some(0.5), vec!["http://localhost:1111".parse().unwrap()]);
@@ -78,7 +74,7 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
     .parse()
     .unwrap();
     let url = solver_url.clone();
-    let solver_handle = async_spawn(async move {
+    let solver_handle = spawn(async move {
         solver_state.run::<TestTypes>(url).await.unwrap();
     });
 
@@ -132,9 +128,6 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
         }
     }
 
-    #[cfg(async_executor_impl = "async-std")]
-    solver_handle.cancel().await;
-    #[cfg(async_executor_impl = "tokio")]
     solver_handle.abort();
 
     // Assert over the payloads with a 50% error rate.
@@ -147,12 +140,12 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_fake_solver_fetch_permissioned_no_error() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    use tokio::spawn;
+
+    hotshot::helpers::initialize_logging();
 
     let solver_state = FakeSolverState::new(
         None, /* 0% error rate */
@@ -174,7 +167,7 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
     .parse()
     .unwrap();
     let url = solver_url.clone();
-    let solver_handle = async_spawn(async move {
+    let solver_handle = spawn(async move {
         solver_state.run::<TestTypes>(url).await.unwrap();
     });
 
@@ -198,9 +191,6 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
         .await
         .unwrap();
 
-    #[cfg(async_executor_impl = "async-std")]
-    solver_handle.cancel().await;
-    #[cfg(async_executor_impl = "tokio")]
     solver_handle.abort();
 
     assert_eq!(resp.urls[0], Url::parse("http://localhost:1111/").unwrap());
@@ -209,12 +199,12 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn test_fake_solver_fetch_permissioned_with_errors() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    use tokio::spawn;
+
+    hotshot::helpers::initialize_logging();
 
     let solver_state =
         FakeSolverState::new(Some(0.5), vec!["http://localhost:1111".parse().unwrap()]);
@@ -230,7 +220,7 @@ async fn test_fake_solver_fetch_permissioned_with_errors() {
     .parse()
     .unwrap();
     let url = solver_url.clone();
-    let solver_handle = async_spawn(async move {
+    let solver_handle = spawn(async move {
         solver_state.run::<TestTypes>(url).await.unwrap();
     });
 
@@ -288,9 +278,6 @@ async fn test_fake_solver_fetch_permissioned_with_errors() {
         }
     }
 
-    #[cfg(async_executor_impl = "async-std")]
-    solver_handle.cancel().await;
-    #[cfg(async_executor_impl = "tokio")]
     solver_handle.abort();
 
     // Assert over the payloads with a 50% error rate.

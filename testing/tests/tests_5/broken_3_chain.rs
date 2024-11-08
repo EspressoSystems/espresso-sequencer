@@ -12,12 +12,12 @@ use hotshot_testing::{
 use tracing::instrument;
 
 /// Broken 3-chain test
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+
+#[tokio::test(flavor = "multi_thread")]
 #[instrument]
 async fn broken_3_chain() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let mut metadata: TestDescription<TestTypes, PushCdnImpl> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,

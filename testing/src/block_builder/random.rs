@@ -16,7 +16,6 @@ use std::{
 };
 
 use async_broadcast::{broadcast, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{future::BoxFuture, Stream, StreamExt};
@@ -36,6 +35,7 @@ use hotshot_types::{
 use lru::LruCache;
 use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 use tide_disco::{method::ReadState, Url};
+use tokio::{spawn, time::sleep};
 
 use super::{
     build_block, run_builder_source_0_1, BlockEntry, BuilderTask, TestBuilderImplementation,
@@ -156,7 +156,7 @@ impl<TYPES: NodeType<Transaction = TestTransaction>> RandomBuilderTask<TYPES> {
                     time_per_block.as_millis(),
                 );
             }
-            async_sleep(time_per_block.saturating_sub(start.elapsed())).await;
+            sleep(time_per_block.saturating_sub(start.elapsed())).await;
         }
     }
 }
@@ -169,7 +169,7 @@ where
         mut self: Box<Self>,
         mut stream: Box<dyn Stream<Item = Event<TYPES>> + std::marker::Unpin + Send + 'static>,
     ) {
-        let mut task = Some(async_spawn(Self::build_blocks(
+        let mut task = Some(spawn(Self::build_blocks(
             self.config.clone(),
             self.num_storage_nodes,
             self.pub_key.clone(),
@@ -177,7 +177,7 @@ where
             self.blocks.clone(),
         )));
 
-        async_spawn(async move {
+        spawn(async move {
             loop {
                 match stream.next().await {
                     None => {
@@ -189,7 +189,7 @@ where
                                 match change {
                                     BuilderChange::Up => {
                                         if task.is_none() {
-                                            task = Some(async_spawn(Self::build_blocks(
+                                            task = Some(spawn(Self::build_blocks(
                                                 self.config.clone(),
                                                 self.num_storage_nodes,
                                                 self.pub_key.clone(),
@@ -200,10 +200,7 @@ where
                                     }
                                     BuilderChange::Down => {
                                         if let Some(handle) = task.take() {
-                                            #[cfg(async_executor_impl = "tokio")]
                                             handle.abort();
-                                            #[cfg(async_executor_impl = "async-std")]
-                                            handle.cancel().await;
                                         }
                                     }
                                     BuilderChange::FailClaims(_) => {}

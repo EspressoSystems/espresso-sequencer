@@ -6,8 +6,8 @@
 
 //! A validator using libp2p
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
+use hotshot::helpers::initialize_logging;
 use hotshot_example_types::{node_types::TestVersions, state_types::TestTypes};
 use hotshot_orchestrator::client::ValidatorArgs;
 use local_ip_address::local_ip;
@@ -22,12 +22,12 @@ pub mod types;
 #[path = "../infra/mod.rs"]
 pub mod infra;
 
-#[cfg_attr(async_executor_impl = "tokio", tokio::main(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::main)]
+#[tokio::main]
 #[instrument]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
+    // Initialize logging
+    initialize_logging();
+
     let mut args = ValidatorArgs::parse();
 
     // If we did not set the advertise address, use our local IP and port 8000

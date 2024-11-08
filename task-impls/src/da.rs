@@ -7,10 +7,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::spawn_blocking;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
@@ -32,8 +29,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use sha2::{Digest, Sha256};
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::spawn_blocking;
+use tokio::{spawn, task::spawn_blocking};
 use tracing::instrument;
 use utils::anytrace::*;
 
@@ -187,7 +183,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let num_nodes = self.quorum_membership.total_nodes(self.cur_epoch);
                 let payload_commitment =
                     spawn_blocking(move || vid_commitment(&txns, num_nodes)).await;
-                #[cfg(async_executor_impl = "tokio")]
                 let payload_commitment = payload_commitment.unwrap();
                 self.storage
                     .write()
@@ -240,7 +235,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     let public_key = self.public_key.clone();
                     let chan = event_stream.clone();
                     let current_epoch = self.cur_epoch;
-                    async_spawn(async move {
+                    spawn(async move {
                         Consensus::calculate_and_update_vid(
                             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
                             view_number,

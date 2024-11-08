@@ -10,10 +10,7 @@ use std::{
 };
 
 use async_broadcast::{InactiveReceiver, Receiver, SendError, Sender};
-use async_compatibility_layer::art::async_timeout;
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use committable::{Commitment, Committable};
 use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
@@ -33,8 +30,7 @@ use hotshot_types::{
     utils::{Terminator, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
+use tokio::{task::JoinHandle, time::timeout};
 use tracing::instrument;
 use utils::anytrace::*;
 
@@ -80,7 +76,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     // Make a background task to await the arrival of the event data.
     let Ok(Some(proposal)) =
         // We want to explicitly timeout here so we aren't waiting around for the data.
-        async_timeout(REQUEST_TIMEOUT, async move {
+        timeout(REQUEST_TIMEOUT, async move {
             // We want to iterate until the proposal is not None, or until we reach the timeout.
             let mut proposal = None;
             while proposal.is_none() {
@@ -662,9 +658,6 @@ pub(crate) async fn validate_proposal_view_and_certs<
 
 /// Cancel a task
 pub async fn cancel_task<T>(task: JoinHandle<T>) {
-    #[cfg(async_executor_impl = "async-std")]
-    task.cancel().await;
-    #[cfg(async_executor_impl = "tokio")]
     task.abort();
 }
 

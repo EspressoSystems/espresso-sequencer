@@ -7,7 +7,6 @@
 use std::{sync::Arc, time::Duration};
 
 use async_broadcast::Sender;
-use async_compatibility_layer::art::async_timeout;
 use async_lock::RwLock;
 use hotshot::traits::implementations::MemoryNetwork;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
@@ -25,12 +24,12 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
+use tokio::time::timeout;
 
 // Test that the event task sends a message, and the message task receives it
 // and emits the proper event
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 #[allow(clippy::too_many_lines)]
 async fn test_network_task() {
     use std::collections::BTreeMap;
@@ -38,8 +37,7 @@ async fn test_network_task() {
     use futures::StreamExt;
     use hotshot_types::traits::network::Topic;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
         TestDescription::default_multiple_rounds();
@@ -101,7 +99,7 @@ async fn test_network_task() {
     .await
     .unwrap();
     let res: Arc<HotShotEvent<TestTypes>> =
-        async_timeout(Duration::from_millis(100), out_rx_internal.recv_direct())
+        timeout(Duration::from_millis(100), out_rx_internal.recv_direct())
             .await
             .expect("timed out waiting for response")
             .expect("channel closed");
@@ -112,15 +110,13 @@ async fn test_network_task() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_network_external_mnessages() {
     use hotshot::types::EventType;
     use hotshot_testing::helpers::build_system_handle_from_launcher;
     use hotshot_types::message::RecipientList;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
         TestDescription::default_multiple_rounds();
@@ -145,14 +141,11 @@ async fn test_network_external_mnessages() {
         .send_external_message(vec![1, 2], RecipientList::Direct(handles[2].public_key()))
         .await
         .unwrap();
-    let event = async_compatibility_layer::art::async_timeout(
-        Duration::from_millis(100),
-        event_streams[2].recv(),
-    )
-    .await
-    .unwrap()
-    .unwrap()
-    .event;
+    let event = tokio::time::timeout(Duration::from_millis(100), event_streams[2].recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .event;
 
     // check that 2 received the message
     assert!(matches!(
@@ -168,14 +161,11 @@ async fn test_network_external_mnessages() {
         .send_external_message(vec![2, 1], RecipientList::Direct(handles[1].public_key()))
         .await
         .unwrap();
-    let event = async_compatibility_layer::art::async_timeout(
-        Duration::from_millis(100),
-        event_streams[1].recv(),
-    )
-    .await
-    .unwrap()
-    .unwrap()
-    .event;
+    let event = tokio::time::timeout(Duration::from_millis(100), event_streams[1].recv())
+        .await
+        .unwrap()
+        .unwrap()
+        .event;
 
     // check that 1 received the message
     assert!(matches!(
@@ -193,14 +183,11 @@ async fn test_network_external_mnessages() {
         .unwrap();
     // All other nodes get the broadcast
     for stream in event_streams.iter_mut().skip(1) {
-        let event = async_compatibility_layer::art::async_timeout(
-            Duration::from_millis(100),
-            stream.recv(),
-        )
-        .await
-        .unwrap()
-        .unwrap()
-        .event;
+        let event = tokio::time::timeout(Duration::from_millis(100), stream.recv())
+            .await
+            .unwrap()
+            .unwrap()
+            .event;
         assert!(matches!(
             event,
             EventType::ExternalMessageReceived {
@@ -210,21 +197,19 @@ async fn test_network_external_mnessages() {
         ));
     }
     // No event on 0 even after short sleep
-    async_compatibility_layer::art::async_sleep(Duration::from_millis(2)).await;
+    tokio::time::sleep(Duration::from_millis(2)).await;
     assert!(event_streams[0].is_empty());
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_network_storage_fail() {
     use std::collections::BTreeMap;
 
     use futures::StreamExt;
     use hotshot_types::traits::network::Topic;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
         TestDescription::default_multiple_rounds();
@@ -286,6 +271,6 @@ async fn test_network_storage_fail() {
     )))
     .await
     .unwrap();
-    let res = async_timeout(Duration::from_millis(100), out_rx_internal.recv_direct()).await;
+    let res = timeout(Duration::from_millis(100), out_rx_internal.recv_direct()).await;
     assert!(res.is_err());
 }

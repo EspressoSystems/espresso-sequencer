@@ -7,15 +7,12 @@
 use std::{sync::Arc, time::Duration};
 
 use async_broadcast::Receiver;
-use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use hotshot::traits::TestableNodeImplementation;
 use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use rand::thread_rng;
-#[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
+use tokio::{spawn, time::sleep};
 
 use crate::{test_runner::Node, test_task::TestEvent};
 
@@ -37,9 +34,9 @@ pub struct TxnTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Ver
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> TxnTask<TYPES, I, V> {
     pub fn run(mut self) -> JoinHandle<()> {
-        async_spawn(async move {
+        spawn(async move {
             loop {
-                async_sleep(self.duration).await;
+                sleep(self.duration).await;
                 if let Ok(TestEvent::Shutdown) = self.shutdown_chan.try_recv() {
                     break;
                 }

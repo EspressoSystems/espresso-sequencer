@@ -4,7 +4,6 @@ use std::{
 };
 
 use anyhow::Result;
-use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
 use futures::FutureExt;
 use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
@@ -95,7 +94,7 @@ impl FakeSolverState {
                 }
                 FakeSolverFaultType::TimeoutFault => {
                     // Sleep for the preconfigured 1 second timeout interval
-                    async_sleep(SOLVER_MAX_TIMEOUT_S).await;
+                    tokio::time::sleep(SOLVER_MAX_TIMEOUT_S).await;
                 }
             }
         }

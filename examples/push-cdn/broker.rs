@@ -68,8 +68,8 @@ struct Args {
     #[arg(long, default_value_t = 1_073_741_824)]
     global_memory_pool_size: usize,
 }
-#[cfg_attr(async_executor_impl = "tokio", tokio::main)]
-#[cfg_attr(async_executor_impl = "async-std", async_std::main)]
+
+#[tokio::main]
 async fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();

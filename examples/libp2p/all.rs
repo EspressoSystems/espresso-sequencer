@@ -8,13 +8,11 @@
 /// types used for this example
 pub mod types;
 
-use async_compatibility_layer::{
-    art::async_spawn,
-    logging::{setup_backtrace, setup_logging},
-};
+use hotshot::helpers::initialize_logging;
 use hotshot_example_types::{node_types::TestVersions, state_types::TestTypes};
 use hotshot_orchestrator::client::ValidatorArgs;
 use infra::{gen_local_address, BUILDER_BASE_PORT, VALIDATOR_BASE_PORT};
+use tokio::spawn;
 use tracing::instrument;
 
 use crate::{
@@ -26,18 +24,17 @@ use crate::{
 #[path = "../infra/mod.rs"]
 pub mod infra;
 
-#[cfg_attr(async_executor_impl = "tokio", tokio::main(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::main)]
+#[tokio::main]
 #[instrument]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
+    // Initialize logging
+    initialize_logging();
 
     // use configfile args
     let (config, orchestrator_url) = read_orchestrator_init_config::<TestTypes>();
 
     // orchestrator
-    async_spawn(run_orchestrator::<TestTypes>(OrchestratorArgs {
+    spawn(run_orchestrator::<TestTypes>(OrchestratorArgs {
         url: orchestrator_url.clone(),
         config: config.clone(),
     }));
@@ -50,7 +47,7 @@ async fn main() {
         let advertise_address = gen_local_address::<VALIDATOR_BASE_PORT>(i);
         let builder_address = gen_local_address::<BUILDER_BASE_PORT>(i);
         let orchestrator_url = orchestrator_url.clone();
-        let node = async_spawn(async move {
+        let node = spawn(async move {
             infra::main_entry_point::<TestTypes, Network, NodeImpl, TestVersions, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,

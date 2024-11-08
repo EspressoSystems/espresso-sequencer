@@ -38,15 +38,13 @@ use vbs::version::Version;
 
 const TIMEOUT: Duration = Duration::from_millis(65);
 
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 /// Tests that we correctly update our internal quorum vote state when reaching a decided upgrade
 /// certificate.
 async fn test_upgrade_task_with_vote() {
     use hotshot_testing::helpers::build_system_handle;
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
 
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await

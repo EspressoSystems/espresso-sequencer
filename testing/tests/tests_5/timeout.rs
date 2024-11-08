@@ -5,8 +5,7 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_timeout() {
     use std::time::Duration;
 
@@ -18,8 +17,8 @@ async fn test_timeout() {
         spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
         test_builder::{TestDescription, TimingData},
     };
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let timing_data = TimingData {
         next_view_timeout: 2000,
         ..Default::default()
@@ -62,8 +61,7 @@ async fn test_timeout() {
 }
 
 #[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn test_timeout_libp2p() {
     use std::time::Duration;
@@ -77,8 +75,8 @@ async fn test_timeout_libp2p() {
         test_builder::{TestDescription, TimingData},
     };
 
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    hotshot::helpers::initialize_logging();
+
     let timing_data = TimingData {
         next_view_timeout: 2000,
         ..Default::default()
