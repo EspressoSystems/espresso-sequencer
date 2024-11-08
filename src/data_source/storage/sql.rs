@@ -32,9 +32,7 @@ use log::LevelFilter;
 #[cfg(not(feature = "embedded-db"))]
 use futures::future::FutureExt;
 #[cfg(not(feature = "embedded-db"))]
-use sqlx::postgres::{
-    Postgres, {PgConnectOptions, PgSslMode},
-};
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
 #[cfg(feature = "embedded-db")]
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{
@@ -209,7 +207,7 @@ pub struct Config {
     #[cfg(feature = "embedded-db")]
     db_opt: SqliteConnectOptions,
     #[cfg(not(feature = "embedded-db"))]
-    db_opt: PostgresConnectOptions,
+    db_opt: PgConnectOptions,
     pool_opt: PoolOptions<Db>,
     #[cfg(not(feature = "embedded-db"))]
     schema: String,
@@ -221,7 +219,7 @@ pub struct Config {
 }
 
 #[cfg(not(feature = "embedded-db"))]
-impl Default for Config<Postgres> {
+impl Default for Config {
     fn default() -> Self {
         PgConnectOptions::default()
             .username("postgres")
@@ -259,7 +257,7 @@ impl From<SqliteConnectOptions> for Config {
 }
 
 #[cfg(not(feature = "embedded-db"))]
-impl From<PgConnectOptions> for Config<Postgres> {
+impl From<PgConnectOptions> for Config {
     fn from(db_opt: PgConnectOptions) -> Self {
         Self {
             db_opt,
@@ -275,7 +273,7 @@ impl From<PgConnectOptions> for Config<Postgres> {
 }
 
 #[cfg(not(feature = "embedded-db"))]
-impl FromStr for Config<Postgres> {
+impl FromStr for Config {
     type Err = <PgConnectOptions as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
