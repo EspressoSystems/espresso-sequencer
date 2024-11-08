@@ -13,7 +13,7 @@
 // see <https://www.gnu.org/licenses/>.
 use std::time::Duration;
 
-use hotshot::helpers::initialize_logging;
+use tracing_subscriber::EnvFilter;
 
 pub mod consensus;
 pub mod mocks;
@@ -24,7 +24,9 @@ pub async fn sleep(dur: Duration) {
 
 pub fn setup_test() {
     // Initialize logging
-    initialize_logging();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     #[cfg(all(feature = "backtrace-on-stack-overflow", not(windows)))]
     unsafe {

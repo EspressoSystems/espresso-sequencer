@@ -96,6 +96,7 @@ tokio = { version = "1", default-features = false, features = [
 	"parking_lot",
 	"sync",
 ] }
+tracing-subscriber = "0.3"
 
 # Dependencies enabled by feature "file-system-data-source".
 atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.4", optional = true }

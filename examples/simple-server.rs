@@ -19,7 +19,6 @@
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
-    helpers::initialize_logging,
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
@@ -48,6 +47,7 @@ use hotshot_types::{
     HotShotConfig, PeerConfig,
 };
 use std::{num::NonZeroUsize, str::FromStr, sync::Arc, time::Duration};
+use tracing_subscriber::EnvFilter;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -105,7 +105,9 @@ async fn init_data_source(db: &Db) -> DataSource {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // Initialize logging
-    initialize_logging();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let opt = Options::parse();
 
