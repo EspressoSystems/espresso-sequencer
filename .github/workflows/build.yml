@@ -47,10 +47,14 @@ jobs:
         run: |
           cargo doc --no-deps --lib --release --all-features
           echo '<meta http-equiv="refresh" content="0; url=hotshot_query_service">' > target/doc/index.html
+
       - name: Deploy Documentation
         uses: peaceiris/actions-gh-pages@v4
         if: ${{ github.ref == 'refs/heads/main' }}
-
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          cname: tide-disco.docs.espressosys.com
   test-sqlite:
     runs-on: ubuntu-latest
     env:
