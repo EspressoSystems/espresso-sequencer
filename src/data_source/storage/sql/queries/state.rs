@@ -438,11 +438,12 @@ fn build_get_path_query<'q>(
 
     sql = format!("SELECT * FROM ({sql}) as t ");
 
+    // PostgreSQL already orders JSON arrays by length, so no additional function is needed
+    // For SQLite, `length()` is used to sort by length.
     if cfg!(feature = "embedded-db") {
         sql.push_str("ORDER BY length(t.path) DESC");
     } else {
-        // array_length() takes in array and the array dimension which is 1 in this case
-        sql.push_str("ORDER BY array_length(t.path, 1) DESC");
+        sql.push_str("ORDER BY t.path DESC");
     }
 
     Ok((query, sql))

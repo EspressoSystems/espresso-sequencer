@@ -90,9 +90,9 @@ use self::{migrate::Migrator, transaction::PoolMetrics};
 /// let mut migrations: Vec<Migration> =
 ///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/sqlite").collect();
 ///    
-///     sqlite_migrations.sort();
-///     assert_eq!(sqlite_migrations[0].version(), 10);
-///     assert_eq!(sqlite_migrations[0].name(), "init_schema");
+///     migrations.sort();
+///     assert_eq!(migrations[0].version(), 10);
+///     assert_eq!(migrations[0].name(), "init_schema");
 /// ```
 ///
 /// Note that a similar macro is available from Refinery:
@@ -812,20 +812,29 @@ pub mod testing {
         container_id: String,
         #[cfg(feature = "embedded-db")]
         db_path: std::path::PathBuf,
+        #[allow(dead_code)]
         persistent: bool,
     }
     impl TmpDb {
         #[cfg(feature = "embedded-db")]
         fn init_sqlite_db(persistent: bool) -> Self {
-            let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tmp");
+            let file = tempfile::Builder::new()
+                .prefix("sqlite-")
+                .suffix(".db")
+                .tempfile()
+                .unwrap();
 
-            // Create the tmp directory if it doesn't exist
-            if !dir.exists() {
-                fs::create_dir(&dir).expect("Failed to create tmp directory");
+            if persistent {
+                let (_, db_path) = file.keep().unwrap();
+
+                return Self {
+                    db_path,
+                    persistent,
+                };
             }
 
             Self {
-                db_path: dir.join(Self::gen_db_name()),
+                db_path: file.into_temp_path().to_path_buf(),
                 persistent,
             }
         }
@@ -1065,15 +1074,6 @@ pub mod testing {
         }
     }
 
-    #[cfg(feature = "embedded-db")]
-    impl Drop for TmpDb {
-        fn drop(&mut self) {
-            if !self.persistent {
-                fs::remove_file(self.db_path.clone()).unwrap();
-            }
-        }
-    }
-
     pub struct TestMerkleTreeMigration;
 
     impl TestMerkleTreeMigration {
@@ -1138,20 +1138,17 @@ mod test {
         setup_test();
 
         let db = TmpDb::init().await;
-        let db_opt = db.config().db_opt;
+        let cfg = db.config();
 
         let connect = |migrations: bool, custom_migrations| {
-            let db_opt = db_opt.clone();
+            let cfg = cfg.clone();
             async move {
-                {
-                    let cfg: Config = db_opt.into();
-                    let mut cfg = cfg.migrations(custom_migrations);
-                    if !migrations {
-                        cfg = cfg.no_migrations();
-                    }
-                    let client = SqlStorage::connect(cfg).await?;
-                    Ok::<_, Error>(client)
+                let mut cfg = cfg.migrations(custom_migrations);
+                if !migrations {
+                    cfg = cfg.no_migrations();
                 }
+                let client = SqlStorage::connect(cfg).await?;
+                Ok::<_, Error>(client)
             }
         };
 
