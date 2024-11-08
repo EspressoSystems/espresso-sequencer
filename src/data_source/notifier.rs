@@ -72,7 +72,6 @@
 
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
-use tracing::warn;
 use std::sync::Arc;
 use std::{
     future::IntoFuture,
@@ -80,6 +79,7 @@ use std::{
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, Mutex};
+use tracing::warn;
 
 /// A predicate on a type `<T>`.
 ///
