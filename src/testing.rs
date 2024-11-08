@@ -13,6 +13,8 @@
 // see <https://www.gnu.org/licenses/>.
 use std::time::Duration;
 
+use hotshot::helpers::initialize_logging;
+
 pub mod consensus;
 pub mod mocks;
 
@@ -21,7 +23,8 @@ pub async fn sleep(dur: Duration) {
 }
 
 pub fn setup_test() {
-    // BFTODO: Call HotShot logging here
+    // Initialize logging
+    initialize_logging();
 
     #[cfg(all(feature = "backtrace-on-stack-overflow", not(windows)))]
     unsafe {

@@ -19,6 +19,7 @@
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
+    helpers::initialize_logging,
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
@@ -103,7 +104,8 @@ async fn init_data_source(db: &Db) -> DataSource {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // BFTODO: Call HotShot logging here
+    // Initialize logging
+    initialize_logging();
 
     let opt = Options::parse();
 
