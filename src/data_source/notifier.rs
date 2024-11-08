@@ -291,7 +291,7 @@ mod test {
     use crate::testing::setup_test;
     use std::time::Duration;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_notify_drop() {
         setup_test();
         let n = Notifier::new();
@@ -317,7 +317,7 @@ mod test {
         assert!(active[0].is_closed());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_notify_active() {
         setup_test();
         let n = Notifier::new();
@@ -352,7 +352,7 @@ mod test {
         assert_eq!(s1.await.unwrap(), 1);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_pending_dropped() {
         setup_test();
         let n = Notifier::new();
@@ -365,7 +365,7 @@ mod test {
         assert_eq!(n.active.lock().await.len(), 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_notifier_dropped() {
         setup_test();
 

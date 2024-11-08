@@ -129,7 +129,7 @@ mod test {
     use tide_disco::{App, Url};
     use toml::toml;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {
         setup_test();
 
@@ -201,7 +201,7 @@ mod test {
         network.shut_down().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_extensions() {
         setup_test();
 

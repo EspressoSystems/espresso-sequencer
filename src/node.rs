@@ -187,7 +187,7 @@ mod test {
     use tokio::time::sleep;
     use toml::toml;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {
         setup_test();
 
@@ -350,7 +350,7 @@ mod test {
         network.shut_down().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_extensions() {
         setup_test();
 

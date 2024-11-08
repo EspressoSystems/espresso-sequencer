@@ -725,7 +725,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_composition() {
         use hotshot_example_types::node_types::TestVersions;
 

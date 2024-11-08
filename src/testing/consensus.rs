@@ -306,9 +306,9 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
 
 impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
     fn drop(&mut self) {
-        let handle = Handle::current();
-
-        block_in_place(move || handle.block_on(self.shut_down_impl()));
+        if let Ok(handle) = Handle::try_current() {
+            block_in_place(move || handle.block_on(self.shut_down_impl()));
+        }
     }
 }
 

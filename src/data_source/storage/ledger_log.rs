@@ -273,7 +273,7 @@ mod test {
     use atomic_store::AtomicStore;
     use tempfile::TempDir;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_ledger_log_creation() {
         setup_test();
 
@@ -303,7 +303,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_ledger_log_insert() {
         setup_test();
 
@@ -347,7 +347,7 @@ mod test {
         // See https://github.com/EspressoSystems/hotshot-query-service/issues/16
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_ledger_log_iter() {
         setup_test();
 

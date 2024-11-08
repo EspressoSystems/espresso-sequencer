@@ -222,7 +222,7 @@ mod test {
 
     type Provider = AnyProvider<MockTypes>;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_first_provider_fails() {
         setup_test();
 

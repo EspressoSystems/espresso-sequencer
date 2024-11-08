@@ -225,7 +225,7 @@ mod test {
         builder(db, provider).await.build().await.unwrap()
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_on_request() {
         setup_test();
 
@@ -450,7 +450,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_block_and_leaf_concurrently() {
         setup_test();
 
@@ -508,7 +508,7 @@ mod test {
         assert_eq!(leaf.header(), block.header());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_different_blocks_same_payload() {
         setup_test();
 
@@ -570,7 +570,7 @@ mod test {
         assert_eq!(block2.header(), leaves[1].header());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_stream() {
         setup_test();
 
@@ -629,7 +629,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_range_start() {
         setup_test();
 
@@ -685,7 +685,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn fetch_transaction() {
         setup_test();
 
@@ -756,7 +756,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_retry() {
         setup_test();
 
@@ -875,7 +875,7 @@ mod test {
             .ok();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_from_malicious_server() {
         setup_test();
 
@@ -903,7 +903,7 @@ mod test {
         assert_eq!(res, None);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_archive_recovery() {
         setup_test();
 
@@ -1130,17 +1130,17 @@ mod test {
         assert_eq!(leaves[0], fetch.try_resolve().ok().unwrap());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_storage_failure_on_begin() {
         test_fetch_storage_failure_helper(FailureType::Begin).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_storage_failure_on_write() {
         test_fetch_storage_failure_helper(FailureType::Write).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_storage_failure_on_commit() {
         test_fetch_storage_failure_helper(FailureType::Commit).await;
     }
@@ -1205,22 +1205,22 @@ mod test {
         assert_eq!(leaves[0], tx.get_leaf(1.into()).await.unwrap());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_storage_failure_retry_on_begin() {
         test_fetch_storage_failure_retry_helper(FailureType::Begin).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_storage_failure_retry_on_write() {
         test_fetch_storage_failure_retry_helper(FailureType::Write).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_storage_failure_retry_on_commit() {
         test_fetch_storage_failure_retry_helper(FailureType::Commit).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_on_decide() {
         setup_test();
 

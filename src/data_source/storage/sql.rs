@@ -926,7 +926,7 @@ mod test {
         testing::{mocks::MockTypes, setup_test},
     };
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_migrations() {
         setup_test();
 
@@ -999,7 +999,7 @@ mod test {
             .unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_target_period_pruning() {
         setup_test();
 
@@ -1097,7 +1097,7 @@ mod test {
         )
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_minimum_retention_pruning() {
         setup_test();
 
@@ -1174,7 +1174,7 @@ mod test {
         assert_eq!(header_rows, 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_pruned_height_storage() {
         setup_test();
 

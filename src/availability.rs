@@ -723,14 +723,14 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {
         test_api_helper::<MockDataSource>(Duration::from_millis(500)).await;
     }
 
     // This test runs the `postgres` Docker image, which doesn't work on Windows.
     #[cfg(not(target_os = "windows"))]
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api_no_storage() {
         // With a long enough fetch timeout, we can run the API without any local storage and it
         // still works: missing data is fetched on demand or proactively from a peer.
@@ -847,7 +847,7 @@ mod test {
         network.shut_down().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_extensions() {
         use hotshot_example_types::node_types::TestVersions;
 
