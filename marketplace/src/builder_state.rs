@@ -640,7 +640,6 @@ impl<Types: NodeType> BuilderState<Types> {
                 *tx,
                 TransactionStatus::Sequenced {
                     block: self.parent_block_references.view_number.u64(),
-                    offset: 0_u64,
                 },
             );
         }

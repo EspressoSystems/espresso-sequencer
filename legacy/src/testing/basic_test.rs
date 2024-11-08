@@ -17,7 +17,7 @@ pub use async_broadcast::broadcast;
 mod tests {
     use super::*;
     use std::collections::VecDeque;
-    use std::{hash::Hash, marker::PhantomData, num::NonZeroUsize};
+    use std::{hash::Hash, marker::PhantomData};
 
     use async_std::future::TimeoutError;
     use async_std::prelude::FutureExt;
@@ -38,7 +38,8 @@ mod tests {
     };
     use marketplace_builder_shared::block::ParentBlockReferences;
     use marketplace_builder_shared::testing::constants::{
-        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_PROTOCOL_MAX_BLOCK_SIZE,
+        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_NUM_NODES_IN_VID_COMPUTATION,
+        TEST_PROTOCOL_MAX_BLOCK_SIZE,
     };
 
     use crate::builder_state::{
@@ -112,21 +113,22 @@ mod tests {
         let (builder_pub_key, builder_private_key) =
             BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
         // instantiate the global state also
-
+        let initial_commitment = vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION);
         let global_state = Arc::new(RwLock::new(GlobalState::<TestTypes>::new(
             bootstrap_sender,
             tx_sender.clone(),
-            vid_commitment(&[], 8),
+            initial_commitment,
             ViewNumber::new(0),
             ViewNumber::new(0),
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
+            TEST_NUM_NODES_IN_VID_COMPUTATION,
         )));
 
         let bootstrap_builder_state = BuilderState::new(
             ParentBlockReferences {
                 view_number: ViewNumber::new(0),
-                vid_commitment: vid_commitment(&[], 8),
+                vid_commitment: initial_commitment,
                 leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
                 builder_commitment: BuilderCommitment::from_bytes([]),
             },
@@ -137,7 +139,6 @@ mod tests {
             tx_receiver,
             tx_queue,
             global_state.clone(),
-            NonZeroUsize::new(NUM_NODES_IN_VID_COMPUTATION).unwrap(),
             Duration::from_millis(100),
             1,
             Arc::new(TestInstanceState::default()),
@@ -149,14 +150,14 @@ mod tests {
         bootstrap_builder_state.event_loop();
 
         let proxy_global_state = ProxyGlobalState::new(
-            global_state,
+            global_state.clone(),
             (builder_pub_key, builder_private_key),
             Duration::from_millis(100),
         );
 
         // to store all the sent messages
         // storing response messages
-        let mut previous_commitment = vid_commitment(&[], 8);
+        let mut previous_commitment = initial_commitment;
         let mut previous_view = ViewNumber::new(0);
         let mut previous_quorum_proposal = {
             let previous_jc = QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
@@ -243,11 +244,13 @@ mod tests {
                     <BLSPubKey as SignatureKey>::sign(&leader_priv, block_hash.as_ref()).unwrap();
 
                 let claimed_block = proxy_global_state
-                    .claim_block(
+                    .claim_block_with_num_nodes(
                         &block_hash,
                         previous_view.u64(),
                         leader_pub,
                         &block_hash_signature,
+                        // Increment to test whether `num_nodes` is updated properly.
+                        TEST_NUM_NODES_IN_VID_COMPUTATION + 1,
                     )
                     .await
                     .unwrap();
@@ -301,7 +304,6 @@ mod tests {
                             _pd: PhantomData,
                         }),
                         sender: pub_key,
-                        total_nodes: NUM_NODES_IN_VID_COMPUTATION,
                     }
                 };
 
@@ -502,5 +504,11 @@ mod tests {
         else {
             panic!("There should not be any more messages in the da_receiver");
         };
+
+        // Verify `num_nodes`.
+        assert_eq!(
+            global_state.read_arc().await.num_nodes,
+            TEST_NUM_NODES_IN_VID_COMPUTATION + 1
+        );
     }
 }

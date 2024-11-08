@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use super::basic_test::{BuilderState, MessageType};
 use crate::{
@@ -58,8 +58,9 @@ pub fn setup_builder_for_test() -> TestSetup {
     let (req_sender, req_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
     let (tx_sender, tx_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
 
+    let parent_commitment = vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION);
     let bootstrap_builder_state_id = BuilderStateId::<TestTypes> {
-        parent_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
+        parent_commitment,
         parent_view: ViewNumber::genesis(),
     };
 
@@ -71,6 +72,7 @@ pub fn setup_builder_for_test() -> TestSetup {
         bootstrap_builder_state_id.parent_view,
         TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
         TEST_PROTOCOL_MAX_BLOCK_SIZE,
+        TEST_NUM_NODES_IN_VID_COMPUTATION,
     )));
 
     let max_api_duration = Duration::from_millis(100);
@@ -86,7 +88,7 @@ pub fn setup_builder_for_test() -> TestSetup {
     let (quorum_proposal_sender, quorum_proposal_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
     let bootstrap_builder_state = BuilderState::<TestTypes>::new(
         ParentBlockReferences {
-            vid_commitment: vid_commitment(&[], TEST_NUM_NODES_IN_VID_COMPUTATION),
+            vid_commitment: parent_commitment,
             view_number: ViewNumber::genesis(),
             leaf_commit: Commitment::from_raw([0; 32]),
             builder_commitment: BuilderCommitment::from_bytes([0; 32]),
@@ -98,7 +100,6 @@ pub fn setup_builder_for_test() -> TestSetup {
         tx_receiver,
         Default::default(),
         global_state.clone(),
-        NonZeroUsize::new(TEST_NUM_NODES_IN_VID_COMPUTATION).unwrap(),
         Duration::from_millis(40),
         1,
         Default::default(),
@@ -281,7 +282,6 @@ async fn progress_round_with_transactions(
                     _pd: Default::default(),
                 }),
                 sender: leader_pub,
-                total_nodes: TEST_NUM_NODES_IN_VID_COMPUTATION,
             }))
             .await
             .expect("should broadcast DA Proposal successfully");
