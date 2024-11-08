@@ -3,7 +3,6 @@
 
 use std::{collections::HashMap, fmt::Display, marker::PhantomData, sync::Arc, time::Duration};
 
-use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot::types::SignatureKey;
@@ -24,6 +23,7 @@ use hotshot_types::{
 };
 use marketplace_builder_shared::block::ParentBlockReferences;
 use tagged_base64::TaggedBase64;
+use tokio::spawn;
 use url::Url;
 use vbs::version::StaticVersion;
 
@@ -152,7 +152,7 @@ where
         .expect("Failed to create builder tide-disco app");
 
         let url_clone = url.clone();
-        async_spawn(async move {
+        spawn(async move {
             tracing::error!("Starting builder app on {url_clone}");
             if let Err(e) = app.serve(url_clone, StaticVersion::<0, 1> {}).await {
                 tracing::error!(?e, "Builder API App exited with error");
@@ -190,7 +190,7 @@ where
                 + 'static,
         >,
     ) {
-        async_spawn(run_builder_service(self.hooks, self.senders, stream));
+        spawn(run_builder_service(self.hooks, self.senders, stream));
     }
 }
 
@@ -214,8 +214,7 @@ mod tests {
         test_builder::TestDescription,
     };
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     #[tracing::instrument]
     #[ignore = "slow"]
     async fn example_test() {
@@ -253,8 +252,7 @@ mod tests {
         .await
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     #[tracing::instrument]
     #[ignore = "slow"]
     async fn stress_test() {

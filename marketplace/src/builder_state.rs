@@ -12,6 +12,7 @@ use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockRefe
 use marketplace_builder_shared::utils::RotatingSet;
 
 use committable::Commitment;
+use tokio::{sync::mpsc::UnboundedSender, task::spawn, time::sleep};
 
 use crate::{
     service::{BroadcastReceivers, GlobalState, ReceivedTransaction},
@@ -20,8 +21,6 @@ use crate::{
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
 use async_broadcast::Sender as BroadcastSender;
-use async_compatibility_layer::channel::UnboundedSender;
-use async_compatibility_layer::{art::async_sleep, art::async_spawn};
 use async_lock::RwLock;
 use core::panic;
 use futures::StreamExt;
@@ -691,7 +690,7 @@ impl<Types: NodeType> BuilderState<Types> {
                 break;
             }
 
-            async_sleep(sleep_interval).await
+            sleep(sleep_interval).await
         }
 
         let Ok((payload, metadata)) =
@@ -804,7 +803,7 @@ impl<Types: NodeType> BuilderState<Types> {
         );
 
         // ... and finally, send the response
-        if let Err(e) = req.response_channel.send(response_msg).await {
+        if let Err(e) = req.response_channel.send(response_msg) {
             tracing::warn!(
                 "Builder {:?} failed to send response to {:?} with builder hash {:?}, Err: {:?}",
                 self.parent_block_references.view_number,
@@ -979,7 +978,7 @@ impl<Types: NodeType> BuilderState<Types> {
     #[tracing::instrument(skip_all, name = "event loop",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     pub fn event_loop(mut self) {
-        let _builder_handle = async_spawn(async move {
+        let _builder_handle = spawn(async move {
             loop {
                 tracing::debug!(
                     "Builder {:?} event loop",
@@ -1117,6 +1116,7 @@ mod test {
     use hotshot_types::data::{Leaf, QuorumProposal};
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
+    use tracing_subscriber::EnvFilter;
 
     use super::DaProposalMessage;
     use super::MessageType;
@@ -1127,11 +1127,12 @@ mod test {
     /// It checkes da_proposal_payload_commit_to_da_proposal change appropriately
     /// when receiving a da proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_process_da_proposal() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
-        tracing::info!("Testing the function `process_da_proposal` in `builder_state.rs`");
+        // Setup logging
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
 
         // Number of views to simulate
         const NUM_ROUNDS: usize = 5;
@@ -1249,10 +1250,13 @@ mod test {
     /// It checkes quorum_proposal_payload_commit_to_quorum_proposal change appropriately
     /// when receiving a quorum proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_process_quorum_proposal() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
+        // Setup logging
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
+
         tracing::info!("Testing the function `process_quorum_proposal` in `builder_state.rs`");
 
         // Number of views to simulate
@@ -1346,10 +1350,13 @@ mod test {
     /// This test the function `process_decide_event`.
     /// It checkes whether we exit out correct builder states when there's a decide event coming in.
     /// This test also checks whether corresponding BuilderStateId is removed in global_state.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_process_decide_event() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
+        // Setup logging
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
+
         tracing::info!("Testing the builder core with multiple messages from the channels");
 
         // Number of views to simulate

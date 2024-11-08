@@ -19,8 +19,6 @@ mod tests {
     use std::collections::VecDeque;
     use std::{hash::Hash, marker::PhantomData};
 
-    use async_std::future::TimeoutError;
-    use async_std::prelude::FutureExt;
     use hotshot::types::SignatureKey;
     use hotshot_builder_api::v0_2::data_source::BuilderDataSource;
     use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
@@ -41,6 +39,9 @@ mod tests {
         TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_NUM_NODES_IN_VID_COMPUTATION,
         TEST_PROTOCOL_MAX_BLOCK_SIZE,
     };
+    use tokio::time::error::Elapsed;
+    use tokio::time::timeout;
+    use tracing_subscriber::EnvFilter;
 
     use crate::builder_state::{
         DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
@@ -57,11 +58,13 @@ mod tests {
 
     use serde::{Deserialize, Serialize};
     /// This test simulates multiple builder states receiving messages from the channels and processing them
-    #[async_std::test]
+    #[tokio::test]
     //#[instrument]
     async fn test_builder() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
+        // Setup logging
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
         tracing::info!("Testing the builder core with multiple messages from the channels");
         #[derive(
             Copy,
@@ -486,21 +489,16 @@ mod tests {
         }
 
         // There should not be any other messages to receive
-        let Err(TimeoutError { .. }) = da_receiver.recv().timeout(Duration::from_millis(100)).await
+        let Err(Elapsed { .. }) = timeout(Duration::from_millis(100), da_receiver.recv()).await
         else {
             panic!("There should not be any more messages in the da_receiver");
         };
-        let Err(TimeoutError { .. }) = quorum_proposal_receiver
-            .recv()
-            .timeout(Duration::from_millis(100))
-            .await
+        let Err(Elapsed { .. }) =
+            timeout(Duration::from_millis(100), quorum_proposal_receiver.recv()).await
         else {
             panic!("There should not be any more messages in the da_receiver");
         };
-        let Err(TimeoutError { .. }) = decide_receiver
-            .recv()
-            .timeout(Duration::from_millis(100))
-            .await
+        let Err(Elapsed { .. }) = timeout(Duration::from_millis(100), decide_receiver.recv()).await
         else {
             panic!("There should not be any more messages in the da_receiver");
         };

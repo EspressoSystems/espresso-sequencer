@@ -8,8 +8,6 @@ use std::{
 };
 
 use anyhow::Context;
-use async_compatibility_layer::art::async_sleep;
-use async_std::prelude::FutureExt;
 use either::Either::{self, Left, Right};
 use futures::stream::unfold;
 use futures::{Stream, StreamExt};
@@ -18,6 +16,7 @@ use hotshot_events_service::events::Error as EventStreamError;
 use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::client::HealthStatus;
 use surf_disco::Client;
+use tokio::time::{sleep, timeout};
 use tracing::{error, warn};
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -124,7 +123,7 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
     > {
         let client = Client::<hotshot_events_service::events::Error, ApiVer>::new(url.clone());
 
-        async {
+        timeout(Self::CONNECTION_TIMEOUT, async {
             loop {
                 match client.healthcheck::<HealthStatus>().await {
                     Ok(_) => break,
@@ -132,10 +131,9 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
                         tracing::debug!(?err, "Healthcheck failed, retrying");
                     }
                 }
-                async_sleep(Self::RETRY_PERIOD).await;
+                sleep(Self::RETRY_PERIOD).await;
             }
-        }
-        .timeout(Self::CONNECTION_TIMEOUT)
+        })
         .await
         .context("Couldn't connect to hotshot events API")?;
 
@@ -181,7 +179,7 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
                         }
                         Err(err) => {
                             error!(?err, "Error while reconnecting, will retry in a while");
-                            async_sleep(Self::RETRY_PERIOD).await;
+                            sleep(Self::RETRY_PERIOD).await;
                             let fut = Self::connect_inner(this.api_url.clone());
                             let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
                             continue;
@@ -205,10 +203,6 @@ mod tests {
         time::Duration,
     };
 
-    use async_compatibility_layer::art::async_spawn;
-    use async_std::prelude::FutureExt;
-    #[cfg(async_executor_impl = "async-std")]
-    use async_std::task::JoinHandle;
     use async_trait::async_trait;
     use futures::{future::BoxFuture, stream, StreamExt};
     use hotshot::types::{Event, EventType};
@@ -219,8 +213,7 @@ mod tests {
     use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
     use tide_disco::{method::ReadState, App};
-    #[cfg(async_executor_impl = "tokio")]
-    use tokio::task::JoinHandle;
+    use tokio::{spawn, task::JoinHandle, time::timeout};
     use url::Url;
     use vbs::version::StaticVersion;
 
@@ -280,15 +273,11 @@ mod tests {
 
         app.register_module(path, api).unwrap();
 
-        async_spawn(async move { app.serve(bind_url, MockVersion {}).await.unwrap() })
+        spawn(async move { app.serve(bind_url, MockVersion {}).await.unwrap() })
     }
 
-    #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-    #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+    #[tokio::test(flavor = "multi_thread")]
     async fn event_stream_wrapper() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
-
         const TIMEOUT: Duration = Duration::from_secs(3);
 
         let url: Url = format!(
@@ -304,43 +293,29 @@ mod tests {
             .await
             .unwrap();
 
-        stream
-            .next()
-            .timeout(TIMEOUT)
+        timeout(TIMEOUT, stream.next())
             .await
             .expect("When mock event server is spawned, stream should work")
             .unwrap();
 
-        #[cfg(async_executor_impl = "tokio")]
         app_handle.abort();
-        #[cfg(async_executor_impl = "async-std")]
-        app_handle.cancel().await;
 
-        stream
-            .next()
-            .timeout(TIMEOUT)
+        timeout(TIMEOUT, stream.next())
             .await
             .expect_err("When mock event server is killed, stream should be in reconnecting state and never return");
 
         let app_handle = run_app("hotshot-events", url.clone());
 
-        stream
-            .next()
-            .timeout(TIMEOUT)
+        timeout(TIMEOUT, stream.next())
             .await
             .expect("When mock event server is restarted, stream should work again")
             .unwrap();
 
-        #[cfg(async_executor_impl = "tokio")]
         app_handle.abort();
-        #[cfg(async_executor_impl = "async-std")]
-        app_handle.cancel().await;
 
         run_app("wrong-path", url.clone());
 
-        stream
-            .next()
-            .timeout(TIMEOUT)
+        timeout(TIMEOUT, stream.next())
             .await
             .expect_err("API is reachable, but is on wrong path");
     }

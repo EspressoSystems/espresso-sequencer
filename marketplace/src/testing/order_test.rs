@@ -5,6 +5,7 @@ use hotshot_types::{
     traits::node_implementation::{ConsensusTime, NodeType},
 };
 use marketplace_builder_shared::block::BuilderStateId;
+use tracing_subscriber::EnvFilter;
 
 use crate::{
     builder_state::MessageType,
@@ -142,10 +143,13 @@ fn order_check<T: Eq + Clone + Debug>(
 /// and focus specifically on orders.
 /// It's fine that leader doesn't include some of transactions we've given, or interspersed with other transactions,
 /// as long as the order is correct it will be good.
-#[async_std::test]
+#[tokio::test]
 async fn test_builder_order() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    // Setup logging
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     tracing::info!("Testing the builder core with multiple messages from the channels");
 
     /// Number of views to simulate, make sure it's larger than 5
@@ -285,10 +289,13 @@ async fn test_builder_order() {
 /// and focus specifically on orders with chain fork.
 /// with one chain proposing transactions we've given and the other not
 /// (we should give out the next batch if responding for first chain and both batches for the other)
-#[async_std::test]
+#[tokio::test]
 async fn test_builder_order_chain_fork() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    // Setup logging
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     tracing::info!("Testing the builder core with multiple messages from the channels");
 
     // Number of views to simulate
@@ -491,10 +498,13 @@ async fn test_builder_order_chain_fork() {
 /// and focus specifically on orders.
 /// It should fail as the proposer randomly drop a subset of transactions within a bundle,
 /// which leads to different order of transaction.
-#[async_std::test]
+#[tokio::test]
 async fn test_builder_order_should_fail() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    // Setup logging
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     tracing::info!("Testing the builder core with multiple messages from the channels");
 
     // Number of views to simulate

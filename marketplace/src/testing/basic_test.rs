@@ -1,9 +1,8 @@
 use hotshot_types::data::QuorumProposal;
 
-use async_compatibility_layer::art::async_sleep;
-use async_std::prelude::FutureExt;
-
 use hotshot_example_types::block_types::TestTransaction;
+use tokio::time::{sleep, timeout};
+use tracing_subscriber::EnvFilter;
 
 use crate::builder_state::MessageType;
 use crate::{builder_state::TransactionSource, testing::TestTypes};
@@ -14,10 +13,13 @@ use crate::{
 use std::time::Duration;
 
 /// This test simulates multiple builder states receiving messages from the channels and processing them
-#[async_std::test]
+#[tokio::test]
 async fn test_builder() {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    // Setup logging
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
+
     tracing::info!("Testing the builder core with multiple messages from the channels");
 
     // Number of views to simulate
@@ -81,10 +83,10 @@ async fn test_builder() {
             .await
             .unwrap();
 
-        let req_msg = get_req_msg(round as u64, builder_state_id).await;
+        let mut req_msg = get_req_msg(round as u64, builder_state_id).await;
 
         // give builder state time to fork
-        async_sleep(Duration::from_millis(100)).await;
+        sleep(Duration::from_millis(100)).await;
 
         // get the builder state for parent view we've just simulated
         global_state
@@ -99,10 +101,7 @@ async fn test_builder() {
             .unwrap();
 
         // get response
-        let res_msg = req_msg
-            .0
-            .recv()
-            .timeout(Duration::from_secs(10))
+        let res_msg = timeout(Duration::from_secs(10), req_msg.0.recv())
             .await
             .unwrap()
             .unwrap();

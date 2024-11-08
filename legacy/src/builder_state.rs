@@ -21,17 +21,19 @@ use crate::{
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
 use async_broadcast::Sender as BroadcastSender;
-use async_compatibility_layer::channel::{oneshot, unbounded, UnboundedSender};
-use async_compatibility_layer::{art::async_sleep, channel::OneShotSender};
-use async_compatibility_layer::{art::async_spawn, channel::UnboundedReceiver};
 use async_lock::RwLock;
 use core::panic;
 use futures::StreamExt;
 
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::spawn_blocking;
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::spawn_blocking;
+use tokio::{
+    spawn,
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        oneshot,
+    },
+    task::spawn_blocking,
+    time::sleep,
+};
 
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -72,6 +74,8 @@ pub struct RequestMessage<Types: NodeType> {
     pub state_id: BuilderStateId<Types>,
     pub response_channel: UnboundedSender<ResponseMessage>,
 }
+
+#[derive(Debug)]
 pub enum TriggerStatus {
     Start,
     Exit,
@@ -85,7 +89,7 @@ pub struct BuildBlockInfo<Types: NodeType> {
     pub offered_fee: u64,
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
-    pub vid_trigger: OneShotSender<TriggerStatus>,
+    pub vid_trigger: oneshot::Sender<TriggerStatus>,
     pub vid_receiver: UnboundedReceiver<(VidCommitment, VidPrecomputeData)>,
     // Could we have included more transactions, but chose not to?
     pub truncated: bool,
@@ -705,7 +709,7 @@ impl<Types: NodeType> BuilderState<Types> {
                 break;
             }
 
-            async_sleep(sleep_interval).await
+            sleep(sleep_interval).await
         }
 
         // should_prioritize_finalization is a flag that is used to determine
@@ -789,24 +793,23 @@ impl<Types: NodeType> BuilderState<Types> {
         // or upon initialization.
         let num_nodes = self.global_state.read_arc().await.num_nodes;
 
-        let (trigger_send, trigger_recv) = oneshot();
+        let (trigger_send, trigger_recv) = oneshot::channel();
 
         // spawn a task to calculate the VID commitment, and pass the handle to the global state
         // later global state can await on it before replying to the proposer
-        let (unbounded_sender, unbounded_receiver) = unbounded();
+        let (unbounded_sender, unbounded_receiver) = unbounded_channel();
         #[allow(unused_must_use)]
-        async_spawn(async move {
-            let Ok(TriggerStatus::Start) = trigger_recv.recv().await else {
+        spawn(async move {
+            let Ok(TriggerStatus::Start) = trigger_recv.await else {
                 return;
             };
 
             let join_handle =
                 spawn_blocking(move || precompute_vid_commitment(&encoded_txns, num_nodes));
-            #[cfg(async_executor_impl = "tokio")]
+
             let (vidc, pre_compute_data) = join_handle.await.unwrap();
-            #[cfg(async_executor_impl = "async-std")]
-            let (vidc, pre_compute_data) = join_handle.await;
-            unbounded_sender.send((vidc, pre_compute_data)).await;
+
+            unbounded_sender.send((vidc, pre_compute_data));
         });
 
         tracing::info!(
@@ -885,7 +888,7 @@ impl<Types: NodeType> BuilderState<Types> {
         );
 
         // ... and finally, send the response
-        if let Err(e) = req.response_channel.send(response_msg).await {
+        if let Err(e) = req.response_channel.send(response_msg) {
             tracing::warn!(
                 "Builder {:?} failed to send response to {:?} with builder hash {:?}, Err: {:?}",
                 self.parent_block_references.view_number,
@@ -907,7 +910,7 @@ impl<Types: NodeType> BuilderState<Types> {
     #[tracing::instrument(skip_all, name = "event loop",
                                     fields(builder_parent_block_references = %self.parent_block_references))]
     pub fn event_loop(mut self) {
-        let _builder_handle = async_spawn(async move {
+        let _builder_handle = spawn(async move {
             loop {
                 tracing::debug!(
                     "Builder {:?} event loop",
@@ -1147,6 +1150,7 @@ mod test {
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
     use marketplace_builder_shared::testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION;
+    use tracing_subscriber::EnvFilter;
 
     use super::DAProposalInfo;
     use super::MessageType;
@@ -1157,10 +1161,12 @@ mod test {
     /// It checkes da_proposal_payload_commit_to_da_proposal change appropriately
     /// when receiving a da proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_process_da_proposal() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
+        // Setup logging
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
         tracing::info!("Testing the function `process_da_proposal` in `builder_state.rs`");
 
         // Number of views to simulate
@@ -1276,10 +1282,13 @@ mod test {
     /// It checkes quorum_proposal_payload_commit_to_quorum_proposal change appropriately
     /// when receiving a quorum proposal message.
     /// This test also checks whether corresponding BuilderStateId is in global_state.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_process_quorum_proposal() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
+        // Setup logging
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
+
         tracing::info!("Testing the function `process_quorum_proposal` in `builder_state.rs`");
 
         // Number of views to simulate
@@ -1375,10 +1384,12 @@ mod test {
     /// This test the function `process_decide_event`.
     /// It checkes whether we exit out correct builder states when there's a decide event coming in.
     /// This test also checks whether corresponding BuilderStateId is removed in global_state.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_process_decide_event() {
-        async_compatibility_layer::logging::setup_logging();
-        async_compatibility_layer::logging::setup_backtrace();
+        // Setup logging
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
         tracing::info!("Testing the builder core with multiple messages from the channels");
 
         // Number of views to simulate

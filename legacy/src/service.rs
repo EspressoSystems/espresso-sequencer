@@ -32,11 +32,6 @@ use crate::{
 use crate::{WaitAndKeep, WaitAndKeepGetError};
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{Sender as BroadcastSender, TrySendError};
-use async_compatibility_layer::{
-    art::async_sleep,
-    art::async_timeout,
-    channel::{unbounded, OneShotSender},
-};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
@@ -50,6 +45,10 @@ use std::time::Duration;
 use std::{fmt::Display, time::Instant};
 use tagged_base64::TaggedBase64;
 use tide_disco::method::ReadState;
+use tokio::{
+    sync::{mpsc::unbounded_channel, oneshot},
+    time::{sleep, timeout},
+};
 
 // We will not increment max block value if we aren't able to serve a response
 // with a margin below [`ProxyGlobalState::max_api_waiting_time`]
@@ -61,7 +60,7 @@ const VID_RESPONSE_TARGET_MARGIN_DIVISOR: u32 = 10;
 pub struct BlockInfo<Types: NodeType> {
     pub block_payload: Types::BlockPayload,
     pub metadata: <<Types as NodeType>::BlockPayload as BlockPayload<Types>>::Metadata,
-    pub vid_trigger: Arc<RwLock<Option<OneShotSender<TriggerStatus>>>>,
+    pub vid_trigger: Arc<RwLock<Option<oneshot::Sender<TriggerStatus>>>>,
     pub vid_receiver: Arc<RwLock<WaitAndKeep<(VidCommitment, VidPrecomputeData)>>>,
     pub offered_fee: u64,
     // Could we have included more transactions with this block, but chose not to?
@@ -628,7 +627,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             }
         }
 
-        let (response_sender, response_receiver) = unbounded();
+        let (response_sender, mut response_receiver) = unbounded_channel();
         let req_msg = RequestMessage {
             state_id: state_id.clone(),
             response_channel: response_sender,
@@ -667,7 +666,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             }
 
             tracing::info!("Failed to get matching BlockBuilder for {state_id}, will try again",);
-            async_sleep(check_duration).await;
+            sleep(check_duration).await;
         }
 
         if !sent {
@@ -689,7 +688,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
         tracing::debug!("Waiting for response for get_available_blocks with parent {state_id}",);
 
         let response_received = loop {
-            match async_timeout(check_duration, response_receiver.recv()).await {
+            match timeout(check_duration, response_receiver.recv()).await {
                 Err(toe) => {
                     if Instant::now() >= timeout_after {
                         tracing::debug!(%toe, "Couldn't get available blocks in time for parent {state_id}");
@@ -709,11 +708,13 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
                     continue;
                 }
                 Ok(recv_attempt) => {
-                    if let Err(ref e) = recv_attempt {
-                        tracing::error!(%e, "Channel closed while getting available blocks for parent {state_id}");
+                    if recv_attempt.is_none() {
+                        tracing::error!(
+                            "Channel closed while getting available blocks for parent {state_id}"
+                        );
                     }
                     break recv_attempt
-                        .map_err(|_| AvailableBlocksError::ChannelUnexpectedlyClosed);
+                        .ok_or_else(|| AvailableBlocksError::ChannelUnexpectedlyClosed);
                 }
             }
         };
@@ -801,7 +802,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
 
             if let Some(trigger_writer) = vid_trigger.write().await.take() {
                 tracing::info!("Sending vid trigger for {block_id}");
-                trigger_writer.send(TriggerStatus::Start);
+                let _ = trigger_writer.send(TriggerStatus::Start);
                 tracing::info!("Sent vid trigger for {block_id}");
             }
             tracing::info!("Done Trying sending vid trigger info for {block_id}",);
@@ -880,7 +881,7 @@ impl<Types: NodeType> ProxyGlobalState<Types> {
             let check_duration = self.max_api_waiting_time / 10;
 
             let response_received = loop {
-                match async_timeout(check_duration, vid_receiver.write().await.get()).await {
+                match timeout(check_duration, vid_receiver.write().await.get()).await {
                     Err(_toe) => {
                         if Instant::now() >= timeout_after {
                             tracing::warn!("Couldn't get vid commitment in time for block {id}",);
@@ -1513,7 +1514,6 @@ where
 mod test {
     use std::{sync::Arc, time::Duration};
 
-    use async_compatibility_layer::channel::unbounded;
     use async_lock::RwLock;
     use committable::Commitment;
     use futures::StreamExt;
@@ -1546,6 +1546,10 @@ mod test {
         },
     };
     use sha2::{Digest, Sha256};
+    use tokio::{
+        spawn,
+        sync::{mpsc::unbounded_channel, oneshot},
+    };
 
     use crate::{
         builder_state::{
@@ -1572,7 +1576,7 @@ mod test {
 
     /// This test checks a [GlobalState] created from [GlobalState::new] has
     /// the appropriate values stored within it.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_new() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -1644,7 +1648,7 @@ mod test {
     /// number builder id will be updated to the new builder state id.
     /// Additionally, it will check that the spawned builder states hashmap
     /// will contain the new builder state id.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_register_builder_state_different_states() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -1733,7 +1737,7 @@ mod test {
     ///
     /// It also demonstrates that doing this will drop the previous sender,
     /// effectively closing it if it is the only reference to it.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_register_builder_state_same_builder_state_id() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -1818,7 +1822,7 @@ mod test {
             };
 
             let req_id_and_sender = state.spawned_builder_states.get(&builder_state_id).unwrap();
-            let (response_sender, _) = unbounded();
+            let (response_sender, _) = unbounded_channel();
 
             assert!(
                 req_id_and_sender
@@ -1849,7 +1853,7 @@ mod test {
     /// This test checks that the register_builder_state method will only
     /// update the highest_view_num_builder_id if the new [BuilderStateId] has
     /// a higher view number than the current highest_view_num_builder_id.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_register_builder_state_decrementing_builder_state_ids() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -1944,7 +1948,7 @@ mod test {
     ///
     /// The assumption behind this test is that the values being stored were
     /// not being stored previously.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_update_global_state_success() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -1973,9 +1977,8 @@ mod test {
             view: new_view_num,
         };
 
-        let (vid_trigger_sender, vid_trigger_receiver) =
-            async_compatibility_layer::channel::oneshot();
-        let (vid_sender, vid_receiver) = unbounded();
+        let (vid_trigger_sender, vid_trigger_receiver) = oneshot::channel();
+        let (vid_sender, vid_receiver) = unbounded_channel();
         let (block_payload, metadata) =
             <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
                 vec![TestTransaction::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])],
@@ -2056,10 +2059,12 @@ mod test {
             let mut vid_trigger_write_lock_guard =
                 retrieved_block_info.vid_trigger.write_arc().await;
             if let Some(vid_trigger_sender) = vid_trigger_write_lock_guard.take() {
-                vid_trigger_sender.send(TriggerStatus::Start);
+                vid_trigger_sender
+                    .send(TriggerStatus::Start)
+                    .expect("vid_trigger_sender failed");
             }
 
-            match vid_trigger_receiver.recv().await {
+            match vid_trigger_receiver.await {
                 Ok(TriggerStatus::Start) => {
                     // This is expected
                 }
@@ -2075,9 +2080,7 @@ mod test {
             let (vid_commitment, vid_precompute) =
                 precompute_vid_commitment(&[1, 2, 3, 4, 5], TEST_NUM_NODES_IN_VID_COMPUTATION);
             assert_eq!(
-                vid_sender
-                    .send((vid_commitment, vid_precompute.clone()))
-                    .await,
+                vid_sender.send((vid_commitment, vid_precompute.clone())),
                 Ok(()),
                 "The vid_sender should be able to send the vid commitment and precompute"
             );
@@ -2146,7 +2149,7 @@ mod test {
     /// and the `builder_state_to_last_built_block` hashmap, the method will
     /// replace the values in the `builder_state_to_last_built_block` hashmap,
     /// and it will also replace the entry in the `block`s LRU.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_update_global_state_replacement() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2174,9 +2177,8 @@ mod test {
             hash: builder_hash.clone(),
             view: new_view_num,
         };
-        let (vid_trigger_sender_1, vid_trigger_receiver_1) =
-            async_compatibility_layer::channel::oneshot();
-        let (vid_sender_1, vid_receiver_1) = unbounded();
+        let (vid_trigger_sender_1, vid_trigger_receiver_1) = oneshot::channel();
+        let (vid_sender_1, vid_receiver_1) = unbounded_channel();
         let (block_payload_1, metadata_1) =
             <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
                 vec![TestTransaction::new(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])],
@@ -2220,9 +2222,8 @@ mod test {
             hash: builder_hash.clone(),
             view: new_view_num,
         };
-        let (vid_trigger_sender_2, vid_trigger_receiver_2) =
-            async_compatibility_layer::channel::oneshot();
-        let (vid_sender_2, vid_receiver_2) = unbounded();
+        let (vid_trigger_sender_2, vid_trigger_receiver_2) = oneshot::channel();
+        let (vid_sender_2, vid_receiver_2) = unbounded_channel();
         let (block_payload_2, metadata_2) =
             <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
                 vec![TestTransaction::new(vec![2, 3, 4, 5, 6, 7, 8, 9, 10, 11])],
@@ -2311,10 +2312,12 @@ mod test {
             let mut vid_trigger_write_lock_guard =
                 retrieved_block_info.vid_trigger.write_arc().await;
             if let Some(vid_trigger_sender) = vid_trigger_write_lock_guard.take() {
-                vid_trigger_sender.send(TriggerStatus::Start);
+                vid_trigger_sender
+                    .send(TriggerStatus::Start)
+                    .expect("vid_trigger_sender failed");
             }
 
-            match vid_trigger_receiver_2.recv().await {
+            match vid_trigger_receiver_2.await {
                 Ok(TriggerStatus::Start) => {
                     // This is expected
                 }
@@ -2324,7 +2327,7 @@ mod test {
             }
 
             assert!(
-                vid_trigger_receiver_1.recv().await.is_err(),
+                vid_trigger_receiver_1.await.is_err(),
                 "This should not receive anything from vid_trigger_receiver_1"
             );
         }
@@ -2335,9 +2338,7 @@ mod test {
             let (vid_commitment, vid_precompute) =
                 precompute_vid_commitment(&[1, 2, 3, 4, 5], TEST_NUM_NODES_IN_VID_COMPUTATION);
             assert_eq!(
-                vid_sender_2
-                    .send((vid_commitment, vid_precompute.clone()))
-                    .await,
+                vid_sender_2.send((vid_commitment, vid_precompute.clone())),
                 Ok(()),
                 "The vid_sender should be able to send the vid commitment and precompute"
             );
@@ -2345,7 +2346,6 @@ mod test {
             assert!(
                 vid_sender_1
                     .send((vid_commitment, vid_precompute.clone()))
-                    .await
                     .is_err(),
                 "The vid_sender should not be able to send the vid commitment and precompute"
             );
@@ -2421,7 +2421,7 @@ mod test {
     /// views up to what is known to have been stored. As a result it will
     /// indicate that is has only targeted to the highest view number that it
     /// is aware of.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_remove_handles_prune_up_to_latest() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2515,7 +2515,7 @@ mod test {
     /// we could still trigger this behavior be re-adding the builder states
     /// with a view number that precedes the last garbage collected view number,
     /// then removing them would trigger the same behavior.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_remove_handles_can_reduce_last_garbage_collected_view_num_simple() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2594,7 +2594,7 @@ mod test {
     /// but differs in that it re-adds the removed builder states, just in case
     /// the previous test's behavior is erroneous and fixed by ensuring that we
     /// only consider removed view numbers.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_remove_handles_can_reduce_last_garbage_collected_view_num_strict() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2693,7 +2693,7 @@ mod test {
     /// states that are registered, and then removing a subset of them. It
     /// verifies the absence of the entries that should have been removed, and
     /// the presence of the entries that should have been kept.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_global_state_remove_handles_expected() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2800,7 +2800,7 @@ mod test {
     /// information for the block view number requested.  As a result, the
     /// implementation will ultimately timeout, and return an error that
     /// indicates that no blocks were available.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_available_blocks_error_no_blocks_available() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2860,7 +2860,7 @@ mod test {
     /// the builder's private key instead of the leader's private key.  Since
     /// these keys do not match, this will result in a signature verification
     /// error.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_available_blocks_error_invalid_signature() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2920,7 +2920,7 @@ mod test {
     /// To trigger this condition, we initialize the GlobalState with a
     /// garbage collected view number that is higher than the view that will
     /// be requested.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_available_blocks_error_requesting_previous_view_number() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -2981,7 +2981,7 @@ mod test {
     /// state, and then we mutate the state to record the wrong latest state id.
     /// When interacted with `GlobalState` via `register_builder_state`, and
     /// `remove_handles`, this error doesn't seem possible immediately possible.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_available_blocks_error_get_channel_for_matching_builder() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3051,7 +3051,7 @@ mod test {
     /// This test checks that call to `available_blocks_implementation` returns
     /// a successful response when the function is called before blocks are
     /// made available.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_available_blocks_requested_before_blocks_available() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3081,7 +3081,7 @@ mod test {
         let cloned_leader_private_key = leader_private_key.clone();
 
         // We want to trigger a request for the available blocks, before we make the available block available
-        let get_available_blocks_handle = async_std::task::spawn(async move {
+        let get_available_blocks_handle = spawn(async move {
             // leader_private_key
             let signature =
                 BLSPubKey::sign(&cloned_leader_private_key, cloned_parent_commit.as_ref()).unwrap();
@@ -3151,14 +3151,13 @@ mod test {
         };
 
         assert!(
-            response_channel
-                .send(expected_response.clone())
-                .await
-                .is_ok(),
+            response_channel.send(expected_response.clone()).is_ok(),
             "failed to send ResponseMessage"
         );
 
-        let result = get_available_blocks_handle.await;
+        let result = get_available_blocks_handle
+            .await
+            .expect("get_available_blocks_handle failed");
         match result {
             Err(err) => {
                 panic!("Unexpected error: {:?}", err);
@@ -3189,7 +3188,7 @@ mod test {
     /// This test checks that call to `available_blocks_implementation` returns
     /// a successful response when the function is called after blocks are
     /// made available.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_available_blocks_requested_after_blocks_available() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3247,7 +3246,7 @@ mod test {
         };
 
         // We want to trigger a request for the available blocks, before we make the available block available
-        let get_available_blocks_handle = async_std::task::spawn(async move {
+        let get_available_blocks_handle = spawn(async move {
             // leader_private_key
             let signature =
                 BLSPubKey::sign(&cloned_leader_private_key, cloned_parent_commit.as_ref()).unwrap();
@@ -3289,14 +3288,13 @@ mod test {
         };
 
         assert!(
-            response_channel
-                .send(expected_response.clone())
-                .await
-                .is_ok(),
+            response_channel.send(expected_response.clone()).is_ok(),
             "failed to send ResponseMessage"
         );
 
-        let result = get_available_blocks_handle.await;
+        let result = get_available_blocks_handle
+            .await
+            .expect("get_available_blocks_handle failed");
         match result {
             Err(err) => {
                 panic!("Unexpected error: {:?}", err);
@@ -3334,7 +3332,7 @@ mod test {
     /// the builder's private key instead of the leader's private key.  Since
     /// these keys do not match, this will result in a signature verification
     /// error.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_error_signature_validation_failed() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3389,7 +3387,7 @@ mod test {
     /// for the block data requested.  As a result, the implementation will
     /// ultimately timeout, and return an error that indicates that the block
     /// data was not found.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_error_block_data_not_found() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3437,7 +3435,7 @@ mod test {
     }
 
     /// This test checks that the function completes successfully.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_success() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3477,9 +3475,8 @@ mod test {
                 transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
             };
 
-            let (vid_trigger_sender, vid_trigger_receiver) =
-                async_compatibility_layer::channel::oneshot();
-            let (_, vid_receiver) = unbounded();
+            let (vid_trigger_sender, vid_trigger_receiver) = oneshot::channel();
+            let (_, vid_receiver) = unbounded_channel();
 
             global_state_write_lock.blocks.put(
                 block_id,
@@ -3500,7 +3497,7 @@ mod test {
             vid_trigger_receiver
         };
 
-        let claim_block_join_handle = async_std::task::spawn(async move {
+        let claim_block_join_handle = spawn(async move {
             let signature =
                 BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
             cloned_state
@@ -3509,7 +3506,7 @@ mod test {
         });
 
         // This should be the started event
-        match vid_trigger_receiver.recv().await {
+        match vid_trigger_receiver.await {
             Ok(TriggerStatus::Start) => {
                 // This is what we expect.
             }
@@ -3540,7 +3537,7 @@ mod test {
     /// the builder's private key instead of the leader's private key.  Since
     /// these keys do not match, this will result in a signature verification
     /// error.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_header_input_error_signature_verification_failed() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3596,7 +3593,7 @@ mod test {
     /// for the block header requested.  As a result, the implementation will
     /// ultimately timeout, and return an error that indicates that the block
     /// header was not found.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_header_input_error_block_header_not_found() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3654,7 +3651,7 @@ mod test {
     ///
     /// At least that's what it should do.  At the moment, this results in a
     /// deadlock due to attempting to acquire the `write_arc` twice.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_header_input_error_could_not_get_vid_in_time() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3694,8 +3691,8 @@ mod test {
                 transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
             };
 
-            let (vid_trigger_sender, _) = async_compatibility_layer::channel::oneshot();
-            let (vid_sender, vid_receiver) = unbounded();
+            let (vid_trigger_sender, _) = oneshot::channel();
+            let (vid_sender, vid_receiver) = unbounded_channel();
 
             global_state_write_lock.blocks.put(
                 block_id,
@@ -3716,7 +3713,7 @@ mod test {
             vid_sender
         };
 
-        let claim_block_header_input_join_handle = async_std::task::spawn(async move {
+        let claim_block_header_input_join_handle = spawn(async move {
             let signature =
                 BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
             cloned_state
@@ -3729,7 +3726,9 @@ mod test {
                 .await
         });
 
-        let result = claim_block_header_input_join_handle.await;
+        let result = claim_block_header_input_join_handle
+            .await
+            .expect("join error");
 
         match result {
             Err(ClaimBlockHeaderInputError::CouldNotGetVidInTime) => {
@@ -3752,7 +3751,7 @@ mod test {
     /// To trigger this condition, we simply submit a request to the
     /// implementation of claim_block, but we close the VID receiver channel's
     /// sender.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_header_input_error_keep_and_wait_get_error() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3792,8 +3791,8 @@ mod test {
                 transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
             };
 
-            let (vid_trigger_sender, _) = async_compatibility_layer::channel::oneshot();
-            let (_, vid_receiver) = unbounded();
+            let (vid_trigger_sender, _) = oneshot::channel();
+            let (_, vid_receiver) = unbounded_channel();
 
             global_state_write_lock.blocks.put(
                 block_id,
@@ -3812,7 +3811,7 @@ mod test {
             );
         };
 
-        let claim_block_header_input_join_handle = async_std::task::spawn(async move {
+        let claim_block_header_input_join_handle = spawn(async move {
             let signature =
                 BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
             cloned_state
@@ -3825,7 +3824,9 @@ mod test {
                 .await
         });
 
-        let result = claim_block_header_input_join_handle.await;
+        let result = claim_block_header_input_join_handle
+            .await
+            .expect("join error");
 
         match result {
             Err(ClaimBlockHeaderInputError::WaitAndKeepGetError(_)) => {
@@ -3844,7 +3845,7 @@ mod test {
 
     /// This test checks that successful response is returned when the VID is
     /// received in time.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_claim_block_header_input_success() {
         let (bootstrap_sender, _) = async_broadcast::broadcast(10);
         let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -3884,8 +3885,8 @@ mod test {
                 transactions: vec![TestTransaction::new(vec![1, 2, 3, 4])],
             };
 
-            let (vid_trigger_sender, _) = async_compatibility_layer::channel::oneshot();
-            let (vid_sender, vid_receiver) = unbounded();
+            let (vid_trigger_sender, _) = oneshot::channel();
+            let (vid_sender, vid_receiver) = unbounded_channel();
 
             global_state_write_lock.blocks.put(
                 block_id,
@@ -3906,7 +3907,7 @@ mod test {
             vid_sender
         };
 
-        let claim_block_header_input_join_handle = async_std::task::spawn(async move {
+        let claim_block_header_input_join_handle = spawn(async move {
             let signature =
                 BLSPubKey::sign(&leader_private_key, cloned_commitment.as_ref()).unwrap();
             cloned_state
@@ -3921,7 +3922,6 @@ mod test {
 
         vid_sender
             .send(precompute_vid_commitment(&[1, 2, 3, 4], 2))
-            .await
             .unwrap();
 
         let result = claim_block_header_input_join_handle.await;
@@ -3946,7 +3946,7 @@ mod test {
     /// to the [Proposal] does not match the public key of the sender.
     /// Additionally, the public keys passed for both the leader and the sender
     /// need to match each other.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_da_event_implementation_error_signature_validation_failed() {
         let (sender_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
@@ -4000,7 +4000,7 @@ mod test {
     /// To trigger this error, we simply need to ensure that the broadcast
     /// channel receiver has been closed / dropped before the attempt to
     /// send on the broadcast sender is performed.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_da_event_implementation_error_broadcast_failed() {
         let (sender_public_key, sender_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
@@ -4051,7 +4051,7 @@ mod test {
 
     /// This test checks the expected successful behavior of the
     /// [handle_da_event_implementation] function.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_da_event_implementation_success() {
         let (sender_public_key, sender_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
@@ -4114,7 +4114,7 @@ mod test {
     ///
     /// Additionally, the public keys passed for both the leader and the sender
     /// need to match each other.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_quorum_event_error_signature_validation_failed() {
         let (sender_public_key, _) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
@@ -4182,7 +4182,7 @@ mod test {
     /// To trigger this error, we simply need to ensure that the broadcast
     /// channel receiver has been closed / dropped before the attempt to
     /// send on the broadcast sender is performed.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_quorum_event_error_broadcast_failed() {
         let (sender_public_key, sender_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
@@ -4247,7 +4247,7 @@ mod test {
 
     /// This test checks to ensure that [handle_quorum_event_implementation]
     /// completes successfully as expected when the correct conditions are met.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_quorum_event_success() {
         let (sender_public_key, sender_private_key) =
             <BLSPubKey as BuilderSignatureKey>::generated_from_seed_indexed([0; 32], 0);
@@ -4321,7 +4321,7 @@ mod test {
     /// To trigger this error we simply provide a broadcast channel with a
     /// buffer smaller than the number of transactions we are attempting to
     /// send through it.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_received_txns_error_too_many_transactions() {
         let (tx_sender, tx_receiver) = async_broadcast::broadcast(2);
         let num_transactions = 5;
@@ -4368,7 +4368,7 @@ mod test {
     ///
     /// To trigger this error we simply provide a [TestTransaction] whose size
     /// exceeds the maximum transaction length. we pass to [HandleReceivedTxns].
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_received_txns_error_transaction_too_big() {
         let (tx_sender, tx_receiver) = async_broadcast::broadcast(10);
         let num_transactions = 2;
@@ -4422,7 +4422,7 @@ mod test {
     /// To trigger this error we simply close the broadcast channel receiver
     /// before attempting to send any transactions through the broadcast channel
     /// sender.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_received_txns_error_internal() {
         let tx_sender = {
             let (tx_sender, _) = async_broadcast::broadcast(10);
@@ -4473,7 +4473,7 @@ mod test {
 
     /// This test checks that [HandleReceivedTxns] processes completely without
     /// issue when the conditions are correct for it to do so.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_handle_received_txns_success() {
         let (tx_sender, tx_receiver) = async_broadcast::broadcast(10);
         let num_transactions = 10;

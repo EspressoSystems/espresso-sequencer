@@ -8,9 +8,8 @@ testing = []
 
 [dependencies]
 anyhow = { workspace = true }
-async-compatibility-layer = { workspace = true }
-async-std = { workspace = true }
 async-trait = { workspace = true }
+async-lock = { workspace = true }
 bincode = { workspace = true }
 chrono = { workspace = true }
 committable = { workspace = true }
@@ -31,6 +30,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 portpicker = "0.1.1"

@@ -6,9 +6,7 @@ edition = { workspace = true }
 [dependencies]
 anyhow = "1"
 async-broadcast = "0.7"
-async-compatibility-layer = { workspace = true, features = ["logging-utils"] }
 async-lock = { workspace = true }
-async-std = { workspace = true, features = ["unstable", "attributes"] }
 async-trait = { workspace = true }
 committable = { workspace = true }
 derivative = { workspace = true }
@@ -24,6 +22,8 @@ tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 hotshot-example-types = { workspace = true }

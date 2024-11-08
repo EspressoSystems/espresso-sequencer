@@ -8,9 +8,7 @@ marketplace-builder-shared = { path = "../shared" }
 
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
-async-compatibility-layer = { workspace = true, features = ["logging-utils"] }
 async-lock = { workspace = true }
-async-std = { workspace = true, features = ["unstable", "attributes"] }
 async-trait = { workspace = true }
 bincode = { workspace = true }
 committable = { workspace = true }
@@ -26,6 +24,7 @@ tide-disco = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 hotshot-example-types = { workspace = true }

@@ -9,7 +9,6 @@ use crate::{
     utils::LegacyCommit,
 };
 use async_broadcast::broadcast;
-use async_compatibility_layer::channel::{unbounded, UnboundedReceiver};
 use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
@@ -29,6 +28,7 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use marketplace_builder_shared::block::{BuilderStateId, ParentBlockReferences};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 
 use crate::service::{broadcast_channels, GlobalState};
 use async_lock::RwLock;
@@ -222,7 +222,7 @@ async fn get_req_msg(
     BuilderStateId<TestTypes>,
     MessageType<TestTypes>,
 ) {
-    let (response_sender, response_receiver) = unbounded();
+    let (response_sender, response_receiver) = unbounded_channel();
     let request_message = MessageType::<TestTypes>::RequestMessage(RequestMessage {
         requested_view_number: ViewNumber::new(round),
         response_channel: response_sender,

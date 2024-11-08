@@ -44,6 +44,8 @@ use std::sync::Arc;
 use std::{fmt::Display, time::Instant};
 use tagged_base64::TaggedBase64;
 use tide_disco::{app::AppError, method::ReadState, App};
+use tokio::time::sleep;
+use tokio::{sync::mpsc::unbounded_channel, time::timeout};
 use tracing::{error, instrument};
 use vbs::version::StaticVersion;
 
@@ -406,13 +408,12 @@ where
                     ));
                 } else {
                     // If we couldn't find the state because it hasn't yet been created, try again
-                    async_compatibility_layer::art::async_sleep(self.api_timeout / 10).await;
+                    sleep(self.api_timeout / 10).await;
                     continue;
                 }
             };
 
-            let (response_sender, response_receiver) =
-                async_compatibility_layer::channel::unbounded();
+            let (response_sender, mut response_receiver) = unbounded_channel();
 
             let request = RequestMessage {
                 requested_view_number: parent_view,
@@ -429,7 +430,7 @@ where
                     BuildError::Error("Error requesting bundle".to_owned())
                 })?;
 
-            let response = async_compatibility_layer::art::async_timeout(
+            let response = timeout(
                 self.api_timeout.saturating_sub(start.elapsed()),
                 response_receiver.recv(),
             )
@@ -439,8 +440,8 @@ where
 
                 BuildError::NotFound
             })?
-            .map_err(|err| {
-                tracing::warn!(%err, "Channel closed while waiting for bundle");
+            .ok_or_else(|| {
+                tracing::warn!("Channel closed while waiting for bundle");
 
                 BuildError::Error("Channel closed while waiting for bundle".to_owned())
             })?;

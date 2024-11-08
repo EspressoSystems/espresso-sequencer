@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use async_std::sync::RwLock;
+use async_lock::RwLock;
 use async_trait::async_trait;
 use chrono::Local;
 use hotshot::{

@@ -17,7 +17,7 @@ use hotshot_types::traits::{
 };
 
 use anyhow::bail;
-use async_std::sync::RwLock;
+use async_lock::RwLock;
 use async_trait::async_trait;
 use chrono::{DateTime, Local};
 
