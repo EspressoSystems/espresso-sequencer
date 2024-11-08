@@ -45,7 +45,8 @@ impl InscriptionPersistence for PostgresPersistence {
             .await?;
 
         if result.rows_affected() != 1 {
-            panic!();
+            tracing::warn!("Failed to store pending put inscription: {:?}", inscription);
+            panic!("Failed to store pending put inscription: {:?}", inscription);
         }
 
         // commit the transaction
@@ -73,7 +74,14 @@ impl InscriptionPersistence for PostgresPersistence {
             .await?;
 
         if result.rows_affected() != 1 {
-            panic!();
+            // This means that we could not store the event for a pending
+            // put_inscription.
+            // This might imply that the pending put inscription hasn't been
+            // stored yet.
+            tracing::warn!(
+                "Failed to store event for 'submit' pending put inscription: {:?}",
+                inscription
+            );
         }
 
         // commit the transaction
@@ -135,7 +143,12 @@ impl InscriptionPersistence for PostgresPersistence {
             .await?;
 
         if store_confirmed_inscription_result.rows_affected() != 1 {
-            panic!();
+            // This could mean that we're trying to store a confirmed
+            // inscription that we've already stored.
+            tracing::warn!(
+                "Failed to store confirmed inscription: {:?}",
+                inscription_and_block_details
+            );
         }
 
         // If this fails... is that a problem?  It depends on the nature of the
@@ -147,7 +160,13 @@ impl InscriptionPersistence for PostgresPersistence {
             .await?;
 
         if store_event_result.rows_affected() != 1 {
-            panic!();
+            // It's not the end of the world if this happens, it just implies
+            // that there is no corresponding pending put inscription entry.
+            // so we'll just log this and move on.
+            tracing::warn!(
+                "Failed to store event for confirmed inscription: {:?}",
+                inscription_and_block_details
+            );
         }
 
         // commit the result
