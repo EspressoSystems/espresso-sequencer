@@ -95,11 +95,7 @@ impl<'q> QueryBuilder<'q> {
             message: format!("{err:#}"),
         })?;
 
-        if cfg!(feature = "embedded-db") {
-            Ok("?".to_string())
-        } else {
-            Ok(format!("${}", self.arguments.len()))
-        }
+        Ok(format!("${}", self.arguments.len()))
     }
 
     /// Finalize the query with a constructed SQL statement.
@@ -308,7 +304,7 @@ impl<Mode> Transaction<Mode> {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;

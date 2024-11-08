@@ -82,7 +82,7 @@ where
         // Find all the hash values and create a hashmap
         // Hashmap will be used to get the hash value of the nodes children and the node itself.
         let hashes = if !hash_ids.is_empty() {
-            let (query, sql) = build_where_in("id", "SELECT id, value FROM hash", hash_ids)?;
+            let (query, sql) = build_where_in("SELECT id, value FROM hash", "id", hash_ids)?;
             query
                 .query_as(&sql)
                 .fetch(self.as_mut())
@@ -441,7 +441,8 @@ fn build_get_path_query<'q>(
     if cfg!(feature = "embedded-db") {
         sql.push_str("ORDER BY length(t.path) DESC");
     } else {
-        sql.push_str("ORDER BY t.path DESC");
+        // array_length() takes in array and the array dimension which is 1 in this case
+        sql.push_str("ORDER BY array_length(t.path, 1) DESC");
     }
 
     Ok((query, sql))

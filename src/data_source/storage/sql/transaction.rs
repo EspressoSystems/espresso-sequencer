@@ -284,8 +284,8 @@ impl_tuple_params!(7, (T1, T2, T3, T4, T5, T6, T7,));
 impl_tuple_params!(8, (T1, T2, T3, T4, T5, T6, T7, T8,));
 
 pub fn build_where_in<'a, I>(
-    column: &'a str,
     query: &'a str,
+    column: &'a str,
     values: I,
 ) -> QueryResult<(queries::QueryBuilder<'a>, String)>
 where

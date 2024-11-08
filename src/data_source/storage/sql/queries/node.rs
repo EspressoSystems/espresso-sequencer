@@ -76,7 +76,7 @@ where
             "SELECT v.share AS share FROM vid AS v
                JOIN header AS h ON v.height = h.height
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let (share_data,) = query

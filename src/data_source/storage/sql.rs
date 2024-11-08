@@ -39,7 +39,7 @@ use sqlx::postgres::{
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{
     pool::{Pool, PoolOptions},
-    ConnectOptions, Connection, Row,
+    ConnectOptions, Row,
 };
 use std::{cmp::min, fmt::Debug, str::FromStr, time::Duration};
 pub extern crate sqlx;
@@ -85,23 +85,16 @@ use self::{migrate::Migrator, transaction::PoolMetrics};
 /// # use hotshot_query_service::data_source::sql::{include_migrations, Migration};
 /// // For PostgreSQL
 /// #[cfg(not(feature = "embedded-db"))]
-/// {   
-///     let mut postgres_migrations: Vec<Migration> =
+///  let mut migrations: Vec<Migration> =
 ///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/postgres").collect();
-///     postgres_migrations.sort();
-///     assert_eq!(postgres_migrations[0].version(), 10);
-///     assert_eq!(postgres_migrations[0].name(), "init_schema");
-/// }
-///
 /// // For SQLite
 /// #[cfg(feature = "embedded-db")]
-/// {
-///     let mut sqlite_migrations: Vec<Migration> =
+/// let mut migrations: Vec<Migration> =
 ///     include_migrations!("$CARGO_MANIFEST_DIR/migrations/sqlite").collect();
+///    
 ///     sqlite_migrations.sort();
 ///     assert_eq!(sqlite_migrations[0].version(), 10);
 ///     assert_eq!(sqlite_migrations[0].name(), "init_schema");
-/// }
 /// ```
 ///
 /// Note that a similar macro is available from Refinery:
@@ -212,16 +205,14 @@ fn add_custom_migrations(
         .map(|pair| pair.reduce(|_, custom| custom))
 }
 
-pub struct Config<DB>
-where
-    DB: Database,
-{
-    db_opt: <DB::Connection as Connection>::Options,
+pub struct Config {
+    #[cfg(feature = "embedded-db")]
+    db_opt: SqliteConnectOptions,
+    #[cfg(not(feature = "embedded-db"))]
+    db_opt: PostgresConnectOptions,
     pool_opt: PoolOptions<Db>,
     #[cfg(not(feature = "embedded-db"))]
     schema: String,
-    #[cfg(feature = "embedded-db")]
-    db_path: std::path::PathBuf,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
@@ -242,23 +233,22 @@ impl Default for Config<Postgres> {
 }
 
 #[cfg(feature = "embedded-db")]
-impl Default for Config<sqlx::Sqlite> {
+impl Default for Config {
     fn default() -> Self {
         SqliteConnectOptions::default()
             .busy_timeout(Duration::from_secs(30))
             .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
+            .create_if_missing(true)
             .into()
     }
 }
 
 #[cfg(feature = "embedded-db")]
-impl From<SqliteConnectOptions> for Config<Sqlite> {
+impl From<SqliteConnectOptions> for Config {
     fn from(db_opt: SqliteConnectOptions) -> Self {
-        let db_path = db_opt.get_filename().to_path_buf();
         Self {
             db_opt,
             pool_opt: PoolOptions::default(),
-            db_path,
             reset: false,
             migrations: vec![],
             no_migrations: false,
@@ -294,7 +284,7 @@ impl FromStr for Config<Postgres> {
 }
 
 #[cfg(feature = "embedded-db")]
-impl FromStr for Config<Sqlite> {
+impl FromStr for Config {
     type Err = <SqliteConnectOptions as FromStr>::Err;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -303,20 +293,20 @@ impl FromStr for Config<Sqlite> {
 }
 
 #[cfg(feature = "embedded-db")]
-impl Config<Sqlite> {
+impl Config {
     pub fn busy_timeout(mut self, timeout: Duration) -> Self {
         self.db_opt = self.db_opt.busy_timeout(timeout);
         self
     }
 
     pub fn db_path(mut self, path: std::path::PathBuf) -> Self {
-        self.db_path = path;
+        self.db_opt = self.db_opt.filename(path);
         self
     }
 }
 
 #[cfg(not(feature = "embedded-db"))]
-impl Config<Postgres> {
+impl Config {
     /// Set the hostname of the database server.
     ///
     /// The default is `localhost`.
@@ -370,7 +360,7 @@ impl Config<Postgres> {
     }
 }
 
-impl<DB: Database> Config<DB> {
+impl Config {
     /// Reset the schema on connection.
     ///
     /// When this [`Config`] is used to [`connect`](Self::connect) a
@@ -490,7 +480,7 @@ pub struct Pruner {
 
 impl SqlStorage {
     /// Connect to a remote database.
-    pub async fn connect<DB: Database>(mut config: Config<DB>) -> Result<Self, Error> {
+    pub async fn connect(mut config: Config) -> Result<Self, Error> {
         let pool = config.pool_opt;
 
         #[cfg(not(feature = "embedded-db"))]
@@ -509,10 +499,10 @@ impl SqlStorage {
 
         #[cfg(feature = "embedded-db")]
         if config.reset {
-            std::fs::remove_file(config.db_path)?;
+            std::fs::remove_file(config.db_opt.get_filename())?;
         }
 
-        let pool = pool.connect(config.db_opt.to_url_lossy().as_ref()).await?;
+        let pool = pool.connect_with(config.db_opt).await?;
 
         // Create or connect to the schema for this query service.
         let mut conn = pool.acquire().await?;
@@ -823,12 +813,11 @@ pub mod testing {
         container_id: String,
         #[cfg(feature = "embedded-db")]
         db_path: std::path::PathBuf,
-        #[cfg(not(feature = "embedded-db"))]
         persistent: bool,
     }
     impl TmpDb {
         #[cfg(feature = "embedded-db")]
-        pub fn init_sqlite_db() -> Self {
+        fn init_sqlite_db(persistent: bool) -> Self {
             let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tmp");
 
             // Create the tmp directory if it doesn't exist
@@ -838,11 +827,12 @@ pub mod testing {
 
             Self {
                 db_path: dir.join(Self::gen_db_name()),
+                persistent,
             }
         }
         pub async fn init() -> Self {
             #[cfg(feature = "embedded-db")]
-            return Self::init_sqlite_db();
+            return Self::init_sqlite_db(false);
 
             #[cfg(not(feature = "embedded-db"))]
             Self::init_postgres(false).await
@@ -850,7 +840,7 @@ pub mod testing {
 
         pub async fn persistent() -> Self {
             #[cfg(feature = "embedded-db")]
-            return Self::init_sqlite_db();
+            return Self::init_sqlite_db(true);
 
             #[cfg(not(feature = "embedded-db"))]
             Self::init_postgres(true).await
@@ -912,9 +902,9 @@ pub mod testing {
             self.db_path.clone()
         }
 
-        pub fn config(&self) -> Config<Db> {
+        pub fn config(&self) -> Config {
             #[cfg(feature = "embedded-db")]
-            let mut cfg: Config<Db> = {
+            let mut cfg: Config = {
                 let db_path = self.db_path.to_string_lossy();
                 let path = format!("sqlite:{db_path}");
                 SqliteConnectOptions::from_str(&path)
@@ -1049,7 +1039,7 @@ pub mod testing {
     impl Drop for TmpDb {
         fn drop(&mut self) {
             self.stop_postgres();
-            if self.persistent {
+            if !self.persistent {
                 let output = Command::new("docker")
                     .args(["container", "rm", self.container_id.as_str()])
                     .output()
@@ -1067,7 +1057,9 @@ pub mod testing {
     #[cfg(feature = "embedded-db")]
     impl Drop for TmpDb {
         fn drop(&mut self) {
-            fs::remove_file(self.db_path.clone()).unwrap();
+            if !self.persistent {
+                fs::remove_file(self.db_path.clone()).unwrap();
+            }
         }
     }
 
@@ -1141,7 +1133,7 @@ mod test {
             let db_opt = db_opt.clone();
             async move {
                 {
-                    let cfg: Config<Db> = db_opt.into();
+                    let cfg: Config = db_opt.into();
                     let mut cfg = cfg.migrations(custom_migrations);
                     if !migrations {
                         cfg = cfg.no_migrations();

@@ -421,7 +421,7 @@ where
                     p.height = h.height
                 WHERE
                     h.height IN (SELECT height FROM header ORDER BY height DESC LIMIT 50)
-                ORDER BY h.height ASC 
+                ORDER BY h.height 
                 ",
             ).fetch(self.as_mut());
 
