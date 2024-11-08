@@ -4705,7 +4705,7 @@ mod test {
                 round,
             )
             .await;
-            current_builder_state_id = progress_round_with_available_block_info(
+            progress_round_with_available_block_info(
                 &proxy_global_state,
                 available_available_blocks_result.unwrap()[0].clone(),
                 current_builder_state_id,
@@ -4717,14 +4717,12 @@ mod test {
         }
 
         // round 3: test status Rejected with correct error message
-        let mut big_txns = Vec::with_capacity(1);
-        big_txns.push(TestTransaction::new(vec![
+        let big_txns = vec![TestTransaction::new(vec![
             0;
             TEST_PROTOCOL_MAX_BLOCK_SIZE
                 as usize
                 + 1
-        ]));
-        let big_txns = big_txns;
+        ])];
         let _ = proxy_global_state.submit_txns(big_txns.clone()).await;
         for tx in big_txns {
             match proxy_global_state.claim_tx_status(tx.commit()).await {
