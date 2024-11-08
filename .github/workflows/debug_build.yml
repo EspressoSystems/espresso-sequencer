@@ -28,7 +28,6 @@ jobs:
           cargo build --workspace --all-features
 
       - name: Test
-        run: |
-          cargo test --workspace --all-features --no-run
-          cargo test --workspace --all-features --verbose -- --test-threads 2
+        run: 
+          cargo nextest run --workspace --all-features 
         timeout-minutes: 60

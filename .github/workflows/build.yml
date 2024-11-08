@@ -41,11 +41,14 @@ jobs:
       # don't compile with all combinations of features.
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+
+      # Install nextest
+      - name: Install Nextest
+        run: cargo install cargo-nextest
       
       - name: Test
         run: |
-          cargo test --workspace --release --all-features --no-run
-          cargo test --workspace --release --all-features --verbose -- --test-threads 2
+          cargo nextest run --workspace --release --all-features
         timeout-minutes: 60
         
       - name: Generate Documentation
