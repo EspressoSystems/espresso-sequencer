@@ -203,6 +203,7 @@ fn add_custom_migrations(
         .map(|pair| pair.reduce(|_, custom| custom))
 }
 
+#[derive(Clone)]
 pub struct Config {
     #[cfg(feature = "embedded-db")]
     db_opt: SqliteConnectOptions,
@@ -861,6 +862,10 @@ pub mod testing {
                 .args(["-p", &format!("{port}:5432")])
                 .args(["-e", "POSTGRES_PASSWORD=password"]);
 
+            if !persistent {
+                cmd.arg("--rm");
+            }
+
             let output = cmd.arg("postgres").output().unwrap();
             let stdout = str::from_utf8(&output.stdout).unwrap();
             let stderr = str::from_utf8(&output.stderr).unwrap();
@@ -1036,16 +1041,26 @@ pub mod testing {
         fn drop(&mut self) {
             self.stop_postgres();
             if !self.persistent {
-                let output = Command::new("docker")
-                    .args(["container", "rm", self.container_id.as_str()])
+                // Check if container exists
+                let check_output = Command::new("docker")
+                    .args(["container", "inspect", self.container_id.as_str()])
                     .output()
                     .unwrap();
-                assert!(
-                    output.status.success(),
-                    "error removing postgres docker {}: {}",
-                    self.container_id,
-                    str::from_utf8(&output.stderr).unwrap()
-                );
+
+                // If the container exists (inspect command succeeded)
+                if check_output.status.success() {
+                    let remove_output = Command::new("docker")
+                        .args(["container", "rm", self.container_id.as_str()])
+                        .output()
+                        .unwrap();
+
+                    assert!(
+                        remove_output.status.success(),
+                        "error removing postgres docker {}: {}",
+                        self.container_id,
+                        str::from_utf8(&remove_output.stderr).unwrap()
+                    );
+                };
             }
         }
     }

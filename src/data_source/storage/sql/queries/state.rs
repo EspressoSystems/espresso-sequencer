@@ -32,7 +32,7 @@ use jf_merkle_tree::{
     prelude::{MerkleNode, MerkleProof},
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
-use sqlx::{types::BitVec, Decode, FromRow};
+use sqlx::{types::BitVec, Decode};
 use sqlx::{types::JsonValue, ColumnIndex};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -340,7 +340,7 @@ pub(crate) fn build_hash_batch_insert(
 }
 
 // Represents a row in a state table
-#[derive(Debug, Default, Clone, FromRow)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Node {
     pub(crate) path: JsonValue,
     pub(crate) created: i64,
