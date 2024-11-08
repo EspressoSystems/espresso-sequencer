@@ -28,6 +28,8 @@ jobs:
         name: Checkout Repository
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "all_features"
         name: Enable Rust Caching
 
       - name: Build
@@ -62,9 +64,11 @@ jobs:
         name: Checkout Repository
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "all_features"
         name: Enable Rust Caching
 
-      - name: Test with embedded-db
+      - name: Test
         run: |
           cargo test --workspace --release --all-features --no-run
           cargo test --workspace --release --all-features --verbose -- --test-threads 2
@@ -83,7 +87,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
-      - name: Test with postgres
+      - name: Test
         run: |
           cargo test --workspace --release --features "no-storage, testing" --no-run
           cargo test --workspace --release --features "no-storage, testing" --verbose -- --test-threads 2
