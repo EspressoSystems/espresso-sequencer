@@ -4633,18 +4633,6 @@ mod test {
             .submit_txns(txns.clone())
             .await
             .expect("should submit transaction without issue");
-
-        for tx in txns.clone() {
-            match proxy_global_state.claim_tx_status(tx.commit()).await {
-                Ok(txn_status) => {
-                    assert_eq!(txn_status, TransactionStatus::Pending);
-                }
-                e => {
-                    panic!("transaction status should be Pending instead of {:?}", e);
-                }
-            }
-        }
-
         // advance the round
         {
             round = 1;
@@ -4664,6 +4652,18 @@ mod test {
             )
             .await;
         }
+        // tx submitted in round 1 should be pending
+        for tx in txns.clone() {
+            match proxy_global_state.claim_tx_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Pending);
+                }
+                e => {
+                    panic!("transaction status should be Pending instead of {:?}", e);
+                }
+            }
+        }
+
 
         // round 2: test status Sequenced
         let mut txns_2 = Vec::with_capacity(num_transactions);
@@ -4675,28 +4675,6 @@ mod test {
             .submit_txns(txns_2.clone())
             .await
             .expect("should submit transaction without issue");
-        // tx submitted in round 1 should be sequenced
-        for tx in txns.clone() {
-            match proxy_global_state.claim_tx_status(tx.commit()).await {
-                Ok(_txn_status) => {
-                    // matches!(txn_status, TransactionStatus::Sequenced { .. });
-                    // assert_eq!(txn_status, TransactionStatus::Sequenced { block: 2 });
-                }
-                e => {
-                    panic!("transaction status should be Sequenced instead of {:?}", e);
-                }
-            }
-        }
-        for tx in txns_2.clone() {
-            match proxy_global_state.claim_tx_status(tx.commit()).await {
-                Ok(txn_status) => {
-                    assert_eq!(txn_status, TransactionStatus::Pending);
-                }
-                e => {
-                    panic!("transaction status should be Pending instead of {:?}", e);
-                }
-            }
-        }
         // advance the round
         {
             round = 2;
@@ -4724,6 +4702,17 @@ mod test {
                 }
                 e => {
                     panic!("transaction status should be Sequenced instead of {:?}", e);
+                }
+            }
+        }
+        // tx submitted in round 2 should be pending
+        for tx in txns_2.clone() {
+            match proxy_global_state.claim_tx_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Pending);
+                }
+                e => {
+                    panic!("transaction status should be Pending instead of {:?}", e);
                 }
             }
         }
