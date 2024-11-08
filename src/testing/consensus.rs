@@ -46,7 +46,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt::Display, str::FromStr};
-use tokio::{runtime::Handle, task::yield_now};
+use tokio::task::{block_in_place, yield_now};
 use tracing::{info_span, Instrument};
 use url::Url;
 
@@ -303,8 +303,7 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
 
 impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
     fn drop(&mut self) {
-        let handle = Handle::current();
-        handle.block_on(self.shut_down_impl());
+        block_in_place(|| self.shut_down_impl());
     }
 }
 
