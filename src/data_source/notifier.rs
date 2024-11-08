@@ -72,7 +72,7 @@
 
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
-use log::warn;
+use tracing::warn;
 use std::sync::Arc;
 use std::{
     future::IntoFuture,

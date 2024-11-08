@@ -14,7 +14,6 @@
 
 use super::Provider;
 use crate::fetching::Request;
-// use async_compatibility_layer::async_primitives::broadcast::{channel, BroadcastSender};
 use async_trait::async_trait;
 use derivative::Derivative;
 use hotshot_types::traits::node_implementation::NodeType;
