@@ -28,8 +28,6 @@ jobs:
         name: Checkout Repository
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "all_features"
         name: Enable Rust Caching
 
       - name: Build
@@ -64,8 +62,6 @@ jobs:
         name: Checkout Repository
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "all_features"
         name: Enable Rust Caching
 
       - name: Test
