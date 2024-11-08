@@ -4,6 +4,33 @@ pub mod postgres;
 
 use super::espresso_inscription::{EspressoInscription, InscriptionAndChainDetails};
 
+/// [DecodeEspressoInscriptionError] is an error that occurs when attempting to
+/// decode an EspressoInscription from the database.
+#[derive(Debug)]
+pub enum DecodeEspressoInscriptionError {
+    SqlxError(sqlx::Error),
+    AddressDecodeError(String, const_hex::FromHexError),
+}
+
+impl From<sqlx::Error> for DecodeEspressoInscriptionError {
+    fn from(error: sqlx::Error) -> Self {
+        DecodeEspressoInscriptionError::SqlxError(error)
+    }
+}
+
+/// [DecodeChainDetailsError] is an error that occurs when attempting to decode
+/// the chain details from the database.
+#[derive(Debug)]
+pub enum DecodeChainDetailsError {
+    SqlxError(sqlx::Error),
+}
+
+impl From<sqlx::Error> for DecodeChainDetailsError {
+    fn from(error: sqlx::Error) -> Self {
+        DecodeChainDetailsError::SqlxError(error)
+    }
+}
+
 /// [RecordPendingPutInscriptionError] is an error that occurs when attempting
 /// to record a pending put inscription.
 #[derive(Debug)]
@@ -35,8 +62,7 @@ impl From<sqlx::Error> for ResolvePendingPutInscriptionError {
 #[derive(Debug)]
 pub enum RetrievePendingPutInscriptionsError {
     SqlxError(sqlx::Error),
-    TryFromSliceError(core::array::TryFromSliceError),
-    FromHexError(const_hex::FromHexError),
+    DecodeEspressoInscriptionError(DecodeEspressoInscriptionError),
 }
 
 impl From<sqlx::Error> for RetrievePendingPutInscriptionsError {
@@ -45,15 +71,9 @@ impl From<sqlx::Error> for RetrievePendingPutInscriptionsError {
     }
 }
 
-impl From<std::array::TryFromSliceError> for RetrievePendingPutInscriptionsError {
-    fn from(error: std::array::TryFromSliceError) -> Self {
-        RetrievePendingPutInscriptionsError::TryFromSliceError(error)
-    }
-}
-
-impl From<const_hex::FromHexError> for RetrievePendingPutInscriptionsError {
-    fn from(error: const_hex::FromHexError) -> Self {
-        RetrievePendingPutInscriptionsError::FromHexError(error)
+impl From<DecodeEspressoInscriptionError> for RetrievePendingPutInscriptionsError {
+    fn from(error: DecodeEspressoInscriptionError) -> Self {
+        RetrievePendingPutInscriptionsError::DecodeEspressoInscriptionError(error)
     }
 }
 
@@ -75,8 +95,8 @@ impl From<sqlx::Error> for RecordConfirmedInscriptionAndChainDetailsError {
 #[derive(Debug)]
 pub enum RetrieveLatestInscriptionAndChainDetailsError {
     SqlxError(sqlx::Error),
-    TryFromSliceError(core::array::TryFromSliceError),
-    FromHexError(const_hex::FromHexError),
+    DecodeEspressoInscriptionError(DecodeEspressoInscriptionError),
+    DecodeChainDetailsError(DecodeChainDetailsError),
 }
 
 impl From<sqlx::Error> for RetrieveLatestInscriptionAndChainDetailsError {
@@ -85,15 +105,15 @@ impl From<sqlx::Error> for RetrieveLatestInscriptionAndChainDetailsError {
     }
 }
 
-impl From<std::array::TryFromSliceError> for RetrieveLatestInscriptionAndChainDetailsError {
-    fn from(error: std::array::TryFromSliceError) -> Self {
-        RetrieveLatestInscriptionAndChainDetailsError::TryFromSliceError(error)
+impl From<DecodeEspressoInscriptionError> for RetrieveLatestInscriptionAndChainDetailsError {
+    fn from(error: DecodeEspressoInscriptionError) -> Self {
+        RetrieveLatestInscriptionAndChainDetailsError::DecodeEspressoInscriptionError(error)
     }
 }
 
-impl From<const_hex::FromHexError> for RetrieveLatestInscriptionAndChainDetailsError {
-    fn from(error: const_hex::FromHexError) -> Self {
-        RetrieveLatestInscriptionAndChainDetailsError::FromHexError(error)
+impl From<DecodeChainDetailsError> for RetrieveLatestInscriptionAndChainDetailsError {
+    fn from(error: DecodeChainDetailsError) -> Self {
+        RetrieveLatestInscriptionAndChainDetailsError::DecodeChainDetailsError(error)
     }
 }
 

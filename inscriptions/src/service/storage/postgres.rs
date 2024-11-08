@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use sqlx::postgres::PgRow;
 use std::num::NonZero;
 use std::time::SystemTime;
 
@@ -8,13 +9,15 @@ use sqlx::Row;
 use crate::service::espresso_inscription::{
     ChainDetails, EspressoInscription, InscriptionAndChainDetails,
 };
+use crate::service::storage::DecodeEspressoInscriptionError;
 use crate::service::ESPRESSO_INSCRIPTION_MESSAGE;
 
 use super::{
-    InscriptionPersistence, RecordConfirmedInscriptionAndChainDetailsError,
-    RecordLastReceivedBlockError, RecordPendingPutInscriptionError,
-    ResolvePendingPutInscriptionError, RetrieveLastReceivedBlockError,
-    RetrieveLatestInscriptionAndChainDetailsError, RetrievePendingPutInscriptionsError,
+    DecodeChainDetailsError, InscriptionPersistence,
+    RecordConfirmedInscriptionAndChainDetailsError, RecordLastReceivedBlockError,
+    RecordPendingPutInscriptionError, ResolvePendingPutInscriptionError,
+    RetrieveLastReceivedBlockError, RetrieveLatestInscriptionAndChainDetailsError,
+    RetrievePendingPutInscriptionsError,
 };
 
 pub struct PostgresPersistence {
@@ -24,6 +27,38 @@ pub struct PostgresPersistence {
 impl PostgresPersistence {
     pub fn new(pool: sqlx::PgPool) -> Self {
         Self { pool }
+    }
+}
+
+impl PostgresPersistence {
+    /// [inscription_from_row] converts a row from the database into an
+    /// [EspressoInscription].
+    fn inscription_from_row(
+        &self,
+        row: &PgRow,
+    ) -> Result<EspressoInscription, DecodeEspressoInscriptionError> {
+        let ins_address_string: String = row.try_get("ins_address")?;
+        let ins_time: i64 = row.try_get("ins_time")?;
+
+        Ok(EspressoInscription {
+            address: ins_address_string.parse().map_err(|err| {
+                DecodeEspressoInscriptionError::AddressDecodeError(ins_address_string, err)
+            })?,
+            message: ESPRESSO_INSCRIPTION_MESSAGE.to_string(),
+            time: ins_time as u64,
+        })
+    }
+
+    /// [chain_details_from_row] converts a row from the database into a
+    /// [ChainDetails].
+    fn chain_details_from_row(&self, row: &PgRow) -> Result<ChainDetails, DecodeChainDetailsError> {
+        let block_height: i64 = row.try_get("chain_block_height")?;
+        let txn_offset: i64 = row.try_get("chain_txn_offset")?;
+
+        Ok(ChainDetails {
+            block: block_height as u64,
+            offset: txn_offset as u64,
+        })
     }
 }
 
@@ -104,13 +139,7 @@ impl InscriptionPersistence for PostgresPersistence {
 
         while let Some(row) = rows.next().await {
             let row = row?;
-            let ins_address_string: String = row.try_get("ins_address")?;
-            let ins_time: i64 = row.try_get("ins_time")?;
-            let inscription = EspressoInscription {
-                address: ins_address_string.parse()?,
-                message: ESPRESSO_INSCRIPTION_MESSAGE.to_string(),
-                time: ins_time as u64,
-            };
+            let inscription = self.inscription_from_row(&row)?;
 
             put_inscriptions.push(inscription);
         }
@@ -131,7 +160,7 @@ impl InscriptionPersistence for PostgresPersistence {
             .unwrap()
             .as_secs();
 
-        let mut conn = self.pool.begin().await?;
+        let mut transaction = self.pool.begin().await?;
 
         let store_confirmed_inscription_result = sqlx::query("INSERT INTO confirmed_inscriptions (ins_hash, ins_address, ins_time, chain_block_height, chain_txn_offset) VALUES ($1, $2, $3, $4, $5)")
             .bind(&inscription_and_block_details.inscription.eip712_hash_struct().0[..])
@@ -139,7 +168,7 @@ impl InscriptionPersistence for PostgresPersistence {
             .bind(inscription_and_block_details.inscription.time as i64)
             .bind(inscription_and_block_details.chain_details.block as i64)
             .bind(inscription_and_block_details.chain_details.offset as i64)
-            .execute(&mut *conn)
+            .execute(&mut *transaction)
             .await?;
 
         if store_confirmed_inscription_result.rows_affected() != 1 {
@@ -151,26 +180,67 @@ impl InscriptionPersistence for PostgresPersistence {
             );
         }
 
-        // If this fails... is that a problem?  It depends on the nature of the
-        // problem
-        let store_event_result = sqlx::query("INSERT INTO pending_put_inscriptions_event (ins_id, event_type, event_time) VALUES((SELECT id FROM pending_put_inscription_request WHERE ins_hash = $1), 'confirmed', $2)")
-            .bind(&inscription_and_block_details.inscription.eip712_hash_struct().0[..])
-            .bind(now as i64)
-            .execute(&mut *conn)
-            .await?;
+        {
+            // Check to see if there is a pending put inscription that
+            // corresponds to the inscription hash, if there isn't, nothing
+            // else needs to be done, if there is, let's record an event
+            // for it.
+            //
+            // This is done as a separate step, because apparently if an
+            // INSERT fails, the transaction is automatically rolled back.
+            let select_result =
+                sqlx::query("SELECT id FROM pending_put_inscription_request WHERE ins_hash = $1")
+                    .bind(
+                        &inscription_and_block_details
+                            .inscription
+                            .eip712_hash_struct()
+                            .0[..],
+                    )
+                    .fetch_optional(&mut *transaction)
+                    .await?;
 
-        if store_event_result.rows_affected() != 1 {
-            // It's not the end of the world if this happens, it just implies
-            // that there is no corresponding pending put inscription entry.
-            // so we'll just log this and move on.
-            tracing::warn!(
-                "Failed to store event for confirmed inscription: {:?}",
-                inscription_and_block_details
-            );
+            if select_result.is_none() {
+                // There is no corresponding pending put inscription, so we
+                // don't need to do anything. so we commit the transaction
+                // and early return
+                transaction.commit().await?;
+                return Ok(());
+            }
         }
 
+        {
+            // We **should** have eliminated the possibility of this failing
+            // to write due to missing a correspond pending put inscription
+            // request.
+            let store_event_result = sqlx::query("INSERT INTO pending_put_inscriptions_event (ins_id, event_type, event_time) VALUES((SELECT id FROM pending_put_inscription_request WHERE ins_hash = $1), 'confirmed', $2)")
+            .bind(&inscription_and_block_details.inscription.eip712_hash_struct().0[..])
+            .bind(now as i64)
+            .execute(&mut *transaction)
+            .await;
+
+            match store_event_result {
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to store event for confirmed inscription: {:?}, with err: {}",
+                        inscription_and_block_details,
+                        e,
+                    );
+                }
+                Ok(store_event_result) => {
+                    if store_event_result.rows_affected() != 1 {
+                        // It's not the end of the world if this happens, it just implies
+                        // that there is no corresponding pending put inscription entry.
+                        // so we'll just log this and move on.
+                        tracing::warn!(
+                            "Failed to store event for confirmed inscription: {:?}",
+                            inscription_and_block_details
+                        );
+                    }
+                }
+            }
+        }
         // commit the result
-        conn.commit().await?;
+        transaction.commit().await?;
 
         Ok(())
     }
@@ -192,19 +262,8 @@ impl InscriptionPersistence for PostgresPersistence {
 
         while let Some(row) = rows.next().await {
             let row = row?;
-            let ins_address_string: String = row.try_get("ins_address")?;
-            let ins_time: i64 = row.try_get("ins_time")?;
-            let inscription = EspressoInscription {
-                address: ins_address_string.parse()?,
-                message: ESPRESSO_INSCRIPTION_MESSAGE.to_string(),
-                time: ins_time as u64,
-            };
-            let block_height: i64 = row.try_get("chain_block_height")?;
-            let txn_offset: i64 = row.try_get("chain_txn_offset")?;
-            let chain_details = ChainDetails {
-                block: block_height as u64,
-                offset: txn_offset as u64,
-            };
+            let inscription = self.inscription_from_row(&row)?;
+            let chain_details = self.chain_details_from_row(&row)?;
 
             inscription_and_chain_details.push(InscriptionAndChainDetails {
                 inscription,
