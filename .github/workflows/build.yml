@@ -43,11 +43,25 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
+  test-sqlite:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
       - name: Test with embedded-db
         run: |
           cargo test --workspace --release --all-features --no-run
           cargo test --workspace --release --all-features --verbose -- --test-threads 2
         timeout-minutes: 60
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
 
       - name: Test with postgres
         run: |
@@ -55,14 +69,24 @@ jobs:
           cargo test --workspace --release --features "no-storage, testing" --verbose -- --test-threads 2
         timeout-minutes: 60
 
+  generate-docs:
+    runs-on: ubuntu-latest
+    needs: [build, test-sqlite, test-postgres]
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
       - name: Generate Documentation
         run: |
           cargo doc --no-deps --lib --release --all-features
           echo '<meta http-equiv="refresh" content="0; url=hotshot_query_service">' > target/doc/index.html
 
-      - name: Deploy Documentation
-        uses: peaceiris/actions-gh-pages@v4
-        if: ${{ github.ref == 'refs/heads/main' }}
+  deploy-docs:
+    runs-on: ubuntu-latest
+    needs: [generate-docs]
+    if: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./target/doc
