@@ -43,8 +43,19 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
+      - name: Generate Documentation
+        run: |
+          cargo doc --no-deps --lib --release --all-features
+          echo '<meta http-equiv="refresh" content="0; url=hotshot_query_service">' > target/doc/index.html
+      - name: Deploy Documentation
+        uses: peaceiris/actions-gh-pages@v4
+        if: ${{ github.ref == 'refs/heads/main' }}
+
   test-sqlite:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+      RUST_LOG: info
     needs: [build]
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +72,9 @@ jobs:
 
   test-postgres:
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+      RUST_LOG: info
     needs: [build]
     steps:
       - uses: actions/checkout@v4
@@ -74,29 +88,3 @@ jobs:
           cargo test --workspace --release --features "no-storage, testing" --no-run
           cargo test --workspace --release --features "no-storage, testing" --verbose -- --test-threads 2
         timeout-minutes: 60
-
-  generate-docs:
-    runs-on: ubuntu-latest
-    needs: [build]
-    steps:
-      - uses: actions/checkout@v4
-        name: Checkout Repository
-
-      - uses: Swatinem/rust-cache@v2
-        name: Enable Rust Caching
-
-      - name: Generate Documentation
-        run: |
-          cargo doc --no-deps --lib --release --all-features
-          echo '<meta http-equiv="refresh" content="0; url=hotshot_query_service">' > target/doc/index.html
-
-  deploy-docs:
-    runs-on: ubuntu-latest
-    needs: [generate-docs]
-    if: ${{ github.ref == 'refs/heads/main' }}
-    steps:
-      - uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
-          cname: tide-disco.docs.espressosys.com

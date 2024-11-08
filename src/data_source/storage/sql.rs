@@ -860,9 +860,7 @@ pub mod testing {
                 .arg("-d")
                 .args(["-p", &format!("{port}:5432")])
                 .args(["-e", "POSTGRES_PASSWORD=password"]);
-            if !persistent {
-                cmd.arg("--rm");
-            }
+
             let output = cmd.arg("postgres").output().unwrap();
             let stdout = str::from_utf8(&output.stdout).unwrap();
             let stderr = str::from_utf8(&output.stderr).unwrap();
