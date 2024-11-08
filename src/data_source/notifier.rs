@@ -78,6 +78,7 @@ use std::{
     future::IntoFuture,
     sync::atomic::{AtomicBool, Ordering},
 };
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{oneshot, Mutex};
 
 /// A predicate on a type `<T>`.
@@ -162,15 +163,18 @@ pub struct Notifier<T> {
     // concurrent subscriptions go through the high-throughput multi-producer stream implementation,
     // and do not contend for the lock on `FilterSender::subscribers`.
     #[derivative(Debug = "ignore")]
-    pending: Arc<Mutex<Vec<Subscriber<T>>>>,
+    pending: Mutex<UnboundedReceiver<Subscriber<T>>>,
+    #[derivative(Debug = "ignore")]
+    subscribe: UnboundedSender<Subscriber<T>>,
 }
 
 impl<T> Notifier<T> {
     pub fn new() -> Self {
-        let pending = Arc::new(Mutex::new(Vec::new()));
+        let (subscribe, pending) = unbounded_channel();
         Self {
             active: Default::default(),
-            pending,
+            pending: Mutex::new(pending),
+            subscribe,
         }
     }
 }
@@ -189,8 +193,11 @@ impl<T: Clone> Notifier<T> {
         // just sent it its message. Remove these from the `active` list.
         active.retain(|subscriber| !subscriber.is_closed());
 
-        // Promote pending subscribers to active and send them the
-        for mut subscriber in self.pending.lock().await.drain(..) {
+        // Promote pending subscribers to active and send them the message.
+        // There is no contention here since we only have one receiver. This is what
+        // `async-compatibility-layer` did internally.
+        let mut pending_guard = self.pending.lock().await;
+        while let Ok(mut subscriber) = pending_guard.try_recv() {
             subscriber.notify(msg);
             if !subscriber.is_closed() {
                 // If that message didn't satisfy the subscriber, or it was dropped, at it to the
@@ -198,6 +205,7 @@ impl<T: Clone> Notifier<T> {
                 active.push(subscriber);
             }
         }
+        drop(pending_guard);
     }
 }
 
@@ -225,7 +233,7 @@ impl<T> Notifier<T> {
         // fails when the receive end of the channel has been dropped, which means the notifier has
         // been dropped, and thus the send end of the oneshot handle has been dropped. The caller
         // will discover this when they try to await a notification and get [`None`].
-        self.pending.lock().await.push(subscriber);
+        let _ = self.subscribe.send(subscriber);
         WaitFor { handle, receiver }
     }
 }
