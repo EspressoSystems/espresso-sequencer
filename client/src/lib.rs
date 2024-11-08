@@ -63,22 +63,21 @@ impl SequencerClient {
         block: Option<u64>,
     ) -> anyhow::Result<FeeAmount> {
         // Get the block height to query at, defaulting to the latest block.
-        let block = if let Some(block) = block {
-            block - 1
-        } else {
-            self.0
-                .get::<u64>("node/block-height")
-                .send()
-                .await
-                .context("getting block height")?
-                - 1
+        let mut block = match block {
+            Some(block) => block,
+            None => self.get_height().await?,
         };
-
+        // As of block zero the state is empty, and the balance will be zero.
+        if block == 0 {
+            return Ok(0.into());
+        }
+        // Block is non-zero, we can safely decrement to query the state as of the previous block.
+        block -= 1;
         // Download the Merkle path for this fee account at the specified block height. Transient errors
         // are possible (for example, if we are fetching from the latest block, the block height might
-        // get incremented slightly before the state becomes available) so retry a few times.
+        // get incremented shortly before the state becomes available) so retry a few times.
         let mut retry = 0;
-        let max_retries = 5;
+        let max_retries = 10;
         let proof = loop {
             tracing::debug!(%address, block, retry, "fetching Espresso balance");
             match self

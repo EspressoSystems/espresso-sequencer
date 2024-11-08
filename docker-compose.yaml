@@ -63,6 +63,8 @@ services:
       - ACCOUNT_INDEX=$ESPRESSO_BUILDER_ETH_ACCOUNT_INDEX
       - AMOUNT=1000000000000000000
       - CONFIRMATIONS=1
+      - RUST_LOG
+      - RUST_LOG_FORMAT
     depends_on:
       deploy-sequencer-contracts:
         condition: service_completed_successfully
