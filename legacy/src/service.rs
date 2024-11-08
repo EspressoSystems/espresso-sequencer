@@ -1588,11 +1588,13 @@ mod test {
     };
     use hotshot_builder_api::v0_1::data_source::AcceptsTxnSubmits;
     use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
+    use hotshot_builder_api::v0_2::builder::TransactionStatus;
     use hotshot_example_types::{
         block_types::{TestBlockPayload, TestMetadata, TestTransaction},
         node_types::{TestTypes, TestVersions},
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::{
         data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
         message::Proposal,
@@ -4563,7 +4565,8 @@ mod test {
     async fn test_get_txn_status() {
         let (proxy_global_state, _, _da_proposal_sender, _quorum_proposal_sender, _) =
             setup_builder_for_test();
-
+        tracing::error!("start===========");
+        // round 0: test status Pending
         let num_transactions = 10;
         let mut txns = Vec::with_capacity(num_transactions);
         for index in 0..num_transactions {
@@ -4575,15 +4578,59 @@ mod test {
             .await
             .expect("should submit transaction without issue");
 
-        // Test status Pending
-        for tx in txns {
-            let x = proxy_global_state.claim_tx_status(tx.commit()).await;
-            tracing::debug!("status of tx {:?} is {:?}", tx, x);
+        for tx in txns.clone() {
+            match proxy_global_state.claim_tx_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Pending);
+                }
+                e => {
+                    panic!("transaction status should be Pending instead of {:?}", e);
+                }
+            }
+            
         }
 
         // Test status Sequenced
-        // Test status Rejected with correct error message
+        
+
+        // round 2: test status Rejected with correct error message
+        let mut big_txns = Vec::with_capacity(num_transactions + 1);
+        for index in 0..(num_transactions - 1) {
+            big_txns.push(TestTransaction::new(vec![(num_transactions + index) as u8]));
+        }
+        big_txns.push(TestTransaction::new(vec![0; TEST_PROTOCOL_MAX_BLOCK_SIZE as usize + 1]));
+        let big_txns = big_txns;
+        let _ = proxy_global_state
+            .submit_txns(big_txns.clone())
+            .await;
+        for tx in big_txns {
+            match proxy_global_state.claim_tx_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    if tx.minimum_block_size() > TEST_PROTOCOL_MAX_BLOCK_SIZE {
+                        matches!(txn_status, TransactionStatus::Rejected { .. });
+                    } else {
+                        assert_eq!(txn_status, TransactionStatus::Pending);
+                    }
+                }
+                e => {
+                    panic!("transaction status should be a valid status instead of {:?}", e);
+                }
+            }
+            
+        }
+
+
         // Test status Unknown when the txn is unknown
+        let unknown_tx = TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
+            match proxy_global_state.claim_tx_status(unknown_tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Unknown);
+                }
+                e => {
+                    panic!("transaction status should be Unknown instead of {:?}", e);
+                }
+            }
+
     }
 
     #[test]
