@@ -1034,15 +1034,6 @@ pub mod testing {
                 );
             }
         }
-
-        #[cfg(feature = "embedded-db")]
-        pub fn gen_db_name() -> String {
-            let mut rng = rand::thread_rng();
-            let random: String = (0..10)
-                .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
-                .collect();
-            format!("tmp-db-{random}.db")
-        }
     }
 
     #[cfg(not(feature = "embedded-db"))]
