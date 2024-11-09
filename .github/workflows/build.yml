@@ -61,7 +61,6 @@ jobs:
     env:
       RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
-    needs: [build]
     steps:
       - uses: actions/checkout@v4
         name: Checkout Repository
@@ -80,7 +79,6 @@ jobs:
     env:
       RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
-    needs: [build]
     steps:
       - uses: actions/checkout@v4
         name: Checkout Repository

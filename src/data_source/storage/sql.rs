@@ -812,7 +812,6 @@ pub mod testing {
         container_id: String,
         #[cfg(feature = "embedded-db")]
         db_path: std::path::PathBuf,
-        #[allow(dead_code)]
         persistent: bool,
     }
     impl TmpDb {
@@ -824,17 +823,10 @@ pub mod testing {
                 .tempfile()
                 .unwrap();
 
-            if persistent {
-                let (_, db_path) = file.keep().unwrap();
-
-                return Self {
-                    db_path,
-                    persistent,
-                };
-            }
+            let (_, db_path) = file.keep().unwrap();
 
             Self {
-                db_path: file.into_temp_path().to_path_buf(),
+                db_path,
                 persistent,
             }
         }
@@ -1040,6 +1032,15 @@ pub mod testing {
     impl Drop for TmpDb {
         fn drop(&mut self) {
             self.stop_postgres();
+        }
+    }
+
+    #[cfg(feature = "embedded-db")]
+    impl Drop for TmpDb {
+        fn drop(&mut self) {
+            if !self.persistent {
+                std::fs::remove_file(self.db_path.clone()).unwrap();
+            }
         }
     }
 

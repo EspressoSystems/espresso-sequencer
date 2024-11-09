@@ -52,7 +52,7 @@ use std::{num::NonZeroUsize, str::FromStr, time::Duration};
 use url::Url;
 use vbs::version::StaticVersionType;
 
-const NUM_NODES: usize = 5;
+const NUM_NODES: usize = 2;
 
 #[derive(Parser)]
 struct Options {
