@@ -1049,28 +1049,6 @@ pub mod testing {
     impl Drop for TmpDb {
         fn drop(&mut self) {
             self.stop_postgres();
-            if !self.persistent {
-                // Check if container exists
-                let check_output = Command::new("docker")
-                    .args(["container", "inspect", self.container_id.as_str()])
-                    .output()
-                    .unwrap();
-
-                // If the container exists (inspect command succeeded)
-                if check_output.status.success() {
-                    let remove_output = Command::new("docker")
-                        .args(["container", "rm", self.container_id.as_str()])
-                        .output()
-                        .unwrap();
-
-                    assert!(
-                        remove_output.status.success(),
-                        "error removing postgres docker {}: {}",
-                        self.container_id,
-                        str::from_utf8(&remove_output.stderr).unwrap()
-                    );
-                };
-            }
         }
     }
 
