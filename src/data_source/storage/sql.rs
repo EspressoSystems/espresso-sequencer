@@ -812,6 +812,7 @@ pub mod testing {
         container_id: String,
         #[cfg(feature = "embedded-db")]
         db_path: std::path::PathBuf,
+        #[allow(dead_code)]
         persistent: bool,
     }
     impl TmpDb {
