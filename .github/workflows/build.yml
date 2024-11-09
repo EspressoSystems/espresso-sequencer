@@ -39,7 +39,7 @@ jobs:
       # Run Clippy on all targets. The lint workflow doesn't run Clippy on tests, because the tests
       # don't compile with all combinations of features.
       - name: Clippy(all-features)
-        run: cargo clippy --workspace --all-features --all-targets -- -D 
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
         
       - name: Clippy(no-storage)
         run: cargo clippy --workspace --features no-storage --all-targets -- -D warnings
