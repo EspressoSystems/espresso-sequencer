@@ -11,25 +11,17 @@ on:
       - release-*
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
-     strategy:
-      matrix:
-        features:
-          - "--all-features"
-          - "--features no-storage"
-          - "--features \"no-storage, embedded-db\""
     env:
       RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
     steps:
-      - uses: styfle/cancel-workflow-action@0.12.1
-        name: Cancel Outdated Builds
-        with:
-          all_but_latest: true
-          access_token: ${{ github.token }}
-
       - uses: actions/checkout@v4
         name: Checkout Repository
 
@@ -46,8 +38,11 @@ jobs:
 
       # Run Clippy on all targets. The lint workflow doesn't run Clippy on tests, because the tests
       # don't compile with all combinations of features.
-      - name: Clippy all-features
-        run: cargo clippy --workspace ${{ matrix.features }} --all-targets -- -D warnings
+      - name: Clippy(all-features)
+        run: cargo clippy --workspace --all-features --all-targets -- -D 
+        
+      - name: Clippy(no-storage)
+        run: cargo clippy --workspace --features no-storage --all-targets -- -D warnings
 
       - name: Generate Documentation
         run: |
