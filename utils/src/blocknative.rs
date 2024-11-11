@@ -1,7 +1,7 @@
 //! Copy from <https://github.com/gakonst/ethers-rs/blob/master/ethers-middleware/src/gas_oracle/blocknative.rs>
 //! which is unmaintained and out-of-sync with the latest blocknative feed
 //!
-//! TDOO: revisit this or remove this when switching to `alloy-rs`
+//! TODO: revisit this or remove this when switching to `alloy-rs`
 use async_trait::async_trait;
 use ethers::{
     middleware::gas_oracle::{from_gwei_f64, GasCategory, GasOracle, GasOracleError, Result},
