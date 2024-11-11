@@ -2,6 +2,9 @@ use std::num::NonZero;
 pub mod in_memory;
 pub mod postgres;
 
+use espresso_types::SeqTypes;
+use hotshot_query_service::availability::BlockQueryData;
+
 use super::espresso_inscription::{EspressoInscription, InscriptionAndChainDetails};
 
 /// [DecodeEspressoInscriptionError] is an error that occurs when attempting to
@@ -208,11 +211,14 @@ pub trait InscriptionPersistence {
     /// blocks.
     async fn record_last_received_block(
         &self,
-        block: u64,
+        block: &BlockQueryData<SeqTypes>,
     ) -> Result<(), RecordLastReceivedBlockError>;
 
-    /// [retrieve_last_received_block] retrieves the last received block height
-    /// from the Espresso Block Chain.  This is used to help bootstrap the
-    /// block stream to ensure that we do not miss processing any blocks.
-    async fn retrieve_last_received_block(&self) -> Result<u64, RetrieveLastReceivedBlockError>;
+    /// [retrieve_last_received_block] retrieves the last received block height,
+    /// and number of transactions from the Espresso Block Chain.  This is used
+    /// to help bootstrap the block stream to ensure that we do not miss
+    /// processing any blocks.
+    async fn retrieve_last_received_block(
+        &self,
+    ) -> Result<(u64, u64), RetrieveLastReceivedBlockError>;
 }

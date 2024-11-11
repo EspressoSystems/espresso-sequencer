@@ -4,10 +4,7 @@ use super::{
     client_id::ClientId,
     client_message::InternalClientMessage,
     data_state::DataState,
-    espresso_inscription::{
-        EspressoInscription, HexSignature, InscriptionAndChainDetails,
-        InscriptionAndSignatureFromService,
-    },
+    espresso_inscription::{EspressoInscription, HexSignature, InscriptionAndSignatureFromService},
     server_message::ServerMessage,
     storage::InscriptionPersistence,
     ESPRESSO_EIP712_DOMAIN,
@@ -359,7 +356,7 @@ impl Drop for InternalClientMessageProcessingTask {
 /// clients that are connected.
 async fn handle_received_inscription<K>(
     client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
-    inscription_and_chain_details: InscriptionAndChainDetails,
+    server_message: ServerMessage,
 ) where
     K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
 {
@@ -373,16 +370,11 @@ async fn handle_received_inscription<K>(
             .collect()
     };
 
-    let arc_inscription_and_chain_details = Arc::new(inscription_and_chain_details);
-    // We collect the results of sending the latest block to the clients.
-
     let client_send_result_future = client_senders.into_iter().map(|(client_id, sender)| {
-        let arc_inscription = arc_inscription_and_chain_details.clone();
+        let server_message = server_message.clone();
         async move {
             let mut sender = sender;
-            let send_result = sender
-                .send(ServerMessage::LatestInscription(arc_inscription))
-                .await;
+            let send_result = sender.send(server_message).await;
 
             (client_id, send_result)
         }
@@ -407,11 +399,11 @@ async fn handle_received_inscription<K>(
 
 /// [ProcessDistributeInscriptionHandlingTask] represents an async task for
 /// processing the incoming [Inscription] and distributing them to all clients.
-pub struct ProcessDistributeInscriptionHandlingTask {
+pub struct ProcessDistributeServerMessageHandlingTask {
     pub task_handle: Option<JoinHandle<()>>,
 }
 
-impl ProcessDistributeInscriptionHandlingTask {
+impl ProcessDistributeServerMessageHandlingTask {
     /// [new] creates a new [ProcessDistributeInscriptionHandlingTask] with the
     /// given client_thread_state and block_detail_receiver.
     ///
@@ -420,16 +412,16 @@ impl ProcessDistributeInscriptionHandlingTask {
     /// returned state.
     pub fn new<S, K>(
         client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
-        inscription_receiver: S,
+        server_message_receiver: S,
     ) -> Self
     where
-        S: Stream<Item = InscriptionAndChainDetails> + Send + Sync + Unpin + 'static,
+        S: Stream<Item = ServerMessage> + Send + Sync + Unpin + 'static,
         K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
         let task_handle =
-            async_std::task::spawn(Self::process_distribute_inscription_handling_stream(
+            async_std::task::spawn(Self::process_distribute_server_message_handling_stream(
                 client_thread_state.clone(),
-                inscription_receiver,
+                server_message_receiver,
             ));
 
         Self {
@@ -437,19 +429,19 @@ impl ProcessDistributeInscriptionHandlingTask {
         }
     }
 
-    /// [process_distribute_inscription_handling_stream] is a function that
-    /// processes the the [Stream] of incoming [EspressoInscription] and
-    /// distributes them to all connected clients.
-    async fn process_distribute_inscription_handling_stream<S, K>(
+    /// [process_distribut_server_message_handling_stream] is a function that
+    /// processes the the [Stream] of incoming [ServerMessage] and distributes
+    /// them to all connected clients.
+    async fn process_distribute_server_message_handling_stream<S, K>(
         client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
         mut stream: S,
     ) where
-        S: Stream<Item = InscriptionAndChainDetails> + Unpin,
+        S: Stream<Item = ServerMessage> + Unpin,
         K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
     {
         loop {
-            let inscription_and_block_details = match stream.next().await {
-                Some(inscription_and_block_details) => inscription_and_block_details,
+            let server_message = match stream.next().await {
+                Some(server_message) => server_message,
                 None => {
                     tracing::error!(
                         "block detail stream closed.  shutting down client handling stream.",
@@ -458,15 +450,14 @@ impl ProcessDistributeInscriptionHandlingTask {
                 }
             };
 
-            handle_received_inscription(client_thread_state.clone(), inscription_and_block_details)
-                .await
+            handle_received_inscription(client_thread_state.clone(), server_message).await
         }
     }
 }
 
 /// [drop] implementation for [ProcessDistributeInscriptionHandlingTask] that will
 /// cancel the task if it is still running.
-impl Drop for ProcessDistributeInscriptionHandlingTask {
+impl Drop for ProcessDistributeServerMessageHandlingTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
@@ -682,7 +673,9 @@ pub mod tests {
     };
     use alloy::signers::local::PrivateKeySigner;
     use async_std::sync::RwLock;
+    use espresso_types::SeqTypes;
     use futures::channel::mpsc::{self, Sender};
+    use hotshot_query_service::availability::BlockQueryData;
     use std::{num::NonZero, sync::Arc};
 
     pub fn create_test_client_thread_state() -> ClientThreadState<Sender<ServerMessage>> {
@@ -734,14 +727,14 @@ pub mod tests {
 
         async fn record_last_received_block(
             &self,
-            _block: u64,
+            _block: &BlockQueryData<SeqTypes>,
         ) -> Result<(), RecordLastReceivedBlockError> {
             todo!();
         }
 
         async fn retrieve_last_received_block(
             &self,
-        ) -> Result<u64, RetrieveLastReceivedBlockError> {
+        ) -> Result<(u64, u64), RetrieveLastReceivedBlockError> {
             todo!();
         }
     }

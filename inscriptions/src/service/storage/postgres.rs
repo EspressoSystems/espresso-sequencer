@@ -1,4 +1,6 @@
+use espresso_types::{Payload, SeqTypes};
 use futures::StreamExt;
+use hotshot_query_service::availability::{BlockQueryData, QueryablePayload};
 use sqlx::postgres::PgRow;
 use std::num::NonZero;
 use std::time::SystemTime;
@@ -276,17 +278,24 @@ impl InscriptionPersistence for PostgresPersistence {
 
     async fn record_last_received_block(
         &self,
-        block: u64,
-    ) -> Result<(), RecordLastReceivedBlockError> {
-        tracing::debug!("Recording last received block: {}", block);
+        block: &BlockQueryData<SeqTypes>,
+    ) -> Result<(), RecordLastReceivedBlockError>
+    where
+        Payload: QueryablePayload<SeqTypes>,
+    {
+        let block_height = block.header().height();
+        let new_transactions = block.payload().enumerate(block.metadata()).count();
+
+        tracing::debug!("Recording last received block: {}", block_height);
         let mut conn = self.pool.begin().await?;
 
         let result = sqlx::query(
             // Update the last read block if the new block number is greater than
             // the current block number.
-            "UPDATE last_read_block SET block_number = $1 WHERE id = 0 AND $1 > block_number",
+            "UPDATE last_read_block SET block_number = $1, num_transaction = num_transaction + $2 WHERE id = 0 AND $1 > block_number",
         )
-        .bind(block as i64)
+        .bind(block_height as i64)
+        .bind(new_transactions as i64)
         .execute(&mut *conn)
         .await?;
 
@@ -296,7 +305,7 @@ impl InscriptionPersistence for PostgresPersistence {
             // already stored block height.
             panic!(
                 "attempt to record last block {}: it is not greater than the previous last read block",
-                block
+                block_height
             );
         }
 
@@ -306,17 +315,20 @@ impl InscriptionPersistence for PostgresPersistence {
         Ok(())
     }
 
-    async fn retrieve_last_received_block(&self) -> Result<u64, RetrieveLastReceivedBlockError> {
+    async fn retrieve_last_received_block(
+        &self,
+    ) -> Result<(u64, u64), RetrieveLastReceivedBlockError> {
         tracing::debug!("Retrieving last received block");
         // We shouldn't need a transaction, as we're just performing a read
         let mut conn = self.pool.acquire().await?;
 
-        let row = sqlx::query("SELECT block_number FROM last_read_block")
+        let row = sqlx::query("SELECT block_number, num_transaction FROM last_read_block")
             .fetch_one(&mut *conn)
             .await?;
 
         let block_number: i64 = row.try_get("block_number")?;
+        let num_transaction: i64 = row.try_get("num_transaction")?;
 
-        Ok(block_number as u64)
+        Ok((block_number as u64, num_transaction as u64))
     }
 }

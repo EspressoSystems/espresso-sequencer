@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
-use super::{client_id::ClientId, espresso_inscription::InscriptionAndChainDetails};
+use super::{
+    client_id::ClientId, data_state::Stats, espresso_inscription::InscriptionAndChainDetails,
+};
 use serde::{Deserialize, Serialize};
 
 /// [ServerMessage] represents the messages that the server can send to the
 /// client for a response.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerMessage {
     /// This allows the client to know what client_id they have been assigned
     YouAre(ClientId),
@@ -18,6 +20,10 @@ pub enum ServerMessage {
     /// connecting to the WebSocket.  It immediately relays to the user
     /// the current list of inscriptions that should be displayed.
     InscriptionSnapshot(Arc<Vec<InscriptionAndChainDetails>>),
+
+    /// Stats is a message that is meant to show the current stats of the
+    /// Block Chain.
+    Stats(Stats),
 }
 
 #[cfg(test)]

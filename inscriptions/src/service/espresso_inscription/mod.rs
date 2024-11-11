@@ -14,6 +14,9 @@ sol! {
     }
 }
 
+/// [HexSignature] is a wrapper around the [Signature] type so that the
+/// signature can be encoded and decoded from a hex representation
+/// directly.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct HexSignature(pub Signature);
 

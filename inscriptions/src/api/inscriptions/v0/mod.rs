@@ -554,7 +554,7 @@ impl ProcessProduceBlockStreamTask {
         Persistence: InscriptionPersistence,
     {
         let backoff_params = BackoffParams::default();
-        let mut delay = Duration::ZERO;
+        let mut delay = Duration::from_millis(50);
 
         for attempt in 1..=100 {
             let block_height = persistence
@@ -562,7 +562,7 @@ impl ProcessProduceBlockStreamTask {
                 .await
                 .ok()
                 // we want to start **after** the last block we received.
-                .map(|height| std::cmp::max(height + 1, minimum_start_block_height));
+                .map(|(height, _)| std::cmp::max(height + 1, minimum_start_block_height));
 
             let block_stream_result = block_stream_receiver.retrieve_stream(block_height).await;
 

@@ -3,6 +3,9 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use espresso_types::SeqTypes;
+use hotshot_query_service::availability::BlockQueryData;
+
 use crate::service::espresso_inscription::{EspressoInscription, InscriptionAndChainDetails};
 
 use super::{
@@ -18,6 +21,7 @@ use super::{
 pub struct HeightCachingInMemory<Persistence> {
     persistence: Persistence,
     last_received_block: AtomicU64,
+    num_transactions: AtomicU64,
 }
 
 impl<Persistence> HeightCachingInMemory<Persistence> {
@@ -26,6 +30,7 @@ impl<Persistence> HeightCachingInMemory<Persistence> {
         Self {
             persistence: storage,
             last_received_block: AtomicU64::new(0),
+            num_transactions: AtomicU64::new(0),
         }
     }
 }
@@ -80,27 +85,36 @@ where
 
     async fn record_last_received_block(
         &self,
-        block: u64,
+        block: &BlockQueryData<SeqTypes>,
     ) -> Result<(), RecordLastReceivedBlockError> {
         let result = self.persistence.record_last_received_block(block).await;
 
         if result.is_ok() {
-            self.last_received_block.store(block, Ordering::SeqCst);
+            self.last_received_block
+                .store(block.header().height(), Ordering::SeqCst);
         }
 
         result
     }
 
-    async fn retrieve_last_received_block(&self) -> Result<u64, RetrieveLastReceivedBlockError> {
+    async fn retrieve_last_received_block(
+        &self,
+    ) -> Result<(u64, u64), RetrieveLastReceivedBlockError> {
         if self.last_received_block.load(Ordering::SeqCst) != 0 {
-            return Ok(self.last_received_block.load(Ordering::SeqCst));
+            return Ok((
+                self.last_received_block.load(Ordering::SeqCst),
+                self.num_transactions.load(Ordering::SeqCst),
+            ));
         }
 
         // fallback to the underlying storage for boot-strapping
-        let block_height = self.persistence.retrieve_last_received_block().await?;
+        let (block_height, num_transactions) =
+            self.persistence.retrieve_last_received_block().await?;
         self.last_received_block
             .store(block_height, Ordering::SeqCst);
+        self.num_transactions
+            .store(num_transactions, Ordering::SeqCst);
 
-        Ok(block_height)
+        Ok((block_height, num_transactions))
     }
 }

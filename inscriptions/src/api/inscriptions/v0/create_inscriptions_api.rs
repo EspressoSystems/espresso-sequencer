@@ -9,14 +9,15 @@ use crate::{
         client_message::InternalClientMessage,
         client_state::{
             ClientThreadState, InternalClientMessageProcessingTask,
-            ProcessDistributeInscriptionHandlingTask, ProcessPutInscriptionToChainTask,
+            ProcessDistributeServerMessageHandlingTask, ProcessPutInscriptionToChainTask,
             ProcessRecordPutInscriptionRequestTask,
         },
         data_state::{DataState, ProcessBlockStreamTask, MAX_LOCAL_INSCRIPTION_HISTORY},
         espresso_inscription::EspressoInscription,
         server_message::ServerMessage,
         storage::{
-            in_memory::HeightCachingInMemory, postgres::PostgresPersistence, InscriptionPersistence,
+            in_memory::HeightCachingInMemory, postgres::PostgresPersistence,
+            InscriptionPersistence, RetrieveLastReceivedBlockError,
         },
     },
     Options,
@@ -36,7 +37,7 @@ use super::{HotshotQueryServiceBlockStreamRetriever, ProcessProduceBlockStreamTa
 pub struct InscriptionsAPI {
     pub process_internal_client_message_handle: Option<InternalClientMessageProcessingTask>,
     pub process_block_stream_handle: Option<ProcessBlockStreamTask>,
-    pub process_distribute_inscription_handle: Option<ProcessDistributeInscriptionHandlingTask>,
+    pub process_distribute_inscription_handle: Option<ProcessDistributeServerMessageHandlingTask>,
     pub process_put_inscription_to_chain_handle: Option<ProcessPutInscriptionToChainTask>,
     pub process_record_put_inscription_handle: Option<ProcessRecordPutInscriptionRequestTask>,
     pub process_produce_blocks_handle: Option<ProcessProduceBlockStreamTask>,
@@ -174,6 +175,7 @@ pub enum CreateInscriptionsProcessingError {
     PostgresError(sqlx::Error),
     MigrationError(sqlx::migrate::MigrateError),
     CreateInscriptionsConfigError(CreateInscriptionsConfigError),
+    RetrieveLastReceivedBlockError(RetrieveLastReceivedBlockError),
 }
 
 impl From<sqlx::Error> for CreateInscriptionsProcessingError {
@@ -191,6 +193,12 @@ impl From<sqlx::migrate::MigrateError> for CreateInscriptionsProcessingError {
 impl From<CreateInscriptionsConfigError> for CreateInscriptionsProcessingError {
     fn from(err: CreateInscriptionsConfigError) -> Self {
         CreateInscriptionsProcessingError::CreateInscriptionsConfigError(err)
+    }
+}
+
+impl From<RetrieveLastReceivedBlockError> for CreateInscriptionsProcessingError {
+    fn from(err: RetrieveLastReceivedBlockError) -> Self {
+        CreateInscriptionsProcessingError::RetrieveLastReceivedBlockError(err)
     }
 }
 
@@ -236,8 +244,15 @@ pub async fn create_inscriptions_processing(
 
     let mut data_state = DataState::new(Default::default(), persistence.clone(), signer.address());
 
+    let (block_height, num_transactions) = persistence.retrieve_last_received_block().await?;
+    // Restore the previous number of transactions and the block height.
+    data_state.add_num_transactions(block_height, num_transactions);
+
     let limit = NonZero::<usize>::new(MAX_LOCAL_INSCRIPTION_HISTORY).unwrap();
-    let latest_inscriptions_result = persistence
+    let latest_inscriptions_result: Result<
+        Vec<crate::service::espresso_inscription::InscriptionAndChainDetails>,
+        crate::service::storage::RetrieveLatestInscriptionAndChainDetailsError,
+    > = persistence
         .retrieve_latest_inscription_and_chain_details(limit)
         .await;
 
@@ -298,7 +313,7 @@ pub async fn create_inscriptions_processing(
 
     let data_state = Arc::new(RwLock::new(data_state));
     let client_thread_state = Arc::new(RwLock::new(client_thread_state));
-    let (inscription_sender, inscription_receiver) = mpsc::channel(32);
+    let (server_message_sender, server_message_receiver) = mpsc::channel(32);
 
     let process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
         internal_client_message_receiver,
@@ -310,12 +325,12 @@ pub async fn create_inscriptions_processing(
         config.inscription_namespace_id(),
         block_receiver,
         data_state.clone(),
-        inscription_sender,
+        server_message_sender,
     );
 
-    let process_distribute_inscription_handle = ProcessDistributeInscriptionHandlingTask::new(
+    let process_distribute_server_message_handle = ProcessDistributeServerMessageHandlingTask::new(
         client_thread_state.clone(),
-        inscription_receiver,
+        server_message_receiver,
     );
 
     let process_record_put_inscription_handle = ProcessRecordPutInscriptionRequestTask::new(
@@ -336,7 +351,7 @@ pub async fn create_inscriptions_processing(
         process_produce_blocks_handle: Some(process_produce_blocks),
         process_internal_client_message_handle: Some(process_internal_client_message_handle),
         process_block_stream_handle: Some(process_block_stream_handle),
-        process_distribute_inscription_handle: Some(process_distribute_inscription_handle),
+        process_distribute_inscription_handle: Some(process_distribute_server_message_handle),
         process_put_inscription_to_chain_handle: Some(process_put_inscription_to_chain_handle),
         process_record_put_inscription_handle: Some(process_record_put_inscription_handle),
     })

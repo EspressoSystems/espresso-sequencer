@@ -7,12 +7,14 @@ use espresso_types::{NamespaceId, Payload, SeqTypes};
 use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
 use hotshot_query_service::availability::{BlockQueryData, QueryablePayload};
 use hotshot_types::traits::block_contents::BlockHeader;
+use serde::{Deserialize, Serialize};
 use sqlx::types::time::OffsetDateTime;
 
 use super::{
     espresso_inscription::{
         ChainDetails, InscriptionAndChainDetails, InscriptionAndSignatureFromService,
     },
+    server_message::ServerMessage,
     storage::InscriptionPersistence,
     validate_inscription_and_signature_from_service,
 };
@@ -26,10 +28,21 @@ pub enum SubmitInscriptionError {
     BufferIsFull,
 }
 
+/// [Stats] represents the statistics that are being tracked by the service.
+/// This structure is meant to be used to track the number of inscriptions,
+/// blocks, and transactions that have been processed by the service.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct Stats {
+    pub(crate) num_inscriptions: u64,
+    pub(crate) num_transactions: u64,
+    pub(crate) num_blocks: u64,
+}
+
 /// [DataState] represents the state of the data that is being stored within
 /// the service.
 pub struct DataState<Persistence> {
     latest_inscriptions: CircularBuffer<MAX_LOCAL_INSCRIPTION_HISTORY, InscriptionAndChainDetails>,
+    stats: Stats,
 
     persistence: Arc<Persistence>,
 
@@ -51,6 +64,7 @@ impl<Persistence> DataState<Persistence> {
             latest_inscriptions,
             persistence,
             address,
+            stats: Stats::default(),
         }
     }
 
@@ -79,6 +93,44 @@ impl<Persistence> DataState<Persistence> {
 
     pub fn persistence(&self) -> &Persistence {
         &self.persistence
+    }
+
+    /// [stats] returns the statistics that are being tracked by the service.
+    pub fn add_num_inscriptions(&mut self, _block_height: u64, num_inscriptions: u64) {
+        self.stats.num_inscriptions = self
+            .stats
+            .num_inscriptions
+            .checked_add(num_inscriptions)
+            .unwrap_or(self.stats.num_inscriptions);
+    }
+
+    /// [add_num_transactions] adds the number of transactions to the statistics
+    /// that are being tracked by the service.
+    pub fn add_num_transactions(&mut self, block_height: u64, num_transactions: u64) {
+        if block_height < self.stats.num_blocks {
+            // We already know these statistics, so we will ignore all other
+            // transactions.
+            return;
+        }
+
+        self.stats.num_blocks = block_height + 1;
+        self.stats.num_transactions = self
+            .stats
+            .num_transactions
+            .checked_add(num_transactions)
+            .unwrap_or(self.stats.num_transactions);
+    }
+
+    /// [set_num_transactions] sets the number of transactions that are being
+    /// tracked by the service.
+    pub fn set_num_transactions(&mut self, num_transactions: u64) {
+        self.stats.num_transactions = num_transactions;
+    }
+
+    /// [set_num_blocks] sets the number of blocks that are being tracked by the
+    /// service.
+    pub fn current_stats(&self) -> Stats {
+        self.stats.clone()
     }
 }
 
@@ -112,16 +164,16 @@ impl std::error::Error for ProcessBlockError {
 /// Additionally, the block that is contained within the [Block] will be
 /// computed into a [BlockDetail] and sent to the [Sink] so that it can be
 /// processed for real-time considerations.
-async fn process_incoming_block<BDSink, Persistence, E>(
+async fn process_incoming_block<SMSink, Persistence, E>(
     inscription_namespace: NamespaceId,
     block: BlockQueryData<SeqTypes>,
     data_state: Arc<RwLock<DataState<Persistence>>>,
-    mut inscription_sender: BDSink,
+    mut server_message_sender: SMSink,
 ) -> Result<(), ProcessBlockError>
 where
     Payload: QueryablePayload<SeqTypes>,
     E: std::fmt::Display + std::fmt::Debug,
-    BDSink: Sink<InscriptionAndChainDetails, Error = E> + Unpin,
+    SMSink: Sink<ServerMessage, Error = E> + Unpin,
     Persistence: InscriptionPersistence,
 {
     let mut inscriptions = Vec::<InscriptionAndChainDetails>::new();
@@ -131,8 +183,10 @@ where
         data_state_read_lock_guard.address()
     };
 
+    let block_height = block.header().block_number();
+    let mut num_transactions = 0;
     for (offset, (_, transaction)) in block.payload().enumerate(block.metadata()).enumerate() {
-        let block_height = block.header().block_number();
+        num_transactions += 1;
 
         if transaction.namespace() != inscription_namespace {
             // Skip anything that isn't in the correct namespace
@@ -176,19 +230,28 @@ where
         });
     }
 
-    {
+    let inscriptions_count = inscriptions.len();
+    let latest_stats = {
         let mut data_state_write_lock_guard = data_state.write().await;
+        data_state_write_lock_guard.add_num_inscriptions(block_height, inscriptions_count as u64);
+        data_state_write_lock_guard.add_num_transactions(block_height, num_transactions);
         for inscription in &inscriptions {
             data_state_write_lock_guard.add_latest_inscription(inscription.clone());
         }
+
+        data_state_write_lock_guard.stats.clone()
+    };
+
+    if let Err(err) = server_message_sender
+        .feed(ServerMessage::Stats(latest_stats))
+        .await
+    {
+        tracing::error!(
+            "failed to enqueue stats for dissemination, encountered error: {:?}",
+            err
+        );
     }
 
-    if inscriptions.is_empty() {
-        // We have no inscriptions to process
-        return Ok(());
-    }
-
-    let inscriptions_count = inscriptions.len();
     for inscription in inscriptions {
         {
             let state = data_state.read_arc().await;
@@ -204,7 +267,10 @@ where
             }
         }
 
-        let feed_result = inscription_sender.feed(inscription).await;
+        let feed_result = server_message_sender
+            .feed(ServerMessage::LatestInscription(Arc::new(inscription)))
+            .await;
+
         if let Err(err) = feed_result {
             tracing::error!(
                 "failed to enqueue inscription for dissemination, encountered error: {:?}",
@@ -215,7 +281,19 @@ where
         }
     }
 
-    let Err(err) = inscription_sender.flush().await else {
+    {
+        // Record the last received block
+        let data_state_read_lock = data_state.read_arc().await;
+        if let Err(err) = data_state_read_lock
+            .persistence()
+            .record_last_received_block(&block)
+            .await
+        {
+            tracing::error!("failed to record last received block: {:?}", err);
+        }
+    }
+
+    let Err(err) = server_message_sender.flush().await else {
         // We have an error flushing the sink.
         tracing::debug!(
             "successfully flushed {} inscriptions to the sender",
@@ -248,23 +326,18 @@ impl ProcessBlockStreamTask {
         inscription_namespace_id: NamespaceId,
         block_receiver: S,
         data_state: Arc<RwLock<DataState<Persistence>>>,
-        inscription_sender: K,
+        server_message_sender: K,
     ) -> Self
     where
         S: Stream<Item = BlockQueryData<SeqTypes>> + Send + Sync + Unpin + 'static,
-        K: Sink<InscriptionAndChainDetails, Error = SendError>
-            + Clone
-            + Send
-            + Sync
-            + Unpin
-            + 'static,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
         Persistence: InscriptionPersistence + Send + Sync + 'static,
     {
         let task_handle = async_std::task::spawn(Self::process_block_stream(
             block_receiver,
             inscription_namespace_id,
             data_state.clone(),
-            inscription_sender,
+            server_message_sender,
         ));
 
         Self {
@@ -274,14 +347,14 @@ impl ProcessBlockStreamTask {
 
     /// [process_block_stream] allows for the consumption of a [Stream] when
     /// attempting to process new incoming [Block]s.
-    async fn process_block_stream<S, Persistence, ISink>(
+    async fn process_block_stream<S, Persistence, SMSink>(
         mut stream: S,
         inscription_namespace_id: NamespaceId,
         data_state: Arc<RwLock<DataState<Persistence>>>,
-        inscription_sender: ISink,
+        server_message_sender: SMSink,
     ) where
         S: Stream<Item = BlockQueryData<SeqTypes>> + Unpin,
-        ISink: Sink<InscriptionAndChainDetails, Error = SendError> + Clone + Unpin,
+        SMSink: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
         Persistence: InscriptionPersistence,
     {
         loop {
@@ -293,18 +366,6 @@ impl ProcessBlockStreamTask {
                 tracing::error!("process block stream: end of stream reached for leaf stream.");
                 return;
             };
-
-            {
-                // Record the last received block
-                let state = data_state.read_arc().await;
-                if let Err(err) = state
-                    .persistence()
-                    .record_last_received_block(block.header().block_number())
-                    .await
-                {
-                    tracing::error!("failed to record last received block: {:?}", err);
-                }
-            }
 
             let now_timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
             let block_timestamp = block.header().timestamp();
@@ -318,12 +379,12 @@ impl ProcessBlockStreamTask {
                 inscription_namespace_id,
                 block,
                 data_state.clone(),
-                inscription_sender.clone(),
+                server_message_sender.clone(),
             )
             .await
             {
                 // We have an error that prevents us from continuing
-                tracing::error!("process leaf stream: error processing leaf: {}", err);
+                tracing::error!("process block stream: error processing block: {}", err);
 
                 // At the moment, all underlying errors are due to `SendError`
                 // which will ultimately mean that further processing attempts
