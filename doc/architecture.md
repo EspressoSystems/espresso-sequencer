@@ -72,17 +72,19 @@ The following interactions are depicted.
 
 1. Builders deposit funds into the fee contract on Ethereum Layer 1. These funds
    are later used to pay fees.
-2. Users submit transactions to the Submit APIs of sequencer nodes.
-3. The leader/proposer obtains a block from a builder.
-4. HotShot consensus creates new blocks containing sequenced rollup
+2. Users submit L2 transactions to the rollup RPCs.
+3. The rollups build L2 / rollup blocks.
+4. The rollups send their L2 blocks to the Espresso confirmation layer.
+5. The leader/proposer obtains a block from a builder.
+6. HotShot consensus creates new blocks containing sequenced rollup
    transactions.
-5. A rollup produces a rollup block with transactions sequenced by the Espresso
+7. A rollup produces a rollup block with transactions sequenced by the Espresso
    sequencer.
-6. A proof for a HotShot state update is created and verified in the Light
+8. A proof for a HotShot state update is created and verified in the Light
    Client smart contract.
-7. A ZK rollup proves a correct state transaction by sending a proof to its
+9. A ZK rollup proves a correct state transaction by sending a proof to its
    rollup smart contract.
-8. A dispute is settled in an optimistic rollup. If necessary, the HotShot
+10. A dispute is settled in an optimistic rollup. If necessary, the HotShot
    commitment is read from the Light Client contract.
 
 ![Sequence diagram](./sequence-diagram.svg)
