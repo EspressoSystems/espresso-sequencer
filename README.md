@@ -18,8 +18,11 @@ and robust infrastructure.
 [Official Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
 
 ### Architecture
+The diagram below shows how the Espresso Confirmation Layer fits into the rollup
+centric Ethereum ecosystem. See [Architecture](./doc/architecture.md) for details.
 
-See [Architecture](./doc/architecture.md).
+![Architecture](./doc/espresso-overview.svg)
+
 
 #### ZK rollups integration
 
