@@ -22,8 +22,8 @@ use hotshot_types::{
     utils::View,
     vid::VidSchemeType,
 };
-use jf_vid::VidScheme;
 use itertools::Itertools;
+use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
