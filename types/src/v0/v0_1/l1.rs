@@ -1,11 +1,14 @@
 use crate::parse_duration;
+use async_broadcast::{InactiveReceiver, Sender};
+use async_std::{
+    sync::{Arc, Mutex},
+    task::JoinHandle,
+};
+use clap::Parser;
 use ethers::{
     prelude::{H256, U256},
-    providers::{Http, Ws, Provider},
+    providers::{Http, Provider, Ws},
 };
-use async_broadcast::{Sender, InactiveReceiver};
-use async_std::{sync::{Arc, Mutex}, task::JoinHandle};
-use clap::Parser;
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::{num::NonZeroUsize, time::Duration};
@@ -60,11 +63,19 @@ pub struct L1ClientOptions {
     pub l1_polling_interval: Duration,
 
     /// Maximum number of L1 blocks to keep in cache at once.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_BLOCKS_CACHE_SIZE", default_value = "100")]
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_BLOCKS_CACHE_SIZE",
+        default_value = "100"
+    )]
     pub l1_blocks_cache_size: NonZeroUsize,
 
     /// Number of L1 events to buffer before discarding.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_EVENTS_CHANNEL_CAPACITY", default_value = "100")]
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_EVENTS_CHANNEL_CAPACITY",
+        default_value = "100"
+    )]
     pub l1_events_channel_capacity: usize,
 
     /// Maximum number of L1 blocks that can be scanned for events in a single query.

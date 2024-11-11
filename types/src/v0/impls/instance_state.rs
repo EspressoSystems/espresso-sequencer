@@ -12,11 +12,12 @@ use super::state::ValidatedState;
 /// Represents the immutable state of a node.
 ///
 /// For mutable state, use `ValidatedState`.
-#[derive(Debug, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct NodeState {
     pub node_id: u64,
     pub chain_config: crate::v0_3::ChainConfig,
     pub l1_client: L1Client,
+    #[debug("{}", peers.name())]
     pub peers: Arc<dyn StateCatchup>,
     pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
@@ -253,6 +254,10 @@ pub mod mock {
 
         fn backoff(&self) -> &BackoffParams {
             &self.backoff
+        }
+
+        fn name(&self) -> String {
+            "MockStateCatchup".into()
         }
     }
 }

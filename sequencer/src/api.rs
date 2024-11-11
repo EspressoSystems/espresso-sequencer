@@ -293,7 +293,7 @@ impl<
         Ok(tree)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, instance))]
     async fn get_frontier(
         &self,
         instance: &NodeState,
@@ -383,7 +383,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
         retain_accounts(&state.fee_merkle_tree, accounts.iter().copied())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, _instance))]
     async fn get_frontier(
         &self,
         _instance: &NodeState,
@@ -1456,6 +1456,17 @@ mod test {
             assert_eq!(*path.index(), account);
             assert!(*path.elem().unwrap() > 0.into(), "{:?}", path.elem());
         }
+
+        // testing fee_balance api
+        let account = TestConfig::<5>::builder_key().fee_account();
+        let amount = client
+            .get::<Option<FeeAmount>>(&format!("fee-state/fee-balance/latest/{}", account))
+            .send()
+            .await
+            .unwrap()
+            .unwrap();
+        let expected = ethers::types::U256::max_value();
+        assert_eq!(expected, amount.0);
     }
 
     #[async_std::test]

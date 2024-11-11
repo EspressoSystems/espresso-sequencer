@@ -2597,9 +2597,11 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
 dependencies = [
+ "convert_case 0.6.0",
  "proc-macro2",
  "quote",
  "syn 2.0.77",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -2986,7 +2988,7 @@ dependencies = [
  "cld",
  "committable",
  "contract-bindings",
- "derive_more 0.99.18",
+ "derive_more 1.0.0",
  "dyn-clone 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "ethers",
  "fluent-asserter",
@@ -8829,7 +8831,7 @@ dependencies = [
  "contract-bindings",
  "csv",
  "derivative",
- "derive_more 0.99.18",
+ "derive_more 1.0.0",
  "dotenvy",
  "dyn-clone 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
  "escargot",
@@ -8901,7 +8903,7 @@ dependencies = [
  "clap",
  "committable",
  "contract-bindings",
- "derive_more 0.99.18",
+ "derive_more 1.0.0",
  "ethers",
  "futures",
  "hotshot-contract-adapter",

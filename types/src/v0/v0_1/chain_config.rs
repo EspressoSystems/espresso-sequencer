@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::{FeeAccount, FeeAmount};
 
 #[derive(Default, Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
-#[display(fmt = "{_0}")]
+#[display("{_0}")]
 pub struct ChainId(pub U256);
 
 #[derive(Hash, Copy, Clone, Debug, Default, Display, PartialEq, Eq, From, Into, Deref)]
-#[display(fmt = "{_0}")]
+#[display("{_0}")]
 pub struct BlockSize(pub(crate) u64);
 
 /// Global variables for an Espresso blockchain.
