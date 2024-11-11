@@ -136,6 +136,7 @@ jobs:
         include:
           - version: 02
             compose: "-f process-compose.yaml -D"
+            
           - version: 03
             compose: "-f process-compose.yaml -f process-compose-mp.yml -D"
     runs-on: ubuntu-latest
@@ -183,10 +184,10 @@ jobs:
       - name: Test Integration
         env:
           NEXTEST_PROFILE: integration
-          INTEGRATION_TEST_SEQUENCER_VERSION: ${{matrix.version}}
+          INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
         run: |
-          cargo nextest run --archive-file nextest-archive.tar.zst  --verbose --no-fail-fast \
-          --workspace-remap $PWD
+          cargo nextest run --archive-file nextest-archive.tar.zst --verbose --no-fail-fast \
+          --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
         timeout-minutes: 40
 
       - name: Process Compose Down

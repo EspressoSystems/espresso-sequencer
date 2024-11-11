@@ -220,6 +220,10 @@ impl L1Client {
         }
     }
 
+    pub fn provider(&self) -> &impl Middleware<Error: 'static> {
+        &self.provider
+    }
+
     fn update_loop(&self) -> impl Future<Output = ()> {
         let rpc = self.provider.clone();
         let retry_delay = self.retry_delay;
@@ -299,7 +303,7 @@ impl L1Client {
                     // Update the state snapshot;
                     let mut state = state.lock().await;
                     if head > state.snapshot.head {
-                        tracing::info!(head, old_head = state.snapshot.head, "L1 head updated");
+                        tracing::debug!(head, old_head = state.snapshot.head, "L1 head updated");
                         state.snapshot.head = head;
                         // Emit an event about the new L1 head. Ignore send errors; it just means no
                         // one is listening to events right now.
@@ -322,7 +326,7 @@ impl L1Client {
                                 .ok();
                         }
                     }
-                    tracing::info!("updated L1 snapshot to {:?}", state.snapshot);
+                    tracing::debug!("updated L1 snapshot to {:?}", state.snapshot);
                 }
 
                 tracing::error!("L1 block stream ended unexpectedly, trying to re-establish");

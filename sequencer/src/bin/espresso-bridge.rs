@@ -159,7 +159,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
     let initial_balance = espresso
         .get_espresso_balance(l1.address(), None)
         .await
-        .context("getting Espresso block height")?;
+        .context("getting Espresso balance")?;
     tracing::debug!(%initial_balance, "initial balance");
 
     // Send the deposit transaction.
