@@ -1798,10 +1798,11 @@ mod test {
 
         // test v3 sig
         let sig =
-            FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data, header.height()).unwrap();
+            FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data, *parent.view_number() + 1)
+                .unwrap();
         // test dedicated marketplace validation function
         account
-            .validate_sequencing_fee_signature_marketplace(&sig, data, header.height())
+            .validate_sequencing_fee_signature_marketplace(&sig, data, *parent.view_number() + 1)
             .then_some(())
             .unwrap();
 
@@ -1828,7 +1829,7 @@ mod test {
 
         // assert expectations
         account
-            .validate_sequencing_fee_signature_marketplace(&sig[0], fee, header.height())
+            .validate_sequencing_fee_signature_marketplace(&sig[0], fee, *parent.view_number() + 1)
             .then_some(())
             .unwrap();
 

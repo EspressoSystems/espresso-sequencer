@@ -443,7 +443,7 @@ impl Header {
                     fee_account.validate_sequencing_fee_signature_marketplace(
                         fee_signature,
                         *fee_amount,
-                        height,
+                        *parent_leaf.view_number() + 1,
                     ),
                     "invalid builder signature"
                 );
