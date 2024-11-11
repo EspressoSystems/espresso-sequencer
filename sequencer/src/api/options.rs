@@ -12,7 +12,7 @@ use futures::{
 };
 use hotshot_events_service::events::Error as EventStreamingError;
 use hotshot_query_service::{
-    data_source::{storage::UpdateAvailabilityStorage, ExtensibleDataSource, MetricsDataSource},
+    data_source::{ExtensibleDataSource, MetricsDataSource},
     status::{self, UpdateStatusData},
     ApiState as AppState, Error,
 };
@@ -39,7 +39,7 @@ use crate::{
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
-    SeqTypes, SequencerApiVersion,
+    SequencerApiVersion,
 };
 
 #[derive(Clone, Debug)]
@@ -267,7 +267,6 @@ impl Options {
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
         D: SequencerDataSource + CatchupStorage + Send + Sync + 'static,
-        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<SeqTypes>,
     {
         let metrics = ds.populate_metrics();
         let ds = Arc::new(ExtensibleDataSource::new(ds, state.clone()));

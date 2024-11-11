@@ -1033,9 +1033,8 @@ mod api_tests {
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
-    use hotshot_query_service::{
-        availability::{AvailabilityDataSource, BlockQueryData, VidCommonQueryData},
-        data_source::storage::UpdateAvailabilityStorage,
+    use hotshot_query_service::availability::{
+        AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
     use hotshot_types::{
         data::QuorumProposal, event::LeafInfo, simple_certificate::QuorumCertificate,
@@ -1185,7 +1184,6 @@ mod api_tests {
     pub async fn test_non_consecutive_decide_with_failing_event_consumer<D>()
     where
         D: TestableSequencerDataSource + Debug + 'static,
-        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<SeqTypes>,
     {
         #[derive(Clone, Copy, Debug)]
         struct FailConsumer;

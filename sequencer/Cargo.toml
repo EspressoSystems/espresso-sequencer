@@ -65,12 +65,12 @@ hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { workspace = true }
 libp2p-networking = { workspace = true }
+async-lock = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
 marketplace-builder-core = { workspace = true, optional = true }
 marketplace-builder-shared = { workspace = true, optional = true }
-async-lock = { workspace = true }
 
 hotshot-types = { workspace = true }
 include_dir = "0.7"
