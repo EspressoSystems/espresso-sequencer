@@ -11,8 +11,8 @@ Rollup -> EspNode : GET availability/stream/leaves/<i>height</i>
 
 loop
 Rollup <-- EspNode : Block
-Rollup <-- EspNode : Leaf, Proof of consensus
-Rollup -> Rollup : Verify Proof of consensus
+Rollup <-- EspNode : Leaf, proof of consensus
+Rollup -> Rollup : Verify proof of consensus
 Rollup -> Rollup : Execute Block
 Rollup --> Client: Updated State
 end
