@@ -393,10 +393,16 @@ pub(crate) struct ValidatedTransition<'a> {
     expected_chain_config: ChainConfig,
     parent: &'a Header,
     proposal: Proposal<'a>,
+    view_number: u64,
 }
 
 impl<'a> ValidatedTransition<'a> {
-    pub(crate) fn new(state: ValidatedState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
+    pub(crate) fn new(
+        state: ValidatedState,
+        parent: &'a Header,
+        proposal: Proposal<'a>,
+        view_number: u64,
+    ) -> Self {
         let expected_chain_config = state
             .chain_config
             .resolve()
@@ -406,6 +412,7 @@ impl<'a> ValidatedTransition<'a> {
             expected_chain_config,
             parent,
             proposal,
+            view_number,
         }
     }
 
@@ -504,7 +511,7 @@ impl<'a> ValidatedTransition<'a> {
     /// verifying signatures. Signatures are identified by index of fee `Vec`.
     fn validate_builder_fee(&self) -> Result<(), ProposalValidationError> {
         // TODO move logic from stand alone fn to here.
-        if let Err(err) = validate_builder_fee(self.proposal.header) {
+        if let Err(err) = validate_builder_fee(self.proposal.header, self.view_number) {
             return Err(ProposalValidationError::BuilderValidationError(err));
         }
         Ok(())
@@ -637,7 +644,10 @@ impl From<MerkleTreeError> for FeeError {
 
 /// Validate builder accounts by verifying signatures. All fees are
 /// verified against signature by index.
-fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
+fn validate_builder_fee(
+    proposed_header: &Header,
+    view_number: u64,
+) -> Result<(), BuilderValidationError> {
     let version = proposed_header.version();
 
     // TODO since we are iterating, should we include account/amount in errors?
@@ -663,7 +673,7 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
                 .validate_sequencing_fee_signature_marketplace(
                     &signature,
                     fee_info.amount().as_u64().unwrap(),
-                    proposed_header.height(),
+                    view_number,
                 )
                 .then_some(())
                 .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
@@ -918,6 +928,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
                 proposed_header,
                 VidSchemeType::get_payload_byte_len(&vid_common),
             ),
+            *parent_leaf.view_number() + 1,
         )
         .validate()?
         .wait_for_l1(&instance.l1_client)
@@ -1163,6 +1174,7 @@ mod test {
                 expected_chain_config,
                 parent,
                 proposal,
+                view_number: 1,
             }
         }
     }
@@ -1759,7 +1771,7 @@ mod test {
             }),
         };
 
-        validate_builder_fee(&header).unwrap();
+        validate_builder_fee(&header, *parent.view_number() + 1).unwrap();
     }
 
     #[tokio::test]
@@ -1820,6 +1832,6 @@ mod test {
             .then_some(())
             .unwrap();
 
-        validate_builder_fee(&header).unwrap();
+        validate_builder_fee(&header, *parent.view_number() + 1).unwrap();
     }
 }

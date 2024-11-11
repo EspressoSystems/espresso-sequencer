@@ -42,6 +42,7 @@ bincode = { workspace = true }
 # CDN imports
 cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
+async-lock = { workspace = true }
 
 clap = { workspace = true }
 client = { path = "../client" }
@@ -65,7 +66,6 @@ hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { workspace = true }
 libp2p-networking = { workspace = true }
-async-lock = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
