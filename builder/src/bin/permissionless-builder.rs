@@ -129,7 +129,7 @@ async fn run<V: Versions>(
 ) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        events_max_block_range: 10000,
+        options: Default::default(),
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -138,7 +138,9 @@ async fn run<V: Versions>(
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
     let instance_state =
-        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers)
+            .await
+            .unwrap();
 
     let base_fee = genesis.max_base_fee();
     tracing::info!(?base_fee, "base_fee");
