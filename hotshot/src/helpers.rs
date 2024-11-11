@@ -21,15 +21,15 @@ pub fn initialize_logging() {
 
     // Conditionally initialize in `json` mode
     if std::env::var("RUST_LOG_FORMAT") == Ok("json".to_string()) {
-        tracing_subscriber::fmt()
+        let _ = tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env())
             .with_span_events(span_event_filter)
             .json()
-            .init();
+            .try_init();
     } else {
-        tracing_subscriber::fmt()
+        let _ = tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env())
             .with_span_events(span_event_filter)
-            .init();
+            .try_init();
     };
 }
