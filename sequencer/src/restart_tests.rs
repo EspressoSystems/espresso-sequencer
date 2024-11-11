@@ -284,6 +284,8 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
                 .join(","),
             "--l1-provider-url",
             network.l1_provider,
+            "--l1-polling-interval",
+            "1s",
         ]);
         opt.is_da = node.is_da;
         Self {
@@ -557,7 +559,7 @@ impl TestNetwork {
         };
 
         let anvil_port = ports.pick();
-        let anvil = Anvil::new().port(anvil_port).spawn();
+        let anvil = Anvil::new().port(anvil_port).block_time(1u64).spawn();
         let anvil_endpoint = anvil.endpoint();
 
         let api_ports = node_params
@@ -816,7 +818,6 @@ fn start_orchestrator(port: u16, nodes: &[NodeParams], builder_port: u16) -> Joi
     config.config.da_staked_committee_size = num_nodes;
     config.config.known_nodes_with_stake = vec![];
     config.config.known_da_nodes = vec![];
-    config.config.known_nodes_without_stake = vec![];
     config.config.next_view_timeout = view_timeout.as_millis() as u64;
     config.config.builder_timeout = builder_timeout;
     config.config.builder_urls = vec1![format!("http://localhost:{builder_port}").parse().unwrap()];

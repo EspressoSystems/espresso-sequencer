@@ -20,11 +20,15 @@ concurrency:
 env:
   RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
+  CARGO_TERM_COLOR: always
+  DOCKER_PLATFORMS: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
+      - uses: rui314/setup-mold@v1
+
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
@@ -46,6 +50,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: v1-rust
+          cache-provider: buildjet
 
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
@@ -86,8 +91,13 @@ jobs:
             target/release/dev-rollup
 
   build-arm:
-    runs-on: buildjet-16vcpu-ubuntu-2204-arm
+    if: github.event_name != 'pull_request'
+    runs-on: buildjet-8vcpu-ubuntu-2204-arm
+    env:
+      CARGO_BUILD_JOBS: '6'
     steps:
+      - uses: rui314/setup-mold@v1
+
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
@@ -102,6 +112,8 @@ jobs:
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: buildjet
 
       - name: Build
         run: |
@@ -143,6 +155,8 @@ jobs:
   build-dockers:
     runs-on: ubuntu-latest
     needs: [build, build-arm]
+    # if build_arm is skipped, run this job anyway
+    if: ${{ !(failure() || cancelled()) }}
     outputs:
       sequencer-tag: ${{ steps.sequencer.outputs.tags }}
       cdn-broker-tag: ${{ steps.cdn-broker.outputs.tags }}
@@ -174,6 +188,7 @@ jobs:
           path: target/amd64/release
 
       - name: Download executables ARM
+        if: github.event_name != 'pull_request'
         uses: actions/download-artifact@v4
         with:
           name: aarch64-unknown-linux-gnu-services
@@ -298,7 +313,7 @@ jobs:
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.sequencer.outputs.tags }}
           labels: ${{ steps.sequencer.outputs.labels }}
@@ -308,7 +323,7 @@ jobs:
         with:
           context: ./
           file: ./docker/cdn-broker.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-broker.outputs.tags }}
           labels: ${{ steps.cdn-broker.outputs.labels }}
@@ -318,7 +333,7 @@ jobs:
         with:
           context: ./
           file: ./docker/cdn-marshal.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-marshal.outputs.tags }}
           labels: ${{ steps.cdn-marshal.outputs.labels }}
@@ -328,7 +343,7 @@ jobs:
         with:
           context: ./
           file: ./docker/cdn-whitelist.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.cdn-whitelist.outputs.tags }}
           labels: ${{ steps.cdn-whitelist.outputs.labels }}
@@ -338,7 +353,7 @@ jobs:
         with:
           context: ./
           file: ./docker/state-relay-server.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.state-relay-server.outputs.tags }}
           labels: ${{ steps.state-relay-server.outputs.labels }}
@@ -348,7 +363,7 @@ jobs:
         with:
           context: ./
           file: ./docker/prover-service.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.prover-service.outputs.tags }}
           labels: ${{ steps.prover-service.outputs.labels }}
@@ -358,7 +373,7 @@ jobs:
         with:
           context: ./
           file: ./docker/orchestrator.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.orchestrator.outputs.tags }}
           labels: ${{ steps.orchestrator.outputs.labels }}
@@ -368,7 +383,7 @@ jobs:
         with:
           context: ./
           file: ./docker/submit-transactions.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.submit-transactions.outputs.tags }}
           labels: ${{ steps.submit-transactions.outputs.labels }}
@@ -378,7 +393,7 @@ jobs:
         with:
           context: ./
           file: ./docker/deploy.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.deploy.outputs.tags }}
           labels: ${{ steps.deploy.outputs.labels }}
@@ -388,7 +403,7 @@ jobs:
         with:
           context: ./
           file: ./docker/permissionless-builder.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.builder.outputs.tags }}
           labels: ${{ steps.builder.outputs.labels }}
@@ -398,7 +413,7 @@ jobs:
         with:
           context: ./
           file: ./docker/nasty-client.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.nasty-client.outputs.tags }}
           labels: ${{ steps.nasty-client.outputs.labels }}
@@ -408,7 +423,7 @@ jobs:
         with:
           context: ./
           file: ./docker/espresso-dev-node.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.espresso-dev-node.outputs.tags }}
           labels: ${{ steps.espresso-dev-node.outputs.labels }}
@@ -417,7 +432,7 @@ jobs:
         with:
           context: ./
           file: ./docker/espresso-bridge.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.bridge.outputs.tags }}
           labels: ${{ steps.bridge.outputs.labels }}
@@ -427,7 +442,7 @@ jobs:
         with:
           context: ./
           file: ./docker/marketplace-solver.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.marketplace-solver.outputs.tags }}
           labels: ${{ steps.marketplace-solver.outputs.labels }}
@@ -437,7 +452,7 @@ jobs:
         with:
           context: ./
           file: ./docker/marketplace-builder.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.marketplace-builder.outputs.tags }}
           labels: ${{ steps.marketplace-builder.outputs.labels }}
@@ -447,7 +462,7 @@ jobs:
         with:
           context: ./
           file: ./docker/node-validator.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.node-validator.outputs.tags }}
           labels: ${{ steps.node-validator.outputs.labels }}
@@ -457,7 +472,7 @@ jobs:
         with:
           context: ./
           file: ./docker/dev-rollup.Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.DOCKER_PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.dev-rollup.outputs.tags }}
           labels: ${{ steps.dev-rollup.outputs.labels }}
@@ -516,4 +531,5 @@ jobs:
       - name: Test docker demo
         run: |
           just demo &
+          set -o pipefail
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'

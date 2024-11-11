@@ -53,17 +53,17 @@ pub struct DeployedContracts {
 /// An identifier for a particular contract.
 #[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
 pub enum Contract {
-    #[display(fmt = "ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
     PlonkVerifier,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
     StateUpdateVK,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
     LightClient,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
     LightClientProxy,
-    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
     FeeContract,
-    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
     FeeContractProxy,
 }
 
@@ -360,7 +360,7 @@ pub async fn deploy(
             .await?;
 
         // confirm that the implementation address is the address of the light client contract deployed above
-        if !is_proxy_contract(provider.clone(), light_client_proxy_address)
+        if !is_proxy_contract(&provider, light_client_proxy_address)
             .await
             .expect("Failed to determine if light contract is a proxy")
         {
@@ -405,7 +405,7 @@ pub async fn deploy(
             .await?;
 
         // confirm that the implementation address is the address of the fee contract deployed above
-        if !is_proxy_contract(provider.clone(), fee_contract_proxy_address)
+        if !is_proxy_contract(&provider, fee_contract_proxy_address)
             .await
             .expect("Failed to determine if fee contract is a proxy")
         {
@@ -437,7 +437,7 @@ fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> boo
 }
 
 pub async fn is_proxy_contract(
-    provider: Provider<Http>,
+    provider: &impl Middleware<Error: 'static>,
     proxy_address: H160,
 ) -> anyhow::Result<bool> {
     // confirm that the proxy_address is a proxy

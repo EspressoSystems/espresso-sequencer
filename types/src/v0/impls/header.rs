@@ -1406,7 +1406,11 @@ mod test_headers {
 
         let anvil = Anvil::new().block_time(1u32).spawn();
         let mut genesis_state = NodeState::mock()
-            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
+            .with_l1(
+                L1Client::new(anvil.endpoint().parse().unwrap())
+                    .await
+                    .unwrap(),
+            )
             .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;

@@ -14,7 +14,7 @@ use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::{
-    traits::EventConsumer, BackoffParams, L1Client, NodeState, PubKey, SeqTypes,
+    traits::EventConsumer, BackoffParams, L1Client, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers::types::U256;
@@ -182,7 +182,7 @@ pub struct NetworkParams {
 
 pub struct L1Params {
     pub url: Url,
-    pub events_max_block_range: u64,
+    pub options: L1ClientOptions,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -473,7 +473,8 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         genesis_state.prefund_account(address, amount);
     }
 
-    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_client = l1_params.options.connect(l1_params.url).await?;
+    l1_client.start().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
@@ -563,7 +564,7 @@ pub mod testing {
             node_implementation::ConsensusTime,
             stake_table::StakeTableScheme,
         },
-        ExecutionType, HotShotConfig, PeerConfig,
+        HotShotConfig, PeerConfig,
     };
     use marketplace_builder_core::{
         builder_state::BuilderState,
@@ -798,15 +799,10 @@ pub mod testing {
 
             let config: HotShotConfig<PubKey> = HotShotConfig {
                 fixed_leader_for_gpuvid: 0,
-                execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
-                known_nodes_without_stake: vec![],
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
-                timeout_ratio: (10, 11),
-                round_start_delay: Duration::from_millis(1).as_millis() as u64,
-                start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes,
                 my_own_validator_config: Default::default(),
@@ -980,7 +976,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
-                L1Client::new(self.l1_url.clone(), 1000),
+                L1Client::new(self.l1_url.clone()).await.unwrap(),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
                 V::Base::VERSION,
             )

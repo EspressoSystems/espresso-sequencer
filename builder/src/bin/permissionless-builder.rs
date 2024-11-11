@@ -4,7 +4,7 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
-    SequencerVersions, V0_0, V0_1,
+    SequencerVersions, V0_0,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -78,7 +78,7 @@ struct NonPermissionedBuilderOptions {
 
     /// The amount of time a builder can wait before incrementing the max block size.
     #[clap(
-        short,
+        short = 'M',
         long,
         env = "ESPRESSO_BUILDER_MAX_BLOCK_SIZE_INCREMENT_PERIOD",
         default_value = "3600s",
@@ -106,13 +106,9 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
-        }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
         }
-        (V0_1::VERSION, _) => run::<SequencerVersions<V0_1, V0_0>>(genesis, opt).await,
         (FeeVersion::VERSION, _) => run::<SequencerVersions<FeeVersion, V0_0>>(genesis, opt).await,
         (MarketplaceVersion::VERSION, _) => {
             run::<SequencerVersions<MarketplaceVersion, V0_0>>(genesis, opt).await
@@ -129,7 +125,7 @@ async fn run<V: Versions>(
 ) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        events_max_block_range: 10000,
+        options: Default::default(),
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -138,7 +134,9 @@ async fn run<V: Versions>(
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
     let instance_state =
-        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers)
+            .await
+            .unwrap();
 
     let base_fee = genesis.max_base_fee();
     tracing::info!(?base_fee, "base_fee");

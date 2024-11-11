@@ -1,5 +1,6 @@
 [files]
 extend-exclude = [
+  ".env",
   "*.json",
   "doc/*.svg",
   "doc/*.puml",

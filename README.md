@@ -67,7 +67,7 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 ## Documentation
 
 The rust code documentation can be found at
-[http://sequencer.docs.espressosys.com](http://sequencer.docs.espressosys.com). Please note the disclaimer about API
+[sequencer.docs.espressosys.com](https://sequencer.docs.espressosys.com). Please note the disclaimer about API
 stability at the end of the readme.
 
 To generate the documentation locally and view it in the browser, run

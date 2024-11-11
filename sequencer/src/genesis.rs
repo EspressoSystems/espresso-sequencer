@@ -5,13 +5,10 @@ use std::{
 
 use anyhow::Context;
 use espresso_types::{
-    v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Timestamp, Upgrade,
-    UpgradeType,
+    v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, L1Client, Timestamp,
+    Upgrade, UpgradeType,
 };
-use ethers::{
-    providers::{Http, Provider},
-    types::H160,
-};
+use ethers::types::H160;
 use sequencer_utils::deployer::is_proxy_contract;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
@@ -89,22 +86,33 @@ impl Genesis {
 
 impl Genesis {
     pub async fn validate_fee_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
-        let provider = Provider::<Http>::try_from(l1_rpc_url)?;
+        let l1 = L1Client::new(l1_rpc_url.parse().context("invalid url")?)
+            .await
+            .context("connecting L1 client")?;
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
-            if !is_proxy_contract(provider.clone(), fee_contract_address).await? {
-                anyhow::bail!("Fee contract's address is not a proxy");
+            tracing::info!("validating fee contract at {fee_contract_address:x}");
+
+            if !is_proxy_contract(l1.provider(), fee_contract_address)
+                .await
+                .context("checking if fee contract is a proxy")?
+            {
+                anyhow::bail!("Fee contract address {fee_contract_address:x} is not a proxy");
             }
         }
 
         // now iterate over each upgrade type and validate the fee contract if it exists
-        for upgrade in self.upgrades.values() {
+        for (version, upgrade) in &self.upgrades {
             match &upgrade.upgrade_type {
                 UpgradeType::Fee { chain_config } | UpgradeType::Marketplace { chain_config } => {
                     if let Some(fee_contract_address) = chain_config.fee_contract {
                         if fee_contract_address == H160::zero() {
                             anyhow::bail!("Fee contract cannot use the zero address");
-                        } else if !is_proxy_contract(provider.clone(), fee_contract_address).await?
+                        } else if !is_proxy_contract(l1.provider(), fee_contract_address)
+                            .await
+                            .context(format!(
+                                "checking if fee contract is a proxy in upgrade {version}",
+                            ))?
                         {
                             anyhow::bail!("Fee contract's address is not a proxy");
                         }
@@ -591,10 +599,7 @@ mod test {
 
         // check if the result from the validation is an error
         if let Err(e) = result {
-            // assert that the error message contains "Fee contract's address is not a proxy"
-            assert!(e
-                .to_string()
-                .contains("Fee contract's address is not a proxy"));
+            assert!(e.to_string().contains("is not a proxy"));
         } else {
             panic!("Expected the fee contract to not be a proxy, but the validation succeeded");
         }

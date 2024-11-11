@@ -4,10 +4,14 @@ set -euo pipefail
 # If we aren't in a nix shell (where this handled in flake.nix) add the target
 # directory to the path so that the binaries are found by process-compose.
 if [ -z "${IN_NIX_SHELL-}" ]; then
+    echo "ALERT: The expected profile for demo-native binaries has been updated"
+    echo "from release to test profile. You can still use release binaries by"
+    echo -e "manually setting your PATH.\n"
     REPO_ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
     # Default to CARGO_TARGET_DIR if set, otherwise use the default target directory.
     TARGET_DIR="${CARGO_TARGET_DIR:-${REPO_ROOT}/target}"
-    export "PATH=${TARGET_DIR}/release:$PATH"
+    echo -e "Appending ${TARGET_DIR}/debug to PATH.\n"
+    export "PATH=${TARGET_DIR}/debug:$PATH"
 fi
 
 ESPRESSO_BASE_STORAGE_PATH=$(mktemp -d -t espresso-XXXXXXXX)

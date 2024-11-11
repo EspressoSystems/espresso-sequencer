@@ -12,11 +12,12 @@ use super::state::ValidatedState;
 /// Represents the immutable state of a node.
 ///
 /// For mutable state, use `ValidatedState`.
-#[derive(Debug, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct NodeState {
     pub node_id: u64,
     pub chain_config: crate::v0_3::ChainConfig,
     pub l1_client: L1Client,
+    #[debug("{}", peers.name())]
     pub peers: Arc<dyn StateCatchup>,
     pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
@@ -71,7 +72,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
         )
@@ -84,7 +85,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 2>::version(),
         )
@@ -97,7 +98,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 3>::version(),
         )
@@ -137,7 +138,7 @@ impl Default for NodeState {
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
         )
@@ -253,6 +254,10 @@ pub mod mock {
 
         fn backoff(&self) -> &BackoffParams {
             &self.backoff
+        }
+
+        fn name(&self) -> String {
+            "MockStateCatchup".into()
         }
     }
 }
