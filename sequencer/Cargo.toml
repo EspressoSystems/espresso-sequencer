@@ -35,6 +35,7 @@ anyhow = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-broadcast = { workspace = true }
+async-lock = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
@@ -42,7 +43,6 @@ bincode = { workspace = true }
 # CDN imports
 cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
-async-lock = { workspace = true }
 
 clap = { workspace = true }
 client = { path = "../client" }
