@@ -18,8 +18,8 @@ centric Ethereum ecosystem.
   Espresso state transition then stores the block commitment.
 6. Rollups post updated state to L1. ZK-rollups include a proof.
 7. Rollup contracts read certified sequence of block commitments from sequencer
-  contract. Verify state transition proofs against this sequence (ZKR) or wait
-  for fraud proof against this sequence (ORU).
+  contract. Verify state transition proofs against this sequence (ZK-rollup) or
+  wait for fraud proof against this sequence (optimistic rollup).
 
 Below is sequence diagram to accompany the overview:
 
