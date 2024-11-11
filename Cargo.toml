@@ -83,20 +83,20 @@ surf-disco = "0.9"
 tagged-base64 = "0.4"
 tide-disco = "0.9"
 time = "0.3"
-toml = "0.8"
-tracing = "0.1"
-trait-variant = "0.1"
-typenum = "1"
-url = "2"
-vbs = "0.1"
-vec1 = "1.12"
 tokio = { version = "1", default-features = false, features = [
 	"rt-multi-thread",
 	"macros",
 	"parking_lot",
 	"sync",
 ] }
+toml = "0.8"
+tracing = "0.1"
 tracing-subscriber = "0.3"
+trait-variant = "0.1"
+typenum = "1"
+url = "2"
+vbs = "0.1"
+vec1 = "1.12"
 
 # Dependencies enabled by feature "file-system-data-source".
 atomic_store = { git = "https://github.com/EspressoSystems/atomicstore.git", tag = "0.1.4", optional = true }

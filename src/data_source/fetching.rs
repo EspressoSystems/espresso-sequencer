@@ -123,7 +123,7 @@ use std::{
     time::Duration,
 };
 use tagged_base64::TaggedBase64;
-use tokio::time::sleep;
+use tokio::{spawn, time::sleep};
 use tracing::Instrument;
 
 mod block;
@@ -603,25 +603,30 @@ where
 
         self.fetcher.store_and_notify(info).await;
 
-        // If data related to this block is missing, try and fetch it.
         if fetch_block || fetch_vid {
-            let mut tx = match self.read().await {
-                Ok(tx) => tx,
-                Err(err) => {
-                    tracing::warn!(
-                        height,
-                        "not fetching missing data at decide; could not open transactin: {err:#}"
-                    );
-                    return Ok(());
+            // If data related to this block is missing, try and fetch it. Do this in an async task:
+            // we're triggering a fire-and-forget fetch; we don't need to block the caller on this.
+            let fetcher = self.fetcher.clone();
+            let span = tracing::info_span!("fetch missing data", height);
+            spawn(async move {
+                tracing::info!(fetch_block, fetch_vid, "fetching missing data");
+                let mut tx = match fetcher.read().await {
+                    Ok(tx) => tx,
+                    Err(err) => {
+                        tracing::warn!(
+                            height,
+                            "not fetching missing data at decide; could not open transactin: {err:#}"
+                        );
+                        return;
+                    }
+                };
+                if fetch_block {
+                    BlockQueryData::active_fetch(&mut tx, fetcher.clone(), height.into()).await;
                 }
-            };
-            if fetch_block {
-                BlockQueryData::active_fetch(&mut tx, self.fetcher.clone(), height.into()).await;
-            }
-            if fetch_vid {
-                VidCommonQueryData::active_fetch(&mut tx, self.fetcher.clone(), height.into())
-                    .await;
-            }
+                if fetch_vid {
+                    VidCommonQueryData::active_fetch(&mut tx, fetcher.clone(), height.into()).await;
+                }
+            }.instrument(span));
         }
         Ok(())
     }
