@@ -191,7 +191,7 @@ mod test {
 
     use crate::mock::{run_mock_event_service, StaticVer01};
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_mock_events_service() {
         // Initialize logging
         initialize_logging();

@@ -851,7 +851,7 @@ mod test {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::traits::signature_key::SignatureKey;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
         // Create some quorum proposals to test with.
         let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;

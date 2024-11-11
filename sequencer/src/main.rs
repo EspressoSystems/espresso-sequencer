@@ -278,7 +278,7 @@ mod test {
 
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_startup_before_orchestrator() {
         setup_test();
 

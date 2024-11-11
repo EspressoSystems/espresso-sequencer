@@ -577,7 +577,7 @@ mod tests {
     use tokio::time::timeout;
     use url::Url;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_leaf_error_debug() {
         let (mut sender, receiver) = mpsc::channel(1);
         // deliberately close the receiver.
@@ -597,7 +597,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_leaf_stream() {
         let data_state: DataState = Default::default();
         let data_state = Arc::new(RwLock::new(data_state));
@@ -664,7 +664,7 @@ mod tests {
         .is_ok());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_node_identity_stream() {
         let data_state: DataState = Default::default();
         let data_state = Arc::new(RwLock::new(data_state));

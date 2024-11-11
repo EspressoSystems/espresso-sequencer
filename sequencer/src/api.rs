@@ -1058,25 +1058,25 @@ mod api_tests {
         testing::{wait_for_decide_on_handle, TestConfigBuilder},
     };
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         submit_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn status_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         status_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn state_signature_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         state_signature_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>() {
         setup_test();
 
@@ -1174,13 +1174,13 @@ mod api_tests {
         assert!(found_empty_block);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn catchup_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_non_consecutive_decide_with_failing_event_consumer<D>()
     where
         D: TestableSequencerDataSource + Debug + 'static,
@@ -1349,7 +1349,7 @@ mod test {
         testing::{TestConfig, TestConfigBuilder},
     };
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_healthcheck() {
         setup_test();
 
@@ -1371,27 +1371,27 @@ mod test {
         assert_eq!(health.status, HealthStatus::Available);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn status_test_without_query_module() {
         status_test_helper(|opt| opt).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn submit_test_without_query_module() {
         submit_test_helper(|opt| opt).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn state_signature_test_without_query_module() {
         state_signature_test_helper(|opt| opt).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn catchup_test_without_query_module() {
         catchup_test_helper(|opt| opt).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_test_merklized_state_api() {
         setup_test();
 
@@ -1475,7 +1475,7 @@ mod test {
         assert_eq!(expected, amount.0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_catchup() {
         setup_test();
 
@@ -1573,7 +1573,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_from_instance() {
         // This test uses a ValidatedState which only has the default chain config commitment.
         // The NodeState has the full chain config.
@@ -1627,7 +1627,7 @@ mod test {
         drop(network);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_catchup() {
         // This test uses a ValidatedState with a non-default chain config
         // so it will be different from the NodeState chain config used by the TestNetwork.
@@ -1704,7 +1704,7 @@ mod test {
         drop(network);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_catchup_dishonest_peer() {
         // This test sets up a network of three nodes, each with the full chain config.
         // One of the nodes is connected to a dishonest peer.
@@ -1777,7 +1777,7 @@ mod test {
         handle.abort();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fee_upgrade_view_based() {
         setup_test();
 
@@ -1806,7 +1806,7 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fee_upgrade_time_based() {
         setup_test();
 
@@ -1837,7 +1837,7 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_upgrade_view_based() {
         setup_test();
 
@@ -1867,7 +1867,7 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_upgrade_time_based() {
         setup_test();
 
@@ -2002,7 +2002,7 @@ mod test {
         network.server.shut_down().await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn test_restart() {
         setup_test();
 
@@ -2141,7 +2141,7 @@ mod test {
         assert_eq!(chain, new_chain);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_config() {
         setup_test();
 
@@ -2185,7 +2185,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_hotshot_event_streaming() {
         setup_test();
 

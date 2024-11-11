@@ -334,7 +334,7 @@ mod test {
     /// [test_cdn_receive_message_task] is a test that verifies that the
     /// expected External Message can be encoded, decoded, and sent to the
     /// url_sender appropriately.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cdn_receive_message_task() {
         let test_hotshot_message_serialized = {
             let test_url = Url::parse("http://localhost:8080/").unwrap();
@@ -373,7 +373,7 @@ mod test {
     /// [test_cdn_receive_messages_task_fails_receiving_message] is a test that
     /// verifies that the task does not close, nor send a url, when it
     /// encounters an error from the recv_msgs function.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cdn_receive_messages_task_fails_receiving_message() {
         let (url_sender, url_receiver) = mpsc::channel(1);
         let task = CdnReceiveMessagesTask::new(
@@ -397,7 +397,7 @@ mod test {
     /// [test_cdn_receive_message_task_fails_decoding_hotshot_message] is a
     /// test that verifies that the task does not close, nor send a url, when it
     /// encounters an error from the deserialization of the hotshot message.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cdn_receive_message_task_fails_decoding_hotshot_message() {
         let (url_sender, url_receiver) = mpsc::channel(1);
         let task =
@@ -421,7 +421,7 @@ mod test {
     /// it encounters a hotshot message that was not an External message.
     ///
     /// This really shouldn't happen in practice.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cdn_receive_message_task_fails_unexpected_hotshot_message_variant() {
         let (url_sender, url_receiver) = mpsc::channel(1);
         let bytes = bincode::serialize(&Message::<SeqTypes> {
@@ -448,7 +448,7 @@ mod test {
     /// [test_cdn_receive_message_task_fails_decoding_external_message] is a
     /// test that verifies that the task does not close, nor send a url, when
     /// it encounters an error from the deserialization of the external message.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cdn_receive_message_task_fails_decoding_external_message() {
         let (url_sender, url_receiver) = mpsc::channel(1);
         let bytes = bincode::serialize(&Message::<SeqTypes> {
@@ -477,7 +477,7 @@ mod test {
     ///
     /// Without being able to send urls to the url_sender, the task doesn't
     /// really have a point in existing.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cdn_receive_message_tasks_exits_when_url_receiver_closed() {
         let (url_sender, url_receiver) = mpsc::channel(1);
 
@@ -538,7 +538,7 @@ mod test {
     /// task broadcasts a RollCallRequest message to the network.  It also
     /// verifies that the task is short-lived, as it does not need to persist
     /// beyond it's initial request.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cdn_broadcast_roll_call_task() {
         let (message_sender, message_receiver) = mpsc::channel(1);
 

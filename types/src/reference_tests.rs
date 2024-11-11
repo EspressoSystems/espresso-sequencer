@@ -306,17 +306,17 @@ Actual: {actual}
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_payload() {
     reference_test_without_committable("v1", "payload", &reference_payload().await);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_tx_index() {
     reference_test_without_committable("v1", "tx_index", &reference_tx_index().await);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_ns_table() {
     reference_test(
         "v1",
@@ -366,7 +366,7 @@ fn test_reference_fee_info() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_header_v1() {
     reference_test(
         "v1",
@@ -376,7 +376,7 @@ async fn test_reference_header_v1() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_header_v2() {
     reference_test(
         "v2",
@@ -386,7 +386,7 @@ async fn test_reference_header_v2() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_header_v3() {
     reference_test(
         "v3",

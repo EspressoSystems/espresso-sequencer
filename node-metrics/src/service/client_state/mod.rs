@@ -1281,7 +1281,7 @@ pub mod tests {
         (node_1, node_2, node_3, data_state)
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_client_handling_stream_task_shutdown() {
         let (_, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1295,7 +1295,7 @@ pub mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_request_latest_voters_snapshot() {
         let (_, _, _, mut data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1366,7 +1366,7 @@ pub mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     #[cfg(feature = "testing")]
     async fn test_process_client_handling_stream_request_latest_blocks_snapshot() {
         use super::clone_block_detail;
@@ -1440,7 +1440,7 @@ pub mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_request_node_identity_snapshot() {
         let (node_1, node_2, node_3, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1511,7 +1511,7 @@ pub mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_subscribe_latest_block() {
         let (_, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1657,7 +1657,7 @@ pub mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_subscribe_node_identity() {
         let (node_1, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1779,7 +1779,7 @@ pub mod tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_subscribe_voters() {
         let (_, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1905,7 +1905,7 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_sender_before_receiver_polled_closes_receiver() {
         let (sender, mut receiver) = mpsc::channel::<u64>(1);
 
@@ -1920,7 +1920,7 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_sender_after_receiver_polled_closes_receiver() {
         let (sender, mut receiver) = mpsc::channel::<u64>(1);
 
@@ -1937,7 +1937,7 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_receiver_before_sender_sends() {
         let (mut sender, receiver) = mpsc::channel(1);
 
@@ -1952,7 +1952,7 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_receiver_after_sender_sends() {
         let (mut sender, mut receiver) = mpsc::channel(1);
 
@@ -1971,7 +1971,7 @@ pub mod tests {
 
     /// Tests to ensure that time timeout on an already ready future does not
     /// cause the future to be dropped.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_timeout_on_already_ready_future() {
         assert_eq!(
             timeout(Duration::ZERO, futures::future::ready(1u64)).await,
@@ -1981,7 +1981,7 @@ pub mod tests {
 
     /// Tests to ensure that time timeout on a pending future does not cause the
     /// future to be dropped.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_timeout_on_async_block_resolves_when_polled() {
         assert_eq!(timeout(Duration::ZERO, async move { 1u64 }).await, Ok(1u64),);
 
@@ -1993,7 +1993,7 @@ pub mod tests {
 
     /// Tests to ensure that time timeout on a pending future does not cause the
     /// future to be dropped.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_timeout_on_pending_future_times_out() {
         assert_ne!(
             timeout(Duration::ZERO, futures::future::pending::<u64>()).await,

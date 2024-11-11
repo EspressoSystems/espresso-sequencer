@@ -387,7 +387,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     #[ignore]
     async fn test_full_setup_example() {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(32);

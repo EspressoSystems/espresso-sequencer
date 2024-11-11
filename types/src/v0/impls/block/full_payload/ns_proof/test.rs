@@ -9,7 +9,7 @@ use jf_vid::{VidDisperse, VidScheme};
 
 use crate::{v0::impls::block::test::ValidTest, NsProof, Payload};
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn ns_proof() {
     let test_cases = vec![
         vec![

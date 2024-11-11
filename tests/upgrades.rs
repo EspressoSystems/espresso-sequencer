@@ -6,7 +6,7 @@ use vbs::version::StaticVersionType;
 
 const SEQUENCER_BLOCKS_TIMEOUT: u64 = 120;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_upgrade() -> Result<()> {
     dotenvy::dotenv()?;
 

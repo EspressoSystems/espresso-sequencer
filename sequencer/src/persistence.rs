@@ -95,7 +95,7 @@ mod persistence_tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_voted_view<P: TestablePersistence>() {
         setup_test();
 
@@ -147,7 +147,7 @@ mod persistence_tests {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_append_and_decide<P: TestablePersistence>() {
         setup_test();
 
@@ -498,7 +498,7 @@ mod persistence_tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_upgrade_certificate<P: TestablePersistence>() {
         setup_test();
 
@@ -547,7 +547,7 @@ mod persistence_tests {
         assert_eq!(view_number, new_view_number_for_certificate);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_decide_with_failing_event_consumer<P: TestablePersistence>() {
         #[derive(Clone, Copy, Debug)]
         struct FailConsumer;

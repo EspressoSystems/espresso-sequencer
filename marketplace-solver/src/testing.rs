@@ -180,7 +180,7 @@ mod test {
         (reg, private_key, signature_keys)
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_duplicate_rollup_registration() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -218,7 +218,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_rollup_registration_invalid_signature() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -268,7 +268,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_update_registration() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -332,7 +332,7 @@ mod test {
         assert_eq!(result[0], reg_ns_1);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_update_rollup_not_registered() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -375,7 +375,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_update_signature_mismatch() {
         // In this test, a rollup is registered.
         // Next, we attempt to update the rollup with different conditions:
@@ -494,7 +494,7 @@ mod test {
             .unwrap_err();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_bid_submission() {
         let mock_solver = MockSolver::init().await;
 
@@ -515,7 +515,7 @@ mod test {
             .unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_database_state() {
         // Initialize a mock solver and register two rollups
         // Drop the first solver tasks handles,

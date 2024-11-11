@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_smoke() -> Result<()> {
     let start = Instant::now();
     dotenvy::dotenv()?;

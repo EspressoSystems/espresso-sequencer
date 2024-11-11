@@ -230,7 +230,7 @@ mod test {
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api
     /// Builder subscrived to this api, and server the hotshot client request and the private mempool tx submission
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_non_permissioned_builder() {
         setup_test();
 

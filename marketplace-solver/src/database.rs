@@ -148,7 +148,7 @@ mod test {
     use crate::database::mock::setup_mock_database;
     use hotshot::helpers::initialize_logging;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_database_connection() {
         initialize_logging();
 

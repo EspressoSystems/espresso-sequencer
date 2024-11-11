@@ -1245,7 +1245,7 @@ mod test {
         FeeAccountProof::prove(&tree, account2).unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_l1_head() {
         initialize_logging();
 
@@ -1267,7 +1267,7 @@ mod test {
         assert_eq!(ProposalValidationError::DecrementingL1Head, err);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_builder_fee() {
         initialize_logging();
 
@@ -1298,7 +1298,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_chain_config() {
         initialize_logging();
 
@@ -1334,7 +1334,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_max_block_size() {
         initialize_logging();
         const MAX_BLOCK_SIZE: usize = 10;
@@ -1371,7 +1371,7 @@ mod test {
             .unwrap()
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_base_fee() {
         initialize_logging();
         // Setup
@@ -1400,7 +1400,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_height() {
         initialize_logging();
         // Setup
@@ -1433,7 +1433,7 @@ mod test {
             .unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_timestamp_non_dec() {
         initialize_logging();
         let tx = Transaction::of_size(10);
@@ -1459,7 +1459,7 @@ mod test {
         proposal.validate_timestamp_non_dec(0).unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_timestamp_drift() {
         initialize_logging();
         // Setup
@@ -1518,7 +1518,7 @@ mod test {
         proposal.validate_timestamp_drift(mock_time).unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_fee_root() {
         initialize_logging();
         // Setup
@@ -1553,7 +1553,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_block_root() {
         initialize_logging();
         // Setup.
@@ -1588,7 +1588,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_ns_table() {
         use NsTableValidationError::InvalidFinalOffset;
 
@@ -1719,7 +1719,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validate_builder_fee() {
         initialize_logging();
         let max_block_size = 10;
@@ -1774,7 +1774,7 @@ mod test {
         validate_builder_fee(&header, *parent.view_number() + 1).unwrap();
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validate_builder_fee_marketplace() {
         initialize_logging();
         let max_block_size = 10;

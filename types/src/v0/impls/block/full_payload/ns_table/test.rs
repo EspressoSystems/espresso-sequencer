@@ -60,7 +60,7 @@ fn ns_table_byte_len() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn payload_byte_len() {
     setup_test();
     let test_case = vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]];

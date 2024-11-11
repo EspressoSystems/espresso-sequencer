@@ -846,22 +846,22 @@ mod test {
         assert_eq!(bundle.sequencing_fee, sequencing_fee);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_reserve_builder_with_public_mempool() {
         test_marketplace_reserve_builder(Mempool::Public).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_reserve_builder_with_private_mempool() {
         test_marketplace_reserve_builder(Mempool::Private).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_fallback_builder_with_public_mempool() {
         test_marketplace_fallback_builder(Mempool::Public).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_fallback_builder_with_private_mempool() {
         test_marketplace_fallback_builder(Mempool::Private).await;
     }

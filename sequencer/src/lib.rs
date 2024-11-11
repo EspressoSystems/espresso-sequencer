@@ -1129,7 +1129,7 @@ mod test {
     use self::testing::run_test_builder;
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_skeleton_instantiation() {
         setup_test();
         // Assign `config` so it isn't dropped early.
@@ -1168,7 +1168,7 @@ mod test {
         wait_for_decide_on_handle(&mut events, &txn).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_header_invariants() {
         setup_test();
 

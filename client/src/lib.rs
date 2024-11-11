@@ -112,7 +112,7 @@ mod tests {
     use super::*;
     // Regression test for a bug where the block number underflowed. This test would panic
     // on the previous implementation, as long as overflow checks are enabled.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_regression_block_number_underflow() {
         let client = SequencerClient::new("http://dummy-url:3030".parse().unwrap());
         assert_eq!(

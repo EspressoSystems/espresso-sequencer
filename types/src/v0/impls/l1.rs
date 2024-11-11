@@ -841,12 +841,12 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_get_finalized_deposits_ws() -> anyhow::Result<()> {
         test_get_finalized_deposits_helper(true).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_get_finalized_deposits_http() -> anyhow::Result<()> {
         test_get_finalized_deposits_helper(false).await
     }
@@ -873,12 +873,12 @@ mod test {
         assert_eq!(block.hash, true_block.hash.unwrap());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_wait_for_finalized_block_ws() {
         test_wait_for_finalized_block_helper(true).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_wait_for_finalized_block_http() {
         test_wait_for_finalized_block_helper(false).await
     }
@@ -911,12 +911,12 @@ mod test {
         assert_eq!(block.hash, true_block.hash.unwrap());
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_wait_for_finalized_block_by_timestamp_ws() {
         test_wait_for_finalized_block_by_timestamp_helper(true).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_wait_for_finalized_block_by_timestamp_http() {
         test_wait_for_finalized_block_by_timestamp_helper(false).await
     }
@@ -939,12 +939,12 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_wait_for_block_ws() {
         test_wait_for_block_helper(true).await
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_wait_for_block_http() {
         test_wait_for_block_helper(false).await
     }

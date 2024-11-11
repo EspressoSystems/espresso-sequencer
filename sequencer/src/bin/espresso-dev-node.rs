@@ -575,7 +575,7 @@ mod tests {
     // and open a PR.
     // - APIs update
     // - Types (like `Header`) update
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_dev_node_test() {
         setup_test();
 
@@ -876,7 +876,7 @@ mod tests {
         (providers, urls)
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_dev_node_multiple_lc_providers_test() {
         setup_test();
 

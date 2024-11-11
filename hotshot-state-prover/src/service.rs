@@ -771,7 +771,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validate_light_contract_is_proxy() -> Result<()> {
         setup_test();
 
@@ -810,7 +810,7 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validate_light_contract_is_not_a_proxy() -> Result<()> {
         setup_test();
 
@@ -849,7 +849,7 @@ mod test {
         Ok(())
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_read_contract_state() -> Result<()> {
         setup_test();
         let anvil = Anvil::new().spawn();
@@ -884,7 +884,7 @@ mod test {
     }
 
     // This test is temporarily ignored. We are unifying the contract deployment in #1071.
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_submit_state_and_proof() -> Result<()> {
         setup_test();
 
