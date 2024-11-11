@@ -27,8 +27,6 @@ end note
 Client --> L2_2 : L2 Transactions\nL2 State queries
 Client --> L2_N : L2 Transactions\nL2 State queries
 
-' L2_1_RPC -> L2_Seq: L2 Transactions
-
 L2_Seq -> L2_Seq: L2 Block
 note top of link
 2.
@@ -53,8 +51,6 @@ note bottom of link
 end note
 
 L2_1_Prover --> L2_1_L1 : State\nProof
-' L2_2 -> L2_2_L1 : State\nProof
-' L2_N -> L2_N_L1 : State\nProof
 note top of link
 6.
 end note
@@ -63,19 +59,5 @@ LC -> L2_L1
 note bottom of link
 7.
 end note
-
-' L2 1 details
-' L2_1_RPC <-down- L2_1_State : Read state
-' L2_1_Val -down-> L2_1_State : Write state
-' L2_1_Prover <-down- L2_1_State : Read State
-
-' Layout
-' L2_1_RPC -[hidden]r-> L2_1_Val
-' L2_1 -[hidden]r-> L2_2
-' L2_2 -[hidden]r-> L2_N
-' L2_1_L1 -[hidden]r-> L2_2_L1
-' L2_2_L1 -[hidden]r-> L2_N_L1
-' L2 -[hidden]d-> L1
-' Esp -[hidden]u-> L2
 
 @enduml
