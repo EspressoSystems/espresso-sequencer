@@ -21,57 +21,66 @@ use hotshot_types::{
     },
     utils::View,
 };
+use itertools::Itertools;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    v0::impls::ValidatedState, v0_3::ChainConfig, AccountQueryData, BackoffParams, BlockMerkleTree,
-    Event, FeeAccount, FeeMerkleCommitment, Leaf, NetworkConfig, SeqTypes,
+    v0::impls::ValidatedState, v0_3::ChainConfig, BackoffParams, BlockMerkleTree, Event,
+    FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf, NetworkConfig, SeqTypes,
 };
 
 use super::impls::NodeState;
 
 #[async_trait]
-pub trait StateCatchup: Send + Sync + std::fmt::Debug {
-    /// Try to fetch the given account state, failing without retrying if unable.
-    async fn try_fetch_account(
+pub trait StateCatchup: Send + Sync {
+    /// Try to fetch the given accounts state, failing without retrying if unable.
+    async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData>;
+        account: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree>;
 
     /// Fetch the given list of accounts, retrying on transient errors.
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
-        let mut ret = vec![];
-        for account in accounts {
-            let account = self
-                .backoff()
-                .retry(self, |provider| {
-                    provider
-                        .try_fetch_account(height, view, fee_merkle_tree_root, account)
+    ) -> anyhow::Result<Vec<FeeAccountProof>> {
+        self.backoff()
+            .retry(self, |provider| {
+                async {
+                    let tree = provider
+                        .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, &accounts)
+                        .await
                         .map_err(|err| {
                             err.context(format!(
-                                "fetching account {account}, height {height}, view {view:?}"
+                                "fetching accounts {accounts:?}, height {height}, view {view:?}"
                             ))
+                        })?;
+                    accounts
+                        .iter()
+                        .map(|account| {
+                            FeeAccountProof::prove(&tree, (*account).into())
+                                .context(format!("missing account {account}"))
+                                .map(|(proof, _)| proof)
                         })
-                        .boxed()
-                })
-                .await;
-            ret.push(account);
-        }
-        Ok(ret)
+                        .collect::<anyhow::Result<Vec<FeeAccountProof>>>()
+                }
+                .boxed()
+            })
+            .await
     }
 
     /// Try to fetch and remember the blocks frontier, failing without retrying if unable.
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
@@ -80,18 +89,18 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     /// Fetch and remember the blocks frontier, retrying on transient errors.
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         self.backoff()
             .retry(mt, |mt| {
-                self.try_remember_blocks_merkle_tree(height, view, mt)
+                self.try_remember_blocks_merkle_tree(instance, height, view, mt)
                     .map_err(|err| err.context("fetching frontier"))
                     .boxed()
             })
-            .await;
-        Ok(())
+            .await
     }
 
     async fn try_fetch_chain_config(
@@ -99,7 +108,10 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig>;
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         self.backoff()
             .retry(self, |provider| {
                 provider
@@ -111,52 +123,59 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     }
 
     fn backoff(&self) -> &BackoffParams;
+    fn name(&self) -> String;
 }
 
 #[async_trait]
 impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
-    async fn try_fetch_account(
+    async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_account(height, view, fee_merkle_tree_root, account)
+            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
+    ) -> anyhow::Result<Vec<FeeAccountProof>> {
         (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
+            .try_remember_blocks_merkle_tree(instance, height, view, mt)
             .await
     }
 
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
+        (**self)
+            .remember_blocks_merkle_tree(instance, height, view, mt)
+            .await
     }
 
     async fn try_fetch_chain_config(
@@ -166,59 +185,72 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
         (**self).try_fetch_chain_config(commitment).await
     }
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         (**self).fetch_chain_config(commitment).await
     }
 
     fn backoff(&self) -> &BackoffParams {
         (**self).backoff()
+    }
+
+    fn name(&self) -> String {
+        (**self).name()
     }
 }
 
 #[async_trait]
 impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
-    async fn try_fetch_account(
+    async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_account(height, view, fee_merkle_tree_root, account)
+            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
+    ) -> anyhow::Result<Vec<FeeAccountProof>> {
         (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
+            .fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
             .await
     }
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
+            .try_remember_blocks_merkle_tree(instance, height, view, mt)
             .await
     }
 
     async fn remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
+        (**self)
+            .remember_blocks_merkle_tree(instance, height, view, mt)
+            .await
     }
 
     async fn try_fetch_chain_config(
@@ -228,34 +260,46 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         (**self).try_fetch_chain_config(commitment).await
     }
 
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+    async fn fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
         (**self).fetch_chain_config(commitment).await
     }
 
     fn backoff(&self) -> &BackoffParams {
         (**self).backoff()
+    }
+
+    fn name(&self) -> String {
+        (**self).name()
     }
 }
 
 /// Catchup from multiple providers tries each provider in a round robin fashion until it succeeds.
 #[async_trait]
 impl<T: StateCatchup> StateCatchup for Vec<T> {
-    #[tracing::instrument(skip(self))]
-    async fn try_fetch_account(
+    #[tracing::instrument(skip(self, instance))]
+    async fn try_fetch_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         for provider in self {
             match provider
-                .try_fetch_account(height, view, fee_merkle_tree_root, account)
+                .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
                 .await
             {
-                Ok(account) => return Ok(account),
+                Ok(tree) => return Ok(tree),
                 Err(err) => {
-                    tracing::warn!(%account, ?provider, "failed to fetch account: {err:#}");
+                    tracing::info!(
+                        ?accounts,
+                        provider = provider.name(),
+                        "failed to fetch accounts: {err:#}"
+                    );
                 }
             }
         }
@@ -263,21 +307,25 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
         bail!("could not fetch account from any provider");
     }
 
-    #[tracing::instrument(skip(self, mt))]
+    #[tracing::instrument(skip(self, instance, mt))]
     async fn try_remember_blocks_merkle_tree(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         for provider in self {
             match provider
-                .try_remember_blocks_merkle_tree(height, view, mt)
+                .try_remember_blocks_merkle_tree(instance, height, view, mt)
                 .await
             {
                 Ok(()) => return Ok(()),
                 Err(err) => {
-                    tracing::warn!(?provider, "failed to fetch frontier: {err:#}");
+                    tracing::info!(
+                        provider = provider.name(),
+                        "failed to fetch frontier: {err:#}"
+                    );
                 }
             }
         }
@@ -293,7 +341,10 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
             match provider.try_fetch_chain_config(commitment).await {
                 Ok(cf) => return Ok(cf),
                 Err(err) => {
-                    tracing::warn!(?provider, "failed to fetch chain config: {err:#}");
+                    tracing::info!(
+                        provider = provider.name(),
+                        "failed to fetch chain config: {err:#}"
+                    );
                 }
             }
         }
@@ -307,6 +358,10 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
             .map(|p| p.backoff())
             .max()
             .expect("provider list not empty")
+    }
+
+    fn name(&self) -> String {
+        format!("[{}]", self.iter().map(StateCatchup::name).join(","))
     }
 }
 
@@ -356,6 +411,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_quorum_proposals(
         &self,
     ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>;
+
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>>;
 
     async fn load_vid_share(
         &self,
@@ -567,6 +627,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
     ) -> anyhow::Result<()>;
+
+    async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
+        match self.load_anchor_leaf().await? {
+            Some((leaf, _)) => Ok(leaf.view_number()),
+            None => Ok(ViewNumber::genesis()),
+        }
+    }
 }
 
 #[async_trait]

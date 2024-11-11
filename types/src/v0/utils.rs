@@ -2,7 +2,7 @@ use anyhow::Context;
 use async_std::task::sleep;
 use bytesize::ByteSize;
 use clap::Parser;
-use derive_more::{Display, From, Into};
+use derive_more::{From, Into};
 use futures::future::BoxFuture;
 use rand::Rng;
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
@@ -43,8 +43,8 @@ pub struct GenesisHeader {
     pub timestamp: Timestamp,
 }
 
-#[derive(Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
-#[display(fmt = "{}", "_0.format(&TimestampFormat).unwrap()")]
+#[derive(Hash, Copy, Clone, Debug, derive_more::Display, PartialEq, Eq, From, Into)]
+#[display("{}", _0.format(&TimestampFormat).unwrap())]
 pub struct Timestamp(OffsetDateTime);
 
 impl_serde_from_string_or_integer!(Timestamp);
@@ -216,6 +216,10 @@ pub struct BackoffParams {
         default_value = "1:10"
     )]
     jitter: Ratio,
+
+    /// Disable retries and just fail after one failed attempt.
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_DISABLE")]
+    disable: bool,
 }
 
 impl Default for BackoffParams {
@@ -225,15 +229,25 @@ impl Default for BackoffParams {
 }
 
 impl BackoffParams {
+    pub fn disabled() -> Self {
+        Self {
+            disable: true,
+            ..Default::default()
+        }
+    }
+
     pub async fn retry<S, T>(
         &self,
         mut state: S,
         f: impl for<'a> Fn(&'a mut S) -> BoxFuture<'a, anyhow::Result<T>>,
-    ) -> T {
+    ) -> anyhow::Result<T> {
         let mut delay = self.base;
         loop {
             match f(&mut state).await {
-                Ok(res) => break res,
+                Ok(res) => break Ok(res),
+                Err(err) if self.disable => {
+                    return Err(err.context("Retryable operation failed; retries disabled"));
+                }
                 Err(err) => {
                     tracing::warn!(
                         "Retryable operation failed, will retry after {delay:?}: {err:#}"

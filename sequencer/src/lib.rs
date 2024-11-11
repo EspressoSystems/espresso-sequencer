@@ -4,7 +4,6 @@ pub mod context;
 pub mod genesis;
 
 mod external_event_handler;
-pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
@@ -15,7 +14,7 @@ use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::{
-    traits::EventConsumer, BackoffParams, L1Client, NodeState, PubKey, SeqTypes,
+    traits::EventConsumer, BackoffParams, L1Client, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers::types::U256;
@@ -51,10 +50,12 @@ use hotshot::{
     types::SignatureKey,
     MarketplaceConfig,
 };
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+use hotshot_orchestrator::client::get_complete_config;
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
+    network::NetworkConfig,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
@@ -121,11 +122,67 @@ pub struct NetworkParams {
     /// The (optional) bootstrap node addresses for Libp2p. If supplied, these will
     /// override the bootstrap nodes specified in the config file.
     pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
+
+    /// The heartbeat interval
+    pub libp2p_heartbeat_interval: Duration,
+
+    /// The number of past heartbeats to gossip about
+    pub libp2p_history_gossip: usize,
+    /// The number of past heartbeats to remember the full messages for
+    pub libp2p_history_length: usize,
+
+    /// The target number of peers in the mesh
+    pub libp2p_mesh_n: usize,
+    /// The maximum number of peers in the mesh
+    pub libp2p_mesh_n_high: usize,
+    /// The minimum number of peers in the mesh
+    pub libp2p_mesh_n_low: usize,
+    /// The minimum number of mesh peers that must be outbound
+    pub libp2p_mesh_outbound_min: usize,
+
+    /// The maximum gossip message size
+    pub libp2p_max_transmit_size: usize,
+
+    /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
+    pub libp2p_max_ihave_length: usize,
+
+    /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
+    pub libp2p_max_ihave_messages: usize,
+
+    /// The time period that message hashes are stored in the cache
+    pub libp2p_published_message_ids_cache_time: Duration,
+
+    /// The time to wait for a Libp2p message requested through IWANT following an IHAVE advertisement
+    pub libp2p_iwant_followup_time: Duration,
+
+    /// The maximum number of Libp2p messages we will process in a given RPC
+    pub libp2p_max_messages_per_rpc: Option<usize>,
+
+    /// How many times we will allow a peer to request the same message id through IWANT gossip before we start ignoring them
+    pub libp2p_gossip_retransmission: u32,
+
+    /// If enabled newly created messages will always be sent to all peers that are subscribed to the topic and have a good enough score
+    pub libp2p_flood_publish: bool,
+
+    /// The time period that Libp2p message hashes are stored in the cache
+    pub libp2p_duplicate_cache_time: Duration,
+
+    /// Time to live for Libp2p fanout peers
+    pub libp2p_fanout_ttl: Duration,
+
+    /// Initial delay in each Libp2p heartbeat
+    pub libp2p_heartbeat_initial_delay: Duration,
+
+    /// How many Libp2p peers we will emit gossip to at each heartbeat
+    pub libp2p_gossip_factor: f64,
+
+    /// Minimum number of Libp2p peers to emit gossip to during a heartbeat
+    pub libp2p_gossip_lazy: usize,
 }
 
 pub struct L1Params {
     pub url: Url,
-    pub events_max_block_range: u64,
+    pub options: L1ClientOptions,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -251,7 +308,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
             tracing::info!(?peers, "loading network config from peers");
             let peers =
                 StatePeers::<SequencerApiVersion>::from_urls(peers, network_params.catchup_backoff);
-            let config = peers.fetch_config(my_config.clone()).await;
+            let config = peers.fetch_config(my_config.clone()).await?;
 
             tracing::info!(
                 node_id = config.node_index,
@@ -267,7 +324,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
             tracing::error!(
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
             );
-            let config = NetworkConfig::get_complete_config(
+            let config = get_complete_config(
                 &orchestrator_client,
                 my_config.clone(),
                 // Register in our Libp2p advertise address and public key so other nodes
@@ -335,12 +392,36 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     )
     .with_context(|| format!("Failed to create CDN network {node_index}"))?;
 
+    // Configure gossipsub based on the command line options
+    let gossip_config = GossipConfig {
+        heartbeat_interval: network_params.libp2p_heartbeat_interval,
+        history_gossip: network_params.libp2p_history_gossip,
+        history_length: network_params.libp2p_history_length,
+        mesh_n: network_params.libp2p_mesh_n,
+        mesh_n_high: network_params.libp2p_mesh_n_high,
+        mesh_n_low: network_params.libp2p_mesh_n_low,
+        mesh_outbound_min: network_params.libp2p_mesh_outbound_min,
+        max_ihave_messages: network_params.libp2p_max_ihave_messages,
+        max_transmit_size: network_params.libp2p_max_transmit_size,
+        max_ihave_length: network_params.libp2p_max_ihave_length,
+        published_message_ids_cache_time: network_params.libp2p_published_message_ids_cache_time,
+        iwant_followup_time: network_params.libp2p_iwant_followup_time,
+        max_messages_per_rpc: network_params.libp2p_max_messages_per_rpc,
+        gossip_retransmission: network_params.libp2p_gossip_retransmission,
+        flood_publish: network_params.libp2p_flood_publish,
+        duplicate_cache_time: network_params.libp2p_duplicate_cache_time,
+        fanout_ttl: network_params.libp2p_fanout_ttl,
+        heartbeat_initial_delay: network_params.libp2p_heartbeat_initial_delay,
+        gossip_factor: network_params.libp2p_gossip_factor,
+        gossip_lazy: network_params.libp2p_gossip_lazy,
+    };
+
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
     let network = {
-        let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+        let p2p_network = Libp2pNetwork::from_config(
             config.clone(),
-            GossipConfig::default(),
+            gossip_config,
             libp2p_bind_address,
             &my_config.public_key,
             // We need the private key so we can derive our Libp2p keypair
@@ -392,10 +473,16 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         genesis_state.prefund_account(address, amount);
     }
 
-    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_client = l1_params.options.connect(l1_params.url).await?;
+    l1_client.start().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
+        L1Finalized::Timestamp { timestamp } => {
+            l1_client
+                .wait_for_finalized_block_with_timestamp(timestamp.unix_timestamp().into())
+                .await
+        }
     };
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
@@ -477,13 +564,13 @@ pub mod testing {
             node_implementation::ConsensusTime,
             stake_table::StakeTableScheme,
         },
-        ExecutionType, HotShotConfig, PeerConfig,
+        HotShotConfig, PeerConfig,
     };
     use marketplace_builder_core::{
         builder_state::BuilderState,
         service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
-        utils::ParentBlockReferences,
     };
+    use marketplace_builder_shared::block::ParentBlockReferences;
     use portpicker::pick_unused_port;
     use vbs::version::Version;
 
@@ -509,7 +596,8 @@ pub mod testing {
             >,
         ) {
             async_spawn(async move {
-                let res = run_builder_service::<SeqTypes>(self.hooks, self.senders, stream).await;
+                let res =
+                    run_builder_service::<SeqTypes, _>(self.hooks, self.senders, stream).await;
                 tracing::error!(?res, "Testing marketplace builder service exited");
             });
         }
@@ -711,15 +799,10 @@ pub mod testing {
 
             let config: HotShotConfig<PubKey> = HotShotConfig {
                 fixed_leader_for_gpuvid: 0,
-                execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
                 known_da_nodes: known_nodes_with_stake.clone(),
                 known_nodes_with_stake: known_nodes_with_stake.clone(),
-                known_nodes_without_stake: vec![],
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
-                timeout_ratio: (10, 11),
-                round_start_delay: Duration::from_millis(1).as_millis() as u64,
-                start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes,
                 my_own_validator_config: Default::default(),
@@ -743,6 +826,7 @@ pub mod testing {
                 start_voting_time: 0,
                 stop_proposing_time: 0,
                 stop_voting_time: 0,
+                epoch_height: 0,
             };
 
             Self {
@@ -892,7 +976,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
-                L1Client::new(self.l1_url.clone(), 1000),
+                L1Client::new(self.l1_url.clone()).await.unwrap(),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
                 V::Base::VERSION,
             )

@@ -1,4 +1,4 @@
-name: Documentation
+name: Rust Docs
 on:
   push:
     branches:
@@ -18,7 +18,7 @@ env:
   RUSTDOCFLAGS: --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
 
 jobs:
-  doc:
+  doc-rust:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Repository

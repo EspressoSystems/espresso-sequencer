@@ -288,7 +288,7 @@ async fn main() -> anyhow::Result<()> {
             .get_contract_address(Contract::LightClientProxy)
             .unwrap();
 
-        if !is_proxy_contract(provider.clone(), light_client_address)
+        if !is_proxy_contract(&provider, light_client_address)
             .await
             .expect("Failed to determine if light client contract is a proxy")
         {

@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
     traits::{
         node_implementation::{NodeType, Versions},
@@ -17,8 +17,8 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    mock, validate_proposal, BuilderValidationError, FeeError, ProposalValidationError,
-    StateValidationError,
+    get_l1_deposits, mock, retain_accounts, BuilderValidationError, FeeError,
+    ProposalValidationError, StateValidationError,
 };
 pub use utils::*;
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -85,6 +85,7 @@ reexport_unchanged_types!(
     Iter,
     L1BlockInfo,
     L1Client,
+    L1ClientOptions,
     L1Snapshot,
     NamespaceId,
     NsIndex,
@@ -119,6 +120,7 @@ reexport_unchanged_types!(
     ViewBasedUpgrade,
     BlockSize,
 );
+pub(crate) use v0_3::{L1Event, L1State, L1UpdateTask, RpcClient};
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
@@ -126,7 +128,8 @@ reexport_unchanged_types!(
 pub struct SeqTypes;
 
 impl NodeType for SeqTypes {
-    type Time = ViewNumber;
+    type View = ViewNumber;
+    type Epoch = EpochNumber;
     type BlockHeader = Header;
     type BlockPayload = Payload;
     type SignatureKey = PubKey;
@@ -176,7 +179,7 @@ pub type Event = hotshot::types::Event<SeqTypes>;
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
-pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
+pub type NetworkConfig = hotshot_types::network::NetworkConfig<PubKey>;
 
 pub use self::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};
 pub use crate::v0_1::{

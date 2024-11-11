@@ -8,7 +8,7 @@ demo *args:
     docker compose up {{args}}
 
 demo-native:
-    cargo build --release
+    cargo build --profile test
     scripts/demo-native
 
 demo-native-mp:
@@ -37,9 +37,9 @@ docker-stop-rm:
 anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
-test:
+test *args:
 	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --verbose 
+	cargo nextest run --locked --workspace --all-features --verbose {{args}}
 
 test-slow:
 	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
@@ -72,17 +72,11 @@ dev-sequencer:
     --state-relay-server-url http://localhost:8083 \
     -- http --port 8083  -- query --storage-path storage
 
-dev-commitment:
-     target/release/commitment-task --sequencer-url http://localhost:50000 \
-     --l1-provider http://localhost:8545 \
-     --eth-mnemonic "test test test test test test test test test test test junk" \
-     --deploy
-
 build-docker-images:
     scripts/build-docker-images-native
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$"
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$"
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 

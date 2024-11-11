@@ -5,7 +5,7 @@ use async_std::sync::Arc;
 use clap::Parser;
 use espresso_types::{
     v0::traits::{EventConsumer, NullEventConsumer, SequencerPersistence},
-    BlockMerkleTree, FeeMerkleTree, PubKey,
+    BlockMerkleTree, PubKey,
 };
 use futures::{
     channel::oneshot,
@@ -27,14 +27,15 @@ use vbs::version::StaticVersionType;
 
 use super::{
     data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource,
+        SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
     update::ApiEventConsumer,
     ApiState, StorageState,
 };
 use crate::{
+    catchup::CatchupStorage,
     context::{SequencerContext, TaskList},
     persistence,
     state::update_state_storage_loop,
@@ -265,7 +266,7 @@ impl Options {
     where
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
-        D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
+        D: SequencerDataSource + CatchupStorage + Send + Sync + 'static,
         for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
     {
         let metrics = ds.populate_metrics();
@@ -356,7 +357,7 @@ impl Options {
             // Initialize merklized state module for fee merkle tree
             app.register_module(
                 "fee-state",
-                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>()?,
+                endpoints::get_balance::<_, SequencerApiVersion>()?,
             )?;
 
             let state = state.clone();
@@ -391,6 +392,7 @@ impl Options {
             + Sync
             + SubmitDataSource<N, P>
             + StateSignatureDataSource<N>
+            + NodeStateDataSource
             + CatchupDataSource
             + HotShotConfigDataSource,
         N: ConnectedNetwork<PubKey>,

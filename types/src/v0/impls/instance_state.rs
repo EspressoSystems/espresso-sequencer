@@ -1,6 +1,6 @@
-use crate::{
-    v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
-    Timestamp, Upgrade, UpgradeMode,
+use crate::v0::{
+    retain_accounts, traits::StateCatchup, v0_3::ChainConfig, FeeMerkleTree, GenesisHeader,
+    L1BlockInfo, L1Client, PubKey, Timestamp, Upgrade, UpgradeMode,
 };
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
@@ -12,11 +12,12 @@ use super::state::ValidatedState;
 /// Represents the immutable state of a node.
 ///
 /// For mutable state, use `ValidatedState`.
-#[derive(Debug, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct NodeState {
     pub node_id: u64,
     pub chain_config: crate::v0_3::ChainConfig,
     pub l1_client: L1Client,
+    #[debug("{}", peers.name())]
     pub peers: Arc<dyn StateCatchup>,
     pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
@@ -71,9 +72,22 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
+        )
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn mock_v2() -> Self {
+        use vbs::version::StaticVersion;
+
+        Self::new(
+            0,
+            ChainConfig::default(),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
+            mock::MockStateCatchup::default(),
+            StaticVersion::<0, 2>::version(),
         )
     }
 
@@ -84,7 +98,7 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 3>::version(),
         )
@@ -124,7 +138,7 @@ impl Default for NodeState {
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            L1Client::http("http://localhost:3331".parse().unwrap()),
             mock::MockStateCatchup::default(),
             StaticVersion::<0, 1>::version(),
         )
@@ -173,10 +187,7 @@ pub mod mock {
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 
     use super::*;
-    use crate::{
-        v0_1::{AccountQueryData, FeeAccountProof},
-        BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
-    };
+    use crate::{BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment};
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {
@@ -195,24 +206,24 @@ pub mod mock {
 
     #[async_trait]
     impl StateCatchup for MockStateCatchup {
-        async fn try_fetch_account(
+        async fn try_fetch_accounts(
             &self,
+            _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
             fee_merkle_tree_root: FeeMerkleCommitment,
-            account: FeeAccount,
-        ) -> anyhow::Result<AccountQueryData> {
+            accounts: &[FeeAccount],
+        ) -> anyhow::Result<FeeMerkleTree> {
             let src = &self.state[&view].fee_merkle_tree;
             assert_eq!(src.commitment(), fee_merkle_tree_root);
 
-            tracing::info!("catchup: fetching account {account:?} for view {view:?}");
-            Ok(FeeAccountProof::prove(src, account.into())
-                .unwrap_or_else(|| panic!("Account {account:?} not in memory"))
-                .into())
+            tracing::info!("catchup: fetching accounts {accounts:?} for view {view:?}");
+            retain_accounts(src, accounts.iter().copied())
         }
 
         async fn try_remember_blocks_merkle_tree(
             &self,
+            _instance: &NodeState,
             _height: u64,
             view: ViewNumber,
             mt: &mut BlockMerkleTree,
@@ -243,6 +254,10 @@ pub mod mock {
 
         fn backoff(&self) -> &BackoffParams {
             &self.backoff
+        }
+
+        fn name(&self) -> String {
+            "MockStateCatchup".into()
         }
     }
 }

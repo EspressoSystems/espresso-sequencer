@@ -1,10 +1,12 @@
 use std::fmt::Display;
 
 use anyhow::Context;
+use async_compatibility_layer::art::async_timeout;
 use async_std::{
     sync::{Arc, RwLock},
-    task::{spawn, JoinHandle},
+    task::{sleep, spawn, JoinHandle},
 };
+use committable::{Commitment, Committable};
 use derivative::Derivative;
 use espresso_types::{
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
@@ -21,19 +23,24 @@ use hotshot::{
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
+    network::NetworkConfig,
     traits::{
         election::Membership,
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::Versions,
+        node_implementation::{ConsensusTime, Versions},
+        ValidatedState as _,
     },
+    utils::{View, ViewInner},
     PeerConfig,
 };
+use std::time::Duration;
+use tracing::{Instrument, Level};
 use url::Url;
 
 use crate::{
@@ -97,6 +104,9 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         metrics
             .create_gauge("node_index".into(), None)
             .set(instance_state.node_id as usize);
+
+        // Start L1 client if it isn't already.
+        instance_state.l1_client.start().await;
 
         // Load saved consensus state from storage.
         let (initializer, anchor_view) = persistence
@@ -195,7 +205,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         let events = handle.event_stream();
 
         let node_id = node_state.node_id;
-        let mut ctx = Self {
+        let ctx = Self {
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
             tasks: Default::default(),
@@ -205,19 +215,21 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             node_state,
             config,
         };
-        ctx.spawn(
-            "main event handler",
-            handle_events(
-                node_id,
-                events,
-                persistence,
-                ctx.state_signer.clone(),
-                external_event_handler,
-                Some(event_streamer.clone()),
-                event_consumer,
-                anchor_view,
-            ),
-        );
+
+        // Spawn event handling loops. These can run in the background (detached from `ctx.tasks`
+        // and thus not explicitly cancelled on `shut_down`) because they each exit on their own
+        // when the consensus event stream ends.
+        spawn(fetch_proposals(ctx.handle.clone(), persistence.clone()));
+        spawn(handle_events(
+            node_id,
+            events,
+            persistence,
+            ctx.state_signer.clone(),
+            external_event_handler,
+            Some(event_streamer.clone()),
+            event_consumer,
+            anchor_view,
+        ));
 
         ctx
     }
@@ -308,11 +320,23 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.tasks.spawn(name, task);
     }
 
+    /// Spawn a short-lived background task attached to this context.
+    ///
+    /// When this context is dropped or [`shut_down`](Self::shut_down), background tasks will be
+    /// cancelled in the reverse order that they were spawned.
+    ///
+    /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
+    /// one is how urgently logging related to the task is treated.
+    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        self.tasks.spawn_short_lived(name, task);
+    }
+
     /// Stop participating in consensus.
     pub async fn shut_down(&mut self) {
         tracing::info!("shutting down SequencerContext");
         self.handle.write().await.shut_down().await;
         self.tasks.shut_down().await;
+        self.node_state.l1_client.stop().await;
 
         // Since we've already shut down, we can set `detached` so the drop
         // handler doesn't call `shut_down` again.
@@ -348,6 +372,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
     }
 }
 
+#[tracing::instrument(skip_all, fields(node_id))]
 #[allow(clippy::too_many_arguments)]
 async fn handle_events<V: Versions>(
     node_id: u64,
@@ -382,11 +407,8 @@ async fn handle_events<V: Versions>(
         state_signer.handle_event(&event).await;
 
         // Handle external messages
-        if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
-            if let Err(err) = external_event_handler
-                .handle_event(external_message_bytes)
-                .await
-            {
+        if let EventType::ExternalMessageReceived { data, .. } = &event.event {
+            if let Err(err) = external_event_handler.handle_event(data).await {
                 tracing::warn!("Failed to handle external message: {:?}", err);
             };
         }
@@ -398,8 +420,166 @@ async fn handle_events<V: Versions>(
     }
 }
 
+#[tracing::instrument(skip_all)]
+async fn fetch_proposals<N, P, V>(
+    consensus: Arc<RwLock<Consensus<N, P, V>>>,
+    persistence: Arc<impl SequencerPersistence>,
+) where
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    V: Versions,
+{
+    let mut tasks = TaskList::default();
+    let mut events = consensus.read().await.event_stream();
+    while let Some(event) = events.next().await {
+        let EventType::QuorumProposal { proposal, .. } = event.event else {
+            continue;
+        };
+        // Whenever we see a quorum proposal, ensure we have the chain of proposals stretching back
+        // to the anchor. This allows state replay from the decided state.
+        let parent_view = proposal.data.justify_qc.view_number;
+        let parent_leaf = proposal.data.justify_qc.data.leaf_commit;
+        tasks.spawn_short_lived(
+            format!("fetch proposal {parent_view:?},{parent_leaf}"),
+            fetch_proposal_chain(
+                consensus.clone(),
+                persistence.clone(),
+                parent_view,
+                parent_leaf,
+            ),
+        );
+    }
+    tasks.shut_down().await;
+}
+
+#[tracing::instrument(skip(consensus, persistence))]
+async fn fetch_proposal_chain<N, P, V>(
+    consensus: Arc<RwLock<Consensus<N, P, V>>>,
+    persistence: Arc<impl SequencerPersistence>,
+    mut view: ViewNumber,
+    mut leaf: Commitment<Leaf<SeqTypes>>,
+) where
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    V: Versions,
+{
+    while view > load_anchor_view(&*persistence).await {
+        match persistence.load_quorum_proposal(view).await {
+            Ok(proposal) => {
+                // If we already have the proposal in storage, keep traversing the chain to its
+                // parent.
+                view = proposal.data.justify_qc.view_number;
+                leaf = proposal.data.justify_qc.data.leaf_commit;
+                continue;
+            }
+            Err(err) => {
+                tracing::info!(?view, %leaf, "proposal missing from storage; fetching from network: {err:#}");
+            }
+        }
+
+        let future =
+            match consensus
+                .read()
+                .await
+                .request_proposal(view, EpochNumber::genesis(), leaf)
+            {
+                Ok(future) => future,
+                Err(err) => {
+                    tracing::info!(?view, %leaf, "failed to request proposal: {err:#}");
+                    sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+        let proposal = match async_timeout(Duration::from_secs(30), future).await {
+            Ok(Ok(proposal)) => proposal,
+            Ok(Err(err)) => {
+                tracing::info!("error fetching proposal: {err:#}");
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+            Err(_) => {
+                tracing::info!("timed out fetching proposal");
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        while let Err(err) = persistence.append_quorum_proposal(&proposal).await {
+            tracing::warn!("error saving fetched proposal: {err:#}");
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // Add the fetched leaf to HotShot state, so consensus can make use of it.
+        {
+            let leaf = Leaf::from_quorum_proposal(&proposal.data);
+            let handle = consensus.read().await;
+            let consensus = handle.consensus();
+            let mut consensus = consensus.write().await;
+            if matches!(
+                consensus.validated_state_map().get(&view),
+                None | Some(View {
+                    // Replace a Da-only view with a Leaf view, which has strictly more information.
+                    view_inner: ViewInner::Da { .. }
+                })
+            ) {
+                let v = View {
+                    view_inner: ViewInner::Leaf {
+                        leaf: Committable::commit(&leaf),
+                        state: Arc::new(ValidatedState::from_header(leaf.block_header())),
+                        delta: None,
+                    },
+                };
+                if let Err(err) = consensus.update_validated_state_map(view, v) {
+                    tracing::warn!(?view, "unable to update validated state map: {err:#}");
+                }
+                consensus
+                    .update_saved_leaves(leaf, &handle.hotshot.upgrade_lock)
+                    .await;
+                tracing::debug!(
+                    ?view,
+                    "added view to validated state map view proposal fetcher"
+                );
+            }
+        }
+
+        view = proposal.data.justify_qc.view_number;
+        leaf = proposal.data.justify_qc.data.leaf_commit;
+    }
+}
+
+async fn load_anchor_view(persistence: &impl SequencerPersistence) -> ViewNumber {
+    loop {
+        match persistence.load_anchor_view().await {
+            Ok(view) => break view,
+            Err(err) => {
+                tracing::warn!("error loading anchor view: {err:#}");
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct TaskList(Vec<(String, JoinHandle<()>)>);
+
+macro_rules! spawn_with_log_level {
+    ($this:expr, $lvl:expr, $name:expr, $task: expr) => {
+        let name = $name.to_string();
+        let task = {
+            let name = name.clone();
+            let span = tracing::span!($lvl, "background task", name);
+            spawn(
+                async move {
+                    tracing::event!($lvl, "spawning background task");
+                    $task.await;
+                    tracing::event!($lvl, "background task exited");
+                }
+                .instrument(span),
+            )
+        };
+        $this.0.push((name, task));
+    };
+}
 
 impl TaskList {
     /// Spawn a background task attached to this [`TaskList`].
@@ -407,15 +587,18 @@ impl TaskList {
     /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
     /// be cancelled in the reverse order that they were spawned.
     pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
-        let name = name.to_string();
-        let task = {
-            let name = name.clone();
-            spawn(async move {
-                task.await;
-                tracing::info!(name, "background task exited");
-            })
-        };
-        self.0.push((name, task));
+        spawn_with_log_level!(self, Level::INFO, name, task);
+    }
+
+    /// Spawn a short-lived background task attached to this [`TaskList`].
+    ///
+    /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
+    /// be cancelled in the reverse order that they were spawned.
+    ///
+    /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
+    /// one is how urgently logging related to the task is treated.
+    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        spawn_with_log_level!(self, Level::DEBUG, name, task);
     }
 
     /// Stop all background tasks.

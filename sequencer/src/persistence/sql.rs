@@ -1,17 +1,20 @@
 use anyhow::Context;
-use async_std::{stream::StreamExt, sync::Arc};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use clap::Parser;
+use committable::Committable;
 use derivative::Derivative;
 use espresso_types::{
     parse_duration,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
+use futures::stream::StreamExt;
+use hotshot_query_service::data_source::storage::sql::Write;
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, postgres::types::ToSql, Config, SqlStorage, Transaction},
+        sql::{include_migrations, query_as, Config, SqlStorage, Transaction},
     },
     Transaction as _, VersionedDataSource,
 };
@@ -25,6 +28,8 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
+use sqlx::Row;
+use sqlx::{query, Executor};
 use std::{collections::BTreeMap, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
@@ -232,10 +237,12 @@ impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        Ok(Persistence {
+        let persistence = Persistence {
             store_undecided_state: self.store_undecided_state,
             db: SqlStorage::connect(self.try_into()?).await?,
-        })
+        };
+        persistence.migrate_quorum_proposal_leaf_hashes().await?;
+        Ok(persistence)
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -248,6 +255,39 @@ impl PersistenceOptions for Options {
 pub struct Persistence {
     db: SqlStorage,
     store_undecided_state: bool,
+}
+
+impl Persistence {
+    /// Ensure the `leaf_hash` column is populated for all existing quorum proposals.
+    ///
+    /// This column was added in a migration, but because it requires computing a commitment of the
+    /// existing data, it is not easy to populate in the SQL migration itself. Thus, on startup, we
+    /// check if there are any just-migrated quorum proposals with a `NULL` value for this column,
+    /// and if so we populate the column manually.
+    async fn migrate_quorum_proposal_leaf_hashes(&self) -> anyhow::Result<()> {
+        let mut tx = self.db.write().await?;
+        let mut proposals = tx.fetch("SELECT * FROM quorum_proposals");
+        let mut updates = vec![];
+        while let Some(row) = proposals.next().await {
+            let row = row?;
+            let hash: Option<String> = row.try_get("leaf_hash")?;
+            if hash.is_none() {
+                let view: i64 = row.try_get("view")?;
+                let data: Vec<u8> = row.try_get("data")?;
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&data)?;
+                let leaf = Leaf::from_quorum_proposal(&proposal.data);
+                let leaf_hash = Committable::commit(&leaf);
+                tracing::info!(view, %leaf_hash, "populating quorum proposal leaf hash");
+                updates.push((view, leaf_hash.to_string()));
+            }
+        }
+        drop(proposals);
+
+        tx.upsert("quorum_proposals", ["view", "leaf_hash"], ["view"], updates)
+            .await?;
+        tx.commit().await
+    }
 }
 
 #[async_trait]
@@ -267,7 +307,7 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt_static("SELECT config FROM network_config ORDER BY id DESC LIMIT 1")
+            .fetch_optional("SELECT config FROM network_config ORDER BY id DESC LIMIT 1")
             .await?
         else {
             tracing::info!("config not found");
@@ -282,7 +322,7 @@ impl SequencerPersistence for Persistence {
         let json = serde_json::to_value(cfg)?;
 
         let mut tx = self.db.write().await?;
-        tx.execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", [&json])
+        tx.execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", (json,))
             .await?;
         tx.commit().await
     }
@@ -306,11 +346,8 @@ impl SequencerPersistence for Persistence {
         // First, append the new leaves. We do this in its own transaction because even if GC or the
         // event consumer later fails, there is no need to abort the storage of the leaves.
         let mut tx = self.db.write().await?;
-        let rows = values
-            .iter()
-            .map(|(view, leaf, qc)| [sql_param(view), sql_param(leaf), sql_param(qc)]);
 
-        tx.upsert("anchor_leaf", ["view", "leaf", "qc"], ["view"], rows)
+        tx.upsert("anchor_leaf", ["view", "leaf", "qc"], ["view"], values)
             .await?;
         tx.commit().await?;
 
@@ -333,7 +370,7 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt_static("SELECT view FROM highest_voted_view WHERE id = 0")
+            .fetch_optional(query("SELECT view FROM highest_voted_view WHERE id = 0"))
             .await?
             .map(|row| {
                 let view: i64 = row.get("view");
@@ -348,7 +385,7 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt_static("SELECT leaf, qc FROM anchor_leaf ORDER BY view DESC LIMIT 1")
+            .fetch_optional("SELECT leaf, qc FROM anchor_leaf ORDER BY view DESC LIMIT 1")
             .await?
         else {
             return Ok(None);
@@ -363,6 +400,14 @@ impl SequencerPersistence for Persistence {
         Ok(Some((leaf, qc)))
     }
 
+    async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
+        let mut tx = self.db.read().await?;
+        let (view,) = query_as::<(i64,)>("SELECT coalesce(max(view), 0) FROM anchor_leaf")
+            .fetch_one(tx.as_mut())
+            .await?;
+        Ok(ViewNumber::new(view as u64))
+    }
+
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
@@ -370,7 +415,7 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt_static("SELECT leaves, state FROM undecided_state WHERE id = 0")
+            .fetch_optional("SELECT leaves, state FROM undecided_state WHERE id = 0")
             .await?
         else {
             return Ok(None);
@@ -393,9 +438,8 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt(
-                "SELECT data FROM da_proposal where view = $1",
-                [&(view.u64() as i64)],
+            .fetch_optional(
+                query("SELECT data FROM da_proposal where view = $1").bind(view.u64() as i64),
             )
             .await?;
 
@@ -415,9 +459,8 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt(
-                "SELECT data FROM vid_share where view = $1",
-                [&(view.u64() as i64)],
+            .fetch_optional(
+                query("SELECT data FROM vid_share where view = $1").bind(view.u64() as i64),
             )
             .await?;
 
@@ -436,22 +479,35 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_static("SELECT * FROM quorum_proposals")
+            .fetch_all("SELECT * FROM quorum_proposals")
             .await?;
 
         Ok(BTreeMap::from_iter(
-            rows.map(|row| {
-                let row = row?;
-                let view: i64 = row.get("view");
-                let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
-                let bytes: Vec<u8> = row.get("data");
-                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
-                    bincode::deserialize(&bytes)?;
-                Ok((view_number, proposal))
-            })
-            .collect::<anyhow::Result<Vec<_>>>()
-            .await?,
+            rows.into_iter()
+                .map(|row| {
+                    let view: i64 = row.get("view");
+                    let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
+                    let bytes: Vec<u8> = row.get("data");
+                    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                        bincode::deserialize(&bytes)?;
+                    Ok((view_number, proposal))
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?,
         ))
+    }
+
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+        let mut tx = self.db.read().await?;
+        let (data,) =
+            query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE view = $1 LIMIT 1")
+                .bind(view.u64() as i64)
+                .fetch_one(tx.as_mut())
+                .await?;
+        let proposal = bincode::deserialize(&data)?;
+        Ok(proposal)
     }
 
     async fn append_vid(
@@ -467,7 +523,7 @@ impl SequencerPersistence for Persistence {
             "vid_share",
             ["view", "data"],
             ["view"],
-            [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
+            [(view as i64, data_bytes)],
         )
         .await?;
         tx.commit().await
@@ -485,7 +541,7 @@ impl SequencerPersistence for Persistence {
             "da_proposal",
             ["view", "data"],
             ["view"],
-            [[sql_param(&(view as i64)), sql_param(&data_bytes)]],
+            [(view as i64, data_bytes)],
         )
         .await?;
         tx.commit().await
@@ -500,7 +556,7 @@ impl SequencerPersistence for Persistence {
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
 
         let mut tx = self.db.write().await?;
-        tx.execute_one_with_retries(stmt, [view.u64() as i64])
+        tx.execute_one_with_retries(stmt, (view.u64() as i64,))
             .await?;
         tx.commit().await
     }
@@ -521,11 +577,7 @@ impl SequencerPersistence for Persistence {
             "undecided_state",
             ["id", "leaves", "state"],
             ["id"],
-            [[
-                sql_param(&0i32),
-                sql_param(&leaves_bytes),
-                sql_param(&state_bytes),
-            ]],
+            [(0_i32, leaves_bytes, state_bytes)],
         )
         .await?;
         tx.commit().await
@@ -536,12 +588,13 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
+        let leaf_hash = Committable::commit(&Leaf::from_quorum_proposal(&proposal.data));
         let mut tx = self.db.write().await?;
         tx.upsert(
             "quorum_proposals",
-            ["view", "data"],
+            ["view", "leaf_hash", "data"],
             ["view"],
-            [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
+            [(view_number as i64, leaf_hash.to_string(), proposal_bytes)],
         )
         .await?;
         tx.commit().await
@@ -554,7 +607,7 @@ impl SequencerPersistence for Persistence {
             .db
             .read()
             .await?
-            .query_opt_static("SELECT * FROM upgrade_certificate where id = true")
+            .fetch_optional("SELECT * FROM upgrade_certificate where id = true")
             .await?;
 
         result
@@ -580,7 +633,7 @@ impl SequencerPersistence for Persistence {
             "upgrade_certificate",
             ["id", "data"],
             ["id"],
-            [[sql_param(&true), sql_param(&upgrade_certificate_bytes)]],
+            [(true, upgrade_certificate_bytes)],
         )
         .await?;
         tx.commit().await
@@ -588,58 +641,57 @@ impl SequencerPersistence for Persistence {
 }
 
 async fn collect_garbage(
-    mut tx: Transaction<'_>,
+    mut tx: Transaction<Write>,
     view: ViewNumber,
     consumer: impl EventConsumer,
 ) -> anyhow::Result<()> {
     // Clean up and collect VID shares.
+
     let mut vid_shares = tx
-        .query(
-            "DELETE FROM vid_share where view <= $1 RETURNING view, data",
-            [&(view.u64() as i64)],
+        .fetch_all(
+            query("DELETE FROM vid_share where view <= $1 RETURNING view, data")
+                .bind(view.u64() as i64),
         )
         .await?
+        .into_iter()
         .map(|row| {
-            let row = row?;
             let view: i64 = row.get("view");
             let data: Vec<u8> = row.get("data");
             let vid_proposal =
                 bincode::deserialize::<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>(&data)?;
             Ok((view as u64, vid_proposal.data))
         })
-        .collect::<anyhow::Result<BTreeMap<_, _>>>()
-        .await?;
+        .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
 
     // Clean up and collect DA proposals.
     let mut da_proposals = tx
-        .query(
-            "DELETE FROM da_proposal where view <= $1 RETURNING view, data",
-            [&(view.u64() as i64)],
+        .fetch_all(
+            query("DELETE FROM da_proposal where view <= $1 RETURNING view, data")
+                .bind(view.u64() as i64),
         )
         .await?
+        .into_iter()
         .map(|row| {
-            let row = row?;
             let view: i64 = row.get("view");
             let data: Vec<u8> = row.get("data");
             let da_proposal =
                 bincode::deserialize::<Proposal<SeqTypes, DaProposal<SeqTypes>>>(&data)?;
             Ok((view as u64, da_proposal.data))
         })
-        .collect::<anyhow::Result<BTreeMap<_, _>>>()
-        .await?;
+        .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
 
     // Clean up and collect leaves, except do not delete the most recent leaf: we need to remember
     // this so that in case we restart, we can pick up from the last decided leaf. We still do
     // include this leaf in the query results (the `UNION` clause) so we can include it in the
     // decide event we send to the consumer.
     let mut leaves = tx
-        .query(
-            "SELECT view, leaf, qc FROM anchor_leaf WHERE view <= $1",
-            [&(view.u64() as i64)],
+        .fetch_all(
+            query("SELECT view, leaf, qc FROM anchor_leaf WHERE view <= $1")
+                .bind(view.u64() as i64),
         )
         .await?
+        .into_iter()
         .map(|row| {
-            let row = row?;
             let view: i64 = row.get("view");
             let leaf_data: Vec<u8> = row.get("leaf");
             let leaf = bincode::deserialize::<Leaf>(&leaf_data)?;
@@ -647,21 +699,15 @@ async fn collect_garbage(
             let qc = bincode::deserialize::<QuorumCertificate<SeqTypes>>(&qc_data)?;
             Ok((view as u64, (leaf, qc)))
         })
-        .collect::<anyhow::Result<BTreeMap<_, _>>>()
+        .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
+
+    tx.execute(query("DELETE FROM anchor_leaf WHERE view < $1").bind(view.u64() as i64))
         .await?;
-    tx.execute(
-        "DELETE FROM anchor_leaf WHERE view < $1",
-        [&(view.u64() as i64)],
-    )
-    .await?;
 
     // Clean up old proposals. These are not part of the decide event we generate for the consumer,
     // so we don't need to return them.
-    tx.execute(
-        "DELETE FROM quorum_proposals where view <= $1",
-        [&(view.u64() as i64)],
-    )
-    .await?;
+    tx.execute(query("DELETE FROM quorum_proposals where view <= $1").bind(view.u64() as i64))
+        .await?;
 
     // Exclude from the decide event any leaves which have definitely already been processed. We may
     // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in
@@ -678,7 +724,9 @@ async fn collect_garbage(
     // persistent value in the database to remember how far we have successfully processed the event
     // stream.
     let last_processed_view: Option<i64> = tx
-        .query_opt_static("SELECT last_processed_view FROM event_stream WHERE id = 1 LIMIT 1")
+        .fetch_optional(query(
+            "SELECT last_processed_view FROM event_stream WHERE id = 1 LIMIT 1",
+        ))
         .await?
         .map(|row| row.get("last_processed_view"));
     let leaves = if let Some(v) = last_processed_view {
@@ -696,60 +744,45 @@ async fn collect_garbage(
         leaves
     };
 
-    // Collate all the information by view number and construct a chain of leaves and a chain of
-    // corresponding QCs.
-    let (leaf_chain, qcs): (Vec<_>, Vec<_>) = leaves
-        .into_iter()
-        // Go in reverse chronological order, as expected by Decide events.
-        .rev()
-        .map(|(view, (mut leaf, qc))| {
-            // Include the VID share if available.
-            let vid_share = vid_shares.remove(&view);
-            if vid_share.is_none() {
-                tracing::debug!(view, "VID share not available at decide");
-            }
+    // Generate a decide event for each leaf, to be processed by the event consumer. We make a
+    // separate event for each leaf because it is possible we have non-consecutive leaves in our
+    // storage, which would not be valid as a single decide with a single leaf chain.
+    for (view, (mut leaf, qc)) in leaves {
+        // Include the VID share if available.
+        let vid_share = vid_shares.remove(&view);
+        if vid_share.is_none() {
+            tracing::debug!(view, "VID share not available at decide");
+        }
 
-            // Fill in the full block payload using the DA proposals we had persisted.
-            if let Some(proposal) = da_proposals.remove(&view) {
-                let payload =
-                    Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
-                leaf.fill_block_payload_unchecked(payload);
-            } else {
-                tracing::debug!(view, "DA proposal not available at decide");
-            }
+        // Fill in the full block payload using the DA proposals we had persisted.
+        if let Some(proposal) = da_proposals.remove(&view) {
+            let payload = Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
+            leaf.fill_block_payload_unchecked(payload);
+        } else {
+            tracing::debug!(view, "DA proposal not available at decide");
+        }
 
-            (
-                LeafInfo {
-                    leaf,
-                    vid_share,
+        let leaf_info = LeafInfo {
+            leaf,
+            vid_share,
 
-                    // Note: the following fields are not used in Decide event processing, and
-                    // should be removed. For now, we just default them.
-                    state: Default::default(),
-                    delta: Default::default(),
+            // Note: the following fields are not used in Decide event processing, and
+            // should be removed. For now, we just default them.
+            state: Default::default(),
+            delta: Default::default(),
+        };
+        tracing::debug!(?view, ?qc, ?leaf_info, "generating decide event");
+        consumer
+            .handle_event(&Event {
+                view_number: ViewNumber::new(view),
+                event: EventType::Decide {
+                    leaf_chain: Arc::new(vec![leaf_info]),
+                    qc: Arc::new(qc),
+                    block_size: None,
                 },
-                qc,
-            )
-        })
-        .unzip();
-
-    // Generate decide event for the consumer.
-    let Some(final_qc) = qcs.into_iter().next() else {
-        tracing::info!(?view, "no new leaves at decide");
-        return Ok(());
-    };
-    tracing::debug!(?view, ?final_qc, ?leaf_chain, "generating decide event");
-
-    consumer
-        .handle_event(&Event {
-            view_number: view,
-            event: EventType::Decide {
-                leaf_chain: Arc::new(leaf_chain),
-                qc: Arc::new(final_qc),
-                block_size: None,
-            },
-        })
-        .await?;
+            })
+            .await?;
+    }
 
     // Now that we have definitely processed leaves up to `view`, we can update
     // `last_processed_view` so we don't process these leaves again. We may still fail at this
@@ -760,15 +793,11 @@ async fn collect_garbage(
         "event_stream",
         ["id", "last_processed_view"],
         ["id"],
-        [[sql_param(&1i32), sql_param(&(view.u64() as i64))]],
+        [(1i32, view.u64() as i64)],
     )
     .await?;
 
     tx.commit().await
-}
-
-pub(crate) fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
-    param
 }
 
 #[cfg(test)]
@@ -808,4 +837,83 @@ mod generic_tests {
     use crate::*;
 
     instantiate_persistence_tests!(Persistence);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
+    use espresso_types::{NodeState, ValidatedState};
+    use futures::stream::TryStreamExt;
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::traits::signature_key::SignatureKey;
+
+    #[async_std::test]
+    async fn test_quorum_proposals_leaf_hash_migration() {
+        // Create some quorum proposals to test with.
+        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let privkey = BLSPubKey::generated_from_seed_indexed([0; 32], 1).1;
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
+        let mut quorum_proposal = Proposal {
+            data: QuorumProposal::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            },
+            signature,
+            _pd: Default::default(),
+        };
+
+        let qp1 = quorum_proposal.clone();
+
+        quorum_proposal.data.view_number = ViewNumber::new(1);
+        let qp2 = quorum_proposal.clone();
+
+        let qps = [qp1, qp2];
+
+        // Create persistence and add the quorum proposals with NULL leaf hash.
+        let db = Persistence::tmp_storage().await;
+        let persistence = Persistence::connect(&db).await;
+        let mut tx = persistence.db.write().await.unwrap();
+        let params = qps
+            .iter()
+            .map(|qp| {
+                (
+                    qp.data.view_number.u64() as i64,
+                    bincode::serialize(&qp).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>();
+        tx.upsert("quorum_proposals", ["view", "data"], ["view"], params)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        // Create a new persistence and ensure the commitments get populated.
+        let persistence = Persistence::connect(&db).await;
+        let mut tx = persistence.db.read().await.unwrap();
+        let rows = tx
+            .fetch("SELECT * FROM quorum_proposals ORDER BY view ASC")
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), qps.len());
+        for (row, qp) in rows.into_iter().zip(qps) {
+            assert_eq!(row.get::<i64, _>("view"), qp.data.view_number.u64() as i64);
+            assert_eq!(
+                row.get::<Vec<u8>, _>("data"),
+                bincode::serialize(&qp).unwrap()
+            );
+            assert_eq!(
+                row.get::<String, _>("leaf_hash"),
+                Committable::commit(&Leaf::from_quorum_proposal(&qp.data)).to_string()
+            );
+        }
+    }
 }

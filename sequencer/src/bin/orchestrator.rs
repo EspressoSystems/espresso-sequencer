@@ -4,10 +4,8 @@ use clap::Parser;
 use derive_more::From;
 use espresso_types::{parse_duration, PubKey, Ratio};
 use ethers::utils::hex::{self, FromHexError};
-use hotshot_orchestrator::{
-    config::{Libp2pConfig, NetworkConfig},
-    run_orchestrator,
-};
+use hotshot_orchestrator::run_orchestrator;
+use hotshot_types::network::{Libp2pConfig, NetworkConfig};
 use sequencer_utils::logging;
 use snafu::Snafu;
 use url::Url;
@@ -120,7 +118,6 @@ async fn main() {
     args.logging.init();
 
     let mut config = NetworkConfig::<PubKey> {
-        start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,
         indexed_da: false,
         ..Default::default()
@@ -134,13 +131,9 @@ async fn main() {
     config.config.num_nodes_with_stake = args.num_nodes;
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
     config.config.known_da_nodes = Vec::new();
-    config.config.known_nodes_without_stake = vec![];
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.libp2p_config = Some(libp2p_config);
-    config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.start_threshold = args.start_threshold.into();
-    config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
-    config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.builder_urls = Vec1::try_from_vec(args.builder_urls).unwrap();
     config.config.builder_timeout = args.builder_timeout;

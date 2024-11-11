@@ -206,12 +206,15 @@ impl Inner {
         Ok(())
     }
 
-    fn decide_event(&self, view: ViewNumber) -> anyhow::Result<Event<SeqTypes>> {
-        // Construct a chain of all decided leaves up to `view` which have not yet been garbage
-        // collected.
+    async fn generate_decide_events(
+        &self,
+        view: ViewNumber,
+        consumer: &impl EventConsumer,
+    ) -> anyhow::Result<()> {
+        // Generate a decide event for each leaf, to be processed by the event consumer. We make a
+        // separate event for each leaf because it is possible we have non-consecutive leaves in our
+        // storage, which would not be valid as a single decide with a single leaf chain.
         let mut leaves = BTreeMap::new();
-        let mut high_qc: Option<QuorumCertificate<SeqTypes>> = None;
-
         for entry in fs::read_dir(self.decided_leaf_path())? {
             let entry = entry?;
             let path = entry.path();
@@ -261,14 +264,7 @@ impl Inner {
                 delta: Default::default(),
             };
 
-            leaves.insert(v, info);
-            if let Some(high_qc) = &mut high_qc {
-                if v > high_qc.view_number.u64() {
-                    *high_qc = qc;
-                }
-            } else {
-                high_qc = Some(qc);
-            }
+            leaves.insert(v, (info, qc));
         }
 
         // The invariant is that the oldest existing leaf in the `anchor_leaf` table -- if there is
@@ -282,15 +278,20 @@ impl Inner {
             }
         }
 
-        let high_qc = high_qc.context("no new leaves at decide event")?;
-        Ok(Event {
-            view_number: view,
-            event: EventType::Decide {
-                qc: Arc::new(high_qc),
-                block_size: None,
-                leaf_chain: Arc::new(leaves.into_values().rev().collect()),
-            },
-        })
+        for (view, (leaf, qc)) in leaves {
+            consumer
+                .handle_event(&Event {
+                    view_number: ViewNumber::new(view),
+                    event: EventType::Decide {
+                        qc: Arc::new(qc),
+                        leaf_chain: Arc::new(vec![leaf]),
+                        block_size: None,
+                    },
+                })
+                .await?;
+        }
+
+        Ok(())
     }
 
     fn load_da_proposal(
@@ -466,17 +467,9 @@ impl SequencerPersistence for Persistence {
         // persist the decided leaves successfully, and the event processing will just run again at
         // the next decide. If there is an error here, we just log it and return early with success
         // to prevent GC from running before the decided leaves are processed.
-        match inner.decide_event(view) {
-            Ok(event) => {
-                if let Err(err) = consumer.handle_event(&event).await {
-                    tracing::warn!(?view, "event processing failed: {err:#}");
-                    return Ok(());
-                }
-            }
-            Err(err) => {
-                tracing::warn!(?view, "event creation: {err:#}");
-                return Ok(());
-            }
+        if let Err(err) = inner.generate_decide_events(view, consumer).await {
+            tracing::warn!(?view, "event processing failed: {err:#}");
+            return Ok(());
         }
 
         if let Err(err) = inner.collect_garbage(view) {
@@ -703,6 +696,18 @@ impl SequencerPersistence for Persistence {
         Ok(map)
     }
 
+    async fn load_quorum_proposal(
+        &self,
+        view: ViewNumber,
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+        let inner = self.inner.read().await;
+        let dir_path = inner.quorum_proposals_dir_path();
+        let file_path = dir_path.join(view.to_string()).with_extension("txt");
+        let bytes = fs::read(file_path)?;
+        let proposal = bincode::deserialize(&bytes)?;
+        Ok(proposal)
+    }
+
     async fn load_upgrade_certificate(
         &self,
     ) -> anyhow::Result<Option<UpgradeCertificate<SeqTypes>>> {
@@ -794,6 +799,12 @@ fn migrate_network_config(
         config.insert("stop_voting_time".into(), 0.into());
     }
 
+    // HotShotConfig was upgraded to include an `epoch_height` parameter. Initialize with a default
+    // if missing.
+    if !config.contains_key("epoch_height") {
+        config.insert("epoch_height".into(), 0.into());
+    }
+
     Ok(network_config)
 }
 
@@ -858,7 +869,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
@@ -877,7 +889,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
@@ -901,7 +914,8 @@ mod test {
                 "start_proposing_time": 9007199254740991u64,
                 "stop_proposing_time": 0,
                 "start_voting_time": 9007199254740991u64,
-                "stop_voting_time": 0
+                "stop_voting_time": 0,
+                "epoch_height": 0
             }
         });
 
@@ -920,7 +934,8 @@ mod test {
                 "start_proposing_time": 1,
                 "stop_proposing_time": 2,
                 "start_voting_time": 1,
-                "stop_voting_time": 2
+                "stop_voting_time": 2,
+                "epoch_height": 0
             }
         });
 
