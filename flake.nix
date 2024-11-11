@@ -46,7 +46,6 @@
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
       RUSTFLAGS = " --cfg hotshot_example";
-      RUSTDOCFLAGS = ASYNC_FLAGS;
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
       rustEnvVars = { inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR; };
