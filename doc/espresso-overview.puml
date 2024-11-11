@@ -24,6 +24,8 @@ Client --> L2_1_RPC : L2 Transactions\nL2 State queries
 note top of link
 1.
 end note
+Client --> L2_2 : L2 Transactions\nL2 State queries
+Client --> L2_N : L2 Transactions\nL2 State queries
 
 ' L2_1_RPC -> L2_Seq: L2 Transactions
 
@@ -32,24 +34,25 @@ note top of link
 2.
 end note
 
-L2_Seq -left-> Esp : Rollup 1 L2 Block\nRollup 1 ID
+L2_Seq --> Esp : Rollup 1 L2 Block\nRollup 1 ID
 note of link
 3.
 end note
 
-Esp -> L2_1_Val : Confirmed\nBlock
-' Esp -> L2_2 : Confirmed\nBlock
-' Esp -> L2_N : Confirmed\nBlock
+L2_2 --> Esp : Rollup 2 L2 Block\nRollup 2 ID
+L2_N --> Esp : Rollup N L2 Block\nRollup N ID
+
+Esp -up-> L2_1_Val : Confirmed\nBlock
 note top of link
 4.
 end note
 
-Esp --> LC : Block Commitment\nQC
+Esp -down-> LC : Block Commitment +\nProof of consensus
 note bottom of link
 5.
 end note
 
-L2_1_Prover -> L2_1_L1 : State\nProof
+L2_1_Prover --> L2_1_L1 : State\nProof
 ' L2_2 -> L2_2_L1 : State\nProof
 ' L2_N -> L2_N_L1 : State\nProof
 note top of link
@@ -68,23 +71,11 @@ end note
 
 ' Layout
 ' L2_1_RPC -[hidden]r-> L2_1_Val
-L2_1 -[hidden]r-> L2_2
-L2_2 -[hidden]r-> L2_N
-L2_1_L1 -[hidden]r-> L2_2_L1
-L2_2_L1 -[hidden]r-> L2_N_L1
-L2 -[hidden]d-> L1
-Esp -[hidden]d-> L2
-legend top
-1. Many clients submit transactions to each L2 simultaneously (for clarity only one rollup is depicted in detail).
-2. The rollup sequencer or block builder builds a block with L2 transactions.
-3. L2 forwards L2 block to the confirmation layer.
-4. Espresso produces Espresso blocks containing rollup namespaces with confirmed rollup blocks. L2 validators receive
-  blocks and execute the state transition functions for their rollups.
-5. Espresso posts succinct commitment to block to L1. Contract verifies proof of Espresso state transition
-  then stores the block commitment.
-6. Rollups post updated state to L1. ZK-rollups include a proof.
-7. Rollup contracts read certified sequence of block commitments from sequencer contract. Verify state transition proofs
-  against this sequence (ZKR) or wait for fraud proof against this sequence (ORU).
-endlegend
+' L2_1 -[hidden]r-> L2_2
+' L2_2 -[hidden]r-> L2_N
+' L2_1_L1 -[hidden]r-> L2_2_L1
+' L2_2_L1 -[hidden]r-> L2_N_L1
+' L2 -[hidden]d-> L1
+' Esp -[hidden]u-> L2
 
 @enduml

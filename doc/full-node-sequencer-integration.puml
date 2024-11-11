@@ -1,0 +1,19 @@
+@startuml
+actor Client
+participant Rollup
+participant "Espresso Node" as EspNode
+participant L1
+
+Rollup <- L1 : <i>height</i> of last verified block
+
+Rollup -> EspNode : GET availability/stream/blocks/<i>height</i>
+Rollup -> EspNode : GET availability/stream/leaves/<i>height</i>
+
+loop
+Rollup <-- EspNode : Block
+Rollup <-- EspNode : Leaf, Proof of consensus
+Rollup -> Rollup : Verify Proof of consensus
+Rollup -> Rollup : Execute Block
+Rollup --> Client: Updated State
+end
+@enduml
