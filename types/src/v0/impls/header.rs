@@ -440,8 +440,11 @@ impl Header {
                 );
             } else {
                 ensure!(
-                    fee_account
-                        .validate_sequencing_fee_signature_marketplace(fee_signature, *fee_amount,),
+                    fee_account.validate_sequencing_fee_signature_marketplace(
+                        fee_signature,
+                        *fee_amount,
+                        height,
+                    ),
                     "invalid builder signature"
                 );
             }
@@ -1228,13 +1231,13 @@ mod test_headers {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header() {
         // Simplest case: building on genesis, L1 info and timestamp unchanged.
         TestCase::default().run().await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_advance_timestamp() {
         TestCase {
             timestamp: 1,
@@ -1245,7 +1248,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_advance_l1_block() {
         TestCase {
             parent_l1_head: 0,
@@ -1263,7 +1266,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_advance_l1_finalized_from_none() {
         TestCase {
             l1_finalized: Some(l1_block(1)),
@@ -1274,7 +1277,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_timestamp_behind_finalized_l1_block() {
         let l1_finalized = Some(L1BlockInfo {
             number: 1,
@@ -1296,7 +1299,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_timestamp_behind() {
         TestCase {
             parent_timestamp: 1,
@@ -1309,7 +1312,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_l1_head_behind() {
         TestCase {
             parent_l1_head: 1,
@@ -1322,7 +1325,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_l1_finalized_behind_some() {
         TestCase {
             parent_l1_finalized: Some(l1_block(1)),
@@ -1335,7 +1338,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_l1_finalized_behind_none() {
         TestCase {
             parent_l1_finalized: Some(l1_block(0)),
@@ -1348,7 +1351,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_deposits_one() {
         TestCase {
             l1_deposits: vec![FeeInfo::new(Address::default(), 1)],
@@ -1358,7 +1361,7 @@ mod test_headers {
         .await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_new_header_deposits_many() {
         TestCase {
             l1_deposits: [
@@ -1400,7 +1403,7 @@ mod test_headers {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_proposal_validation_success() {
         setup_test();
 
@@ -1523,7 +1526,7 @@ mod test_headers {
             .validate_builder_signature(&signature, &commitment));
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_versioned_header_serialization() {
         setup_test();
 

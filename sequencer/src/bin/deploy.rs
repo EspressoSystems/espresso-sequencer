@@ -115,7 +115,7 @@ struct Options {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     opt.logging.init();

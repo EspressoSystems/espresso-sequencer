@@ -117,6 +117,7 @@ use hotshot::traits::implementations::{
 use hotshot_query_service::metrics::PrometheusMetrics;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::BuilderSignatureKey};
 use tide_disco::App;
+use tokio::spawn;
 use url::Url;
 
 /// Options represents the configuration options that are available for running
@@ -294,10 +295,10 @@ pub async fn run_standalone_service(options: Options) {
 
     let port = options.port();
     // We would like to wait until being signaled
-    let app_serve_handle = async_std::task::spawn(async move {
+    let app_serve_handle = spawn(async move {
         let app_serve_result = app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1).await;
         tracing::info!("app serve result: {:?}", app_serve_result);
     });
 
-    app_serve_handle.await;
+    let _ = app_serve_handle.await;
 }

@@ -2,10 +2,10 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use espresso_types::v0_3::BidTxBody;
+use tokio::{spawn, time::sleep};
 
 use espresso_types::v0_3::RollupRegistration;
 
@@ -115,7 +115,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
         let bid_key_pair = self.bid_key_pair.clone();
         let solver_base_url = self.solver_base_url.clone();
 
-        async_spawn(async move {
+        spawn(async move {
             let bid_tx = match BidTxBody::new(
                 fee_account,
                 bid_amount,
@@ -195,7 +195,7 @@ impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
         let solver_base_url = self.solver_base_url.clone();
         let namespaces_to_skip_lock = Arc::clone(&self.namespaces_to_skip);
 
-        async_spawn(async move {
+        spawn(async move {
             let namespaces_to_skip = fetch_namespaces_to_skip(solver_base_url).await;
             *namespaces_to_skip_lock.write().await = namespaces_to_skip;
         });

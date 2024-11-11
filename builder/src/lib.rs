@@ -1,4 +1,3 @@
-use async_compatibility_layer::art::async_spawn;
 use espresso_types::SeqTypes;
 use hotshot_builder_api::v0_1::builder::{
     Error as BuilderApiError, Options as HotshotBuilderApiOptions,
@@ -6,6 +5,7 @@ use hotshot_builder_api::v0_1::builder::{
 use hotshot_builder_core::service::ProxyGlobalState;
 use sequencer::SequencerApiVersion;
 use tide_disco::{App, Url};
+use tokio::spawn;
 use vbs::version::{StaticVersion, StaticVersionType};
 
 pub mod non_permissioned;
@@ -35,12 +35,11 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, SequencerApiVersion::instance()));
+    spawn(app.serve(url, SequencerApiVersion::instance()));
 }
 
 #[cfg(test)]
 pub mod testing {
-    use async_compatibility_layer::art::async_spawn;
     use async_lock::RwLock;
     use committable::Committable;
     use espresso_types::{
@@ -122,7 +121,6 @@ pub mod testing {
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 num_bootstrap: 1usize,
                 da_staked_committee_size: num_nodes_with_stake,
-                my_own_validator_config: Default::default(),
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
@@ -262,7 +260,7 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, SequencerApiVersion::instance()));
+            tokio::spawn(app.serve(url, SequencerApiVersion::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence, V: Versions>(
@@ -281,7 +279,7 @@ pub mod testing {
             Self::run_hotshot_event_streaming_api(hotshot_events_api_url, events_streamer.clone());
 
             // send the events to the event streaming state
-            async_spawn({
+            tokio::spawn({
                 async move {
                     let mut hotshot_event_stream = hotshot_context_handle.event_stream();
                     loop {

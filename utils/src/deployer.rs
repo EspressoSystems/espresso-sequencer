@@ -1,5 +1,4 @@
 use anyhow::{ensure, Context};
-use async_std::sync::Arc;
 use clap::{builder::OsStr, Parser, ValueEnum};
 use contract_bindings::{
     erc1967_proxy::ERC1967Proxy,
@@ -19,6 +18,7 @@ use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
 };
+use std::sync::Arc;
 use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
 
@@ -465,7 +465,6 @@ pub enum ContractGroup {
 pub mod test_helpers {
 
     use anyhow::{ensure, Context};
-    use async_std::sync::Arc;
     use contract_bindings::{
         erc1967_proxy::ERC1967Proxy,
         fee_contract::{FeeContract, FEECONTRACT_ABI, FEECONTRACT_BYTECODE},
@@ -475,6 +474,7 @@ pub mod test_helpers {
     };
     use ethers::{prelude::*, solc::artifacts::BytecodeObject};
     use hotshot_contract_adapter::light_client::LightClientConstructorArgs;
+    use std::sync::Arc;
 
     use super::{Contract, Contracts};
 

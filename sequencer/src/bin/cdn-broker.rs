@@ -82,7 +82,7 @@ struct Args {
     )]
     global_memory_pool_size: u64,
 }
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();

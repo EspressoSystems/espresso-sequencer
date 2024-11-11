@@ -1,9 +1,5 @@
 use crate::parse_duration;
 use async_broadcast::{InactiveReceiver, Sender};
-use async_std::{
-    sync::{Arc, Mutex},
-    task::JoinHandle,
-};
 use clap::Parser;
 use ethers::{
     prelude::{H256, U256},
@@ -11,7 +7,8 @@ use ethers::{
 };
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{num::NonZeroUsize, time::Duration};
+use tokio::{sync::Mutex, task::JoinHandle};
+use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {

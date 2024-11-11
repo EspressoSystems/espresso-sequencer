@@ -2,15 +2,11 @@
 
 use std::{
     iter,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, Context, Result};
-use async_std::{
-    io,
-    sync::Arc,
-    task::{sleep, spawn, spawn_blocking},
-};
 use contract_bindings::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
 use ethers::middleware::{
@@ -52,6 +48,7 @@ use serde::Deserialize;
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::ext::InstantExt;
+use tokio::{io, spawn, task::spawn_blocking, time::sleep};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -424,7 +421,9 @@ pub async fn sync_state<ApiVer: StaticVersionType>(
             stake_table_capacity,
         )
     })
-    .await?;
+    .await
+    .map_err(|e| ProverError::Internal(format!("failed to join task: {e}")))??;
+
     let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
@@ -491,7 +490,7 @@ pub async fn run_prover_service_with_stake_table<ApiVer: StaticVersionType + 'st
     }
 
     let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(config.stake_table_capacity))).await;
+        spawn_blocking(move || Arc::new(load_proving_key(config.stake_table_capacity))).await?;
 
     let update_interval = config.update_interval;
     let retry_interval = config.retry_interval;
@@ -517,7 +516,7 @@ pub async fn run_prover_once<ApiVer: StaticVersionType>(
         .with_context(|| "Failed to initialize stake table")?;
     let stake_table_capacity = config.stake_table_capacity;
     let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
+        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await?;
     let relay_server_client = Client::<ServerError, ApiVer>::new(config.relay_server.clone());
 
     sync_state(&st, proving_key, &relay_server_client, &config)
@@ -772,7 +771,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_validate_light_contract_is_proxy() -> Result<()> {
         setup_test();
 
@@ -811,7 +810,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_validate_light_contract_is_not_a_proxy() -> Result<()> {
         setup_test();
 
@@ -850,7 +849,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_read_contract_state() -> Result<()> {
         setup_test();
         let anvil = Anvil::new().spawn();
@@ -885,7 +884,7 @@ mod test {
     }
 
     // This test is temporarily ignored. We are unifying the contract deployment in #1071.
-    #[async_std::test]
+    #[tokio::test]
     async fn test_submit_state_and_proof() -> Result<()> {
         setup_test();
 

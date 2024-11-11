@@ -13,7 +13,6 @@ ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-srs = { workspace = true }
 ark-std = { workspace = true }
-async-std = { workspace = true }
 clap = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 displaydoc = { version = "0.2.3", default-features = false }
@@ -41,6 +40,7 @@ toml = "0.8"
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 sequencer-utils = { path = "../utils", features = ["testing"] }

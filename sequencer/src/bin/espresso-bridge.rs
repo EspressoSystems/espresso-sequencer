@@ -1,5 +1,4 @@
 use anyhow::{bail, ensure, Context};
-use async_std::sync::Arc;
 use clap::{Parser, Subcommand};
 use client::SequencerClient;
 use contract_bindings::fee_contract::FeeContract;
@@ -11,6 +10,7 @@ use ethers::{
 };
 use futures::stream::StreamExt;
 use sequencer_utils::logging;
+use std::sync::Arc;
 use surf_disco::Url;
 
 /// Command-line utility for working with the Espresso bridge.
@@ -274,7 +274,7 @@ async fn l1_balance(opt: L1Balance) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     opt.logging.init();

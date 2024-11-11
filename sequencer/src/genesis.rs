@@ -560,7 +560,7 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_genesis_fee_contract_is_not_a_proxy() -> anyhow::Result<()> {
         setup_test();
 
@@ -606,7 +606,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_genesis_fee_contract_is_a_proxy() -> anyhow::Result<()> {
         setup_test();
 
@@ -650,7 +650,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_genesis_fee_contract_is_a_proxy_with_upgrades() -> anyhow::Result<()> {
         setup_test();
 
@@ -722,7 +722,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_genesis_fee_contract_is_not_a_proxy_with_upgrades() -> anyhow::Result<()> {
         setup_test();
 
@@ -799,7 +799,7 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_genesis_missing_fee_contract_with_upgrades() {
         let toml = toml! {
             base_version = "0.1"
@@ -866,7 +866,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_genesis_upgrade_fee_contract_address_is_zero() {
         let toml = toml! {
             base_version = "0.1"

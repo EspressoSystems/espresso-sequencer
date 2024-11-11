@@ -1,7 +1,7 @@
 use std::{pin::Pin, sync::Arc};
 
 use anyhow::Context;
-use async_std::sync::RwLock;
+use async_lock::RwLock;
 use espresso_types::SeqTypes;
 use futures::{Stream, StreamExt as _};
 use hotshot::types::Event;
@@ -69,13 +69,7 @@ pub async fn handle_events(
 
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
-    use std::{sync::Arc, time::Duration};
-
-    use async_compatibility_layer::art::async_spawn;
-    use async_std::{
-        sync::RwLock,
-        task::{sleep, JoinHandle},
-    };
+    use async_lock::RwLock;
     use espresso_types::SeqTypes;
     use hotshot::rand::{self};
     use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
@@ -89,7 +83,9 @@ pub mod mock {
     };
     use portpicker::pick_unused_port;
     use rand::{rngs::OsRng, RngCore};
+    use std::{sync::Arc, time::Duration};
     use tide_disco::{App, Url};
+    use tokio::{spawn, task::JoinHandle, time::sleep};
     use vbs::version::{StaticVersion, StaticVersionType};
 
     const NON_STAKED_NODE_COUNT: usize = 10;
@@ -168,7 +164,7 @@ pub mod mock {
             .expect("Failed to register hotshot events API");
 
         // cleanup with a function that takes in a a future
-        let events_api_handle = async_spawn({
+        let events_api_handle = spawn({
             let url = url.clone();
             async move {
                 {
@@ -176,8 +172,7 @@ pub mod mock {
                 }
             }
         });
-        let generate_events_handle =
-            async_spawn(generate_view_finished_events(events_streamer.clone()));
+        let generate_events_handle = spawn(generate_view_finished_events(events_streamer.clone()));
 
         let url = url.join("events_api").unwrap();
 
@@ -187,19 +182,20 @@ pub mod mock {
 
 #[cfg(test)]
 mod test {
-
-    use async_compatibility_layer::logging::setup_logging;
-    use async_std::stream::StreamExt;
     use espresso_types::SeqTypes;
+    use futures::StreamExt as _;
+    use hotshot::helpers::initialize_logging;
     use hotshot::types::Event;
     use hotshot_events_service::events_source::StartupInfo;
     use surf_disco::Client;
 
     use crate::mock::{run_mock_event_service, StaticVer01};
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_mock_events_service() {
-        setup_logging();
+        // Initialize logging
+        initialize_logging();
+
         let (url, handle1, handle2) = run_mock_event_service();
 
         tracing::info!("running event service");
@@ -233,7 +229,7 @@ mod test {
             }
         }
 
-        handle1.cancel().await;
-        handle2.cancel().await;
+        handle1.abort();
+        handle2.abort();
     }
 }

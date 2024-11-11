@@ -1,11 +1,10 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
+use hotshot::helpers::initialize_logging;
 use node_metrics::{run_standalone_service, Options};
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
 
     run_standalone_service(Options::parse()).await;
 }

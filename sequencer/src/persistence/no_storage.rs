@@ -2,7 +2,6 @@
 #![cfg(any(test, feature = "testing"))]
 
 use anyhow::bail;
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
@@ -15,8 +14,11 @@ use hotshot_types::{
     message::Proposal,
     simple_certificate::{QuorumCertificate, UpgradeCertificate},
     utils::View,
+    vid::VidSchemeType,
 };
+use jf_vid::VidScheme;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use crate::{SeqTypes, ViewNumber};
 
@@ -135,6 +137,7 @@ impl SequencerPersistence for NoStorage {
     async fn append_da(
         &self,
         _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         Ok(())
     }

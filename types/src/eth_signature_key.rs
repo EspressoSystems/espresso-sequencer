@@ -13,6 +13,7 @@ use ethers::{
     utils::public_key_to_address,
 };
 use hotshot_types::traits::signature_key::BuilderSignatureKey;
+use hotshot_types::traits::signature_key::PrivateSignatureKey;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -25,6 +26,25 @@ pub struct EthKeyPair {
     fee_account: FeeAccount,
 }
 
+impl TryFrom<&tagged_base64::TaggedBase64> for EthKeyPair {
+    type Error = tagged_base64::Tb64Error;
+
+    fn try_from(value: &tagged_base64::TaggedBase64) -> Result<Self, Self::Error> {
+        // Make sure the tag is correct
+        if value.tag() != "ETH_KEY_PAIR" {
+            return Err(tagged_base64::Tb64Error::InvalidTag);
+        }
+
+        // Convert the bytes to a signing key
+        let bytes = value.value();
+        let signing_key =
+            SigningKey::from_slice(&bytes).map_err(|_| tagged_base64::Tb64Error::InvalidData)?;
+
+        // Convert the signing key to an EthKeyPair
+        Ok(signing_key.into())
+    }
+}
+
 impl From<SigningKey> for EthKeyPair {
     fn from(signing_key: SigningKey) -> Self {
         let fee_account = public_key_to_address(&VerifyingKey::from(&signing_key)).into();
@@ -32,6 +52,23 @@ impl From<SigningKey> for EthKeyPair {
             signing_key,
             fee_account,
         }
+    }
+}
+
+impl PrivateSignatureKey for EthKeyPair {
+    fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        let signing_key =
+            SigningKey::from_slice(bytes).map_err(|_| tagged_base64::Tb64Error::InvalidData)?;
+
+        Ok(signing_key.into())
+    }
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.signing_key.to_bytes().to_vec()
+    }
+
+    fn to_tagged_base64(&self) -> Result<tagged_base64::TaggedBase64, tagged_base64::Tb64Error> {
+        tagged_base64::TaggedBase64::new("ETH_KEY_PAIR", &self.signing_key.to_bytes())
     }
 }
 

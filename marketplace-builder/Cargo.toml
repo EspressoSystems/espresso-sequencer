@@ -13,9 +13,7 @@ testing = ["hotshot-query-service", "sequencer-utils", "tempfile"]
 [dependencies]
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
-async-compatibility-layer = { workspace = true }
-async-lock = "2.2"
-async-std = { workspace = true }
+async-lock = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 committable = { workspace = true }
@@ -44,6 +42,7 @@ tide-disco = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 hotshot-query-service = { workspace = true }

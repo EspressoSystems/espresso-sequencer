@@ -11,8 +11,6 @@ testing = []
 [dependencies]
 anyhow = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
-async-compatibility-layer = { workspace = true }
-async-std = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 committable = "0.2"
@@ -31,3 +29,5 @@ surf = "2.3.2"
 tempfile = { workspace = true }
 tracing = "0.1.37"
 url = "2.3.1"
+hotshot = { workspace = true }
+tokio = { workspace = true }

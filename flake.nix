@@ -45,8 +45,7 @@
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
-      ASYNC_FLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" ";
-      RUSTFLAGS = "${ASYNC_FLAGS} --cfg hotshot_example";
+      RUSTFLAGS = " --cfg hotshot_example";
       RUSTDOCFLAGS = ASYNC_FLAGS;
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";

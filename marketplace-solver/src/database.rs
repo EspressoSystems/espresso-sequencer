@@ -145,13 +145,12 @@ pub mod mock {
 
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use async_compatibility_layer::logging::setup_logging;
-
     use crate::database::mock::setup_mock_database;
+    use hotshot::helpers::initialize_logging;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_database_connection() {
-        setup_logging();
+        initialize_logging();
 
         let (tmpdb, client) = setup_mock_database().await;
         let pool = client.pool();

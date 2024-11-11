@@ -2,13 +2,10 @@ use std::{
     cmp::{min, Ordering},
     fmt::Debug,
     num::NonZeroUsize,
+    sync::Arc,
 };
 
 use anyhow::{bail, Context};
-use async_std::{
-    sync::{Arc, Mutex, MutexGuard},
-    task::{sleep, spawn},
-};
 use async_trait::async_trait;
 use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -23,6 +20,11 @@ use futures::{
 };
 use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
+use tokio::{
+    spawn,
+    sync::{Mutex, MutexGuard},
+    time::sleep,
+};
 use tracing::Instrument;
 use url::Url;
 
@@ -123,7 +125,7 @@ impl PubsubClient for RpcClient {
 impl Drop for L1UpdateTask {
     fn drop(&mut self) {
         if let Some(task) = self.0.get_mut().take() {
-            async_std::task::block_on(task.cancel());
+            task.abort();
         }
     }
 }
@@ -216,7 +218,7 @@ impl L1Client {
     /// called again.
     pub async fn stop(&self) {
         if let Some(update_task) = self.update_task.0.lock().await.take() {
-            update_task.cancel().await;
+            update_task.abort();
         }
     }
 
@@ -839,12 +841,12 @@ mod test {
         Ok(())
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_finalized_deposits_ws() -> anyhow::Result<()> {
         test_get_finalized_deposits_helper(true).await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_finalized_deposits_http() -> anyhow::Result<()> {
         test_get_finalized_deposits_helper(false).await
     }
@@ -871,12 +873,12 @@ mod test {
         assert_eq!(block.hash, true_block.hash.unwrap());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_wait_for_finalized_block_ws() {
         test_wait_for_finalized_block_helper(true).await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_wait_for_finalized_block_http() {
         test_wait_for_finalized_block_helper(false).await
     }
@@ -909,12 +911,12 @@ mod test {
         assert_eq!(block.hash, true_block.hash.unwrap());
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_wait_for_finalized_block_by_timestamp_ws() {
         test_wait_for_finalized_block_by_timestamp_helper(true).await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_wait_for_finalized_block_by_timestamp_http() {
         test_wait_for_finalized_block_by_timestamp_helper(false).await
     }
@@ -937,12 +939,12 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_wait_for_block_ws() {
         test_wait_for_block_helper(true).await
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn test_wait_for_block_http() {
         test_wait_for_block_helper(false).await
     }

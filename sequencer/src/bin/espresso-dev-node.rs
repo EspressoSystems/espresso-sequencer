@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
-use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
@@ -33,6 +32,7 @@ use sequencer_utils::{
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::{error::ServerError, method::ReadState, Api, Error as _, StatusCode};
+use tokio::spawn;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -141,7 +141,7 @@ struct Args {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli_params = Args::parse();
 
@@ -535,13 +535,12 @@ mod tests {
     use std::{process::Child, sync::Arc, time::Duration};
 
     use crate::AltChainInfo;
-    use async_std::{stream::StreamExt, task::sleep};
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};
-    use futures::TryStreamExt;
+    use futures::{StreamExt, TryStreamExt};
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
@@ -553,6 +552,7 @@ mod tests {
     use sequencer_utils::{init_signer, test_utils::setup_test, Anvil, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+    use tokio::time::sleep;
 
     use url::Url;
     use vbs::version::StaticVersion;
@@ -575,7 +575,7 @@ mod tests {
     // and open a PR.
     // - APIs update
     // - Types (like `Header`) update
-    #[async_std::test]
+    #[tokio::test]
     async fn slow_dev_node_test() {
         setup_test();
 
@@ -876,7 +876,7 @@ mod tests {
         (providers, urls)
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn slow_dev_node_multiple_lc_providers_test() {
         setup_test();
 

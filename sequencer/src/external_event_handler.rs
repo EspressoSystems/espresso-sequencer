@@ -2,7 +2,6 @@
 
 use crate::context::TaskList;
 use anyhow::{Context, Result};
-use async_compatibility_layer::channel::{Receiver, Sender};
 use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
@@ -14,6 +13,8 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, sync::Arc};
+use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::{Receiver, Sender};
 use url::Url;
 
 /// An external message that can be sent to or received from a node
@@ -65,8 +66,7 @@ impl<V: Versions> ExternalEventHandler<V> {
         public_key: BLSPubKey,
     ) -> Result<Self> {
         // Create the outbound message queue
-        let (outbound_message_sender, outbound_message_receiver) =
-            async_compatibility_layer::channel::bounded(10);
+        let (outbound_message_sender, outbound_message_receiver) = channel(10);
 
         // Spawn the outbound message handling loop
         tasks.spawn(
@@ -158,7 +158,7 @@ impl<V: Versions> ExternalEventHandler<V> {
         mut receiver: Receiver<OutboundMessage>,
         network: Arc<N>,
     ) {
-        while let Ok(message) = receiver.recv().await {
+        while let Some(message) = receiver.recv().await {
             // Match the message type
             match message {
                 OutboundMessage::Direct(message, recipient) => {

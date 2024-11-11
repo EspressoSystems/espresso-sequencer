@@ -2,8 +2,7 @@ use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use anyhow::Context;
 use async_broadcast::broadcast;
-use async_compatibility_layer::art::async_spawn;
-use async_std::sync::{Arc, RwLock};
+use async_lock::RwLock;
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
     ValidatedState,
@@ -27,7 +26,9 @@ use hotshot_types::{
 use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_builder_shared::utils::EventServiceStream;
 use sequencer::{catchup::StatePeers, L1Params, SequencerApiVersion};
+use std::sync::Arc;
 use tide_disco::Url;
+use tokio::spawn;
 use vbs::version::StaticVersionType;
 
 use crate::run_builder_api_service;
@@ -128,6 +129,7 @@ impl BuilderConfig {
             bootstrapped_view,
             max_block_size_increment_period,
             instance_state.chain_config.max_block_size.into(),
+            node_count.into(),
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -147,7 +149,6 @@ impl BuilderConfig {
             tx_receiver,
             VecDeque::new() /* tx_queue */,
             global_state_clone,
-            node_count,
             maximize_txns_count_timeout_duration,
             base_fee
                 .as_u64()
@@ -158,7 +159,7 @@ impl BuilderConfig {
         );
 
         // spawn the builder event loop
-        async_spawn(async move {
+        spawn(async move {
             builder_state.event_loop();
         });
 
@@ -180,13 +181,12 @@ impl BuilderConfig {
         let event_stream =
             EventServiceStream::<SeqTypes, SequencerApiVersion>::connect(events_url).await?;
 
-        async_spawn(async move {
+        spawn(async move {
             let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion, _>(
                 da_sender,
                 qc_sender,
                 decide_sender,
                 event_stream,
-                node_count,
                 global_state_clone,
             )
             .await;
@@ -207,9 +207,9 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use async_std::stream::StreamExt;
     use espresso_types::MockSequencerVersions;
     use ethers::utils::Anvil;
+    use futures::StreamExt;
     use portpicker::pick_unused_port;
     use sequencer::{
         api::{
@@ -230,7 +230,7 @@ mod test {
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api
     /// Builder subscrived to this api, and server the hotshot client request and the private mempool tx submission
-    #[async_std::test]
+    #[tokio::test]
     async fn test_non_permissioned_builder() {
         setup_test();
 

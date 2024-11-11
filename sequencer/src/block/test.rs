@@ -14,7 +14,7 @@ use jf_vid::VidScheme;
 use rand::RngCore;
 use std::collections::HashMap;
 
-#[async_std::test]
+#[tokio::test]
 async fn basic_correctness() {
     // play with this
     let test_cases = vec![
@@ -105,7 +105,7 @@ async fn basic_correctness() {
     }
 }
 
-#[async_std::test]
+#[tokio::test]
 async fn enforce_max_block_size() {
     setup_logging();
     setup_backtrace();

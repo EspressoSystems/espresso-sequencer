@@ -1,7 +1,6 @@
 //! Sequencer-specific API options and initialization.
 
 use anyhow::{bail, Context};
-use async_std::sync::Arc;
 use clap::Parser;
 use espresso_types::{
     v0::traits::{EventConsumer, NullEventConsumer, SequencerPersistence},
@@ -13,7 +12,7 @@ use futures::{
 };
 use hotshot_events_service::events::Error as EventStreamingError;
 use hotshot_query_service::{
-    data_source::{ExtensibleDataSource, MetricsDataSource, UpdateDataSource},
+    data_source::{storage::UpdateAvailabilityStorage, ExtensibleDataSource, MetricsDataSource},
     status::{self, UpdateStatusData},
     ApiState as AppState, Error,
 };
@@ -22,6 +21,7 @@ use hotshot_types::traits::{
     network::ConnectedNetwork,
     node_implementation::Versions,
 };
+use std::sync::Arc;
 use tide_disco::{listener::RateLimitListener, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
@@ -267,7 +267,7 @@ impl Options {
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
         D: SequencerDataSource + CatchupStorage + Send + Sync + 'static,
-        for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
+        for<'a> D::Transaction<'a>: UpdateAvailabilityStorage<SeqTypes>,
     {
         let metrics = ds.populate_metrics();
         let ds = Arc::new(ExtensibleDataSource::new(ds, state.clone()));
