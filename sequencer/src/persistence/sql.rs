@@ -322,7 +322,7 @@ impl SequencerPersistence for Persistence {
         let json = serde_json::to_value(cfg)?;
 
         let mut tx = self.db.write().await?;
-        tx.execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", (json,))
+        tx.execute(query("INSERT INTO network_config (config) VALUES ($1)").bind(json))
             .await?;
         tx.commit().await
     }
@@ -556,8 +556,7 @@ impl SequencerPersistence for Persistence {
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
 
         let mut tx = self.db.write().await?;
-        tx.execute_one_with_retries(stmt, (view.u64() as i64,))
-            .await?;
+        tx.execute(query(stmt).bind(view.u64() as i64)).await?;
         tx.commit().await
     }
     async fn update_undecided_state(

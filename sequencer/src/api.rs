@@ -1177,7 +1177,7 @@ mod api_tests {
     pub async fn test_non_consecutive_decide_with_failing_event_consumer<D>()
     where
         D: TestableSequencerDataSource + Debug + 'static,
-        for<'a> D::Transaction<'a>: UpdateAvailabilityData<SeqTypes>,
+        for<'a> D: UpdateAvailabilityData<SeqTypes>,
     {
         #[derive(Clone, Copy, Debug)]
         struct FailConsumer;

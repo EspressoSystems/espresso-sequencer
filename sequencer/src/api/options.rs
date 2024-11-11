@@ -266,8 +266,12 @@ impl Options {
     where
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
-        D: SequencerDataSource + CatchupStorage + Send + Sync + 'static,
-        for<'a> D::Transaction<'a>: UpdateDataSource<SeqTypes>,
+        D: UpdateDataSource<SeqTypes>
+            + SequencerDataSource
+            + CatchupStorage
+            + Send
+            + Sync
+            + 'static,
     {
         let metrics = ds.populate_metrics();
         let ds = Arc::new(ExtensibleDataSource::new(ds, state.clone()));

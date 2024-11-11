@@ -10,9 +10,6 @@
 
 use async_trait::async_trait;
 use espresso_types::v0_3::ChainConfig;
-use hotshot_query_service::data_source::fetching;
-
-use crate::SeqTypes;
 
 pub mod fs;
 pub mod no_storage;
@@ -21,16 +18,6 @@ pub mod sql;
 #[async_trait]
 pub trait ChainConfigPersistence: Sized + Send + Sync {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
-}
-
-#[async_trait]
-impl<'a, T> ChainConfigPersistence for fetching::Transaction<'a, SeqTypes, T>
-where
-    T: ChainConfigPersistence,
-{
-    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
-        self.as_mut().insert_chain_config(chain_config).await
-    }
 }
 
 #[cfg(any(test, feature = "testing"))]
