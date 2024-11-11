@@ -562,7 +562,7 @@ impl ProcessProduceBlockStreamTask {
                 .await
                 .ok()
                 // we want to start **after** the last block we received.
-                .map(|(height, _)| std::cmp::max(height + 1, minimum_start_block_height));
+                .map(|stats| std::cmp::max(stats.num_blocks + 1, minimum_start_block_height));
 
             let block_stream_result = block_stream_receiver.retrieve_stream(block_height).await;
 

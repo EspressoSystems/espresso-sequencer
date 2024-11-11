@@ -8,6 +8,7 @@ use std::time::SystemTime;
 use alloy::sol_types::SolStruct;
 use sqlx::Row;
 
+use crate::service::data_state::Stats;
 use crate::service::espresso_inscription::{
     ChainDetails, EspressoInscription, InscriptionAndChainDetails,
 };
@@ -315,20 +316,29 @@ impl InscriptionPersistence for PostgresPersistence {
         Ok(())
     }
 
-    async fn retrieve_last_received_block(
-        &self,
-    ) -> Result<(u64, u64), RetrieveLastReceivedBlockError> {
+    async fn retrieve_last_received_block(&self) -> Result<Stats, RetrieveLastReceivedBlockError> {
         tracing::debug!("Retrieving last received block");
         // We shouldn't need a transaction, as we're just performing a read
         let mut conn = self.pool.acquire().await?;
 
-        let row = sqlx::query("SELECT block_number, num_transaction FROM last_read_block")
+        let last_read_stats_row =
+            sqlx::query("SELECT block_number, num_transaction FROM last_read_block")
+                .fetch_one(&mut *conn)
+                .await?;
+
+        let block_number: i64 = last_read_stats_row.try_get("block_number")?;
+        let num_transaction: i64 = last_read_stats_row.try_get("num_transaction")?;
+
+        let number_of_inscriptions_row = sqlx::query("SELECT COUNT(*) FROM confirmed_inscriptions")
             .fetch_one(&mut *conn)
             .await?;
 
-        let block_number: i64 = row.try_get("block_number")?;
-        let num_transaction: i64 = row.try_get("num_transaction")?;
+        let number_of_inscriptions: i64 = number_of_inscriptions_row.try_get(0)?;
 
-        Ok((block_number as u64, num_transaction as u64))
+        Ok(Stats {
+            num_blocks: block_number as u64,
+            num_transactions: num_transaction as u64,
+            num_inscriptions: number_of_inscriptions as u64,
+        })
     }
 }

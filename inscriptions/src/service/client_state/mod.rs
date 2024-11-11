@@ -661,7 +661,7 @@ pub mod tests {
     use super::{ClientThreadState, InternalClientMessageProcessingTask};
     use crate::service::{
         client_id::ClientId,
-        data_state::DataState,
+        data_state::{DataState, Stats},
         espresso_inscription::{EspressoInscription, InscriptionAndChainDetails},
         server_message::ServerMessage,
         storage::{
@@ -734,7 +734,7 @@ pub mod tests {
 
         async fn retrieve_last_received_block(
             &self,
-        ) -> Result<(u64, u64), RetrieveLastReceivedBlockError> {
+        ) -> Result<Stats, RetrieveLastReceivedBlockError> {
             todo!();
         }
     }

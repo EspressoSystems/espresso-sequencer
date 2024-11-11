@@ -12,7 +12,7 @@ use crate::{
             ProcessDistributeServerMessageHandlingTask, ProcessPutInscriptionToChainTask,
             ProcessRecordPutInscriptionRequestTask,
         },
-        data_state::{DataState, ProcessBlockStreamTask, MAX_LOCAL_INSCRIPTION_HISTORY},
+        data_state::{DataState, ProcessBlockStreamTask, Stats, MAX_LOCAL_INSCRIPTION_HISTORY},
         espresso_inscription::EspressoInscription,
         server_message::ServerMessage,
         storage::{
@@ -244,9 +244,15 @@ pub async fn create_inscriptions_processing(
 
     let mut data_state = DataState::new(Default::default(), persistence.clone(), signer.address());
 
-    let (block_height, num_transactions) = persistence.retrieve_last_received_block().await?;
+    let Stats {
+        num_blocks: block_height,
+        num_transactions,
+        num_inscriptions,
+    } = persistence.retrieve_last_received_block().await?;
+
     // Restore the previous number of transactions and the block height.
     data_state.add_num_transactions(block_height, num_transactions);
+    data_state.add_num_inscriptions(block_height, num_inscriptions);
 
     let limit = NonZero::<usize>::new(MAX_LOCAL_INSCRIPTION_HISTORY).unwrap();
     let latest_inscriptions_result: Result<

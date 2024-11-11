@@ -5,7 +5,10 @@ pub mod postgres;
 use espresso_types::SeqTypes;
 use hotshot_query_service::availability::BlockQueryData;
 
-use super::espresso_inscription::{EspressoInscription, InscriptionAndChainDetails};
+use super::{
+    data_state::Stats,
+    espresso_inscription::{EspressoInscription, InscriptionAndChainDetails},
+};
 
 /// [DecodeEspressoInscriptionError] is an error that occurs when attempting to
 /// decode an EspressoInscription from the database.
@@ -218,7 +221,5 @@ pub trait InscriptionPersistence {
     /// and number of transactions from the Espresso Block Chain.  This is used
     /// to help bootstrap the block stream to ensure that we do not miss
     /// processing any blocks.
-    async fn retrieve_last_received_block(
-        &self,
-    ) -> Result<(u64, u64), RetrieveLastReceivedBlockError>;
+    async fn retrieve_last_received_block(&self) -> Result<Stats, RetrieveLastReceivedBlockError>;
 }

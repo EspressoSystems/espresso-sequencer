@@ -6,7 +6,10 @@ use std::{
 use espresso_types::SeqTypes;
 use hotshot_query_service::availability::BlockQueryData;
 
-use crate::service::espresso_inscription::{EspressoInscription, InscriptionAndChainDetails};
+use crate::service::{
+    data_state::Stats,
+    espresso_inscription::{EspressoInscription, InscriptionAndChainDetails},
+};
 
 use super::{
     InscriptionPersistence, RecordConfirmedInscriptionAndChainDetailsError,
@@ -97,24 +100,22 @@ where
         result
     }
 
-    async fn retrieve_last_received_block(
-        &self,
-    ) -> Result<(u64, u64), RetrieveLastReceivedBlockError> {
+    async fn retrieve_last_received_block(&self) -> Result<Stats, RetrieveLastReceivedBlockError> {
         if self.last_received_block.load(Ordering::SeqCst) != 0 {
-            return Ok((
-                self.last_received_block.load(Ordering::SeqCst),
-                self.num_transactions.load(Ordering::SeqCst),
-            ));
+            return Ok(Stats {
+                num_blocks: self.last_received_block.load(Ordering::SeqCst),
+                num_transactions: self.num_transactions.load(Ordering::SeqCst),
+                num_inscriptions: 0,
+            });
         }
 
         // fallback to the underlying storage for boot-strapping
-        let (block_height, num_transactions) =
-            self.persistence.retrieve_last_received_block().await?;
+        let stats = self.persistence.retrieve_last_received_block().await?;
         self.last_received_block
-            .store(block_height, Ordering::SeqCst);
+            .store(stats.num_blocks, Ordering::SeqCst);
         self.num_transactions
-            .store(num_transactions, Ordering::SeqCst);
+            .store(stats.num_transactions, Ordering::SeqCst);
 
-        Ok((block_height, num_transactions))
+        Ok(stats)
     }
 }
