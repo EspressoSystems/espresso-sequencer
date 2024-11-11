@@ -21,6 +21,7 @@
 //! implementations of [`Provider`] for various data availability sources.
 //!
 
+use async_lock::Mutex;
 use async_lock::Semaphore;
 use backoff::{backoff::Backoff, ExponentialBackoff};
 use derivative::Derivative;
@@ -30,7 +31,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{spawn, sync::Mutex, time::sleep};
+use tokio::{spawn, time::sleep};
 
 pub mod provider;
 pub mod request;

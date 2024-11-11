@@ -27,12 +27,12 @@ use crate::{
     status::HasMetrics,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
+use async_lock::Mutex;
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
 use std::ops::RangeBounds;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, Default)]
 enum FailureMode {

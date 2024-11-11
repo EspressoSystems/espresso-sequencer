@@ -70,6 +70,7 @@
 //! spawned to fetch missing resources and send them through the [`Notifier`], but these should be
 //! relatively few and rare.
 
+use async_lock::Mutex;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
 use std::sync::Arc;
@@ -78,7 +79,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::oneshot;
 use tracing::warn;
 
 /// A predicate on a type `<T>`.
