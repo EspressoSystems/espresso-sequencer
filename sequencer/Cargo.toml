@@ -78,6 +78,7 @@ jf-crhf = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-rescue = { workspace = true }
 tempfile = { workspace = true, optional = true }
+async-lock = { workspace = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
@@ -106,14 +107,13 @@ surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.18"
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
-tokio = { workspace = true }
-async-lock = { workspace = true }
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
 

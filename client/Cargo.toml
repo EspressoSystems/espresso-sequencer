@@ -14,6 +14,6 @@ futures = { workspace = true }
 jf-merkle-tree = { workspace = true }
 sequencer-utils = { path = "../utils" }
 surf-disco = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
-tokio = { workspace = true }

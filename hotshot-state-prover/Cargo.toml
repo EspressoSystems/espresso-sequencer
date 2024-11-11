@@ -36,11 +36,11 @@ serde = { workspace = true }
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
+tokio = { workspace = true }
 toml = "0.8"
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 sequencer-utils = { path = "../utils", features = ["testing"] }

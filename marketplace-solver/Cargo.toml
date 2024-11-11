@@ -13,8 +13,8 @@ testing = [
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 async-lock = { workspace = true }
+async-trait = { workspace = true }
 bincode = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
@@ -34,10 +34,10 @@ sqlx = { workspace = true, features = [ "postgres", "macros" ] }
 surf-disco = { workspace = true }
 thiserror = { workspace = true }
 tide-disco = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 portpicker = { workspace = true }

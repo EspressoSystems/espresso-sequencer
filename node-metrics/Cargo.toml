@@ -9,6 +9,7 @@ edition = { workspace = true }
 testing = ["serde_json", "espresso-types/testing"]
 
 [dependencies]
+async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
@@ -20,7 +21,6 @@ hotshot = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 tokio = { workspace = true }
-async-lock = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-types = { workspace = true }
