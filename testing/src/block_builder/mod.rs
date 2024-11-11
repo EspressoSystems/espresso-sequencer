@@ -4,9 +4,10 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use async_broadcast::Receiver;
+use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::Stream;
 use hotshot::{traits::BlockPayload, types::Event};
@@ -168,7 +169,7 @@ pub fn run_builder_source_0_1<TYPES, Source>(
 /// Helper function to construct all builder data structures from a list of transactions
 async fn build_block<TYPES: NodeType>(
     transactions: Vec<TYPES::Transaction>,
-    num_storage_nodes: usize,
+    num_storage_nodes: Arc<RwLock<usize>>,
     pub_key: TYPES::BuilderSignatureKey,
     priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
 ) -> BlockEntry<TYPES>
@@ -186,7 +187,7 @@ where
     let commitment = block_payload.builder_commitment(&metadata);
 
     let (vid_commitment, precompute_data) =
-        precompute_vid_commitment(&block_payload.encode(), num_storage_nodes);
+        precompute_vid_commitment(&block_payload.encode(), *num_storage_nodes.read_arc().await);
 
     // Get block size from the encoded payload
     let block_size = block_payload.encode().len() as u64;

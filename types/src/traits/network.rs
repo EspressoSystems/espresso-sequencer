@@ -8,12 +8,6 @@
 //!
 //! Contains types and traits used by `HotShot` to abstract over network access
 
-use derivative::Derivative;
-use dyn_clone::DynClone;
-use futures::Future;
-use thiserror::Error;
-use tokio::{sync::mpsc::error::TrySendError, time::sleep};
-
 use std::{
     collections::HashMap,
     fmt::{Debug, Display},
@@ -24,12 +18,16 @@ use std::{
 };
 
 use async_trait::async_trait;
-use futures::future::join_all;
+use derivative::Derivative;
+use dyn_clone::DynClone;
+use futures::{future::join_all, Future};
 use rand::{
     distributions::{Bernoulli, Uniform},
     prelude::Distribution,
 };
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use tokio::{sync::mpsc::error::TrySendError, time::sleep};
 
 use super::{node_implementation::NodeType, signature_key::SignatureKey};
 use crate::{

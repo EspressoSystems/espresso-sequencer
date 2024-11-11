@@ -42,7 +42,6 @@ use async_trait::async_trait;
 use futures::join;
 use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry};
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
-use tokio::{spawn, time::sleep};
 // Internal
 /// Reexport error type
 pub use hotshot_types::error::HotShotError;
@@ -68,6 +67,7 @@ use hotshot_types::{
 // External
 /// Reexport rand crate
 pub use rand;
+use tokio::{spawn, time::sleep};
 use tracing::{debug, instrument, trace};
 
 use crate::{

@@ -2,8 +2,10 @@ use std::time::Duration;
 
 use async_broadcast::broadcast;
 use futures::StreamExt;
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
-use hotshot_example_types::state_types::TestValidatedState;
+use hotshot_example_types::{
+    node_types::{MemoryImpl, TestTypes, TestVersions},
+    state_types::TestValidatedState,
+};
 use hotshot_task::dependency_task::HandleDepOutput;
 use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::VoteDependencyHandle};
 use hotshot_testing::{
@@ -11,10 +13,9 @@ use hotshot_testing::{
     predicates::{event::*, Predicate, PredicateResult},
     view_generator::TestViewGenerator,
 };
-use hotshot_types::data::Leaf;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{EpochNumber, ViewNumber},
+    data::{EpochNumber, Leaf, ViewNumber},
     traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
 };
 use itertools::Itertools;

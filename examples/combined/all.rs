@@ -12,8 +12,8 @@ use std::path::Path;
 
 use cdn_broker::Broker;
 use cdn_marshal::Marshal;
-use hotshot::helpers::initialize_logging;
 use hotshot::{
+    helpers::initialize_logging,
     traits::implementations::{KeyPair, TestingDef, WrappedSignatureKey},
     types::SignatureKey,
 };

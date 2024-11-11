@@ -7,6 +7,8 @@
 // TODO: Remove after integration
 #![allow(unused_imports)]
 
+use std::sync::Arc;
+
 use committable::Committable;
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
@@ -25,9 +27,8 @@ use hotshot_testing::{
     serial,
     view_generator::TestViewGenerator,
 };
-use hotshot_types::data::Leaf;
 use hotshot_types::{
-    data::ViewNumber,
+    data::{Leaf, ViewNumber},
     request_response::ProposalRequestPayload,
     traits::{
         consensus_api::ConsensusApi,
@@ -36,8 +37,6 @@ use hotshot_types::{
         ValidatedState,
     },
 };
-
-use std::sync::Arc;
 
 #[cfg(test)]
 #[tokio::test(flavor = "multi_thread")]

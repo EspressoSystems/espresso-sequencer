@@ -54,7 +54,7 @@ pub struct SimpleBuilderImplementation;
 
 impl SimpleBuilderImplementation {
     pub async fn create<TYPES: NodeType>(
-        num_storage_nodes: usize,
+        num_nodes: usize,
         changes: HashMap<u64, BuilderChange>,
         change_sender: Sender<BuilderChange>,
     ) -> (SimpleBuilderSource<TYPES>, SimpleBuilderTask<TYPES>) {
@@ -70,7 +70,7 @@ impl SimpleBuilderImplementation {
             priv_key,
             transactions: transactions.clone(),
             blocks: blocks.clone(),
-            num_storage_nodes,
+            num_nodes: Arc::new(RwLock::new(num_nodes)),
             should_fail_claims: Arc::clone(&should_fail_claims),
         };
 
@@ -95,13 +95,13 @@ where
     type Config = ();
 
     async fn start(
-        num_storage_nodes: usize,
+        num_nodes: usize,
         url: Url,
         _config: Self::Config,
         changes: HashMap<u64, BuilderChange>,
     ) -> Box<dyn BuilderTask<TYPES>> {
         let (change_sender, change_receiver) = broadcast(128);
-        let (source, task) = Self::create(num_storage_nodes, changes, change_sender).await;
+        let (source, task) = Self::create(num_nodes, changes, change_sender).await;
         run_builder_source(url, change_receiver, source);
 
         Box::new(task)
@@ -112,7 +112,7 @@ where
 pub struct SimpleBuilderSource<TYPES: NodeType> {
     pub_key: TYPES::BuilderSignatureKey,
     priv_key: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderPrivateKey,
-    num_storage_nodes: usize,
+    num_nodes: Arc<RwLock<usize>>,
     #[allow(clippy::type_complexity)]
     transactions: Arc<RwLock<HashMap<Commitment<TYPES::Transaction>, SubmittedTransaction<TYPES>>>>,
     blocks: Arc<RwLock<HashMap<BuilderCommitment, BlockEntry<TYPES>>>>,
@@ -248,7 +248,7 @@ where
 
         let block_entry = build_block(
             transactions,
-            self.num_storage_nodes,
+            self.num_nodes.clone(),
             self.pub_key.clone(),
             self.priv_key.clone(),
         )
@@ -303,8 +303,9 @@ where
         view_number: u64,
         sender: TYPES::SignatureKey,
         signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-        _num_nodes: usize,
+        num_nodes: usize,
     ) -> Result<AvailableBlockData<TYPES>, BuildError> {
+        *self.num_nodes.write().await = num_nodes;
         self.claim_block(block_hash, view_number, sender, signature)
             .await
     }

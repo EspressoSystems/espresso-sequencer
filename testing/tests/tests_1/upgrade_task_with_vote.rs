@@ -6,15 +6,14 @@
 
 #![allow(unused_imports)]
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
-use hotshot_example_types::state_types::TestValidatedState;
 use hotshot_example_types::{
     block_types::{TestMetadata, TestTransaction},
     node_types::{MemoryImpl, TestTypes, TestVersions},
-    state_types::TestInstanceState,
+    state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{
@@ -29,14 +28,12 @@ use hotshot_testing::{
     script::{Expectations, InputOrder, TaskScript},
     view_generator::TestViewGenerator,
 };
-use hotshot_types::data::Leaf;
 use hotshot_types::{
-    data::{null_block, ViewNumber},
+    data::{null_block, Leaf, ViewNumber},
     simple_vote::UpgradeProposalData,
     traits::{election::Membership, node_implementation::ConsensusTime},
     vote::HasViewNumber,
 };
-use std::sync::Arc;
 use vbs::version::Version;
 const TIMEOUT: Duration = Duration::from_millis(65);
 

@@ -33,8 +33,7 @@ use hotshot_types::{
     },
     vote::{HasViewNumber, Vote},
 };
-use tokio::spawn;
-use tokio::task::JoinHandle;
+use tokio::{spawn, task::JoinHandle};
 use tracing::instrument;
 use utils::anytrace::*;
 

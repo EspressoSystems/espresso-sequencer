@@ -6,12 +6,14 @@
 
 #![allow(clippy::panic)]
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
-use hotshot_example_types::state_types::TestValidatedState;
+use hotshot_example_types::{
+    node_types::{MemoryImpl, TestTypes, TestVersions},
+    state_types::TestValidatedState,
+};
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_testing::{
     all_predicates,
@@ -20,9 +22,10 @@ use hotshot_testing::{
     random,
     script::{Expectations, InputOrder, TaskScript},
 };
-use hotshot_types::data::Leaf;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use std::sync::Arc;
+use hotshot_types::{
+    data::{Leaf, ViewNumber},
+    traits::node_implementation::ConsensusTime,
+};
 
 const TIMEOUT: Duration = Duration::from_millis(35);
 

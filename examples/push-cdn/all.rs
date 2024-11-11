@@ -12,8 +12,8 @@ use std::path::Path;
 
 use cdn_broker::{reexports::crypto::signature::KeyPair, Broker};
 use cdn_marshal::Marshal;
-use hotshot::helpers::initialize_logging;
 use hotshot::{
+    helpers::initialize_logging,
     traits::implementations::{TestingDef, WrappedSignatureKey},
     types::SignatureKey,
 };

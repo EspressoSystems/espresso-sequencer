@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
@@ -34,7 +34,6 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use sha2::Digest;
-use std::sync::Arc;
 use vec1::vec1;
 
 const TIMEOUT: Duration = Duration::from_millis(35);

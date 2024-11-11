@@ -8,8 +8,7 @@ use std::time::Duration;
 
 use async_broadcast::{Receiver, Sender};
 use hotshot_task_impls::helpers::broadcast_event;
-use tokio::task::JoinHandle;
-use tokio::{spawn, time::timeout};
+use tokio::{spawn, task::JoinHandle, time::timeout};
 
 use crate::test_task::TestEvent;
 

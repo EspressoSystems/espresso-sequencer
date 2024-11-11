@@ -23,9 +23,9 @@ use hotshot_types::{
         node_implementation::{NodeType, Versions},
     },
 };
-use tokio::task::JoinHandle;
 use tokio::{
     spawn,
+    task::JoinHandle,
     time::{sleep, timeout},
 };
 use tracing::error;

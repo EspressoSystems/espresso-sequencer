@@ -20,10 +20,10 @@ use std::{collections::HashSet, fmt::Debug};
 
 use futures::channel::oneshot::Sender;
 use hotshot_types::traits::{network::NetworkError, node_implementation::NodeType};
-use libp2p::dns::tokio::Transport as DnsTransport;
 use libp2p::{
     build_multiaddr,
     core::{muxing::StreamMuxerBox, transport::Boxed},
+    dns::tokio::Transport as DnsTransport,
     gossipsub::Event as GossipEvent,
     identify::Event as IdentifyEvent,
     identity::Keypair,

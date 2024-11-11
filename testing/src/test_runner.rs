@@ -40,8 +40,7 @@ use hotshot_types::{
     HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
-use tokio::spawn;
-use tokio::task::JoinHandle;
+use tokio::{spawn, task::JoinHandle};
 #[allow(deprecated)]
 use tracing::info;
 

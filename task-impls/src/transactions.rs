@@ -706,6 +706,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             bail!("No available blocks");
         }
 
+        let version = match self.upgrade_lock.version(view_number).await {
+            Ok(v) => v,
+            Err(err) => {
+                bail!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
+            }
+        };
+
         for (block_info, builder_idx) in available_blocks {
             // Verify signature over chosen block.
             if !block_info.sender.validate_block_info_signature(
@@ -732,9 +739,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             let response = {
                 let client = &self.builder_clients[builder_idx];
 
-                let (block, header_input) = futures::join! {
-                    client.claim_block(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature),
-                    client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
+                // If epochs are supported, provide the latest `num_nodes` information to the
+                // builder for VID computation.
+                let (block, header_input) = if version >= V::Epochs::VERSION {
+                    futures::join! {
+                        client.claim_block_with_num_nodes(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature, self.membership.total_nodes(self.cur_epoch)) ,
+                        client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
+                    }
+                } else {
+                    futures::join! {
+                        client.claim_block(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature),
+                        client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
+                    }
                 };
 
                 let block_data = match block {

@@ -11,8 +11,7 @@ use async_lock::RwLock;
 use hotshot::traits::TestableNodeImplementation;
 use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use rand::thread_rng;
-use tokio::task::JoinHandle;
-use tokio::{spawn, time::sleep};
+use tokio::{spawn, task::JoinHandle, time::sleep};
 
 use crate::{test_runner::Node, test_task::TestEvent};
 
