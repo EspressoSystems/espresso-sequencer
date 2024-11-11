@@ -20,7 +20,7 @@ use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 use tokio::{
     runtime::Handle,
     spawn,
-    task::{block_in_place, JoinHandle},
+    task::JoinHandle,
     time::{sleep, timeout},
 };
 
@@ -358,11 +358,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
     fn drop(&mut self) {
         if !self.detached {
             if let Ok(handle) = Handle::try_current() {
-                tokio::task::block_in_place(move || {
-                    handle.block_on(async move {
-                        self.shut_down().await;
-                    });
-                });
+                handle.block_on(async move { self.shut_down().await });
             }
         }
     }
