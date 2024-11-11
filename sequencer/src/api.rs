@@ -300,7 +300,7 @@ impl<
         Ok(tree)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, instance))]
     async fn get_frontier(
         &self,
         instance: &NodeState,
@@ -390,7 +390,7 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
         retain_accounts(&state.fee_merkle_tree, accounts.iter().copied())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, _instance))]
     async fn get_frontier(
         &self,
         _instance: &NodeState,

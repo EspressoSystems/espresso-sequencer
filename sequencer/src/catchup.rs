@@ -15,6 +15,7 @@ use hotshot_types::{
     data::ViewNumber, network::NetworkConfig, traits::node_implementation::ConsensusTime as _,
     ValidatorConfig,
 };
+use itertools::Itertools;
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -141,7 +142,7 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
             let snapshot = match req.send().await {
                 Ok(res) => res,
                 Err(err) => {
-                    tracing::warn!("Error fetching accounts from peer: {err:#}");
+                    tracing::info!(peer = %client.url, "error fetching accounts from peer: {err:#}");
                     continue;
                 }
             };
@@ -149,11 +150,11 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
             // Verify proofs.
             for account in accounts {
                 let Some((proof, _)) = FeeAccountProof::prove(&snapshot, (*account).into()) else {
-                    tracing::warn!("response from peer missing account {account}");
+                    tracing::warn!(peer = %client.url, "response from peer missing account {account}");
                     continue;
                 };
                 if let Err(err) = proof.verify(&fee_merkle_tree_root) {
-                    tracing::warn!("peer gave invalid proof for account {account}: {err:#}");
+                    tracing::warn!(peer = %client.url, "peer gave invalid proof for account {account}: {err:#}");
                     continue;
                 }
             }
@@ -163,7 +164,7 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
         bail!("Could not fetch account from any peer");
     }
 
-    #[tracing::instrument(skip(self, mt), height = mt.num_leaves())]
+    #[tracing::instrument(skip(self, _instance, mt))]
     async fn try_remember_blocks_merkle_tree(
         &self,
         _instance: &NodeState,
@@ -172,7 +173,7 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         for client in self.clients.iter() {
-            tracing::info!("Fetching frontier from {}", client.url);
+            tracing::debug!(peer = %client.url, "fetching frontier from peer");
             match client
                 .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.u64()))
                 .send()
@@ -180,19 +181,19 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
             {
                 Ok(frontier) => {
                     let Some(elem) = frontier.elem() else {
-                        tracing::warn!("Provided frontier is missing leaf element");
+                        tracing::warn!(peer = %client.url, "Provided frontier is missing leaf element");
                         continue;
                     };
                     match mt.remember(mt.num_leaves() - 1, *elem, &frontier) {
                         Ok(_) => return Ok(()),
                         Err(err) => {
-                            tracing::warn!("Error verifying block proof: {}", err);
+                            tracing::warn!(peer = %client.url, "Error verifying block proof: {err:#}");
                             continue;
                         }
                     }
                 }
                 Err(err) => {
-                    tracing::warn!("Error fetching blocks from peer: {}", err);
+                    tracing::info!(peer = %client.url, "error fetching blocks from peer: {err:#}");
                 }
             }
         }
@@ -232,6 +233,16 @@ impl<ApiVer: StaticVersionType> StateCatchup for StatePeers<ApiVer> {
 
     fn backoff(&self) -> &BackoffParams {
         &self.backoff
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "StatePeers({})",
+            self.clients
+                .iter()
+                .map(|client| client.url.to_string())
+                .join(",")
+        )
     }
 }
 
@@ -344,7 +355,7 @@ impl<T> SqlStateCatchup<T> {
 #[async_trait]
 impl<T> StateCatchup for SqlStateCatchup<T>
 where
-    T: CatchupStorage + std::fmt::Debug + Send + Sync,
+    T: CatchupStorage + Send + Sync,
 {
     // TODO: add a test for the account proof validation
     // issue # 2102 (https://github.com/EspressoSystems/espresso-sequencer/issues/2102)
@@ -364,7 +375,7 @@ where
             .0)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self, instance, mt))]
     async fn try_remember_blocks_merkle_tree(
         &self,
         instance: &NodeState,
@@ -409,6 +420,10 @@ where
 
     fn backoff(&self) -> &BackoffParams {
         &self.backoff
+    }
+
+    fn name(&self) -> String {
+        "SqlStateCatchup".into()
     }
 }
 
@@ -478,5 +493,9 @@ impl StateCatchup for NullStateCatchup {
 
     fn backoff(&self) -> &BackoffParams {
         &self.backoff
+    }
+
+    fn name(&self) -> String {
+        "NullStateCatchup".into()
     }
 }

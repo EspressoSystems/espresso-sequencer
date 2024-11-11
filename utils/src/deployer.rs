@@ -53,17 +53,17 @@ pub struct DeployedContracts {
 /// An identifier for a particular contract.
 #[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
 pub enum Contract {
-    #[display(fmt = "ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
     PlonkVerifier,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
     StateUpdateVK,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
     LightClient,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
     LightClientProxy,
-    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
     FeeContract,
-    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
     FeeContractProxy,
 }
 

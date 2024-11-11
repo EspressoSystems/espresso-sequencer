@@ -1,7 +1,7 @@
 use anyhow::Context;
 use bytesize::ByteSize;
 use clap::Parser;
-use derive_more::{Display, From, Into};
+use derive_more::{From, Into};
 use futures::future::BoxFuture;
 use rand::Rng;
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
@@ -43,8 +43,8 @@ pub struct GenesisHeader {
     pub timestamp: Timestamp,
 }
 
-#[derive(Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
-#[display(fmt = "{}", "_0.format(&TimestampFormat).unwrap()")]
+#[derive(Hash, Copy, Clone, Debug, derive_more::Display, PartialEq, Eq, From, Into)]
+#[display("{}", _0.format(&TimestampFormat).unwrap())]
 pub struct Timestamp(OffsetDateTime);
 
 impl_serde_from_string_or_integer!(Timestamp);

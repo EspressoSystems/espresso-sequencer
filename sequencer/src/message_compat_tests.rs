@@ -60,7 +60,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
     let membership = StaticCommittee::new(
-        vec![],                      /* no elligible leaders */
+        vec![],                      /* no eligible leaders */
         vec![PeerConfig::default()], /* one committee member, necessary to generate a VID share */
         Topic::Global,
     );
