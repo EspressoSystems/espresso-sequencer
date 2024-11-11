@@ -800,6 +800,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-process"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63255f1dc2381611000436537bbedfe83183faa303a5a0edaf191edef06526bb"
+dependencies = [
+ "async-channel 2.3.1",
+ "async-io 2.3.4",
+ "async-lock 3.4.0",
+ "async-signal",
+ "async-task",
+ "blocking",
+ "cfg-if",
+ "event-listener 5.3.1",
+ "futures-lite 2.3.0",
+ "rustix 0.38.36",
+ "tracing",
+]
+
+[[package]]
 name = "async-signal"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -833,22 +852,22 @@ dependencies = [
 
 [[package]]
 name = "async-std"
-version = "1.12.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62565bb4402e926b29953c785397c6dc0391b7b446e45008b0049eb43cec6f5d"
+checksum = "c634475f29802fde2b8f0b505b1bd00dfe4df7d4a000f0b36f7671197d5c3615"
 dependencies = [
  "async-attributes",
  "async-channel 1.9.0",
  "async-global-executor",
- "async-io 1.13.0",
- "async-lock 2.8.0",
- "async-process",
+ "async-io 2.3.4",
+ "async-lock 3.4.0",
+ "async-process 2.3.0",
  "crossbeam-utils",
  "futures-channel",
  "futures-core",
  "futures-io",
- "futures-lite 1.13.0",
- "gloo-timers",
+ "futures-lite 2.3.0",
+ "gloo-timers 0.3.0",
  "kv-log-macro",
  "log",
  "memchr",
@@ -3691,7 +3710,7 @@ version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f288b0a4f20f9a56b5d1da57e2227c661b7b16168e2f72365f57b63326e29b24"
 dependencies = [
- "gloo-timers",
+ "gloo-timers 0.2.6",
  "send_wrapper 0.4.0",
 ]
 
@@ -3798,6 +3817,18 @@ name = "gloo-timers"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b995a66bb87bebce9a0f4a95aed01daca4872c050bfcb21653361c03bc35e5c"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "gloo-timers"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
 dependencies = [
  "futures-channel",
  "futures-core",
@@ -9239,7 +9270,7 @@ dependencies = [
  "async-io 1.13.0",
  "async-lock 2.8.0",
  "async-net",
- "async-process",
+ "async-process 1.8.1",
  "blocking",
  "futures-lite 1.13.0",
 ]
