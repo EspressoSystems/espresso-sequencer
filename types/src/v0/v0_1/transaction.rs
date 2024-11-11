@@ -37,5 +37,5 @@ pub struct Transaction {
     PartialOrd,
     Ord,
 )]
-#[display(fmt = "{_0}")]
+#[display("{_0}")]
 pub struct NamespaceId(pub(crate) u64);

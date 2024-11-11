@@ -20,12 +20,15 @@ concurrency:
 env:
   RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
+  CARGO_TERM_COLOR: always
   DOCKER_PLATFORMS: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
+      - uses: rui314/setup-mold@v1
+
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
@@ -47,6 +50,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: v1-rust
+          cache-provider: buildjet
 
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
@@ -92,6 +96,8 @@ jobs:
     env:
       CARGO_BUILD_JOBS: '6'
     steps:
+      - uses: rui314/setup-mold@v1
+
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
@@ -106,6 +112,8 @@ jobs:
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-provider: buildjet
 
       - name: Build
         run: |
@@ -523,4 +531,5 @@ jobs:
       - name: Test docker demo
         run: |
           just demo &
+          set -o pipefail
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'

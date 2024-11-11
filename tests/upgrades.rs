@@ -1,6 +1,6 @@
 use crate::common::TestConfig;
 use anyhow::Result;
-use espresso_types::{FeeVersion, MarketplaceVersion, V0_1};
+use espresso_types::{FeeVersion, MarketplaceVersion};
 use futures::{stream, StreamExt};
 use vbs::version::StaticVersionType;
 
@@ -15,7 +15,7 @@ async fn test_upgrade() -> Result<()> {
     let versions = if testing.sequencer_version >= 3 {
         (FeeVersion::version(), MarketplaceVersion::version())
     } else {
-        (V0_1::version(), FeeVersion::version())
+        panic!("Invalid sequencer version provided for upgrade test.");
     };
 
     println!("Waiting on readiness");
