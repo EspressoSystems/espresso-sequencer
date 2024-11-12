@@ -548,7 +548,7 @@ impl ProcessProduceBlockStreamTask {
                 }
             };
 
-            let block_height = std::cmp::min(minimum_start_block_height, last_stats.num_blocks);
+            let block_height = std::cmp::max(minimum_start_block_height, last_stats.num_blocks);
 
             // Retrieve a stream
             let Ok(stream) =
