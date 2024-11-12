@@ -905,6 +905,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         proposed_header: &Header,
         vid_common: VidCommon,
         version: Version,
+        view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
@@ -928,7 +929,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
                 proposed_header,
                 VidSchemeType::get_payload_byte_len(&vid_common),
             ),
-            *parent_leaf.view_number() + 1,
+            view_number,
         )
         .validate()?
         .wait_for_l1(&instance.l1_client)

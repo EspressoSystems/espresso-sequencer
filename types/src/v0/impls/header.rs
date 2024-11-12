@@ -352,6 +352,7 @@ impl Header {
         mut l1: L1Snapshot,
         l1_deposits: &[FeeInfo],
         builder_fee: Vec<BuilderFee<SeqTypes>>,
+        view_number: u64,
         mut timestamp: u64,
         mut state: ValidatedState,
         chain_config: ChainConfig,
@@ -443,7 +444,7 @@ impl Header {
                     fee_account.validate_sequencing_fee_signature_marketplace(
                         fee_signature,
                         *fee_amount,
-                        *parent_leaf.view_number() + 1,
+                        view_number,
                     ),
                     "invalid builder signature"
                 );
@@ -755,6 +756,7 @@ impl BlockHeader<SeqTypes> for Header {
         builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
+        view_number: u64,
         _vid_common: VidCommon,
         auction_results: Option<SolverAuctionResults>,
         version: Version,
@@ -864,6 +866,7 @@ impl BlockHeader<SeqTypes> for Header {
             l1_snapshot,
             &l1_deposits,
             builder_fee,
+            view_number,
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             validated_state,
             chain_config,
@@ -995,6 +998,8 @@ impl BlockHeader<SeqTypes> for Header {
             l1_snapshot,
             &l1_deposits,
             vec![builder_fee],
+            // View number is 0 for legacy headers
+            0,
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             validated_state,
             chain_config,
@@ -1196,6 +1201,7 @@ mod test_headers {
                     fee_amount,
                     fee_signature,
                 }],
+                *parent_leaf.view_number() + 1,
                 self.timestamp,
                 validated_state.clone(),
                 genesis.instance_state.chain_config,
