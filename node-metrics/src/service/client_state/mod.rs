@@ -1928,7 +1928,7 @@ pub mod tests {
         sleep(Duration::from_millis(100)).await;
         drop(sender);
 
-        assert!(join_handle.await.is_err());
+        assert!(join_handle.await.unwrap().is_none());
     }
 
     /// Tests the behavior of the sender and receiver when the receiver is
