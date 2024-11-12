@@ -167,6 +167,16 @@ opt-level = 3
 [profile.test.package.diff-test-hotshot]
 opt-level = 3
 
+[profile.test]
+inherits = "dev"
+# Minimal opt-level to run api::test::test_{catchup,restart}
+opt-level = 1
+
+# [profile.mutants]
+# inherits = "dev"
+# debug = "none"
+
+
 [patch."https://github.com/EspressoSystems/HotShot.git"]
 hotshot = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.79-patch1" }
 hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/HotShot.git", tag = "0.5.79-patch1" }

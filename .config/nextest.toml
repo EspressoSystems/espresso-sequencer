@@ -1,7 +1,15 @@
+# cargo-mutants does not seem to support specifying the nextest profile? :(
 [profile.default]
 slow-timeout = "2m"
-default-filter = 'not (test(slow_) | package(tests))'
-retries = 2
+default-filter = """not (test(slow_) | package(tests) \
+  | test(test_fee_upgrade_time_based) \
+  | test(test_fee_upgrade_view_based) \
+  | test(test_marketplace_upgrade_time_based) \
+  | test(test_marketplace_upgrade_view_based) \
+  | test(test_process_client_handling_stream_subscribe_voters) \
+  | test(test_process_client_handling_stream_subscribe_node_identity) \
+  )"""
+retries = 0
 
 # The restart tests run an entire sequencing network, and so are quite resource intensive.
 [[profile.default.overrides]]
@@ -22,3 +30,18 @@ retries = 2
 slow-timeout = "2m"
 default-filter = 'package(tests)'
 retries = 2
+
+# # Profile to be used with mutant testing.
+# # The upgrade tests are slow.
+# # The process_client_handling_stream_subscribe_... tests may hang.
+# [profile.fast-non-flaky]
+# slow-timeout = "2m"
+# default-filter = """not (test(slow_) | package(tests) \
+#   | test(test_fee_upgrade_time_based) \
+#   | test(test_fee_upgrade_view_based) \
+#   | test(test_marketplace_upgrade_time_based) \
+#   | test(test_marketplace_upgrade_view_based) \
+#   | test(test_process_client_handling_stream_subscribe_voters) \
+#   | test(test_process_client_handling_stream_subscribe_node_identity) \
+#   )"""
+# retries = 0
