@@ -17,8 +17,8 @@ use hotshot::{
     MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
+use parking_lot::Mutex;
 use tokio::{
-    runtime::Handle,
     spawn,
     task::JoinHandle,
     time::{sleep, timeout},
@@ -53,7 +53,7 @@ use crate::{
 pub type Consensus<N, P, V> = SystemContextHandle<SeqTypes, Node<N, P>, V>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
-#[derive(Derivative)]
+#[derive(Derivative, Clone)]
 #[derivative(Debug(bound = ""))]
 pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> {
     /// The consensus handle
@@ -357,9 +357,20 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
 {
     fn drop(&mut self) {
         if !self.detached {
-            if let Ok(handle) = Handle::try_current() {
-                handle.block_on(async move { self.shut_down().await });
-            }
+            // Spawn a task to shut down the context
+            let handle_clone = self.handle.clone();
+            let tasks_clone = self.tasks.clone();
+            let node_state_clone = self.node_state.clone();
+
+            spawn(async move {
+                tracing::info!("shutting down SequencerContext");
+                handle_clone.write().await.shut_down().await;
+                tasks_clone.shut_down();
+                node_state_clone.l1_client.stop().await;
+            });
+
+            // Set `detached` so the drop handler doesn't call `shut_down` again.
+            self.detached = true;
         }
     }
 }
@@ -551,8 +562,9 @@ async fn load_anchor_view(persistence: &impl SequencerPersistence) -> ViewNumber
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct TaskList(Vec<(String, JoinHandle<()>)>);
+#[derive(Debug, Default, Clone)]
+#[allow(clippy::type_complexity)]
+pub(crate) struct TaskList(Arc<Mutex<Vec<(String, JoinHandle<()>)>>>);
 
 macro_rules! spawn_with_log_level {
     ($this:expr, $lvl:expr, $name:expr, $task: expr) => {
@@ -569,7 +581,7 @@ macro_rules! spawn_with_log_level {
                 .instrument(span),
             )
         };
-        $this.0.push((name, task));
+        $this.0.lock().push((name, task));
     };
 }
 
@@ -594,8 +606,9 @@ impl TaskList {
     }
 
     /// Stop all background tasks.
-    pub fn shut_down(&mut self) {
-        for (name, task) in self.0.drain(..).rev() {
+    pub fn shut_down(&self) {
+        let tasks: Vec<(String, JoinHandle<()>)> = self.0.lock().drain(..).collect();
+        for (name, task) in tasks.into_iter().rev() {
             tracing::info!(name, "cancelling background task");
             task.abort();
         }
@@ -603,11 +616,18 @@ impl TaskList {
 
     /// Wait for all background tasks to complete.
     pub async fn join(&mut self) {
-        join_all(self.0.drain(..).map(|(_, task)| task)).await;
+        let tasks: Vec<(String, JoinHandle<()>)> = self.0.lock().drain(..).collect();
+        join_all(tasks.into_iter().map(|(_, task)| task)).await;
     }
 
-    pub fn extend(&mut self, mut tasks: TaskList) {
-        self.0.extend(std::mem::take(&mut tasks.0));
+    pub fn extend(&mut self, tasks: TaskList) {
+        self.0.lock().extend(
+            tasks
+                .0
+                .lock()
+                .drain(..)
+                .collect::<Vec<(String, JoinHandle<()>)>>(),
+        );
     }
 }
 

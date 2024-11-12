@@ -8698,6 +8698,7 @@ dependencies = [
  "marketplace-builder-shared",
  "marketplace-solver",
  "num_enum",
+ "parking_lot",
  "portpicker",
  "pretty_assertions",
  "rand 0.8.5",
