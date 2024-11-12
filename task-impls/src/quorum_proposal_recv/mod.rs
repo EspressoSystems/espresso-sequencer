@@ -33,7 +33,7 @@ use vbs::version::Version;
 use self::handlers::handle_quorum_proposal_recv;
 use crate::{
     events::{HotShotEvent, ProposalMissing},
-    helpers::{broadcast_event, cancel_task, parent_leaf_and_state},
+    helpers::{broadcast_event, parent_leaf_and_state},
 };
 /// Event handlers for this task.
 mod handlers;
@@ -108,13 +108,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     /// Cancel all tasks the consensus tasks has spawned before the given view
     pub fn cancel_tasks(&mut self, view: TYPES::View) {
         let keep = self.spawned_tasks.split_off(&view);
-        let mut cancel = Vec::new();
         while let Some((_, tasks)) = self.spawned_tasks.pop_first() {
-            let mut to_cancel = tasks.into_iter().map(cancel_task).collect();
-            cancel.append(&mut to_cancel);
+            for task in tasks {
+                task.abort();
+            }
         }
         self.spawned_tasks = keep;
-        tokio::spawn(async move { join_all(cancel).await });
     }
 
     /// Handles all consensus events relating to propose and vote-enabling events.
@@ -192,7 +191,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
         Ok(())
     }
 
-    async fn cancel_subtasks(&mut self) {
+    fn cancel_subtasks(&mut self) {
         while !self.spawned_tasks.is_empty() {
             let Some((_, handles)) = self.spawned_tasks.pop_first() else {
                 break;

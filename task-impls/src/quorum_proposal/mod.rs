@@ -10,7 +10,6 @@ use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
 use either::Either;
-use futures::future::join_all;
 use hotshot_task::{
     dependency::{AndDependency, EventDependency, OrDependency},
     dependency_task::DependencyTask,
@@ -34,10 +33,7 @@ use tracing::instrument;
 use utils::anytrace::*;
 
 use self::handlers::{ProposalDependency, ProposalDependencyHandle};
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
+use crate::{events::HotShotEvent, helpers::broadcast_event};
 
 mod handlers;
 
@@ -350,7 +346,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             for view in (*self.latest_proposed_view + 1)..=(*new_view) {
                 if let Some(dependency) = self.proposal_dependencies.remove(&TYPES::View::new(view))
                 {
-                    cancel_task(dependency).await;
+                    dependency.abort();
                 }
             }
 
@@ -527,21 +523,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                 )?;
             }
             HotShotEvent::ViewChange(view) | HotShotEvent::Timeout(view) => {
-                self.cancel_tasks(*view).await;
+                self.cancel_tasks(*view);
             }
             _ => {}
         }
         Ok(())
     }
+
     /// Cancel all tasks the consensus tasks has spawned before the given view
-    pub async fn cancel_tasks(&mut self, view: TYPES::View) {
+    pub fn cancel_tasks(&mut self, view: TYPES::View) {
         let keep = self.proposal_dependencies.split_off(&view);
-        let mut cancel = Vec::new();
         while let Some((_, task)) = self.proposal_dependencies.pop_first() {
-            cancel.push(cancel_task(task));
+            task.abort();
         }
         self.proposal_dependencies = keep;
-        join_all(cancel).await;
     }
 }
 
@@ -560,7 +555,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
         self.handle(event, receiver.clone(), sender.clone()).await
     }
 
-    async fn cancel_subtasks(&mut self) {
+    fn cancel_subtasks(&mut self) {
         while let Some((_, handle)) = self.proposal_dependencies.pop_first() {
             handle.abort();
         }

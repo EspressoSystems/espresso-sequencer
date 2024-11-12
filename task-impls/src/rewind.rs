@@ -45,7 +45,7 @@ impl<TYPES: NodeType> TaskState for RewindTaskState<TYPES> {
         Ok(())
     }
 
-    async fn cancel_subtasks(&mut self) {
+    fn cancel_subtasks(&mut self) {
         tracing::info!("Node ID {} Recording {} events", self.id, self.events.len());
         let filename = format!("rewind_{}.log", self.id);
         let mut file = match OpenOptions::new()

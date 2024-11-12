@@ -12,7 +12,6 @@ use std::{
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
-use futures::future::join_all;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::Consensus,
@@ -39,7 +38,7 @@ use utils::anytrace::*;
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, cancel_task},
+    helpers::broadcast_event,
 };
 
 /// the network message task state
@@ -232,7 +231,7 @@ impl<
         Ok(())
     }
 
-    async fn cancel_subtasks(&mut self) {}
+    fn cancel_subtasks(&mut self) {}
 }
 
 impl<
@@ -340,13 +339,14 @@ impl<
     /// Cancel all tasks for previous views
     pub fn cancel_tasks(&mut self, view: TYPES::View) {
         let keep = self.transmit_tasks.split_off(&view);
-        let mut cancel = Vec::new();
+
         while let Some((_, tasks)) = self.transmit_tasks.pop_first() {
-            let mut to_cancel = tasks.into_iter().map(cancel_task).collect();
-            cancel.append(&mut to_cancel);
+            for task in tasks {
+                task.abort();
+            }
         }
+
         self.transmit_tasks = keep;
-        spawn(async move { join_all(cancel).await });
     }
 
     /// Parses a `HotShotEvent` and returns a tuple of: (sender's public key, `MessageKind`, `TransmitType`)
@@ -801,7 +801,7 @@ pub mod test {
             Ok(())
         }
 
-        async fn cancel_subtasks(&mut self) {}
+        fn cancel_subtasks(&mut self) {}
     }
 
     impl<

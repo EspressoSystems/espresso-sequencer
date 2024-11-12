@@ -37,7 +37,7 @@ use vbs::version::StaticVersionType;
 
 use crate::{
     events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
+    helpers::broadcast_event,
     quorum_vote::handlers::{handle_quorum_proposal_validated, submit_vote, update_shared_state},
 };
 
@@ -395,7 +395,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             // Cancel the old dependency tasks.
             for view in *self.latest_voted_view..(*new_view) {
                 if let Some(dependency) = self.vote_dependencies.remove(&TYPES::View::new(view)) {
-                    cancel_task(dependency).await;
+                    dependency.abort();
                     tracing::debug!("Vote dependency removed for view {:?}", view);
                 }
             }
@@ -578,7 +578,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 // cancel old tasks
                 let current_tasks = self.vote_dependencies.split_off(&view);
                 while let Some((_, task)) = self.vote_dependencies.pop_last() {
-                    cancel_task(task).await;
+                    task.abort();
                 }
                 self.vote_dependencies = current_tasks;
             }
@@ -587,7 +587,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 // cancel old tasks
                 let current_tasks = self.vote_dependencies.split_off(&view);
                 while let Some((_, task)) = self.vote_dependencies.pop_last() {
-                    cancel_task(task).await;
+                    task.abort();
                 }
                 self.vote_dependencies = current_tasks;
             }
@@ -720,7 +720,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
         self.handle(event, receiver.clone(), sender.clone()).await
     }
 
-    async fn cancel_subtasks(&mut self) {
+    fn cancel_subtasks(&mut self) {
         while let Some((_, handle)) = self.vote_dependencies.pop_last() {
             handle.abort();
         }

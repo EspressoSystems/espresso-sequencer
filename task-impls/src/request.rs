@@ -75,7 +75,7 @@ pub struct NetworkRequestState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Drop for NetworkRequestState<TYPES, I> {
     fn drop(&mut self) {
-        futures::executor::block_on(async move { self.cancel_subtasks().await });
+        self.cancel_subtasks();
     }
 }
 
@@ -123,7 +123,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
         }
     }
 
-    async fn cancel_subtasks(&mut self) {
+    fn cancel_subtasks(&mut self) {
         self.shutdown_flag.store(true, Ordering::Relaxed);
 
         while !self.spawned_tasks.is_empty() {

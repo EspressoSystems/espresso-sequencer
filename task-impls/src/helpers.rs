@@ -30,7 +30,7 @@ use hotshot_types::{
     utils::{Terminator, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-use tokio::{task::JoinHandle, time::timeout};
+use tokio::time::timeout;
 use tracing::instrument;
 use utils::anytrace::*;
 
@@ -638,11 +638,6 @@ pub(crate) async fn validate_proposal_view_and_certs<
     .await?;
 
     Ok(())
-}
-
-/// Cancel a task
-pub async fn cancel_task<T>(task: JoinHandle<T>) {
-    task.abort();
 }
 
 /// Helper function to send events and log errors

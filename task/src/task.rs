@@ -28,7 +28,7 @@ pub trait TaskState: Send {
     type Event: TaskEvent + Clone + Send + Sync;
 
     /// Joins all subtasks.
-    async fn cancel_subtasks(&mut self);
+    fn cancel_subtasks(&mut self);
 
     /// Handles an event, providing direct access to the specific channel we received the event on.
     async fn handle_event(
@@ -77,7 +77,7 @@ impl<S: TaskState + Send + 'static> Task<S> {
                 match self.receiver.recv_direct().await {
                     Ok(input) => {
                         if *input == S::Event::shutdown_event() {
-                            self.state.cancel_subtasks().await;
+                            self.state.cancel_subtasks();
 
                             break self.boxed_state();
                         }
@@ -129,7 +129,7 @@ impl<EVENT: Send + Sync + Clone + TaskEvent> ConsensusTaskRegistry<EVENT> {
         while let Some(handle) = handles.pop() {
             let mut task_state = handle.await.unwrap();
 
-            task_state.cancel_subtasks().await;
+            task_state.cancel_subtasks();
         }
     }
     /// Take a task, run it, and register it

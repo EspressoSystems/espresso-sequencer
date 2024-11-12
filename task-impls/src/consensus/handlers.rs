@@ -23,9 +23,7 @@ use utils::anytrace::*;
 
 use super::ConsensusTaskState;
 use crate::{
-    consensus::Versions,
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
+    consensus::Versions, events::HotShotEvent, helpers::broadcast_event,
     vote_collection::handle_vote,
 };
 
@@ -170,11 +168,7 @@ pub(crate) async fn handle_view_change<
     });
 
     // Cancel the old timeout task
-    cancel_task(std::mem::replace(
-        &mut task_state.timeout_task,
-        new_timeout_task,
-    ))
-    .await;
+    std::mem::replace(&mut task_state.timeout_task, new_timeout_task).abort();
 
     let consensus_reader = task_state.consensus.read().await;
     consensus_reader
