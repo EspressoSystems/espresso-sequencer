@@ -668,7 +668,7 @@ impl ProcessProduceBlockStreamTask {
             };
 
             let block_height = block.header().height();
-            if block_height < starting_block_height {
+            if block_height <= starting_block_height {
                 tracing::info!(
                     "block height {block_height} is less than starting block height {starting_block_height}, skipping",
                 );
