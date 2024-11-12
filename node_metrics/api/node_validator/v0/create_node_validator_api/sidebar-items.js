@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["CreateNodeValidatorProcessingError","ExternalMessage"],"fn":["create_node_validator_processing"],"struct":["HotShotEventProcessingTask","NodeValidatorAPI","NodeValidatorConfig","ProcessExternalMessageHandlingTask","RollCallInfo"]};
