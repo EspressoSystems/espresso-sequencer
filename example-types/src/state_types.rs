@@ -107,6 +107,7 @@ impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
         _proposed_header: &TYPES::BlockHeader,
         _vid_common: VidCommon,
         _version: Version,
+        _view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         Self::run_delay_settings_from_config(&instance.delay_config).await;
         Ok((

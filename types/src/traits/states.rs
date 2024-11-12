@@ -73,6 +73,7 @@ pub trait ValidatedState<TYPES: NodeType>:
         proposed_header: &TYPES::BlockHeader,
         vid_common: VidCommon,
         version: Version,
+        view_number: u64,
     ) -> impl Future<Output = Result<(Self, Self::Delta), Self::Error>> + Send;
 
     /// Construct the state with the given block header.

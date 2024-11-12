@@ -217,6 +217,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             let Some(null_fee) = null_block::builder_fee::<TYPES, V>(
                 self.membership.total_nodes(self.cur_epoch),
                 version,
+                *block_view,
             ) else {
                 tracing::error!("Failed to get null fee");
                 return None;
@@ -361,6 +362,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         let Some(null_fee) = null_block::builder_fee::<TYPES, V>(
             self.membership.total_nodes(self.cur_epoch),
             version,
+            *block_view,
         ) else {
             tracing::error!("Failed to calculate null block fee.");
             return None;

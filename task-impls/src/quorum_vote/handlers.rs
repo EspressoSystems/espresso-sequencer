@@ -228,6 +228,7 @@ pub(crate) async fn update_shared_state<
             &proposed_leaf.block_header().clone(),
             vid_share.data.common.clone(),
             version,
+            *view_number,
         )
         .await
         .wrap()

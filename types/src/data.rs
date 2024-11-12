@@ -796,7 +796,7 @@ pub mod null_block {
     use crate::{
         traits::{
             block_contents::BuilderFee,
-            node_implementation::{ConsensusTime, NodeType, Versions},
+            node_implementation::{NodeType, Versions},
             signature_key::BuilderSignatureKey,
             BlockPayload,
         },
@@ -825,6 +825,7 @@ pub mod null_block {
     pub fn builder_fee<TYPES: NodeType, V: Versions>(
         num_storage_nodes: usize,
         version: vbs::version::Version,
+        view_number: u64,
     ) -> Option<BuilderFee<TYPES>> {
         /// Arbitrary fee amount, this block doesn't actually come from a builder
         const FEE_AMOUNT: u64 = 0;
@@ -838,7 +839,7 @@ pub mod null_block {
             match TYPES::BuilderSignatureKey::sign_sequencing_fee_marketplace(
                 &priv_key,
                 FEE_AMOUNT,
-                *TYPES::View::genesis(),
+                view_number,
             ) {
                 Ok(sig) => Some(BuilderFee {
                     fee_amount: FEE_AMOUNT,

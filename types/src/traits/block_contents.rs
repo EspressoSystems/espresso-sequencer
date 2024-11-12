@@ -220,6 +220,7 @@ pub trait BlockHeader<TYPES: NodeType>:
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         builder_fee: Vec<BuilderFee<TYPES>>,
+        view_number: u64,
         vid_common: VidCommon,
         auction_results: Option<TYPES::AuctionResult>,
         version: Version,

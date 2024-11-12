@@ -337,6 +337,7 @@ impl<
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: Vec<BuilderFee<TYPES>>,
+        _view_number: u64,
         _vid_common: VidCommon,
         _auction_results: Option<TYPES::AuctionResult>,
         _version: Version,

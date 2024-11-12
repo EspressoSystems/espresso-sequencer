@@ -132,6 +132,7 @@ async fn test_upgrade_task_with_proposal() {
     let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
         quorum_membership.total_nodes(EpochNumber::new(1)),
         <TestVersions as Versions>::Base::VERSION,
+        *ViewNumber::new(1),
     )
     .unwrap();
 

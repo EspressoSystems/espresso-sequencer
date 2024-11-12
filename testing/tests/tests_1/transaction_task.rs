@@ -51,7 +51,8 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
         vec1::vec1![
             null_block::builder_fee::<TestConsecutiveLeaderTypes, TestVersions>(
                 quorum_membership.total_nodes(EpochNumber::new(0)),
-                <TestVersions as Versions>::Base::VERSION
+                <TestVersions as Versions>::Base::VERSION,
+                *ViewNumber::new(4),
             )
             .unwrap()
         ],

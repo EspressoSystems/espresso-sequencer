@@ -99,7 +99,8 @@ async fn test_da_task() {
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(EpochNumber::new(0)),
-                    <TestVersions as Versions>::Base::VERSION
+                    <TestVersions as Versions>::Base::VERSION,
+                    *ViewNumber::new(2),
                 )
                 .unwrap()],
                 Some(precompute),
@@ -198,7 +199,8 @@ async fn test_da_task_storage_failure() {
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(EpochNumber::new(0)),
-                    <TestVersions as Versions>::Base::VERSION
+                    <TestVersions as Versions>::Base::VERSION,
+                    *ViewNumber::new(2),
                 )
                 .unwrap()],
                 Some(precompute),
