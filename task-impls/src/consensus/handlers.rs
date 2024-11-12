@@ -192,14 +192,14 @@ pub(crate) async fn handle_view_change<
     // Do the comparison before the subtraction to avoid potential overflow, since
     // `last_decided_view` may be greater than `cur_view` if the node is catching up.
     if usize::try_from(task_state.cur_view.u64()).unwrap()
-        > usize::try_from(task_state.last_decided_view.u64()).unwrap()
+        > usize::try_from(consensus_reader.last_decided_view().u64()).unwrap()
     {
         consensus_reader
             .metrics
             .number_of_views_since_last_decide
             .set(
                 usize::try_from(task_state.cur_view.u64()).unwrap()
-                    - usize::try_from(task_state.last_decided_view.u64()).unwrap(),
+                    - usize::try_from(consensus_reader.last_decided_view().u64()).unwrap(),
             );
     }
 

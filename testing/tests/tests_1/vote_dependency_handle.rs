@@ -78,11 +78,7 @@ async fn test_vote_dependency_handle() {
     // For each permutation...
     for inputs in all_inputs.into_iter() {
         // The outputs are static here, but we re-make them since we use `into_iter` below
-        let outputs = vec![
-            exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
-            exact(ViewChange(ViewNumber::new(3))),
-            quorum_vote_send(),
-        ];
+        let outputs = vec![exact(ViewChange(ViewNumber::new(3))), quorum_vote_send()];
 
         let (event_sender, mut event_receiver) = broadcast(1024);
         let view_number = ViewNumber::new(node_id);

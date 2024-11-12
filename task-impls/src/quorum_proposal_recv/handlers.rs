@@ -221,12 +221,6 @@ pub(crate) async fn handle_quorum_proposal_recv<
     }
     drop(consensus_writer);
 
-    broadcast_event(
-        HotShotEvent::HighQcUpdated(justify_qc.clone()).into(),
-        event_sender,
-    )
-    .await;
-
     let Some((parent_leaf, _parent_state)) = parent else {
         tracing::warn!(
             "Proposal's parent missing from storage with commitment: {:?}",

@@ -169,13 +169,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> Handl
         }
 
         broadcast_event(
-            Arc::new(HotShotEvent::QuorumVoteDependenciesValidated(
-                self.view_number,
-            )),
-            &self.sender,
-        )
-        .await;
-        broadcast_event(
             Arc::new(HotShotEvent::ViewChange(self.view_number + 1)),
             &self.sender,
         )
@@ -423,9 +416,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 );
 
                 // Handle the event before creating the dependency task.
-                if let Err(e) =
-                    handle_quorum_proposal_validated(&proposal.data, &event_sender, self).await
-                {
+                if let Err(e) = handle_quorum_proposal_validated(&proposal.data, self).await {
                     tracing::debug!(
                         "Failed to handle QuorumProposalValidated event; error = {e:#}"
                     );
@@ -567,12 +558,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                     None,
                 );
             }
-            HotShotEvent::QuorumVoteDependenciesValidated(view_number) => {
-                tracing::debug!("All vote dependencies verified for view {:?}", view_number);
-                if !self.update_latest_voted_view(*view_number).await {
-                    tracing::debug!("view not updated");
-                }
-            }
             HotShotEvent::Timeout(view) => {
                 let view = TYPES::View::new(view.saturating_sub(1));
                 // cancel old tasks
@@ -584,6 +569,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             }
             HotShotEvent::ViewChange(mut view) => {
                 view = TYPES::View::new(view.saturating_sub(1));
+                if !self.update_latest_voted_view(view).await {
+                    tracing::debug!("view not updated");
+                }
                 // cancel old tasks
                 let current_tasks = self.vote_dependencies.split_off(&view);
                 while let Some((_, task)) = self.vote_dependencies.pop_last() {
@@ -651,13 +639,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             return;
         }
 
-        broadcast_event(
-            Arc::new(HotShotEvent::QuorumVoteDependenciesValidated(
-                proposal.data.view_number(),
-            )),
-            &event_sender,
-        )
-        .await;
         broadcast_event(
             Arc::new(HotShotEvent::ViewChange(proposal.data.view_number() + 1)),
             &event_sender,

@@ -42,7 +42,6 @@ pub(crate) async fn handle_quorum_proposal_validated<
     V: Versions,
 >(
     proposal: &QuorumProposal<TYPES>,
-    sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut QuorumVoteTaskState<TYPES, I, V>,
 ) -> Result<()> {
     let LeafChainTraversalOutcome {
@@ -50,7 +49,6 @@ pub(crate) async fn handle_quorum_proposal_validated<
         new_decided_view_number,
         new_decide_qc,
         leaf_views,
-        leaves_decided,
         included_txns,
         decided_upgrade_cert,
     } = decide_from_proposal(
@@ -80,13 +78,6 @@ pub(crate) async fn handle_quorum_proposal_validated<
 
     let mut consensus_writer = task_state.consensus.write().await;
     if let Some(locked_view_number) = new_locked_view_number {
-        // Broadcast the locked view update.
-        broadcast_event(
-            HotShotEvent::LockedViewUpdated(locked_view_number).into(),
-            sender,
-        )
-        .await;
-
         consensus_writer.update_locked_view(locked_view_number)?;
     }
 
@@ -99,11 +90,6 @@ pub(crate) async fn handle_quorum_proposal_validated<
 
         // Set the new decided view.
         consensus_writer.update_last_decided_view(decided_view_number)?;
-        broadcast_event(
-            HotShotEvent::LastDecidedViewUpdated(decided_view_number).into(),
-            sender,
-        )
-        .await;
 
         consensus_writer
             .metrics
@@ -143,8 +129,6 @@ pub(crate) async fn handle_quorum_proposal_validated<
             &task_state.output_event_stream,
         )
         .await;
-
-        broadcast_event(Arc::new(HotShotEvent::LeafDecided(leaves_decided)), sender).await;
         tracing::debug!("Successfully sent decide event");
     }
 

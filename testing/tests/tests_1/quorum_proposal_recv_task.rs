@@ -94,7 +94,6 @@ async fn test_quorum_proposal_recv_task() {
 
     let expectations = vec![Expectations::from_outputs(vec![
         exact(QuorumProposalPreliminarilyValidated(proposals[1].clone())),
-        exact(HighQcUpdated(proposals[1].data.justify_qc.clone())),
         exact(QuorumProposalValidated(
             proposals[1].clone(),
             leaves[0].clone(),
@@ -195,7 +194,6 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
         exact(QuorumProposalPreliminarilyValidated(proposals[2].clone())),
         exact(ViewChange(ViewNumber::new(3))),
         exact(QuorumProposalRequestSend(req, signature)),
-        exact(HighQcUpdated(proposals[2].data.justify_qc.clone())),
     ])];
 
     let state =

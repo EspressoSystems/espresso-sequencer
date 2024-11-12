@@ -92,8 +92,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     QuorumProposalSend(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
     QuorumVoteSend(QuorumVote<TYPES>),
-    /// All dependencies for the quorum vote are validated.
-    QuorumVoteDependenciesValidated(TYPES::View),
     /// A quorum proposal with the given parent leaf is validated.
     /// The full validation checks include:
     /// 1. The proposal is not for an old view
@@ -175,10 +173,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ),
     /// Event when the transactions task has sequenced transactions. Contains the encoded transactions, the metadata, and the view number
     BlockRecv(PackedBundle<TYPES>),
-    /// Event when the transactions task has a block formed
-    BlockReady(VidDisperse<TYPES>, TYPES::View),
-    /// Event when consensus decided on a leaf
-    LeafDecided(Vec<Leaf<TYPES>>),
+
     /// Send VID shares to VID storage nodes; emitted by the DA leader
     ///
     /// Like [`HotShotEvent::DaProposalSend`].
@@ -202,19 +197,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     UpgradeVoteSend(UpgradeVote<TYPES>),
     /// Upgrade certificate has been sent to the network
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
-
-    /* Consensus State Update Events */
-    /// A new locked view has been created (2-chain)
-    LockedViewUpdated(TYPES::View),
-
-    /// A new anchor view has been successfully reached by this node (3-chain).
-    LastDecidedViewUpdated(TYPES::View),
-
-    /// A new high_qc has been reached by this node.
-    UpdateHighQc(QuorumCertificate<TYPES>),
-
-    /// A new high_qc has been updated in `Consensus`.
-    HighQcUpdated(QuorumCertificate<TYPES>),
 
     /// A quorum proposal has been preliminarily validated.
     /// The preliminary checks include:
@@ -300,7 +282,6 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             HotShotEvent::BlockRecv(packed_bundle) => Some(packed_bundle.view_number),
             HotShotEvent::Shutdown
             | HotShotEvent::TransactionSend(_, _)
-            | HotShotEvent::LeafDecided(_)
             | HotShotEvent::TransactionsRecv(_) => None,
             HotShotEvent::VidDisperseSend(proposal, _) => Some(proposal.data.view_number()),
             HotShotEvent::VidShareRecv(_, proposal) | HotShotEvent::VidShareValidated(proposal) => {
@@ -313,18 +294,11 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             }
             HotShotEvent::QuorumProposalRequestSend(req, _)
             | HotShotEvent::QuorumProposalRequestRecv(req, _) => Some(req.view_number),
-            HotShotEvent::QuorumVoteDependenciesValidated(view_number)
-            | HotShotEvent::ViewChange(view_number)
+            HotShotEvent::ViewChange(view_number)
             | HotShotEvent::ViewSyncTimeout(view_number, _, _)
             | HotShotEvent::ViewSyncTrigger(view_number)
-            | HotShotEvent::Timeout(view_number)
-            | HotShotEvent::BlockReady(_, view_number)
-            | HotShotEvent::LockedViewUpdated(view_number)
-            | HotShotEvent::LastDecidedViewUpdated(view_number) => Some(*view_number),
+            | HotShotEvent::Timeout(view_number) => Some(*view_number),
             HotShotEvent::DaCertificateRecv(cert) | HotShotEvent::DacSend(cert, _) => {
-                Some(cert.view_number())
-            }
-            HotShotEvent::UpdateHighQc(cert) | HotShotEvent::HighQcUpdated(cert) => {
                 Some(cert.view_number())
             }
             HotShotEvent::DaCertificateValidated(cert) => Some(cert.view_number),
@@ -384,12 +358,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             ),
             HotShotEvent::QuorumVoteSend(vote) => {
                 write!(f, "QuorumVoteSend(view_number={:?})", vote.view_number())
-            }
-            HotShotEvent::QuorumVoteDependenciesValidated(view_number) => {
-                write!(
-                    f,
-                    "QuorumVoteDependenciesValidated(view_number={view_number:?})"
-                )
             }
             HotShotEvent::QuorumProposalValidated(proposal, _) => write!(
                 f,
@@ -504,14 +472,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             HotShotEvent::BlockRecv(packed_bundle) => {
                 write!(f, "BlockRecv(view_number={:?})", packed_bundle.view_number)
             }
-            HotShotEvent::BlockReady(_, view_number) => {
-                write!(f, "BlockReady(view_number={view_number:?})")
-            }
-            HotShotEvent::LeafDecided(leaves) => {
-                let view_numbers: Vec<<TYPES as NodeType>::View> =
-                    leaves.iter().map(Leaf::view_number).collect();
-                write!(f, "LeafDecided({view_numbers:?})")
-            }
             HotShotEvent::VidDisperseSend(proposal, _) => write!(
                 f,
                 "VidDisperseSend(view_number={:?})",
@@ -567,18 +527,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     "QuorumProposalResponseRecv(view_number={:?})",
                     proposal.data.view_number
                 )
-            }
-            HotShotEvent::LockedViewUpdated(view_number) => {
-                write!(f, "LockedViewUpdated(view_number={view_number:?})")
-            }
-            HotShotEvent::LastDecidedViewUpdated(view_number) => {
-                write!(f, "LastDecidedViewUpdated(view_number={view_number:?})")
-            }
-            HotShotEvent::UpdateHighQc(cert) => {
-                write!(f, "UpdateHighQc(view_number={:?})", cert.view_number())
-            }
-            HotShotEvent::HighQcUpdated(cert) => {
-                write!(f, "HighQcUpdated(view_number={:?})", cert.view_number())
             }
             HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
                 write!(

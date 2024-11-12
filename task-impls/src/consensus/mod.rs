@@ -87,9 +87,6 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: 
     /// A reference to the metrics trait.
     pub consensus: OuterConsensus<TYPES>,
 
-    /// The last decided view
-    pub last_decided_view: TYPES::View,
-
     /// The node's id
     pub id: u64,
 
@@ -98,7 +95,7 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: 
 }
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskState<TYPES, I, V> {
     /// Handles a consensus event received on the event stream
-    #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, last_decided_view = *self.last_decided_view), name = "Consensus replica task", level = "error", target = "ConsensusTaskState")]
+    #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view), name = "Consensus replica task", level = "error", target = "ConsensusTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
@@ -127,21 +124,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
             HotShotEvent::Timeout(view_number) => {
                 if let Err(e) = handle_timeout(*view_number, &sender, self).await {
                     tracing::debug!("Failed to handle Timeout event; error = {e}");
-                }
-            }
-            HotShotEvent::LastDecidedViewUpdated(view_number) => {
-                if *view_number < self.last_decided_view {
-                    tracing::debug!("New decided view is not newer than ours");
-                } else {
-                    self.last_decided_view = *view_number;
-                    if let Err(e) = self
-                        .consensus
-                        .write()
-                        .await
-                        .update_last_decided_view(*view_number)
-                    {
-                        tracing::trace!("{e:?}");
-                    }
                 }
             }
             _ => {}

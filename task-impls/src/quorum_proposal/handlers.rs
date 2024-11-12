@@ -292,7 +292,6 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                         timeout_certificate = Some(timeout.clone());
                     }
                     either::Left(qc) => {
-                        // Handled by the UpdateHighQc event.
                         parent_view_number = Some(qc.view_number());
                     }
                 },

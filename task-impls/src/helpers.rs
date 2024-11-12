@@ -167,9 +167,6 @@ pub struct LeafChainTraversalOutcome<TYPES: NodeType> {
     /// The decided leaves with corresponding validated state and VID info.
     pub leaf_views: Vec<LeafInfo<TYPES>>,
 
-    /// The decided leaves.
-    pub leaves_decided: Vec<Leaf<TYPES>>,
-
     /// The transactions in the block payload for each leaf.
     pub included_txns: Option<HashSet<Commitment<<TYPES as NodeType>::Transaction>>>,
 
@@ -188,7 +185,6 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
             new_decided_view_number: None,
             new_decide_qc: None,
             leaf_views: Vec::new(),
-            leaves_decided: Vec::new(),
             included_txns: None,
             decided_upgrade_cert: None,
         }
@@ -323,7 +319,6 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
                     delta.clone(),
                     vid_share,
                 ));
-                res.leaves_decided.push(leaf.clone());
                 if let Some(ref payload) = leaf.block_payload() {
                     res.included_txns = Some(
                         payload
