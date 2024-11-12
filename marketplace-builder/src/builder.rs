@@ -539,7 +539,7 @@ mod test {
         builder_client: Client<ServerError, MarketplaceVersion>,
         transactions: Vec<Transaction>,
         urls: Urls,
-    ) -> Bundle<SeqTypes> {
+    ) -> (Bundle<SeqTypes>, u64) {
         // Subscribe to events.
         let events_service_client = Client::<
             hotshot_events_service::events::Error,
@@ -583,7 +583,10 @@ mod test {
         }
 
         // Fetch the bundle.
-        get_bundle(builder_client, parent_view_number, parent_commitment).await
+        (
+            get_bundle(builder_client, parent_view_number, parent_commitment).await,
+            parent_view_number,
+        )
     }
 
     async fn test_marketplace_reserve_builder(mempool: Mempool) {
@@ -648,7 +651,7 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
 
-        let bundle = match mempool {
+        let (bundle, parent_view_number) = match mempool {
             Mempool::Public => {
                 let server = &network.server;
                 let mut events = server.event_stream().await;
@@ -669,8 +672,11 @@ mod test {
                     .unwrap();
                 wait_for_transaction(&mut events, unregistered_transaction).await;
 
-                // Get the bundle.
-                get_bundle(builder_client, parent_view_number, parent_commitment).await
+                // Return the retrieved bundle and parent view number
+                (
+                    get_bundle(builder_client, parent_view_number, parent_commitment).await,
+                    parent_view_number,
+                )
             }
             Mempool::Private => {
                 submit_and_get_bundle_with_private_mempool(
@@ -704,7 +710,7 @@ mod test {
         let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
             &keypair,
             fees.as_u64().unwrap(),
-        1,
+            parent_view_number + 1,
         )
         .unwrap();
 
@@ -777,7 +783,7 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
 
-        let bundle = match mempool {
+        let (bundle, parent_view_number) = match mempool {
             Mempool::Public => {
                 let server = &network.server;
                 let mut events = server.event_stream().await;
@@ -799,7 +805,10 @@ mod test {
                 wait_for_transaction(&mut events, unregistered_transaction.clone()).await;
 
                 // Get the bundle.
-                get_bundle(builder_client, parent_view_number, parent_commitment).await
+                (
+                    get_bundle(builder_client, parent_view_number, parent_commitment).await,
+                    parent_view_number,
+                )
             }
             Mempool::Private => {
                 submit_and_get_bundle_with_private_mempool(
@@ -833,7 +842,7 @@ mod test {
         let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
                     &keypair,
                     fees.as_u64().unwrap(),
-                    1,
+                    parent_view_number + 1,
                 )
                 .unwrap();
 
