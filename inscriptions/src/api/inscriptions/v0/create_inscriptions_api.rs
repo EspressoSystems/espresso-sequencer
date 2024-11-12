@@ -250,6 +250,8 @@ pub async fn create_inscriptions_processing(
         num_inscriptions,
     } = persistence.retrieve_last_received_block().await?;
 
+    tracing::debug!("launching service with the following recovered stats: block_height: {}, num_transactions: {}, num_inscriptions: {}", block_height, num_transactions, num_inscriptions);
+
     // Restore the previous number of transactions and the block height.
     data_state.add_num_transactions(block_height, num_transactions);
     data_state.add_num_inscriptions(block_height, num_inscriptions);

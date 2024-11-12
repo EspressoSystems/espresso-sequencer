@@ -564,6 +564,8 @@ impl ProcessProduceBlockStreamTask {
                 // we want to start **after** the last block we received.
                 .map(|stats| std::cmp::max(stats.num_blocks + 1, minimum_start_block_height));
 
+            tracing::debug!("attempt {attempt} to connect to block stream, at height: {}, with minimum_start_block_height: {minimum_start_block_height}", block_height.unwrap_or(0));
+
             let block_stream_result = block_stream_receiver.retrieve_stream(block_height).await;
 
             let block_stream = match block_stream_result {
