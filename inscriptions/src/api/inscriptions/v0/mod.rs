@@ -1,6 +1,7 @@
 pub mod create_inscriptions_api;
 
 use crate::service::client_message::InternalClientMessage;
+use crate::service::data_state::Stats;
 use crate::service::espresso_inscription::{EspressoInscription, InscriptionAndSignature};
 use crate::service::server_message::ServerMessage;
 use crate::service::storage::InscriptionPersistence;
@@ -440,12 +441,26 @@ impl BlockStreamRetriever for HotshotQueryServiceBlockStreamRetriever {
 /// [RetrieveBlockStreamError] indicates the various failure conditions that can
 /// occur when attempting to retrieve a stream of [Block]s using the
 /// [ProcessProduceBlockStreamTask::retrieve_block_stream] function.
+#[derive(Debug)]
 enum RetrieveBlockStreamError {
     /// [MaxAttemptsExceeded] indicates that the maximum number of attempts to
     /// attempt to retrieve the [Stream] of [Block]s has been exceeded.
     /// In this case, it doesn't make sense to continue to re-attempt to
     /// reconnect to the service, as it does not seem to be available.
     MaxAttemptsExceeded,
+}
+
+#[derive(Debug)]
+enum ProcessConsumeBlockStreamError {
+    /// [BlockStreamEnded] indicates that the [Stream] of [Block]s has ended
+    /// prematurely.  This could be due to the Hotshot Query Service closing
+    /// the connection, or some other error.
+    BlockStreamEnded,
+
+    /// [BlockSenderClosed] indicates that the [Sink] for sending the [Block]s
+    /// has been closed.  This could be due to the client disconnecting, or
+    /// some other error.
+    BlockSenderClosed,
 }
 
 /// [ProcessProduceBlockStreamTask] is a task that produce a stream of [BlockQueryData]s
@@ -518,20 +533,51 @@ impl ProcessProduceBlockStreamTask {
         //   the blocks again.
 
         loop {
+            let last_stats = match persistence.retrieve_last_received_block().await {
+                Ok(stats) => stats,
+                Err(err) => {
+                    tracing::warn!(
+                        "failed to retrieve last received block, defaulting to fallback stats: {:?}",
+                        err
+                    );
+                    Stats {
+                        num_blocks: minimum_start_block_height,
+                        num_transactions: 0,
+                        num_inscriptions: 0,
+                    }
+                }
+            };
+
+            let block_height = std::cmp::min(minimum_start_block_height, last_stats.num_blocks);
+
             // Retrieve a stream
-            let Ok(stream) = Self::retrieve_block_stream(
-                &block_stream_retriever,
-                persistence.clone(),
-                minimum_start_block_height,
-            )
-            .await
+            let Ok(stream) =
+                Self::retrieve_block_stream(&block_stream_retriever, block_height).await
             else {
                 panic!("failed to retrieve block stream");
             };
 
             // Consume the blocks of a stream
-            Self::process_consume_block_stream::<R, K>(stream, block_sender.clone()).await;
-            tracing::warn!("block stream ended, will attempt to re-acquire block stream");
+            let Err(err) = Self::process_consume_block_stream::<R, K>(
+                stream,
+                block_height,
+                block_sender.clone(),
+            )
+            .await
+            else {
+                panic!("this indicates a result has been returned that is a success, this is an invariant that cannot happen");
+            };
+
+            match err {
+                ProcessConsumeBlockStreamError::BlockSenderClosed => {
+                    tracing::warn!("block sender closed, recovery is impossible");
+                    panic!("block sender closed, recovery is impossible");
+                }
+
+                ProcessConsumeBlockStreamError::BlockStreamEnded => {
+                    tracing::info!("block stream ended, will attempt to re-acquire block stream");
+                }
+            }
         }
     }
 
@@ -544,29 +590,24 @@ impl ProcessProduceBlockStreamTask {
     ///
     /// This function also implements exponential backoff with a maximum
     /// delay of 5 seconds.
-    async fn retrieve_block_stream<R, Persistence>(
+    async fn retrieve_block_stream<R>(
         block_stream_receiver: &R,
-        persistence: Arc<Persistence>,
-        minimum_start_block_height: u64,
+        block_height: u64,
     ) -> Result<R::Stream, RetrieveBlockStreamError>
     where
         R: BlockStreamRetriever<Item = BlockQueryData<SeqTypes>>,
-        Persistence: InscriptionPersistence,
     {
         let backoff_params = BackoffParams::default();
         let mut delay = Duration::from_millis(50);
 
         for attempt in 1..=100 {
-            let block_height = persistence
-                .retrieve_last_received_block()
-                .await
-                .ok()
-                // we want to start **after** the last block we received.
-                .map(|stats| std::cmp::max(stats.num_blocks + 1, minimum_start_block_height));
+            tracing::debug!(
+                "attempt {attempt} to connect to block stream, at height: {block_height}",
+            );
 
-            tracing::debug!("attempt {attempt} to connect to block stream, at height: {}, with minimum_start_block_height: {minimum_start_block_height}", block_height.unwrap_or(0));
-
-            let block_stream_result = block_stream_receiver.retrieve_stream(block_height).await;
+            let block_stream_result = block_stream_receiver
+                .retrieve_stream(Some(block_height))
+                .await;
 
             let block_stream = match block_stream_result {
                 Err(error) => {
@@ -600,7 +641,11 @@ impl ProcessProduceBlockStreamTask {
     /// Hotshot Query Service and then send them to the [Sink] provided.  If the
     /// [Sink] is closed, or if the Stream ends prematurely, then the function
     /// will return.
-    async fn process_consume_block_stream<R, K>(blocks_stream: R::Stream, block_sender: K)
+    async fn process_consume_block_stream<R, K>(
+        blocks_stream: R::Stream,
+        starting_block_height: u64,
+        block_sender: K,
+    ) -> Result<(), ProcessConsumeBlockStreamError>
     where
         R: BlockStreamRetriever<Item = BlockQueryData<SeqTypes>>,
         K: Sink<BlockQueryData<SeqTypes>, Error = SendError>
@@ -619,13 +664,21 @@ impl ProcessProduceBlockStreamTask {
                 block
             } else {
                 tracing::info!("block stream closed");
-                break;
+                return Err(ProcessConsumeBlockStreamError::BlockStreamEnded);
             };
+
+            let block_height = block.header().height();
+            if block_height < starting_block_height {
+                tracing::info!(
+                    "block height {block_height} is less than starting block height {starting_block_height}, skipping",
+                );
+                continue;
+            }
 
             let block_send_result = block_sender.send(block).await;
             if let Err(err) = block_send_result {
-                tracing::info!("block sender closed: {}", err);
-                break;
+                tracing::warn!("block sender closed: {}", err);
+                return Err(ProcessConsumeBlockStreamError::BlockSenderClosed);
             }
         }
     }
