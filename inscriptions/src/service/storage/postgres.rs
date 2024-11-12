@@ -257,7 +257,7 @@ impl InscriptionPersistence for PostgresPersistence {
         // We shouldn't need a transaction, as we're just performing a read
         let mut conn = self.pool.acquire().await?;
 
-        let mut rows = sqlx::query("SELECT ins_address, ins_time, chain_block_height, chain_txn_offset FROM confirmed_inscriptions ORDER BY id DESC LIMIT $1")
+        let mut rows = sqlx::query("SELECT ins_address, ins_time, chain_block_height, chain_txn_offset FROM confirmed_inscriptions ORDER BY id ASC LIMIT $1")
             .bind(number_of_inscriptions.get() as i64)
             .fetch(&mut *conn);
 
