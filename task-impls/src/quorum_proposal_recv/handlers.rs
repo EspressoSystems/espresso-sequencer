@@ -11,6 +11,7 @@ use std::sync::Arc;
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLockUpgradableReadGuard;
 use committable::Committable;
+use hotshot_types::traits::block_contents::BlockHeader;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf, QuorumProposal},
@@ -18,12 +19,12 @@ use hotshot_types::{
     simple_certificate::QuorumCertificate,
     traits::{
         election::Membership,
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         storage::Storage,
         ValidatedState,
     },
-    utils::{View, ViewInner},
+    utils::{epoch_from_block_number, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
 use tokio::spawn;
@@ -227,8 +228,18 @@ pub(crate) async fn handle_quorum_proposal_recv<
             justify_qc.data.leaf_commit
         );
         validate_proposal_liveness(proposal, &validation_info).await?;
+        let block_number = proposal.data.block_header.block_number();
+        let epoch = TYPES::Epoch::new(epoch_from_block_number(
+            block_number,
+            validation_info.epoch_height,
+        ));
+        tracing::trace!(
+            "Sending ViewChange for view {} and epoch {}",
+            view_number,
+            *epoch
+        );
         broadcast_event(
-            Arc::new(HotShotEvent::ViewChange(view_number)),
+            Arc::new(HotShotEvent::ViewChange(view_number, epoch)),
             event_sender,
         )
         .await;
@@ -244,8 +255,19 @@ pub(crate) async fn handle_quorum_proposal_recv<
         quorum_proposal_sender_key,
     )
     .await?;
+
+    let epoch_number = TYPES::Epoch::new(epoch_from_block_number(
+        proposal.data.block_header.block_number(),
+        validation_info.epoch_height,
+    ));
+
+    tracing::trace!(
+        "Sending ViewChange for view {} and epoch {}",
+        view_number,
+        *epoch_number
+    );
     broadcast_event(
-        Arc::new(HotShotEvent::ViewChange(view_number)),
+        Arc::new(HotShotEvent::ViewChange(view_number, epoch_number)),
         event_sender,
     )
     .await;

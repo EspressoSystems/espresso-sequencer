@@ -92,10 +92,13 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: 
 
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
+
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskState<TYPES, I, V> {
     /// Handles a consensus event received on the event stream
-    #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view), name = "Consensus replica task", level = "error", target = "ConsensusTaskState")]
+    #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, cur_epoch = *self.cur_epoch), name = "Consensus replica task", level = "error", target = "ConsensusTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
@@ -116,8 +119,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     tracing::debug!("Failed to handle TimeoutVoteRecv event; error = {e}");
                 }
             }
-            HotShotEvent::ViewChange(new_view_number) => {
-                if let Err(e) = handle_view_change(*new_view_number, &sender, self).await {
+            HotShotEvent::ViewChange(new_view_number, epoch_number) => {
+                if let Err(e) =
+                    handle_view_change(*new_view_number, *epoch_number, &sender, self).await
+                {
                     tracing::trace!("Failed to handle ViewChange event; error = {e}");
                 }
             }

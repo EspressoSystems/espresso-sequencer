@@ -23,7 +23,7 @@ use hotshot_testing::{
     script::{Expectations, InputOrder, TaskScript},
 };
 use hotshot_types::{
-    data::{Leaf, ViewNumber},
+    data::{EpochNumber, Leaf, ViewNumber},
     traits::node_implementation::ConsensusTime,
 };
 
@@ -85,7 +85,7 @@ async fn test_quorum_vote_task_success() {
     let expectations = vec![Expectations::from_outputs(all_predicates![
         exact(DaCertificateValidated(dacs[1].clone())),
         exact(VidShareValidated(vids[1].0[0].clone())),
-        exact(ViewChange(ViewNumber::new(3))),
+        exact(ViewChange(ViewNumber::new(3), EpochNumber::new(0))),
         quorum_vote_send(),
     ])];
 

@@ -128,6 +128,9 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
     /// The view to enter when first starting consensus
     start_view: TYPES::View,
 
+    /// The epoch to enter when first starting consensus
+    start_epoch: TYPES::Epoch,
+
     /// Access to the output event stream.
     output_event_stream: (Sender<Event<TYPES>>, InactiveReceiver<Event<TYPES>>),
 
@@ -171,6 +174,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Clone
             consensus: self.consensus.clone(),
             instance_state: Arc::clone(&self.instance_state),
             start_view: self.start_view,
+            start_epoch: self.start_epoch,
             output_event_stream: self.output_event_stream.clone(),
             external_event_stream: self.external_event_stream.clone(),
             anchored_leaf: self.anchored_leaf.clone(),
@@ -345,6 +349,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             private_key,
             config,
             start_view: initializer.start_view,
+            start_epoch: initializer.start_epoch,
             network,
             memberships: Arc::new(memberships),
             metrics: Arc::clone(&consensus_metrics),
@@ -375,7 +380,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         #[allow(clippy::panic)]
         self.internal_event_stream
             .0
-            .broadcast_direct(Arc::new(HotShotEvent::ViewChange(self.start_view)))
+            .broadcast_direct(Arc::new(HotShotEvent::ViewChange(
+                self.start_view,
+                self.start_epoch,
+            )))
             .await
             .unwrap_or_else(|_| {
                 panic!(
@@ -967,6 +975,8 @@ pub struct HotShotInitializer<TYPES: NodeType> {
 
     /// Starting view number that should be equivelant to the view the node shut down with last.
     start_view: TYPES::View,
+    /// Starting epoch number that should be equivelant to the epoch the node shut down with last.
+    start_epoch: TYPES::Epoch,
     /// The view we last performed an action in.  An action is Proposing or voting for
     /// Either the quorum or DA.
     actioned_view: TYPES::View,
@@ -1000,6 +1010,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             validated_state: Some(Arc::new(validated_state)),
             state_delta: Some(Arc::new(state_delta)),
             start_view: TYPES::View::new(0),
+            start_epoch: TYPES::Epoch::new(0),
             actioned_view: TYPES::View::new(0),
             saved_proposals: BTreeMap::new(),
             high_qc,
@@ -1023,6 +1034,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         instance_state: TYPES::InstanceState,
         validated_state: Option<Arc<TYPES::ValidatedState>>,
         start_view: TYPES::View,
+        start_epoch: TYPES::Epoch,
         actioned_view: TYPES::View,
         saved_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>>,
         high_qc: QuorumCertificate<TYPES>,
@@ -1036,6 +1048,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             validated_state,
             state_delta: None,
             start_view,
+            start_epoch,
             actioned_view,
             saved_proposals,
             high_qc,

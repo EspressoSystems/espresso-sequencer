@@ -27,15 +27,15 @@ use crate::{
     message::{Proposal, UpgradeLock},
     simple_certificate::{DaCertificate, QuorumCertificate},
     traits::{
-        block_contents::{BlockHeader, BuilderFee},
+        block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
-    utils::{BuilderCommitment, StateAndDelta, Terminator, Terminator::Inclusive},
+    utils::{BuilderCommitment, LeafCommitment, StateAndDelta, Terminator},
     vid::VidCommitment,
-    vote::{Certificate, HasViewNumber},
+    vote::HasViewNumber,
 };
 
 /// A type alias for `HashMap<Commitment<T>, T>`
@@ -503,6 +503,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             epoch_number > self.cur_epoch,
             debug!("New epoch isn't newer than the current epoch.")
         );
+        tracing::trace!("Updating epoch from {} to {}", self.cur_epoch, epoch_number);
         self.cur_epoch = epoch_number;
         Ok(())
     }
@@ -882,15 +883,80 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         Some(())
     }
 
-    /// Returns true if the current high qc is for the last block in the epoch
-    pub fn is_high_qc_for_last_block(&self) -> bool {
-        let high_qc = self.high_qc();
-        self.is_qc_for_last_block(high_qc)
+    /// Return true if the high QC takes part in forming an eQC, i.e.
+    /// it is one of the 3-chain certificates but not the eQC itself
+    pub fn is_high_qc_forming_eqc(&self) -> bool {
+        let high_qc_leaf_commit = self.high_qc().data.leaf_commit;
+        let is_high_qc_extended = self.is_leaf_extended(high_qc_leaf_commit);
+        if is_high_qc_extended {
+            tracing::debug!("We have formed an eQC!");
+        }
+        self.is_leaf_for_last_block(high_qc_leaf_commit) && !is_high_qc_extended
     }
 
-    /// Returns true if the given qc is for the last block in the epoch
-    pub fn is_qc_for_last_block(&self, cert: &QuorumCertificate<TYPES>) -> bool {
-        let Some(leaf) = self.saved_leaves.get(&cert.data().leaf_commit) else {
+    /// Return true if the given leaf takes part in forming an eQC, i.e.
+    /// it is one of the 3-chain leaves but not the eQC leaf itself
+    pub fn is_leaf_forming_eqc(&self, leaf_commit: LeafCommitment<TYPES>) -> bool {
+        self.is_leaf_for_last_block(leaf_commit) && !self.is_leaf_extended(leaf_commit)
+    }
+
+    /// Returns true if the given leaf can form an extended Quorum Certificate
+    /// The Extended Quorum Certificate (eQC) is the third Quorum Certificate formed in three
+    /// consecutive views for the last block in the epoch.
+    pub fn is_leaf_extended(&self, leaf_commit: LeafCommitment<TYPES>) -> bool {
+        if !self.is_leaf_for_last_block(leaf_commit) {
+            tracing::debug!("The given leaf is not for the last block in the epoch.");
+            return false;
+        }
+
+        let Some(leaf) = self.saved_leaves.get(&leaf_commit) else {
+            return false;
+        };
+        let leaf_view = leaf.view_number();
+        let leaf_block_number = leaf.height();
+
+        let mut last_visited_view_number = leaf_view;
+        let mut is_leaf_extended = true;
+        if let Err(e) = self.visit_leaf_ancestors(
+            leaf_view,
+            Terminator::Inclusive(leaf_view - 2),
+            true,
+            |leaf, _, _| {
+                tracing::trace!(
+                    "last_visited_view_number = {}, leaf.view_number = {}",
+                    *last_visited_view_number,
+                    *leaf.view_number()
+                );
+
+                if leaf.view_number() == leaf_view {
+                    return true;
+                }
+
+                if last_visited_view_number - 1 != leaf.view_number() {
+                    tracing::trace!("The chain is broken. Non consecutive views.");
+                    is_leaf_extended = false;
+                    return false;
+                }
+                if leaf_block_number != leaf.height() {
+                    tracing::trace!("The chain is broken. Block numbers do not match.");
+                    is_leaf_extended = false;
+                    return false;
+                }
+                last_visited_view_number = leaf.view_number();
+                true
+            },
+        ) {
+            is_leaf_extended = false;
+            tracing::trace!("The chain is broken. Leaf ascension failed.");
+            tracing::debug!("Leaf ascension failed; error={e}");
+        }
+        tracing::trace!("Can the given leaf form an eQC? {}", is_leaf_extended);
+        is_leaf_extended
+    }
+
+    /// Returns true if a given leaf is for the last block in the epoch
+    pub fn is_leaf_for_last_block(&self, leaf_commit: LeafCommitment<TYPES>) -> bool {
+        let Some(leaf) = self.saved_leaves.get(&leaf_commit) else {
             return false;
         };
         let block_height = leaf.height();
@@ -899,83 +965,6 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         } else {
             block_height % self.epoch_height == 0
         }
-    }
-
-    /// Returns true if the current high qc is an extended Quorum Certificate
-    /// The Extended Quorum Certificate (eQC) is the third Quorum Certificate formed in three
-    /// consecutive views for the last block in the epoch.
-    pub fn is_high_qc_extended(&self) -> bool {
-        let high_qc = self.high_qc();
-        let ret = self.is_qc_extended(high_qc);
-        if ret {
-            tracing::debug!("We have formed an eQC!");
-        };
-        ret
-    }
-
-    /// Returns true if the given qc is an extended Quorum Certificate
-    /// The Extended Quorum Certificate (eQC) is the third Quorum Certificate formed in three
-    /// consecutive views for the last block in the epoch.
-    pub fn is_qc_extended(&self, cert: &QuorumCertificate<TYPES>) -> bool {
-        if !self.is_qc_for_last_block(cert) {
-            tracing::debug!("High QC is not for the last block in the epoch.");
-            return false;
-        }
-
-        let qc_view = cert.view_number();
-        let high_qc_block_number =
-            if let Some(leaf) = self.saved_leaves.get(&cert.data().leaf_commit) {
-                leaf.block_header().block_number()
-            } else {
-                return false;
-            };
-
-        let mut last_visited_view_number = qc_view;
-        let mut is_qc_extended = true;
-        if let Err(e) =
-            self.visit_leaf_ancestors(qc_view, Inclusive(qc_view - 2), true, |leaf, _, _| {
-                tracing::trace!(
-                    "last_visited_view_number = {}, leaf.view_number = {}",
-                    *last_visited_view_number,
-                    *leaf.view_number()
-                );
-
-                if leaf.view_number() == qc_view {
-                    return true;
-                }
-
-                if last_visited_view_number - 1 != leaf.view_number() {
-                    tracing::trace!("The chain is broken. Non consecutive views.");
-                    is_qc_extended = false;
-                    return false;
-                }
-                if high_qc_block_number != leaf.height() {
-                    tracing::trace!("The chain is broken. Block numbers do not match.");
-                    is_qc_extended = false;
-                    return false;
-                }
-                last_visited_view_number = leaf.view_number();
-                true
-            })
-        {
-            is_qc_extended = false;
-            tracing::trace!("The chain is broken. Leaf ascension failed.");
-            tracing::debug!("Leaf ascension failed; error={e}");
-        }
-        tracing::trace!("Is the given QC an eQC? {}", is_qc_extended);
-        is_qc_extended
-    }
-
-    /// Return true if the given Quorum Certificate takes part in forming an eQC, i.e.
-    /// it is one of the 3-chain certificates but not the eQC itself
-    pub fn is_qc_forming_eqc(&self, cert: &QuorumCertificate<TYPES>) -> bool {
-        self.is_qc_for_last_block(cert) && !self.is_qc_extended(cert)
-    }
-
-    /// Return true if the high QC takes part in forming an eQC, i.e.
-    /// it is one of the 3-chain certificates but not the eQC itself
-    pub fn is_high_qc_forming_eqc(&self) -> bool {
-        self.is_high_qc_for_last_block() && !self.is_high_qc_extended()
     }
 }
 

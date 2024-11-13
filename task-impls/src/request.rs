@@ -112,7 +112,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 }
                 Ok(())
             }
-            HotShotEvent::ViewChange(view) => {
+            HotShotEvent::ViewChange(view, _) => {
                 let view = *view;
                 if view > self.view {
                     self.view = view;

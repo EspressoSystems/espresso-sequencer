@@ -609,8 +609,11 @@ impl<
                     TransmitType::Direct(leader),
                 ))
             }
-            HotShotEvent::ViewChange(view) => {
+            HotShotEvent::ViewChange(view, epoch) => {
                 self.view = view;
+                if epoch > self.epoch {
+                    self.epoch = epoch;
+                }
                 self.cancel_tasks(view);
                 let net = Arc::clone(&self.network);
                 let epoch = self.epoch.u64();

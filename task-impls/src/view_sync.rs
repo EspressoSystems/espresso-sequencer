@@ -265,7 +265,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
         task_map.insert(view, replica_state);
     }
 
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "View Sync Main Task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = *self.cur_epoch), name = "View Sync Main Task", level = "error")]
     #[allow(clippy::type_complexity)]
     /// Handles incoming events for the main view sync task
     pub async fn handle(
@@ -420,7 +420,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                 }
             }
 
-            &HotShotEvent::ViewChange(new_view) => {
+            &HotShotEvent::ViewChange(new_view, epoch) => {
+                if epoch > self.cur_epoch {
+                    self.cur_epoch = epoch;
+                }
                 let new_view = TYPES::View::new(*new_view);
                 if self.cur_view < new_view {
                     tracing::debug!(
@@ -492,7 +495,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     // If this is the first timeout we've seen advance to the next view
                     self.cur_view = view_number + 1;
                     broadcast_event(
-                        Arc::new(HotShotEvent::ViewChange(TYPES::View::new(*self.cur_view))),
+                        Arc::new(HotShotEvent::ViewChange(self.cur_view, self.cur_epoch)),
                         &event_stream,
                     )
                     .await;
@@ -508,7 +511,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     ViewSyncReplicaTaskState<TYPES, I, V>
 {
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "View Sync Replica Task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = *self.cur_epoch), name = "View Sync Replica Task", level = "error")]
     /// Handle incoming events for the view sync replica task
     pub async fn handle(
         &mut self,
@@ -658,8 +661,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     *self.next_view
                 );
 
+                // TODO: Figure out the correct way to view sync across epochs if needed
                 broadcast_event(
-                    Arc::new(HotShotEvent::ViewChange(self.next_view)),
+                    Arc::new(HotShotEvent::ViewChange(self.next_view, self.cur_epoch)),
                     &event_stream,
                 )
                 .await;
@@ -724,8 +728,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     timeout_task.abort();
                 }
 
+                // TODO: Figure out the correct way to view sync across epochs if needed
                 broadcast_event(
-                    Arc::new(HotShotEvent::ViewChange(self.next_view)),
+                    Arc::new(HotShotEvent::ViewChange(self.next_view, self.cur_epoch)),
                     &event_stream,
                 )
                 .await;

@@ -153,7 +153,7 @@ where
 {
     let info = "ViewChange".to_string();
     let check: EventCallback<TYPES> =
-        Arc::new(move |e: Arc<HotShotEvent<TYPES>>| matches!(e.as_ref(), ViewChange(_)));
+        Arc::new(move |e: Arc<HotShotEvent<TYPES>>| matches!(e.as_ref(), ViewChange(_, _)));
     Box::new(EventPredicate { check, info })
 }
 

@@ -156,6 +156,7 @@ where
                                             TestInstanceState::new(self.async_delay_config.clone()),
                                             None,
                                             TYPES::View::genesis(),
+                                            TYPES::Epoch::genesis(),
                                             TYPES::View::genesis(),
                                             BTreeMap::new(),
                                             self.high_qc.clone(),
@@ -238,6 +239,7 @@ where
                                     TestInstanceState::new(self.async_delay_config.clone()),
                                     None,
                                     read_storage.last_actioned_view().await,
+                                    read_storage.last_actioned_epoch().await,
                                     read_storage.last_actioned_view().await,
                                     read_storage.proposals_cloned().await,
                                     read_storage.high_qc_cloned().await.unwrap_or(

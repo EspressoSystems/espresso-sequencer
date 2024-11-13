@@ -8,14 +8,20 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
+use self::handlers::handle_quorum_proposal_recv;
+use crate::{
+    events::{HotShotEvent, ProposalMissing},
+    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
+};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
-use futures::future::join_all;
+use either::Either;
+use futures::future::{err, join_all};
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
-    data::{Leaf, ViewChangeEvidence},
+    data::{EpochNumber, Leaf, ViewChangeEvidence},
     event::Event,
     message::UpgradeLock,
     simple_certificate::UpgradeCertificate,
@@ -23,18 +29,12 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
     },
-    vote::HasViewNumber,
+    vote::{Certificate, HasViewNumber},
 };
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 use utils::anytrace::{bail, Result};
 use vbs::version::Version;
-
-use self::handlers::handle_quorum_proposal_recv;
-use crate::{
-    events::{HotShotEvent, ProposalMissing},
-    helpers::{broadcast_event, parent_leaf_and_state},
-};
 /// Event handlers for this task.
 mod handlers;
 
@@ -77,6 +77,9 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
 
     /// Lock for a decided upgrade
     pub upgrade_lock: UpgradeLock<TYPES, V>,
+
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 /// all the info we need to validate a proposal.  This makes it easy to spawn an effemeral task to
@@ -100,6 +103,8 @@ pub(crate) struct ValidationInfo<TYPES: NodeType, I: NodeImplementation<TYPES>, 
     pub(crate) storage: Arc<RwLock<I::Storage>>,
     /// Lock for a decided upgrade
     pub(crate) upgrade_lock: UpgradeLock<TYPES, V>,
+    /// Number of blocks in an epoch, zero means there are no epochs
+    pub epoch_height: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
@@ -117,7 +122,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     }
 
     /// Handles all consensus events relating to propose and vote-enabling events.
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus replica task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view, epoch = *self.cur_epoch), name = "Consensus replica task", level = "error")]
     #[allow(unused_variables)]
     pub async fn handle(
         &mut self,
@@ -143,6 +148,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     output_event_stream: self.output_event_stream.clone(),
                     storage: Arc::clone(&self.storage),
                     upgrade_lock: self.upgrade_lock.clone(),
+                    epoch_height: self.epoch_height,
                 };
                 match handle_quorum_proposal_recv(
                     proposal,
@@ -157,7 +163,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
                     Err(e) => debug!(?e, "Failed to validate the proposal"),
                 }
             }
-            HotShotEvent::ViewChange(view) => {
+            HotShotEvent::ViewChange(view, epoch) => {
+                if *epoch > self.cur_epoch {
+                    self.cur_epoch = *epoch;
+                }
                 if self.cur_view >= *view {
                     return;
                 }

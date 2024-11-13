@@ -122,7 +122,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
-    ViewChange(TYPES::View),
+    ViewChange(TYPES::View, TYPES::Epoch),
     /// Timeout for the view sync protocol; emitted by a replica in the view sync task
     ViewSyncTimeout(TYPES::View, u64, ViewSyncPhase),
 
@@ -294,7 +294,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             }
             HotShotEvent::QuorumProposalRequestSend(req, _)
             | HotShotEvent::QuorumProposalRequestRecv(req, _) => Some(req.view_number),
-            HotShotEvent::ViewChange(view_number)
+            HotShotEvent::ViewChange(view_number, _)
             | HotShotEvent::ViewSyncTimeout(view_number, _, _)
             | HotShotEvent::ViewSyncTrigger(view_number)
             | HotShotEvent::Timeout(view_number) => Some(*view_number),
@@ -379,8 +379,11 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             HotShotEvent::DacSend(cert, _) => {
                 write!(f, "DacSend(view_number={:?})", cert.view_number())
             }
-            HotShotEvent::ViewChange(view_number) => {
-                write!(f, "ViewChange(view_number={view_number:?})")
+            HotShotEvent::ViewChange(view_number, epoch_number) => {
+                write!(
+                    f,
+                    "ViewChange(view_number={view_number:?}, epoch_number={epoch_number:?})"
+                )
             }
             HotShotEvent::ViewSyncTimeout(view_number, _, _) => {
                 write!(f, "ViewSyncTimeout(view_number={view_number:?})")

@@ -70,7 +70,7 @@ impl<TYPES: NodeType> Clone for ViewInner<TYPES> {
     }
 }
 /// The hash of a leaf.
-type LeafCommitment<TYPES> = Commitment<Leaf<TYPES>>;
+pub type LeafCommitment<TYPES> = Commitment<Leaf<TYPES>>;
 
 /// Optional validated state and state delta.
 pub type StateAndDelta<TYPES> = (
@@ -209,4 +209,16 @@ pub fn bincode_opts() -> WithOtherTrailing<
         .with_little_endian()
         .with_fixint_encoding()
         .reject_trailing_bytes()
+}
+
+/// Returns an epoch number given a block number and an epoch height
+#[must_use]
+pub fn epoch_from_block_number(block_number: u64, epoch_height: u64) -> u64 {
+    if epoch_height == 0 {
+        0
+    } else if block_number % epoch_height == 0 {
+        block_number / epoch_height
+    } else {
+        block_number / epoch_height + 1
+    }
 }
