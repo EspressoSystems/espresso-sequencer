@@ -53,7 +53,7 @@ impl SequencerDataSource for DataSource {
         let fetch_limit = opt.fetch_rate_limit;
         let active_fetch_delay = opt.active_fetch_delay;
         let chunk_fetch_delay = opt.chunk_fetch_delay;
-        let mut cfg = Config::try_from(opt)?;
+        let mut cfg = Config::try_from(&opt)?;
 
         if reset {
             cfg = cfg.reset_schema();
