@@ -10,6 +10,11 @@
 pub mod task_state;
 use std::{collections::BTreeMap, fmt::Debug, num::NonZeroUsize, sync::Arc, time::Duration};
 
+use crate::{
+    tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi,
+    ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer,
+    MarketplaceConfig, Memberships, NetworkTaskRegistry, SignatureKey, SystemContext, Versions,
+};
 use async_broadcast::{broadcast, RecvError};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -32,7 +37,7 @@ use hotshot_task_impls::{
     view_sync::ViewSyncTaskState,
 };
 use hotshot_types::{
-    consensus::Consensus,
+    consensus::{Consensus, OuterConsensus},
     constants::EVENT_CHANNEL_SIZE,
     message::{Message, UpgradeLock},
     traits::{
@@ -42,12 +47,6 @@ use hotshot_types::{
 };
 use tokio::{spawn, time::sleep};
 use vbs::version::StaticVersionType;
-
-use crate::{
-    tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi,
-    ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer,
-    MarketplaceConfig, Memberships, NetworkTaskRegistry, SignatureKey, SystemContext, Versions,
-};
 
 /// event for global event stream
 #[derive(Clone, Debug)]
@@ -200,7 +199,7 @@ pub fn add_network_event_task<
         quorum_membership,
         da_membership,
         storage: Arc::clone(&handle.storage()),
-        consensus: Arc::clone(&handle.consensus()),
+        consensus: OuterConsensus::new(handle.consensus()),
         upgrade_lock: handle.hotshot.upgrade_lock.clone(),
         transmit_tasks: BTreeMap::new(),
     };

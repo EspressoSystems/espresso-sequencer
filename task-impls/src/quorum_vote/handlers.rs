@@ -283,6 +283,7 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     storage: Arc<RwLock<I::Storage>>,
     leaf: Leaf<TYPES>,
     vid_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
+    extended_vote: bool,
 ) -> Result<()> {
     ensure!(
         quorum_membership.has_stake(&public_key, epoch_number),
@@ -317,7 +318,16 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
         .await
         .wrap()
         .context(error!("Failed to store VID share"))?;
-    broadcast_event(Arc::new(HotShotEvent::QuorumVoteSend(vote)), &sender).await;
+
+    if extended_vote {
+        broadcast_event(
+            Arc::new(HotShotEvent::ExtendedQuorumVoteSend(vote)),
+            &sender,
+        )
+        .await;
+    } else {
+        broadcast_event(Arc::new(HotShotEvent::QuorumVoteSend(vote)), &sender).await;
+    }
 
     Ok(())
 }

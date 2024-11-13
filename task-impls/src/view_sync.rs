@@ -332,9 +332,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     epoch: self.cur_epoch,
                     id: self.id,
                 };
-                let vote_collector =
-                    create_vote_accumulator(&info, event, &event_stream, self.upgrade_lock.clone())
-                        .await?;
+                let vote_collector = create_vote_accumulator(
+                    &info,
+                    event,
+                    &event_stream,
+                    self.upgrade_lock.clone(),
+                    true,
+                )
+                .await?;
 
                 relay_map.insert(relay, vote_collector);
             }
@@ -373,9 +378,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     id: self.id,
                 };
 
-                let vote_collector =
-                    create_vote_accumulator(&info, event, &event_stream, self.upgrade_lock.clone())
-                        .await?;
+                let vote_collector = create_vote_accumulator(
+                    &info,
+                    event,
+                    &event_stream,
+                    self.upgrade_lock.clone(),
+                    true,
+                )
+                .await?;
                 relay_map.insert(relay, vote_collector);
             }
 
@@ -412,9 +422,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ViewSyncTaskSta
                     epoch: self.cur_epoch,
                     id: self.id,
                 };
-                let vote_collector =
-                    create_vote_accumulator(&info, event, &event_stream, self.upgrade_lock.clone())
-                        .await;
+                let vote_collector = create_vote_accumulator(
+                    &info,
+                    event,
+                    &event_stream,
+                    self.upgrade_lock.clone(),
+                    true,
+                )
+                .await;
                 if let Ok(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }

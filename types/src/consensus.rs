@@ -14,7 +14,7 @@ use std::{
 };
 
 use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
-use committable::Commitment;
+use committable::{Commitment, Committable};
 use tracing::instrument;
 use utils::anytrace::*;
 use vec1::Vec1;
@@ -33,7 +33,9 @@ use crate::{
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
-    utils::{BuilderCommitment, LeafCommitment, StateAndDelta, Terminator},
+    utils::{
+        epoch_from_block_number, BuilderCommitment, LeafCommitment, StateAndDelta, Terminator,
+    },
     vid::VidCommitment,
     vote::HasViewNumber,
 };
@@ -905,11 +907,12 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// consecutive views for the last block in the epoch.
     pub fn is_leaf_extended(&self, leaf_commit: LeafCommitment<TYPES>) -> bool {
         if !self.is_leaf_for_last_block(leaf_commit) {
-            tracing::debug!("The given leaf is not for the last block in the epoch.");
+            tracing::trace!("The given leaf is not for the last block in the epoch.");
             return false;
         }
 
         let Some(leaf) = self.saved_leaves.get(&leaf_commit) else {
+            tracing::trace!("We don't have a leaf corresponding to the leaf commit");
             return false;
         };
         let leaf_view = leaf.view_number();
@@ -957,6 +960,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Returns true if a given leaf is for the last block in the epoch
     pub fn is_leaf_for_last_block(&self, leaf_commit: LeafCommitment<TYPES>) -> bool {
         let Some(leaf) = self.saved_leaves.get(&leaf_commit) else {
+            tracing::trace!("We don't have a leaf corresponding to the leaf commit");
             return false;
         };
         let block_height = leaf.height();
@@ -965,6 +969,17 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         } else {
             block_height % self.epoch_height == 0
         }
+    }
+
+    /// Returns true if the `parent_leaf` formed an eQC for the previous epoch to the `proposed_leaf`
+    pub fn check_eqc(&self, proposed_leaf: &Leaf<TYPES>, parent_leaf: &Leaf<TYPES>) -> bool {
+        if parent_leaf.view_number() == TYPES::View::genesis() {
+            return true;
+        }
+        let new_epoch = epoch_from_block_number(proposed_leaf.height(), self.epoch_height);
+        let old_epoch = epoch_from_block_number(parent_leaf.height(), self.epoch_height);
+        let parent_leaf_commit = <Leaf<TYPES> as Committable>::commit(parent_leaf);
+        new_epoch - 1 == old_epoch && self.is_leaf_extended(parent_leaf_commit)
     }
 }
 

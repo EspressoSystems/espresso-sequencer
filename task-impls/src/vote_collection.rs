@@ -62,6 +62,9 @@ pub struct VoteCollectionTaskState<
 
     /// Node id
     pub id: u64,
+
+    /// Whether we should check if we are the leader when handling a vote
+    pub check_if_leader: bool,
 }
 
 /// Describes the functions a vote must implement for it to be aggregatable by the generic vote collection task
@@ -103,10 +106,12 @@ impl<
         vote: &VOTE,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Result<Option<CERT>> {
-        ensure!(
-            vote.leader(&self.membership, self.epoch)? == self.public_key,
-            info!("Received vote for a view in which we were not the leader.")
-        );
+        if self.check_if_leader {
+            ensure!(
+                vote.leader(&self.membership, self.epoch)? == self.public_key,
+                info!("Received vote for a view in which we were not the leader.")
+            );
+        }
         ensure!(
             vote.view_number() == self.view,
             error!(
@@ -189,6 +194,7 @@ pub async fn create_vote_accumulator<TYPES, VOTE, CERT, V>(
     event: Arc<HotShotEvent<TYPES>>,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
     upgrade_lock: UpgradeLock<TYPES, V>,
+    check_if_leader: bool,
 ) -> Result<VoteCollectionTaskState<TYPES, VOTE, CERT, V>>
 where
     TYPES: NodeType,
@@ -219,6 +225,7 @@ where
         view: info.view,
         epoch: info.epoch,
         id: info.id,
+        check_if_leader,
     };
 
     state.handle_vote_event(Arc::clone(&event), sender).await?;
@@ -246,6 +253,7 @@ pub async fn handle_vote<
     event: &Arc<HotShotEvent<TYPES>>,
     event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
     upgrade_lock: &UpgradeLock<TYPES, V>,
+    check_if_leader: bool,
 ) -> Result<()>
 where
     VoteCollectionTaskState<TYPES, VOTE, CERT, V>: HandleVoteEvent<TYPES, VOTE, CERT>,
@@ -265,6 +273,7 @@ where
                 Arc::clone(event),
                 event_stream,
                 upgrade_lock.clone(),
+                check_if_leader,
             )
             .await?;
 

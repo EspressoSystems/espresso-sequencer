@@ -246,6 +246,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
                     &event,
                     &tx,
                     &self.upgrade_lock,
+                    true,
                 )
                 .await?;
             }
