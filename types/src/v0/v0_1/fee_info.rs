@@ -25,7 +25,7 @@ use crate::FeeMerkleTree;
     From,
     Into,
 )]
-#[display(fmt = "{_0}")]
+#[display("{_0}")]
 pub struct FeeAmount(pub U256);
 
 // New Type for `Address` in order to implement `CanonicalSerialize` and
@@ -46,7 +46,7 @@ pub struct FeeAmount(pub U256);
     From,
     Into,
 )]
-#[display(fmt = "{_0:x}")]
+#[display("{_0:x}")]
 pub struct FeeAccount(pub Address);
 
 #[derive(

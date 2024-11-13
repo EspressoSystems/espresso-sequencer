@@ -40,6 +40,7 @@ use hotshot_types::{
     PeerConfig,
 };
 use std::time::Duration;
+use tracing::{Instrument, Level};
 use url::Url;
 
 use crate::{
@@ -319,6 +320,17 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.tasks.spawn(name, task);
     }
 
+    /// Spawn a short-lived background task attached to this context.
+    ///
+    /// When this context is dropped or [`shut_down`](Self::shut_down), background tasks will be
+    /// cancelled in the reverse order that they were spawned.
+    ///
+    /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
+    /// one is how urgently logging related to the task is treated.
+    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        self.tasks.spawn_short_lived(name, task);
+    }
+
     /// Stop participating in consensus.
     pub async fn shut_down(&mut self) {
         tracing::info!("shutting down SequencerContext");
@@ -427,7 +439,7 @@ async fn fetch_proposals<N, P, V>(
         // to the anchor. This allows state replay from the decided state.
         let parent_view = proposal.data.justify_qc.view_number;
         let parent_leaf = proposal.data.justify_qc.data.leaf_commit;
-        tasks.spawn(
+        tasks.spawn_short_lived(
             format!("fetch proposal {parent_view:?},{parent_leaf}"),
             fetch_proposal_chain(
                 consensus.clone(),
@@ -473,7 +485,7 @@ async fn fetch_proposal_chain<N, P, V>(
             {
                 Ok(future) => future,
                 Err(err) => {
-                    tracing::warn!(?view, %leaf, "failed to request proposal: {err:#}");
+                    tracing::info!(?view, %leaf, "failed to request proposal: {err:#}");
                     sleep(Duration::from_secs(1)).await;
                     continue;
                 }
@@ -481,12 +493,12 @@ async fn fetch_proposal_chain<N, P, V>(
         let proposal = match async_timeout(Duration::from_secs(30), future).await {
             Ok(Ok(proposal)) => proposal,
             Ok(Err(err)) => {
-                tracing::warn!("error fetching proposal: {err:#}");
+                tracing::info!("error fetching proposal: {err:#}");
                 sleep(Duration::from_secs(1)).await;
                 continue;
             }
             Err(_) => {
-                tracing::warn!("timed out fetching proposal");
+                tracing::info!("timed out fetching proposal");
                 sleep(Duration::from_secs(1)).await;
                 continue;
             }
@@ -523,7 +535,7 @@ async fn fetch_proposal_chain<N, P, V>(
                 consensus
                     .update_saved_leaves(leaf, &handle.hotshot.upgrade_lock)
                     .await;
-                tracing::info!(
+                tracing::debug!(
                     ?view,
                     "added view to validated state map view proposal fetcher"
                 );
@@ -550,21 +562,43 @@ async fn load_anchor_view(persistence: &impl SequencerPersistence) -> ViewNumber
 #[derive(Debug, Default)]
 pub(crate) struct TaskList(Vec<(String, JoinHandle<()>)>);
 
+macro_rules! spawn_with_log_level {
+    ($this:expr, $lvl:expr, $name:expr, $task: expr) => {
+        let name = $name.to_string();
+        let task = {
+            let name = name.clone();
+            let span = tracing::span!($lvl, "background task", name);
+            spawn(
+                async move {
+                    tracing::event!($lvl, "spawning background task");
+                    $task.await;
+                    tracing::event!($lvl, "background task exited");
+                }
+                .instrument(span),
+            )
+        };
+        $this.0.push((name, task));
+    };
+}
+
 impl TaskList {
     /// Spawn a background task attached to this [`TaskList`].
     ///
     /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
     /// be cancelled in the reverse order that they were spawned.
     pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
-        let name = name.to_string();
-        let task = {
-            let name = name.clone();
-            spawn(async move {
-                task.await;
-                tracing::info!(name, "background task exited");
-            })
-        };
-        self.0.push((name, task));
+        spawn_with_log_level!(self, Level::INFO, name, task);
+    }
+
+    /// Spawn a short-lived background task attached to this [`TaskList`].
+    ///
+    /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
+    /// be cancelled in the reverse order that they were spawned.
+    ///
+    /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
+    /// one is how urgently logging related to the task is treated.
+    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        spawn_with_log_level!(self, Level::DEBUG, name, task);
     }
 
     /// Stop all background tasks.

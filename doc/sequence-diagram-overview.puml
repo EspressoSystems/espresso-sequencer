@@ -23,8 +23,8 @@ box "Ethereum L1" #LightGrey
     participant "Fee\nContract" as fee
 end box
 
-box Espresso Network #MistyRose
-    box Espresso Node #Bisque
+box Espresso Sequencer Network #MistyRose
+    box Sequencer Node #Bisque
         box APIs #LightCyan
             participant "Submit\nAPI" as submit
             participant "Query\nAPI" as query

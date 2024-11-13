@@ -531,4 +531,5 @@ jobs:
       - name: Test docker demo
         run: |
           just demo &
+          set -o pipefail
           timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'

@@ -18,11 +18,11 @@ use tracing::info_span;
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
 enum Scheme {
     #[default]
-    #[display(fmt = "all")]
+    #[display("all")]
     All,
-    #[display(fmt = "bls")]
+    #[display("bls")]
     Bls,
-    #[display(fmt = "schnorr")]
+    #[display("schnorr")]
     Schnorr,
 }
 

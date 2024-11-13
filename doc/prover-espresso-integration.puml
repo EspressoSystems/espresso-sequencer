@@ -1,0 +1,16 @@
+@startuml
+participant "Rollup Prover" as Rollup
+participant "Espresso Node" as EspNode
+participant L1
+
+Rollup <- L1 : <i>height</i> of last verified block
+Rollup -> EspNode : GET availability/stream/blocks/<i>height</i>
+
+loop
+Rollup <-- EspNode : Block
+Rollup <- L1 : Certified block commitment
+Rollup -> Rollup : Check block against commitment
+Rollup -> Rollup : Execute block
+Rollup -> L1 : New State\nProof
+end
+@enduml
