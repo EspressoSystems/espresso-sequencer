@@ -77,7 +77,7 @@
 //! let mut events = hotshot.event_stream();
 //! while let Some(event) = events.next().await {
 //!     // Update the query data based on this event.
-//!     data_source.update(&event).await;
+//!     data_source.update(&event).await.ok();
 //! }
 //! # Ok(())
 //! # }
@@ -418,7 +418,6 @@ pub mod types;
 pub use error::Error;
 pub use resolvable::Resolvable;
 
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use derive_more::{Deref, From, Into};
 use futures::{future::BoxFuture, stream::StreamExt};
@@ -429,6 +428,7 @@ use hotshot_types::traits::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::sync::Arc;
 use task::BackgroundTask;
 use tide_disco::{method::ReadState, App, StatusCode};
 use vbs::version::StaticVersionType;
@@ -553,8 +553,10 @@ where
 
     // Update query data using HotShot events.
     while let Some(event) = events.next().await {
-        // Update the query data based on this event.
-        data_source.update(&event).await;
+        // Update the query data based on this event. It is safe to ignore errors here; the error
+        // just returns the failed block height for use in garbage collection, but this simple
+        // implementation isn't doing any kind of garbage collection.
+        data_source.update(&event).await.ok();
     }
 
     Ok(())
@@ -577,7 +579,7 @@ mod test {
             mocks::{MockHeader, MockPayload, MockTypes},
         },
     };
-    use async_std::sync::RwLock;
+    use async_lock::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::FutureExt;
@@ -723,7 +725,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_composition() {
         use hotshot_example_types::node_types::TestVersions;
 

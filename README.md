@@ -94,7 +94,7 @@ Once you have Cargo installed (either via Nix or Rustup) you can build the proje
 `cargo build` or `cargo build --release`. To run unit tests, we recommend using
 
 ```bash
-cargo test --release --all-features
+cargo nextest run --release --all-features
 ```
 
 You can also run unit tests using the development profile, but without the optimizations of the
@@ -102,7 +102,7 @@ release profile, some stack sizes exceed the default Rust stack. Therefore, you 
 configure a default stack size to run the development build. 3MB seems to work well:
 
 ```bash
-RUST_MIN_STACK=3145728 cargo test --all-features
+RUST_MIN_STACK=3145728 cargo nextest run --all-features
 ```
 
 #### Doctest
@@ -110,5 +110,5 @@ RUST_MIN_STACK=3145728 cargo test --all-features
 Doctests require the `testing` feature. Due to a [limitation of doctest](https://stackoverflow.com/a/55727482) it is recommended to run doctests via
 
 ```bash
-cargo test --doc --features testing
+cargo nextest run --doc --features testing
 ```

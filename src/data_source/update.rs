@@ -56,7 +56,13 @@ pub trait UpdateDataSource<Types: NodeType>: UpdateAvailabilityData<Types> {
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    async fn update(&self, event: &Event<Types>);
+    ///
+    /// # Returns
+    ///
+    /// If all provided data is successfully inserted into the database, returns `Ok(())`. If any
+    /// error occurred, the error is logged, and the return value is the height of the first leaf
+    /// which failed to be inserted.
+    async fn update(&self, event: &Event<Types>) -> Result<(), u64>;
 }
 
 #[async_trait]
@@ -66,7 +72,7 @@ where
     Payload<Types>: QueryablePayload<Types>,
     <Types as NodeType>::InstanceState: Default,
 {
-    async fn update(&self, event: &Event<Types>) {
+    async fn update(&self, event: &Event<Types>) -> Result<(), u64> {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             // `qc` justifies the first (most recent) leaf...
             let qcs = once((**qc).clone())
@@ -95,7 +101,7 @@ where
                             ?qc,
                             "inconsistent leaf; cannot append leaf information: {err:#}"
                         );
-                        continue;
+                        return Err(leaf.block_header().block_number());
                     }
                 };
 
@@ -137,10 +143,12 @@ where
                     .append(BlockInfo::new(leaf_data, block_data, vid_common, vid_share))
                     .await
                 {
-                    tracing::warn!(height, "failed to append leaf information: {err:#}");
+                    tracing::error!(height, "failed to append leaf information: {err:#}");
+                    return Err(leaf.block_header().block_number());
                 }
             }
         }
+        Ok(())
     }
 }
 

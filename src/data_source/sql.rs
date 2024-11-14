@@ -282,7 +282,9 @@ impl Config {
 ///     spawn(async move {
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
-///             state.hotshot_qs.update(&event).await;
+///             if state.hotshot_qs.update(&event).await.is_err() {
+///                 continue;
+///             }
 ///
 ///             let mut tx = state.hotshot_qs.write().await.unwrap();
 ///             // Update other modules' states based on `event`, using `tx` to access the database.
@@ -349,7 +351,7 @@ pub mod testing {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            self.update(event).await;
+            self.update(event).await.unwrap();
         }
     }
 }
@@ -390,7 +392,7 @@ mod test {
 
     // This function should be generic, but the file system data source does not currently support
     // storing VID common and later the corresponding share.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_vid_monotonicity() {
         use hotshot_example_types::node_types::TestVersions;
 

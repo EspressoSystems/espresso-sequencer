@@ -36,8 +36,8 @@
 //!
 
 use super::Request;
-use async_std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 
 mod any;
 mod query_service;

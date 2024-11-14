@@ -60,6 +60,7 @@ use std::{
     marker::PhantomData,
     time::Instant,
 };
+use tokio::time::sleep;
 
 pub type Query<'q> = sqlx::query::Query<'q, Db, <Db as Database>::Arguments<'q>>;
 pub type QueryAs<'q, T> = sqlx::query::QueryAs<'q, Db, T, <Db as Database>::Arguments<'q>>;

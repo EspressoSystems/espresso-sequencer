@@ -31,12 +31,11 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryResult,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
+use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds, sync::Arc};
 
 pub(super) type PayloadFetcher<Types, S, P> =
     fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>;

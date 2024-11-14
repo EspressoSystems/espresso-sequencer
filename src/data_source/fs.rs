@@ -138,7 +138,9 @@ pub use super::storage::fs::Transaction;
 ///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
-///             state.hotshot_qs.update(&event).await;
+///             if state.hotshot_qs.update(&event).await.is_err() {
+///                 continue;
+///             }
 ///
 ///             // Update other modules' states based on `event`.
 ///             let mut tx = state.hotshot_qs.write().await.unwrap();
@@ -269,7 +271,7 @@ mod impl_testable_data_source {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            self.update(event).await;
+            self.update(event).await.unwrap();
         }
     }
 }

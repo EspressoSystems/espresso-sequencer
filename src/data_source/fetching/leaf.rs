@@ -26,12 +26,12 @@ use crate::{
     types::HeightIndexed,
     Payload, QueryResult,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::node_implementation::NodeType;
+use std::sync::Arc;
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
 
 pub(super) type LeafFetcher<Types, S, P> =

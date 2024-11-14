@@ -174,7 +174,7 @@ mod test {
         },
         ApiState, Error, Header, VidShare,
     };
-    use async_std::{sync::RwLock, task::sleep};
+    use async_lock::RwLock;
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
     use hotshot_types::event::EventType;
@@ -184,9 +184,10 @@ mod test {
     use surf_disco::Client;
     use tempfile::TempDir;
     use tide_disco::App;
+    use tokio::time::sleep;
     use toml::toml;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {
         setup_test();
 
@@ -349,7 +350,7 @@ mod test {
         network.shut_down().await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_extensions() {
         setup_test();
 

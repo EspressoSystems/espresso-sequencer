@@ -433,7 +433,7 @@ mod impl_testable_data_source {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            self.update(event).await;
+            self.update(event).await.unwrap();
         }
     }
 }

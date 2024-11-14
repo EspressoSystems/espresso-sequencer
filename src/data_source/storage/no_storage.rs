@@ -28,10 +28,11 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
-use async_std::sync::{Arc, RwLock};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
+use std::sync::Arc;
 use std::{cmp::max, ops::RangeBounds};
 
 /// Mock storage implementation which doesn't actually store anything.
@@ -383,7 +384,7 @@ pub mod testing {
         }
 
         async fn handle_event(&self, event: &Event<MockTypes>) {
-            self.update(event).await;
+            self.update(event).await.unwrap();
         }
     }
 

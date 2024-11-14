@@ -19,7 +19,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +39,15 @@ jobs:
       # don't compile with all combinations of features.
       - name: Clippy(all-features)
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+
+      # Install nextest
+      - name: Install Nextest
+        run: cargo install cargo-nextest
+      
+      - name: Test
+        run: |
+          cargo nextest run --workspace --release --all-features
+        timeout-minutes: 60
         
       - name: Clippy(no-storage)
         run: cargo clippy --workspace --features no-storage --all-targets -- -D warnings
@@ -68,10 +76,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
+       # Install nextest
+      - name: Install Nextest
+        run: cargo install cargo-nextest
+      
       - name: Test
         run: |
-          cargo test --workspace --release --all-features --no-run
-          cargo test --workspace --release --all-features --verbose -- --test-threads 2
+          cargo nextest run --workspace --release --all-features
         timeout-minutes: 60
 
   test-postgres:

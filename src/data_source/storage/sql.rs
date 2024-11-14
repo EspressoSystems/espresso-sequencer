@@ -782,24 +782,19 @@ impl VersionedDataSource for SqlStorage {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
-    #![allow(unused_imports)]
-    use crate::data_source::storage::sql::sqlx::ConnectOptions;
-    use async_compatibility_layer::art::async_timeout;
-    use async_std::net::TcpStream;
-    use rand::Rng;
     use refinery::Migration;
-    use sqlx::sqlite::SqliteConnectOptions;
     use std::{
-        env, fs,
-        path::Path,
+        env,
         process::{Command, Stdio},
-        str::{self, FromStr},
+        str::{self},
         time::Duration,
     };
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
 
     use portpicker::pick_unused_port;
 
-    use super::{Config, Db};
+    use super::Config;
     use crate::testing::sleep;
 
     #[derive(Debug)]
@@ -966,14 +961,14 @@ pub mod testing {
 
         #[cfg(not(feature = "embedded-db"))]
         async fn wait_for_ready(&self) {
-            let timeout = Duration::from_secs(
+            let timeout_duration = Duration::from_secs(
                 env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
                     .unwrap_or("60".to_string())
                     .parse()
                     .expect("SQL_TMP_DB_CONNECT_TIMEOUT must be an integer number of seconds"),
             );
 
-            if let Err(err) = async_timeout(timeout, async {
+            if let Err(err) = timeout(timeout_duration, async {
                 while Command::new("docker")
                     .args([
                         "exec",
@@ -1022,7 +1017,7 @@ pub mod testing {
             .await
             {
                 panic!(
-                    "failed to connect to TmpDb within configured timeout {timeout:?}: {err:#}\n{}",
+                    "failed to connect to TmpDb within configured timeout {timeout_duration:?}: {err:#}\n{}",
                     "Consider increasing the timeout by setting SQL_TMP_DB_CONNECT_TIMEOUT"
                 );
             }
@@ -1095,12 +1090,12 @@ pub mod testing {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
-    use async_std::task::sleep;
     use hotshot_example_types::{
         node_types::TestVersions,
         state_types::{TestInstanceState, TestValidatedState},
     };
     use std::time::Duration;
+    use tokio::time::sleep;
 
     use super::{testing::TmpDb, *};
     use crate::{
@@ -1109,7 +1104,7 @@ mod test {
         testing::{mocks::MockTypes, setup_test},
     };
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_migrations() {
         setup_test();
 
@@ -1188,7 +1183,7 @@ mod test {
             .unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_target_period_pruning() {
         setup_test();
 
@@ -1279,7 +1274,7 @@ mod test {
         )
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_minimum_retention_pruning() {
         setup_test();
 
@@ -1356,7 +1351,7 @@ mod test {
         assert_eq!(header_rows, 0);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_pruned_height_storage() {
         setup_test();
 

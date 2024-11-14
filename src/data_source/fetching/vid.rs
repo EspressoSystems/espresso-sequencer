@@ -27,12 +27,12 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryResult, VidCommon, VidShare,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
+use std::sync::Arc;
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
 
 pub(super) type VidCommonFetcher<Types, S, P> =
