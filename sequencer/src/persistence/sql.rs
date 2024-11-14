@@ -69,6 +69,11 @@ pub struct PostgresOptions {
 #[derive(Parser, Clone, Derivative, Default, From, Into)]
 #[derivative(Debug)]
 pub struct SqliteOptions {
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_SQLITE_PATH",
+        default_value = "./sqlite.db"
+    )]
     pub(crate) path: PathBuf,
 }
 
@@ -660,7 +665,7 @@ impl SequencerPersistence for Persistence {
         }
         let stmt = "
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
-        ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
+        ON CONFLICT (id) DO UPDATE SET view = MAX(highest_voted_view.view, excluded.view)";
 
         let mut tx = self.db.write().await?;
         tx.execute(query(stmt).bind(view.u64() as i64)).await?;

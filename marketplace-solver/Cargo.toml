@@ -8,8 +8,8 @@ edition = "2021"
 testing = [
 	"hotshot-query-service",
 	"portpicker",
-	
 ]
+embedded-db  = []
 
 [dependencies]
 anyhow = { workspace = true }

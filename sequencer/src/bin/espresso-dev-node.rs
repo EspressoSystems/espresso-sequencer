@@ -580,16 +580,12 @@ mod tests {
         setup_test();
 
         let builder_port = pick_unused_port().unwrap();
-
         let api_port = pick_unused_port().unwrap();
-
         let dev_node_port = pick_unused_port().unwrap();
-
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
 
         let db = TmpDb::init().await;
-        let postgres_port = db.port();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
@@ -601,16 +597,9 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
-            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
-            .env(
-                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
-                postgres_port.to_string(),
-            )
-            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
-            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
             .spawn()
             .unwrap();
 
@@ -896,7 +885,6 @@ mod tests {
             .join(",");
 
         let db = TmpDb::init().await;
-        let postgres_port = db.port();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
@@ -908,16 +896,9 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
-            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
-            .env(
-                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
-                postgres_port.to_string(),
-            )
-            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
-            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
             .env(
                 "ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS",
                 alt_chains_env_value,

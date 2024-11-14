@@ -14,7 +14,7 @@ embedded-db = ["hotshot-query-service/embedded-db"]
 
 [[bin]]
 name = "espresso-dev-node"
-required-features = ["testing"]
+required-features = ["testing", "embedded-db"]
 
 [dev-dependencies]
 escargot = "0.5.10"
