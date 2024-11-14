@@ -32,7 +32,7 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
-use std::{collections::BTreeMap, path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
