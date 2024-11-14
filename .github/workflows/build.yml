@@ -86,6 +86,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
+      # Install nextest
+      - name: Install Nextest
+        run: cargo install cargo-nextest
+
       - name: Test
         run: |
           cargo nextest run --workspace --release --features "no-storage, testing"
