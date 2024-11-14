@@ -67,7 +67,6 @@ jobs:
   test-sqlite:
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +87,6 @@ jobs:
   test-postgres:
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
     steps:
       - uses: actions/checkout@v4
@@ -99,6 +97,5 @@ jobs:
 
       - name: Test
         run: |
-          cargo test --workspace --release --features "no-storage, testing" --no-run
-          cargo test --workspace --release --features "no-storage, testing" --verbose -- --test-threads 2
+          cargo nextest run --workspace --release --features "no-storage, testing"
         timeout-minutes: 60
