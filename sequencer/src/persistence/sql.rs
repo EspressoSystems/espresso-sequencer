@@ -673,14 +673,15 @@ impl SequencerPersistence for Persistence {
         #[cfg(feature = "embedded-db")]
         let max_fn = "MAX";
         #[cfg(not(feature = "embedded-db"))]
-        let max_fn = "MAX";
+        let max_fn = "GREATEST";
 
-        let stmt = "
-        INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
-        ON CONFLICT (id) DO UPDATE SET view = {max_fn}(highest_voted_view.view, excluded.view)";
+        let stmt = format!(
+            "INSERT INTO highest_voted_view (id, view) VALUES (0, $1) 
+            ON CONFLICT (id) DO UPDATE SET view = {max_fn}(highest_voted_view.view, excluded.view)"
+        );
 
         let mut tx = self.db.write().await?;
-        tx.execute(query(stmt).bind(view.u64() as i64)).await?;
+        tx.execute(query(&stmt).bind(view.u64() as i64)).await?;
         tx.commit().await
     }
     async fn update_undecided_state(
