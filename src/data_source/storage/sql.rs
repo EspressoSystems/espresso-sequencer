@@ -782,11 +782,12 @@ impl VersionedDataSource for SqlStorage {
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
+    #![allow(unused_imports)]
     use refinery::Migration;
     use std::{
         env,
         process::{Command, Stdio},
-        str::{self},
+        str::{self, FromStr},
         time::Duration,
     };
     use tokio::net::TcpStream;
@@ -905,7 +906,7 @@ pub mod testing {
             let mut cfg: Config = {
                 let db_path = self.db_path.to_string_lossy();
                 let path = format!("sqlite:{db_path}");
-                SqliteConnectOptions::from_str(&path)
+                sqlx::sqlite::SqliteConnectOptions::from_str(&path)
                     .expect("invalid db path")
                     .create_if_missing(true)
                     .into()
