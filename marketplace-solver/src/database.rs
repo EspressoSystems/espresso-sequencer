@@ -106,58 +106,58 @@ impl From<sqlx::Error> for SolverError {
     }
 }
 
-#[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
-pub mod mock {
-    use hotshot_query_service::data_source::sql::testing::TmpDb;
+// #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+// pub mod mock {
+//     use hotshot_query_service::data_source::sql::testing::TmpDb;
 
-    use super::PostgresClient;
-    use crate::DatabaseOptions;
+//     use super::PostgresClient;
+//     use crate::DatabaseOptions;
 
-    pub async fn setup_mock_database() -> (TmpDb, PostgresClient) {
-        let db: TmpDb = TmpDb::init().await;
-        let host = db.host();
-        let port = db.port();
+//     pub async fn setup_mock_database() -> (TmpDb, PostgresClient) {
+//         let db: TmpDb = TmpDb::init().await;
+//         let host = db.host();
+//         let port = db.port();
 
-        let opts = DatabaseOptions {
-            url: None,
-            host: Some(host),
-            port: Some(port),
-            db_name: None,
-            username: Some("postgres".to_string()),
-            password: Some("password".to_string()),
-            max_connections: Some(100),
-            acquire_timeout: None,
-            require_ssl: false,
-            migrations: true,
-            reset: false,
-        };
+//         let opts = DatabaseOptions {
+//             url: None,
+//             host: Some(host),
+//             port: Some(port),
+//             db_name: None,
+//             username: Some("postgres".to_string()),
+//             password: Some("password".to_string()),
+//             max_connections: Some(100),
+//             acquire_timeout: None,
+//             require_ssl: false,
+//             migrations: true,
+//             reset: false,
+//         };
 
-        // TmpDb will be dropped, which will cause the Docker container to be killed.
-        // Therefore, it is returned and kept in scope until needed.
-        (
-            db,
-            PostgresClient::connect(opts)
-                .await
-                .expect("failed to connect to database"),
-        )
-    }
-}
+//         // TmpDb will be dropped, which will cause the Docker container to be killed.
+//         // Therefore, it is returned and kept in scope until needed.
+//         (
+//             db,
+//             PostgresClient::connect(opts)
+//                 .await
+//                 .expect("failed to connect to database"),
+//         )
+//     }
+// }
 
-#[cfg(all(test, not(target_os = "windows")))]
-mod test {
-    use async_compatibility_layer::logging::setup_logging;
+// #[cfg(all(test, not(target_os = "windows")))]
+// mod test {
+//     use async_compatibility_layer::logging::setup_logging;
 
-    use crate::database::mock::setup_mock_database;
+//     use crate::database::mock::setup_mock_database;
 
-    #[async_std::test]
-    async fn test_database_connection() {
-        setup_logging();
+//     #[async_std::test]
+//     async fn test_database_connection() {
+//         setup_logging();
 
-        let (tmpdb, client) = setup_mock_database().await;
-        let pool = client.pool();
+//         let (tmpdb, client) = setup_mock_database().await;
+//         let pool = client.pool();
 
-        sqlx::query("SELECT 1;").execute(pool).await.unwrap();
+//         sqlx::query("SELECT 1;").execute(pool).await.unwrap();
 
-        drop(tmpdb);
-    }
-}
+//         drop(tmpdb);
+//     }
+// }

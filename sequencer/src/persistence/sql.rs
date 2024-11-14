@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
+use derive_more::derive::{From, Into};
 use espresso_types::{
     parse_duration,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
@@ -30,28 +31,14 @@ use hotshot_types::{
 };
 use sqlx::Row;
 use sqlx::{query, Executor};
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]
 #[derivative(Debug)]
-pub struct Options {
-    /// Postgres URI.
-    ///
-    /// This is a shorthand for setting a number of other options all at once. The URI has the
-    /// following format ([brackets] indicate optional segments):
-    ///
-    ///   postgres[ql]://[username[:password]@][host[:port],]/database[?parameter_list]
-    ///
-    /// Options set explicitly via other env vars or flags will take precedence, so you can use this
-    /// URI to set a baseline and then use other parameters to override or add configuration. In
-    /// addition, there are some parameters which cannot be set via the URI, such as TLS.
-    // Hide from debug output since may contain sensitive data.
-    #[derivative(Debug = "ignore")]
-    pub(crate) uri: Option<String>,
-
+pub struct PostgresOptions {
     /// Hostname for the remote Postgres database server.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_HOST")]
     pub(crate) host: Option<String>,
@@ -77,6 +64,38 @@ pub struct Options {
     /// Use TLS for an encrypted connection to the database.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_USE_TLS")]
     pub(crate) use_tls: bool,
+}
+
+#[derive(Parser, Clone, Derivative, Default, From, Into)]
+#[derivative(Debug)]
+pub struct SqliteOptions {
+    pub(crate) path: PathBuf,
+}
+
+#[derive(Parser, Clone, Derivative, Default, From, Into)]
+#[derivative(Debug)]
+pub struct Options {
+    #[cfg(not(feature = "embedded-db"))]
+    #[clap(flatten)]
+    pub(crate) postgres_options: PostgresOptions,
+
+    #[cfg(feature = "embedded-db")]
+    #[clap(flatten)]
+    pub(crate) sqlite_options: SqliteOptions,
+
+    /// Postgres URI.
+    ///
+    /// This is a shorthand for setting a number of other options all at once. The URI has the
+    /// following format ([brackets] indicate optional segments):
+    ///
+    ///   postgres[ql]://[username[:password]@][host[:port],]/database[?parameter_list]
+    ///
+    /// Options set explicitly via other env vars or flags will take precedence, so you can use this
+    /// URI to set a baseline and then use other parameters to override or add configuration. In
+    /// addition, there are some parameters which cannot be set via the URI, such as TLS.
+    // Hide from debug output since may contain sensitive data.
+    #[derivative(Debug = "ignore")]
+    pub(crate) uri: Option<String>,
 
     /// This will enable the pruner and set the default pruning parameters unless provided.
     /// Default parameters:
@@ -118,6 +137,68 @@ pub struct Options {
     pub(crate) archive: bool,
 }
 
+#[cfg(not(feature = "embedded-db"))]
+impl From<PostgresOptions> for Config {
+    fn from(opt: PostgresOptions) -> Self {
+        let mut cfg = Config::default();
+
+        if let Some(host) = opt.host {
+            cfg = cfg.host(host);
+        }
+
+        if let Some(port) = opt.port {
+            cfg = cfg.port(port);
+        }
+
+        if let Some(database) = &opt.database {
+            cfg = cfg.database(database);
+        }
+
+        if let Some(user) = &opt.user {
+            cfg = cfg.user(user);
+        }
+
+        if let Some(password) = &opt.password {
+            cfg = cfg.password(password);
+        }
+
+        if opt.use_tls {
+            cfg = cfg.tls();
+        }
+
+        cfg
+    }
+}
+
+#[cfg(feature = "embedded-db")]
+impl From<SqliteOptions> for Config {
+    fn from(opt: SqliteOptions) -> Self {
+        let mut cfg = Config::default();
+
+        cfg = cfg.db_path(opt.path);
+        cfg
+    }
+}
+
+#[cfg(not(feature = "embedded-db"))]
+impl From<PostgresOptions> for Options {
+    fn from(opt: PostgresOptions) -> Self {
+        Options {
+            postgres_options: opt,
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(feature = "embedded-db")]
+impl From<SqliteOptions> for Options {
+    fn from(opt: SqliteOptions) -> Self {
+        Options {
+            sqlite_options: opt,
+            ..Default::default()
+        }
+    }
+}
 impl TryFrom<Options> for Config {
     type Error = anyhow::Error;
 
@@ -126,25 +207,47 @@ impl TryFrom<Options> for Config {
             Some(uri) => uri.parse()?,
             None => Self::default(),
         };
-        cfg = cfg.migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
 
-        if let Some(host) = opt.host {
-            cfg = cfg.host(host);
+        #[cfg(not(feature = "embedded-db"))]
+        {
+            cfg = cfg.migrations(include_migrations!(
+                "$CARGO_MANIFEST_DIR/api/migrations/postgres"
+            ));
+
+            let pg_options = opt.postgres_options;
+
+            if let Some(host) = pg_options.host {
+                cfg = cfg.host(host);
+            }
+
+            if let Some(port) = pg_options.port {
+                cfg = cfg.port(port);
+            }
+
+            if let Some(database) = &pg_options.database {
+                cfg = cfg.database(database);
+            }
+
+            if let Some(user) = &pg_options.user {
+                cfg = cfg.user(user);
+            }
+
+            if let Some(password) = &pg_options.password {
+                cfg = cfg.password(password);
+            }
+
+            if pg_options.use_tls {
+                cfg = cfg.tls();
+            }
         }
-        if let Some(port) = opt.port {
-            cfg = cfg.port(port);
-        }
-        if let Some(database) = &opt.database {
-            cfg = cfg.database(database);
-        }
-        if let Some(user) = &opt.user {
-            cfg = cfg.user(user);
-        }
-        if let Some(password) = &opt.password {
-            cfg = cfg.password(password);
-        }
-        if opt.use_tls {
-            cfg = cfg.tls();
+
+        #[cfg(feature = "embedded-db")]
+        {
+            cfg = cfg.migrations(include_migrations!(
+                "$CARGO_MANIFEST_DIR/api/migrations/sqlite"
+            ));
+
+            cfg = cfg.db_path(opt.sqlite_options.path);
         }
 
         if opt.prune {
@@ -266,10 +369,13 @@ impl Persistence {
     /// and if so we populate the column manually.
     async fn migrate_quorum_proposal_leaf_hashes(&self) -> anyhow::Result<()> {
         let mut tx = self.db.write().await?;
+
         let mut proposals = tx.fetch("SELECT * FROM quorum_proposals");
+
         let mut updates = vec![];
         while let Some(row) = proposals.next().await {
             let row = row?;
+
             let hash: Option<String> = row.try_get("leaf_hash")?;
             if hash.is_none() {
                 let view: i64 = row.try_get("view")?;
@@ -286,6 +392,7 @@ impl Persistence {
 
         tx.upsert("quorum_proposals", ["view", "leaf_hash"], ["view"], updates)
             .await?;
+
         tx.commit().await
     }
 }
@@ -810,20 +917,28 @@ mod testing {
         type Storage = TmpDb;
 
         async fn tmp_storage() -> Self::Storage {
-            TmpDb::init().await
+            TmpDb::persistent().await
         }
 
         async fn connect(db: &Self::Storage) -> Self {
-            Options {
-                port: Some(db.port()),
-                host: Some(db.host()),
-                user: Some("postgres".into()),
-                password: Some("password".into()),
-                ..Default::default()
+            #[cfg(not(feature = "embedded-db"))]
+            {
+                let opt: Options = PostgresOptions {
+                    port: Some(db.port()),
+                    host: Some(db.host()),
+                    user: Some("postgres".into()),
+                    password: Some("password".into()),
+                    ..Default::default()
+                }
+                .into();
+                opt.create().await.unwrap()
             }
-            .create()
-            .await
-            .unwrap()
+
+            #[cfg(feature = "embedded-db")]
+            {
+                let opt: Options = SqliteOptions { path: db.path() }.into();
+                opt.create().await.unwrap()
+            }
         }
     }
 }

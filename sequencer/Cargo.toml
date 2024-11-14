@@ -10,6 +10,7 @@ default = ["libp2p"]
 testing = ["hotshot-testing", "marketplace-builder-core", "marketplace-builder-shared", "hotshot-builder-api"]
 libp2p = []
 benchmarking = []
+embedded-db = ["hotshot-query-service/embedded-db"]
 
 [[bin]]
 name = "espresso-dev-node"

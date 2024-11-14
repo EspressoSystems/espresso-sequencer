@@ -452,15 +452,38 @@ mod impl_testable_data_source {
     use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
 
     use super::*;
-    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+    use crate::{
+        api::{self, data_source::testing::TestableSequencerDataSource},
+        persistence::sql::{PostgresOptions, SqliteOptions},
+    };
 
     fn tmp_options(db: &TmpDb) -> Options {
-        Options {
-            port: Some(db.port()),
-            host: Some(db.host()),
-            user: Some("postgres".into()),
-            password: Some("password".into()),
-            ..Default::default()
+        #[cfg(not(feature = "embedded-db"))]
+        {
+            let opt = PostgresOptions {
+                port: Some(db.port()),
+                host: Some(db.host()),
+                user: Some("postgres".into()),
+                password: Some("password".into()),
+                ..Default::default()
+            };
+
+            Options {
+                postgres_options: opt,
+                ..Default::default()
+            }
+        }
+
+        #[cfg(feature = "embedded-db")]
+        {
+            let path = db.path();
+            tracing::error!("path {:?}", path);
+            let opt = SqliteOptions { path: db.path() };
+
+            Options {
+                sqlite_options: opt,
+                ..Default::default()
+            }
         }
     }
 

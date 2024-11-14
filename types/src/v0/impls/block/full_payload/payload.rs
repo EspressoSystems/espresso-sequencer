@@ -74,7 +74,6 @@ impl Payload {
     fn from_transactions_sync(
         transactions: impl IntoIterator<Item = <Self as BlockPayload<SeqTypes>>::Transaction> + Send,
         chain_config: ChainConfig,
-        _instance_state: &<Self as BlockPayload<SeqTypes>>::Instance,
     ) -> Result<
         (Self, <Self as BlockPayload<SeqTypes>>::Metadata),
         <Self as BlockPayload<SeqTypes>>::Error,
@@ -158,11 +157,7 @@ impl BlockPayload<SeqTypes> for Payload {
             }
         };
 
-        Self::from_transactions_sync(
-            transactions,
-            ChainConfig::from(chain_config),
-            instance_state,
-        )
+        Self::from_transactions_sync(transactions, ChainConfig::from(chain_config))
     }
 
     // TODO avoid cloning the entire payload here?
@@ -174,7 +169,7 @@ impl BlockPayload<SeqTypes> for Payload {
     }
 
     fn empty() -> (Self, Self::Metadata) {
-        let payload = Self::from_transactions_sync(vec![], Default::default(), &Default::default())
+        let payload = Self::from_transactions_sync(vec![], Default::default())
             .unwrap()
             .0;
 
