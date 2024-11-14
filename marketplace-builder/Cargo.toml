@@ -9,6 +9,7 @@ edition = { workspace = true }
 default = ["libp2p"]
 libp2p = ["sequencer/libp2p"]
 testing = ["hotshot-query-service", "sequencer-utils", "tempfile"]
+embedded-db = []
 
 [dependencies]
 anyhow = { workspace = true }
