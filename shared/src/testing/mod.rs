@@ -13,6 +13,7 @@ use validation::BuilderValidationConfig;
 
 pub mod constants;
 pub mod generation;
+pub mod mock;
 pub mod validation;
 
 /// Transaction payload used in testing to track various properties

@@ -11,9 +11,13 @@ use anyhow::Context;
 use either::Either::{self, Left, Right};
 use futures::stream::unfold;
 use futures::{Stream, StreamExt};
+use hotshot::traits::BlockPayload;
 use hotshot::types::Event;
 use hotshot_events_service::events::Error as EventStreamError;
+use hotshot_types::data::{DaProposal, QuorumProposal};
+use hotshot_types::traits::block_contents::BlockHeader;
 use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::utils::BuilderCommitment;
 use surf_disco::client::HealthStatus;
 use surf_disco::Client;
 use tokio::time::{sleep, timeout};
@@ -32,8 +36,8 @@ where
     fresh: HashSet<T>,
     stale: HashSet<T>,
     expiring: HashSet<T>,
-    last_rotation: Instant,
-    period: Duration,
+    pub last_rotation: Instant,
+    pub period: Duration,
 }
 
 impl<T> RotatingSet<T>
@@ -318,5 +322,47 @@ mod tests {
         timeout(TIMEOUT, stream.next())
             .await
             .expect_err("API is reachable, but is on wrong path");
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ProposalId<Types>
+where
+    Types: NodeType,
+{
+    view_number: Types::View,
+    builder_commitment: BuilderCommitment,
+}
+
+impl<Types> ProposalId<Types>
+where
+    Types: NodeType,
+{
+    pub fn from_quorum_proposal(proposal: &QuorumProposal<Types>) -> Self {
+        Self {
+            builder_commitment: proposal.block_header.builder_commitment(),
+            view_number: proposal.view_number,
+        }
+    }
+
+    pub fn from_da_proposal(proposal: &DaProposal<Types>) -> Self {
+        let builder_commitment = <Types::BlockPayload as BlockPayload<Types>>::from_bytes(
+            &proposal.encoded_transactions,
+            &proposal.metadata,
+        )
+        .builder_commitment(&proposal.metadata);
+
+        Self {
+            builder_commitment,
+            view_number: proposal.view_number,
+        }
+    }
+
+    pub fn view_number(&self) -> <Types as NodeType>::View {
+        self.view_number
+    }
+
+    pub fn builder_commitment(&self) -> &BuilderCommitment {
+        &self.builder_commitment
     }
 }

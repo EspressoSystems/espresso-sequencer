@@ -11,6 +11,7 @@ pub const TEST_PROTOCOL_MAX_BLOCK_SIZE: u64 = 1_000_000;
 pub const TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD: Duration = Duration::from_secs(60);
 
 /// Controls the number of nodes that are used in the VID computation for the tests.
+/// This is an arbitrary default value for testing.
 pub const TEST_NUM_NODES_IN_VID_COMPUTATION: usize = 4;
 
 /// Controls the number of attempts that the simulated consensus will
@@ -21,3 +22,7 @@ pub const TEST_NUM_CONSENSUS_RETRIES: usize = 4;
 /// All of the channels created need a capacity. The concrete capacity isn't
 /// specifically bounded in tests, so it is set to an arbitrary value.
 pub const TEST_CHANNEL_BUFFER_SIZE: usize = 32;
+
+/// Governs the included transaction GC period used in tests.
+/// This is an arbitrary default value for testing.
+pub const TEST_INCLUDED_TX_GC_PERIOD: Duration = Duration::from_secs(1);
