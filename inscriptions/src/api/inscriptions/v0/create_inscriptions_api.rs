@@ -285,33 +285,6 @@ pub async fn create_inscriptions_processing(
         }
     }
 
-    // Retrieve all pending put inscriptions request, and front-load them.
-    {
-        let pending_inscriptions_result = persistence.retrieve_pending_put_inscriptions().await;
-
-        let pending_inscriptions = match pending_inscriptions_result {
-            Ok(pending_inscriptions) => pending_inscriptions,
-            Err(err) => {
-                tracing::error!("error retrieving pending inscriptions: {:?}", err);
-                panic!("error retrieving pending inscriptions: {:?}", err);
-            }
-        };
-
-        tracing::info!(
-            "bootstrapping with {} previous put inscription requests",
-            pending_inscriptions.len()
-        );
-
-        let mut put_inscription_to_chain_sender = put_inscription_to_chain_sender;
-
-        for inscription in pending_inscriptions {
-            if let Err(err) = put_inscription_to_chain_sender.send(inscription).await {
-                tracing::error!("error sending inscription to chain: {:?}", err);
-                panic!("error sending inscription to chain: {:?}", err);
-            }
-        }
-    }
-
     let process_produce_blocks = ProcessProduceBlockStreamTask::new(
         HotshotQueryServiceBlockStreamRetriever::new(config.block_stream_source_base_url()),
         persistence.clone(),
@@ -354,6 +327,33 @@ pub async fn create_inscriptions_processing(
         put_inscription_to_chain_receiver,
         config.submit_url(),
     );
+
+    // Retrieve all pending put inscriptions request, and front-load them.
+    {
+        let pending_inscriptions_result = persistence.retrieve_pending_put_inscriptions().await;
+
+        let pending_inscriptions = match pending_inscriptions_result {
+            Ok(pending_inscriptions) => pending_inscriptions,
+            Err(err) => {
+                tracing::error!("error retrieving pending inscriptions: {:?}", err);
+                panic!("error retrieving pending inscriptions: {:?}", err);
+            }
+        };
+
+        tracing::info!(
+            "bootstrapping with {} previous put inscription requests",
+            pending_inscriptions.len()
+        );
+
+        let mut put_inscription_to_chain_sender = put_inscription_to_chain_sender;
+
+        for inscription in pending_inscriptions {
+            if let Err(err) = put_inscription_to_chain_sender.send(inscription).await {
+                tracing::error!("error sending inscription to chain: {:?}", err);
+                panic!("error sending inscription to chain: {:?}", err);
+            }
+        }
+    }
 
     Ok(InscriptionsAPI {
         process_produce_blocks_handle: Some(process_produce_blocks),
