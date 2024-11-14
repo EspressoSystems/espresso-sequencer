@@ -6330,6 +6330,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-types",
  "jf-signature 0.2.0",
+ "marketplace-solver",
  "portpicker",
  "rand 0.8.5",
  "serde",

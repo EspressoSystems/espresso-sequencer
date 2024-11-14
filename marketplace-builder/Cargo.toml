@@ -31,9 +31,9 @@ jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true, features = ["bls"] }
 marketplace-builder-core = { workspace = true }
 marketplace-builder-shared = { workspace = true }
-marketplace-solver = { path = "../marketplace-solver", features = ["testing"] }
+marketplace-solver = { path = "../marketplace-solver" }
 portpicker = { workspace = true }
-sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer = { path = "../sequencer" }
 sequencer-utils = { path = "../utils", optional = true }
 surf = "2.3.1"
 surf-disco = { workspace = true }
@@ -46,6 +46,7 @@ vbs = { workspace = true }
 
 [dev-dependencies]
 hotshot-query-service = { workspace = true }
+marketplace-solver = { path = "../marketplace-solver", features = ["testing"] }
 sequencer = { path = "../sequencer", features = ["testing"] }
 sequencer-utils = { path = "../utils", features = ["testing"] }
 tempfile = { workspace = true }
