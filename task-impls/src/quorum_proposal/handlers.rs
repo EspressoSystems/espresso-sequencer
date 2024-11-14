@@ -17,7 +17,7 @@ use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
-    simple_certificate::UpgradeCertificate,
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
     },
@@ -111,7 +111,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         view_change_evidence: Option<ViewChangeEvidence<TYPES>>,
         formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
         decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
-        parent_view_number: TYPES::View,
+        parent_qc: QuorumCertificate<TYPES>,
     ) -> Result<()> {
         let (parent_leaf, state) = parent_leaf_and_state(
             self.view_number,
@@ -122,7 +122,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             self.private_key.clone(),
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             &self.upgrade_lock,
-            parent_view_number,
+            parent_qc.view_number(),
         )
         .await?;
 
@@ -165,8 +165,6 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         );
 
         let version = self.upgrade_lock.version(self.view_number).await?;
-
-        let high_qc = self.consensus.read().await.high_qc().clone();
 
         let builder_commitment = commitment_and_metadata.builder_commitment.clone();
         let metadata = commitment_and_metadata.metadata.clone();
@@ -218,7 +216,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let proposal = QuorumProposal {
             block_header,
             view_number: self.view_number,
-            justify_qc: high_qc,
+            justify_qc: parent_qc,
             upgrade_certificate,
             proposal_certificate,
         };
@@ -268,7 +266,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
         let mut timeout_certificate = None;
         let mut view_sync_finalize_cert = None;
         let mut vid_share = None;
-        let mut parent_view_number = None;
+        let mut parent_qc = None;
         for event in res.iter().flatten().flatten() {
             match event.as_ref() {
                 HotShotEvent::SendPayloadCommitmentAndMetadata(
@@ -293,7 +291,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                         timeout_certificate = Some(timeout.clone());
                     }
                     either::Left(qc) => {
-                        parent_view_number = Some(qc.view_number());
+                        parent_qc = Some(qc.clone());
                     }
                 },
                 HotShotEvent::ViewSyncFinalizeCertificate2Recv(cert) => {
@@ -306,8 +304,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
             }
         }
 
-        let parent_view_number =
-            parent_view_number.unwrap_or(self.consensus.read().await.high_qc().view_number());
+        let parent_qc = parent_qc.unwrap_or(self.consensus.read().await.high_qc().clone());
 
         if commit_and_metadata.is_none() {
             tracing::error!(
@@ -334,7 +331,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                 proposal_cert,
                 self.formed_upgrade_certificate.clone(),
                 Arc::clone(&self.upgrade_lock.decided_upgrade_certificate),
-                parent_view_number,
+                parent_qc,
             )
             .await
         {
