@@ -308,46 +308,46 @@ struct RollupRegistrationResult {
     data: Vec<u8>,
 }
 
-// #[cfg(any(test, feature = "testing"))]
-// impl GlobalState {
-//     pub async fn mock() -> Self {
-//         let db = hotshot_query_service::data_source::sql::testing::TmpDb::init().await;
-//         let host = db.host();
-//         let port = db.port();
+#[cfg(all(any(test, feature = "testing"), not(feature = "embedded-db")))]
+impl GlobalState {
+    pub async fn mock() -> Self {
+        let db = hotshot_query_service::data_source::sql::testing::TmpDb::init().await;
+        let host = db.host();
+        let port = db.port();
 
-//         let opts = crate::DatabaseOptions {
-//             url: None,
-//             host: Some(host),
-//             port: Some(port),
-//             db_name: None,
-//             username: Some("postgres".to_string()),
-//             password: Some("password".to_string()),
-//             max_connections: Some(100),
-//             acquire_timeout: None,
-//             require_ssl: false,
-//             migrations: true,
-//             reset: false,
-//         };
+        let opts = crate::DatabaseOptions {
+            url: None,
+            host: Some(host),
+            port: Some(port),
+            db_name: None,
+            username: Some("postgres".to_string()),
+            password: Some("password".to_string()),
+            max_connections: Some(100),
+            acquire_timeout: None,
+            require_ssl: false,
+            migrations: true,
+            reset: false,
+        };
 
-//         let client = PostgresClient::connect(opts)
-//             .await
-//             .expect("failed to connect to database");
+        let client = PostgresClient::connect(opts)
+            .await
+            .expect("failed to connect to database");
 
-//         Self {
-//             solver: SolverState::mock(),
-//             database: client,
-//         }
-//     }
-// }
+        Self {
+            solver: SolverState::mock(),
+            database: client,
+        }
+    }
+}
 
-// #[cfg(any(test, feature = "testing"))]
-// impl SolverState {
-//     pub fn mock() -> Self {
-//         Self {
-//             stake_table: StakeTable {
-//                 known_nodes_with_stake: crate::mock::generate_stake_table(),
-//             },
-//             bid_txs: Default::default(),
-//         }
-//     }
-// }
+#[cfg(all(any(test, feature = "testing"), not(feature = "embedded-db")))]
+impl SolverState {
+    pub fn mock() -> Self {
+        Self {
+            stake_table: StakeTable {
+                known_nodes_with_stake: crate::mock::generate_stake_table(),
+            },
+            bid_txs: Default::default(),
+        }
+    }
+}

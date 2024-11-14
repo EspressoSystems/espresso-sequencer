@@ -69,6 +69,10 @@ pub struct PostgresOptions {
 #[derive(Parser, Clone, Derivative, Default, From, Into)]
 #[derivative(Debug)]
 pub struct SqliteOptions {
+    /// File path for the SQLite database.
+    ///
+    /// By default, it is set to `./sqlite.db` in the current directory.
+    ///  SQLite will create the database file if it does not exist.
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_SQLITE_PATH",
@@ -77,6 +81,7 @@ pub struct SqliteOptions {
     pub(crate) path: PathBuf,
 }
 
+/// Options for database-backed persistence, supporting both Postgres and SQLite.
 #[derive(Parser, Clone, Derivative, Default, From, Into)]
 #[derivative(Debug)]
 pub struct Options {
@@ -88,12 +93,13 @@ pub struct Options {
     #[clap(flatten)]
     pub(crate) sqlite_options: SqliteOptions,
 
-    /// Postgres URI.
+    /// Database URI for Postgres or SQLite.
     ///
     /// This is a shorthand for setting a number of other options all at once. The URI has the
     /// following format ([brackets] indicate optional segments):
     ///
-    ///   postgres[ql]://[username[:password]@][host[:port],]/database[?parameter_list]
+    /// - **Postgres:** `postgres[ql]://[username[:password]@][host[:port],]/database[?parameter_list]`
+    /// - **SQLite:** `sqlite://path/to/db.sqlite`
     ///
     /// Options set explicitly via other env vars or flags will take precedence, so you can use this
     /// URI to set a baseline and then use other parameters to override or add configuration. In
