@@ -13,8 +13,8 @@ use std::{path::Path, time::Duration};
 use async_trait::async_trait;
 use bincode::config::Options;
 use cdn_broker::reexports::{
-    connection::protocols::Tcp,
-    def::{ConnectionDef, RunDef, Topic as TopicTrait},
+    connection::protocols::{Tcp, TcpTls},
+    def::{hook::NoMessageHook, ConnectionDef, RunDef, Topic as TopicTrait},
     discovery::{Embedded, Redis},
 };
 #[cfg(feature = "hotshot-testing")]
@@ -22,7 +22,6 @@ use cdn_broker::{Broker, Config as BrokerConfig};
 pub use cdn_client::reexports::crypto::signature::KeyPair;
 use cdn_client::{
     reexports::{
-        connection::protocols::Quic,
         crypto::signature::{Serializable, SignatureScheme},
         message::{Broadcast, Direct, Message as PushCdnMessage},
     },
@@ -90,22 +89,35 @@ impl<T: SignatureKey> SignatureScheme for WrappedSignatureKey<T> {
     type PublicKey = Self;
 
     /// Sign a message of arbitrary data and return the serialized signature
-    fn sign(private_key: &Self::PrivateKey, message: &[u8]) -> anyhow::Result<Vec<u8>> {
-        let signature = T::sign(private_key, message)?;
-        // TODO: replace with rigorously defined serialization scheme...
-        // why did we not make `PureAssembledSignatureType` be `CanonicalSerialize + CanonicalDeserialize`?
+    fn sign(
+        private_key: &Self::PrivateKey,
+        namespace: &str,
+        message: &[u8],
+    ) -> anyhow::Result<Vec<u8>> {
+        // Combine the namespace and message into a single byte array
+        let message = [namespace.as_bytes(), message].concat();
+
+        let signature = T::sign(private_key, &message)?;
         Ok(bincode_opts().serialize(&signature)?)
     }
 
     /// Verify a message of arbitrary data and return the result
-    fn verify(public_key: &Self::PublicKey, message: &[u8], signature: &[u8]) -> bool {
-        // TODO: replace with rigorously defined signing scheme
+    fn verify(
+        public_key: &Self::PublicKey,
+        namespace: &str,
+        message: &[u8],
+        signature: &[u8],
+    ) -> bool {
+        // Deserialize the signature
         let signature: T::PureAssembledSignatureType = match bincode_opts().deserialize(signature) {
             Ok(key) => key,
             Err(_) => return false,
         };
 
-        public_key.0.validate(&signature, message)
+        // Combine the namespace and message into a single byte array
+        let message = [namespace.as_bytes(), message].concat();
+
+        public_key.0.validate(&signature, &message)
     }
 }
 
@@ -132,11 +144,12 @@ impl<K: SignatureKey + 'static> RunDef for ProductionDef<K> {
 }
 
 /// The user definition for the Push CDN.
-/// Uses the Quic protocol and untrusted middleware.
+/// Uses the TCP+TLS protocol and untrusted middleware.
 pub struct UserDef<K: SignatureKey + 'static>(PhantomData<K>);
 impl<K: SignatureKey + 'static> ConnectionDef for UserDef<K> {
     type Scheme = WrappedSignatureKey<K>;
-    type Protocol = Quic;
+    type Protocol = TcpTls;
+    type MessageHook = NoMessageHook;
 }
 
 /// The broker definition for the Push CDN.
@@ -145,16 +158,18 @@ pub struct BrokerDef<K: SignatureKey + 'static>(PhantomData<K>);
 impl<K: SignatureKey> ConnectionDef for BrokerDef<K> {
     type Scheme = WrappedSignatureKey<K>;
     type Protocol = Tcp;
+    type MessageHook = NoMessageHook;
 }
 
-/// The client definition for the Push CDN. Uses the Quic
+/// The client definition for the Push CDN. Uses the TCP+TLS
 /// protocol and no middleware. Differs from the user
 /// definition in that is on the client-side.
 #[derive(Clone)]
 pub struct ClientDef<K: SignatureKey + 'static>(PhantomData<K>);
 impl<K: SignatureKey> ConnectionDef for ClientDef<K> {
     type Scheme = WrappedSignatureKey<K>;
-    type Protocol = Quic;
+    type Protocol = TcpTls;
+    type MessageHook = NoMessageHook;
 }
 
 /// The testing run definition for the Push CDN.
@@ -329,6 +344,10 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                     private_key: broker_private_key.clone(),
                 },
                 discovery_endpoint: discovery_endpoint.clone(),
+
+                user_message_hook: NoMessageHook,
+                broker_message_hook: NoMessageHook,
+
                 ca_cert_path: None,
                 ca_key_path: None,
                 // 1GB

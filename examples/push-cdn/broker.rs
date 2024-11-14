@@ -7,7 +7,7 @@
 //! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
 use anyhow::Result;
-use cdn_broker::{Broker, Config};
+use cdn_broker::{reexports::def::hook::NoMessageHook, Broker, Config};
 use clap::Parser;
 use hotshot::traits::implementations::{KeyPair, ProductionDef, WrappedSignatureKey};
 use hotshot_example_types::node_types::TestTypes;
@@ -103,6 +103,9 @@ async fn main() -> Result<()> {
             private_key,
         },
 
+        user_message_hook: NoMessageHook,
+        broker_message_hook: NoMessageHook,
+
         public_bind_endpoint: args.public_bind_endpoint,
         public_advertise_endpoint: args.public_advertise_endpoint,
         private_bind_endpoint: args.private_bind_endpoint,
@@ -111,7 +114,7 @@ async fn main() -> Result<()> {
     };
 
     // Create new `Broker`
-    // Uses TCP from broker connections and Quic for user connections.
+    // Uses TCP from broker connections and TCP+TLS for user connections.
     let broker = Broker::new(broker_config).await?;
 
     // Start the main loop, consuming it

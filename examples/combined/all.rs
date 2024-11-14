@@ -10,7 +10,7 @@ pub mod types;
 
 use std::path::Path;
 
-use cdn_broker::Broker;
+use cdn_broker::{reexports::def::hook::NoMessageHook, Broker};
 use cdn_marshal::Marshal;
 use hotshot::{
     helpers::initialize_logging,
@@ -81,6 +81,9 @@ async fn main() {
                     public_key: WrappedSignatureKey(broker_public_key),
                     private_key: broker_private_key.clone(),
                 },
+
+                user_message_hook: NoMessageHook,
+                broker_message_hook: NoMessageHook,
 
                 metrics_bind_endpoint: None,
                 ca_cert_path: None,

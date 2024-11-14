@@ -10,7 +10,11 @@ pub mod types;
 
 use std::path::Path;
 
-use cdn_broker::{reexports::crypto::signature::KeyPair, Broker};
+use cdn_broker::{
+    reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
+    Broker,
+};
+
 use cdn_marshal::Marshal;
 use hotshot::{
     helpers::initialize_logging,
@@ -90,6 +94,9 @@ async fn main() {
                     private_key: broker_private_key.clone(),
                 },
 
+                user_message_hook: NoMessageHook,
+                broker_message_hook: NoMessageHook,
+
                 metrics_bind_endpoint: None,
                 ca_cert_path: None,
                 ca_key_path: None,
@@ -109,10 +116,12 @@ async fn main() {
     }
 
     // Get the port to use for the marshal
-    let marshal_port = 9000;
+    let marshal_endpoint = config
+        .cdn_marshal_address
+        .clone()
+        .expect("CDN marshal address must be specified");
 
     // Configure the marshal
-    let marshal_endpoint = format!("127.0.0.1:{marshal_port}");
     let marshal_config = cdn_marshal::Config {
         bind_endpoint: marshal_endpoint.clone(),
         discovery_endpoint,
