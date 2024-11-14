@@ -427,8 +427,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first HotShot commitment found that is greater than or equal to the provided
-            // height
-            // is the root of the tree that leaf at that HotShot height
+            // height is the root of the tree that leaf at that HotShot height
             if (stateHistoryCommitments[i].hotShotBlockHeight >= hotShotBlockHeight) {
                 return (
                     stateHistoryCommitments[i].hotShotBlockCommRoot,
