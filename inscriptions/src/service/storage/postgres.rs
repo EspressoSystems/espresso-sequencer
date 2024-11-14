@@ -116,7 +116,7 @@ impl InscriptionPersistence for PostgresPersistence {
             // put_inscription.
             // This might imply that the pending put inscription hasn't been
             // stored yet.
-            tracing::warn!(
+            tracing::debug!(
                 "Failed to store event for 'submit' pending put inscription: {:?}",
                 inscription
             );
