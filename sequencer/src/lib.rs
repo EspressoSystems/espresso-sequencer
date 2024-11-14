@@ -566,10 +566,10 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 pub mod testing {
     use std::{collections::HashMap, time::Duration};
 
+    use catchup::NullStateCatchup;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
-        mock::MockStateCatchup,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
         Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
         Upgrade,
@@ -928,7 +928,7 @@ pub mod testing {
                     i,
                     ValidatedState::default(),
                     no_storage::Options,
-                    MockStateCatchup::default(),
+                    NullStateCatchup::default(),
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     NullEventConsumer,

@@ -469,7 +469,6 @@ pub mod test_helpers {
     use tokio::{spawn, time::sleep};
 
     use espresso_types::{
-        mock::MockStateCatchup,
         v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
     };
@@ -497,6 +496,7 @@ pub mod test_helpers {
 
     use super::*;
     use crate::{
+        catchup::NullStateCatchup,
         persistence::no_storage,
         testing::{
             run_marketplace_builder, run_test_builder, wait_for_decide_on_handle, TestConfig,
@@ -536,12 +536,12 @@ pub mod test_helpers {
         network_config: Option<TestConfig<{ NUM_NODES }>>,
     }
 
-    impl Default for TestNetworkConfigBuilder<5, no_storage::Options, MockStateCatchup> {
+    impl Default for TestNetworkConfigBuilder<5, no_storage::Options, NullStateCatchup> {
         fn default() -> Self {
             TestNetworkConfigBuilder {
                 state: std::array::from_fn(|_| ValidatedState::default()),
                 persistence: Some([no_storage::Options; 5]),
-                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                catchup: Some(std::array::from_fn(|_| NullStateCatchup::default())),
                 network_config: None,
                 api_config: None,
             }
@@ -549,15 +549,15 @@ pub mod test_helpers {
     }
 
     impl<const NUM_NODES: usize>
-        TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, NullStateCatchup>
     {
         pub fn with_num_nodes(
-        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, NullStateCatchup>
         {
             TestNetworkConfigBuilder {
                 state: std::array::from_fn(|_| ValidatedState::default()),
                 persistence: Some([no_storage::Options; { NUM_NODES }]),
-                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                catchup: Some(std::array::from_fn(|_| NullStateCatchup::default())),
                 network_config: None,
                 api_config: None,
             }
@@ -1304,7 +1304,6 @@ mod test {
     use tokio::time::sleep;
 
     use espresso_types::{
-        mock::MockStateCatchup,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
@@ -1344,7 +1343,7 @@ mod test {
     };
     use super::*;
     use crate::{
-        catchup::StatePeers,
+        catchup::{NullStateCatchup, StatePeers},
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
     };
@@ -1360,7 +1359,7 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
+        let config = TestNetworkConfigBuilder::<5, _, NullStateCatchup>::default()
             .api_config(options)
             .network_config(network_config)
             .build();
