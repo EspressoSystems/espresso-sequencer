@@ -669,9 +669,15 @@ impl SequencerPersistence for Persistence {
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
         }
+
+        #[cfg(feature = "embedded-db")]
+        let max_fn = "MAX";
+        #[cfg(not(feature = "embedded-db"))]
+        let max_fn = "MAX";
+
         let stmt = "
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
-        ON CONFLICT (id) DO UPDATE SET view = MAX(highest_voted_view.view, excluded.view)";
+        ON CONFLICT (id) DO UPDATE SET view = {max_fn}(highest_voted_view.view, excluded.view)";
 
         let mut tx = self.db.write().await?;
         tx.execute(query(stmt).bind(view.u64() as i64)).await?;
