@@ -16,37 +16,24 @@ hotshot-example-types = { path = "../example-types" }
 
 [dependencies]
 anyhow = { workspace = true }
-async-lock = { workspace = true }
 async-trait = { workspace = true }
 blake3 = { workspace = true }
 bincode = { workspace = true }
 custom_debug = { workspace = true }
 delegate = "0.13"
 derive_builder = "0.20"
-either = { workspace = true }
 futures = { workspace = true }
 hotshot-types = { path = "../types" }
 libp2p-swarm-derive = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tide = { version = "0.16", optional = true, default-features = false, features = [
-  "h1-server",
-] }
 tracing = { workspace = true }
-void = "1"
 lazy_static = { workspace = true }
 pin-project = "1"
-portpicker.workspace = true
 cbor4ii = "0.3"
-tracing-subscriber = { workspace = true }
-
 libp2p = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true }
-tokio-stream = "0.1"
 
 [lints]
 workspace = true

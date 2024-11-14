@@ -22,11 +22,9 @@ committable = { workspace = true }
 custom_debug = { workspace = true }
 digest = { workspace = true, features = ["rand_core"] }
 either = { workspace = true }
-espresso-systems-common = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }
 cdn-proto = { workspace = true }
-reqwest = { workspace = true }
 serde-inline-default = "0.2"
 lazy_static = { workspace = true }
 memoize = { workspace = true }
@@ -43,7 +41,6 @@ jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
-serde_bytes = { workspace = true }
 tagged-base64 = { workspace = true }
 vbs = { workspace = true }
 displaydoc = { version = "0.2.5", default-features = false }

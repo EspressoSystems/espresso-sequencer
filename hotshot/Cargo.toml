@@ -13,9 +13,6 @@ example-upgrade = ["hotshot-task-impls/example-upgrade"]
 gpu-vid = ["hotshot-task-impls/gpu-vid"]
 rewind = ["hotshot-task-impls/rewind"]
 
-# Features required for binaries
-bin-orchestrator = ["clap"]
-
 # Build the extended documentation
 docs = []
 doc-images = []
@@ -29,11 +26,9 @@ async-trait = { workspace = true }
 bimap = "0.6"
 bincode = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true, optional = true }
 committable = { workspace = true }
 custom_debug = { workspace = true }
 dashmap = "6"
-derive_more = { workspace = true }
 either = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }
@@ -46,15 +41,11 @@ lru.workspace = true
 portpicker = "0.1"
 rand = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
-thiserror = { workspace = true }
-surf-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 vbs = { workspace = true }
-jf-signature.workspace = true
 blake3.workspace = true
-sha2 = { workspace = true }
 url = { workspace = true }
 num_enum = "0.7"
 parking_lot = "0.12"
@@ -67,8 +58,6 @@ cdn-marshal = { workspace = true }
 
 [dev-dependencies]
 blake3 = { workspace = true }
-clap.workspace = true
-toml = { workspace = true }
 
 [lints]
 workspace = true

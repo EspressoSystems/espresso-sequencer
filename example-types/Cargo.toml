@@ -12,27 +12,19 @@ slow-tests = []
 gpu-vid = ["hotshot-task-impls/gpu-vid"]
 
 [dependencies]
-async-broadcast = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 sha3 = "^0.10"
 committable = { workspace = true }
-either = { workspace = true }
-futures = { workspace = true }
 hotshot = { path = "../hotshot" }
 hotshot-types = { path = "../types" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.36", default-features = false }
-hotshot-builder-api = { path = "../builder-api" }
 rand = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 time = { workspace = true }
 async-lock = { workspace = true }
-bitvec = { workspace = true }
-ethereum-types = { workspace = true }
-hotshot-task = { path = "../task" }
 jf-vid = { workspace = true }
 vbs = { workspace = true }
 url = { workspace = true }

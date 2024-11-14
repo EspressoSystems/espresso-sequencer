@@ -17,7 +17,6 @@ async-broadcast = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
-bitvec = { workspace = true }
 cdn-proto = { workspace = true }
 chrono = { workspace = true }
 committable = { workspace = true }
@@ -26,7 +25,6 @@ futures = { workspace = true }
 hotshot-task = { path = "../task" }
 hotshot-types = { path = "../types" }
 hotshot-builder-api = { path = "../builder-api" }
-jf-signature = { workspace = true }
 jf-vid = { workspace = true }
 lru.workspace = true
 rand = { workspace = true }

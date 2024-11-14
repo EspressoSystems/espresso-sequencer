@@ -15,13 +15,11 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 hotshot-types = { path = "../types" }
 vbs = { workspace = true }
-serde = { workspace = true }
 rand = { workspace = true }
 hotshot-example-types = { path = "../example-types" }
 async-trait = { workspace = true }
 futures = { workspace = true }
 async-lock = { workspace = true }
-tracing = { workspace = true }
 
 [lints]
 workspace = true
