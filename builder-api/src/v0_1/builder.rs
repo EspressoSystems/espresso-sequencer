@@ -219,7 +219,8 @@ pub fn submit_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
     options: &Options,
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
-    State: 'static + Send + Sync + AcceptsTxnSubmits<Types>,
+    State: 'static + Send + Sync + ReadState,
+    <State as ReadState>::State: Send + Sync + AcceptsTxnSubmits<Types>,
 {
     let mut api = load_api::<State, Error, Ver>(
         options.api_path.as_ref(),
@@ -234,7 +235,7 @@ where
                     .map_err(Error::TxnUnpack)?;
                 let hash = tx.commit();
                 state
-                    .submit_txns(vec![tx])
+                    .read(|state| state.submit_txns(vec![tx]))
                     .await
                     .map_err(Error::TxnSubmit)?;
                 Ok(hash)
@@ -247,12 +248,15 @@ where
                     .body_auto::<Vec<<Types as NodeType>::Transaction>, Ver>(Ver::instance())
                     .map_err(Error::TxnUnpack)?;
                 let hashes = txns.iter().map(|tx| tx.commit()).collect::<Vec<_>>();
-                state.submit_txns(txns).await.map_err(Error::TxnSubmit)?;
+                state
+                    .read(|state| state.submit_txns(txns))
+                    .await
+                    .map_err(Error::TxnSubmit)?;
                 Ok(hashes)
             }
             .boxed()
         })?
-        .at("get_status", |req: RequestParams, state| {
+        .get("get_status", |req: RequestParams, state| {
             async move {
                 let tx = req
                     .body_auto::<<Types as NodeType>::Transaction, Ver>(Ver::instance())
