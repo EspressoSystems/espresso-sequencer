@@ -116,6 +116,45 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    /// The maximum idle time of a database connection.
+    ///
+    /// Any connection which has been open and unused longer than this duration will be
+    /// automatically closed to reduce load on the server.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_IDLE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "10m")]
+    pub(crate) idle_connection_timeout: Duration,
+
+    /// The maximum lifetime of a database connection.
+    ///
+    /// Any connection which has been open longer than this duration will be automatically closed
+    /// (and, if needed, replaced), even if it is otherwise healthy. It is good practice to refresh
+    /// even healthy connections once in a while (e.g. daily) in case of resource leaks in the
+    /// server implementation.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "30m")]
+    pub(crate) connection_timeout: Duration,
+
+    /// The minimum number of database connections to maintain at any time.
+    ///
+    /// The database client will, to the best of its ability, maintain at least `min` open
+    /// connections at all times. This can be used to reduce the latency hit of opening new
+    /// connections when at least this many simultaneous connections are frequently needed.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_POSTGRES_MIN_CONNECTIONS",
+        default_value = "0"
+    )]
+    pub(crate) min_connections: u32,
+
+    /// The maximum number of database connections to maintain at any time.
+    ///
+    /// Once `max` connections are in use simultaneously, further attempts to acquire a connection
+    /// (or begin a transaction) will block until one of the existing connections is released.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_POSTGRES_MAX_CONNECTIONS",
+        default_value = "25"
+    )]
+    pub(crate) max_connections: u32,
 }
 
 impl TryFrom<Options> for Config {
