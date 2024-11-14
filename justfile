@@ -38,22 +38,34 @@ anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test *args:
-	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-	cargo nextest run --locked --workspace --all-features --verbose {{args}}
+    @echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
+    @echo 'features: "all"'
+    cargo nextest run --locked --workspace --all-features --verbose {{args}}
+    @echo 'features: "testing"'
+    cargo nextest run --locked --workspace --features testing --verbose {{args}}
 
 test-slow:
-	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --verbose --profile slow
+    @echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
+    @echo 'features: "all"'
+    cargo nextest run --locked --release --workspace --all-features --verbose --profile slow
+    @echo 'features: "testing"'
+    cargo nextest run --locked --release --workspace --features testing --verbose --profile slow
 
 test-all:
-	cargo nextest run --locked --release --workspace --all-features --verbose --profile all
+    @echo 'features: "all"'
+    cargo nextest run --locked --release --workspace --all-features --verbose --profile all
+    @echo 'features: "testing"'
+    cargo nextest run --locked --release --workspace --features testing --verbose --profile all
 
 test-integration:
 	@echo 'NOTE that demo-native must be running for this test to succeed.'
 	cargo nextest run --all-features --nocapture --profile integration
 
 clippy:
+    @echo 'features: "all"'
     cargo clippy --workspace --all-features --all-targets -- -D warnings
+    @echo 'features: "testing"'
+    cargo clippy --workspace --all-features --features testing -- -D warnings
 
 # Helpful shortcuts for local development
 dev-orchestrator:
