@@ -7,7 +7,14 @@ edition = "2021"
 
 [features]
 default = ["libp2p"]
-testing = ["hotshot-testing", "marketplace-builder-core", "marketplace-builder-shared", "hotshot-builder-api"]
+testing = [
+  "hotshot-testing",
+  "marketplace-builder-core",
+  "marketplace-builder-shared",
+  "hotshot-builder-api",
+  "espresso-types/testing",
+  "sequencer-utils/testing",
+]
 libp2p = []
 benchmarking = []
 
@@ -25,6 +32,9 @@ pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
 tempfile = { workspace = true }
+
+# Enable "testing" feature when running tests
+sequencer = { path = ".", features = [ "testing" ] }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -115,6 +125,7 @@ tracing-subscriber = "0.3.18"
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
+
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
 

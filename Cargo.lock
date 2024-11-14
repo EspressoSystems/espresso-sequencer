@@ -8705,6 +8705,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_distr",
  "reqwest 0.12.9",
+ "sequencer",
  "sequencer-utils",
  "serde",
  "serde_json",
