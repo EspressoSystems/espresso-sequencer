@@ -8,6 +8,7 @@ use hotshot_types::{
     light_client::{StateKeyPair, StateSignKey},
     traits::signature_key::SignatureKey,
 };
+use tagged_base64::TaggedBase64;
 
 #[derive(Clone, Debug)]
 enum PrivateKey {
@@ -19,9 +20,9 @@ impl FromStr for PrivateKey {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(key) = s.parse() {
+        if let Ok(key) = TaggedBase64::parse(s)?.try_into() {
             Ok(Self::Bls(key))
-        } else if let Ok(key) = s.parse() {
+        } else if let Ok(key) = TaggedBase64::parse(s)?.try_into() {
             Ok(Self::Schnorr(key))
         } else {
             bail!("unrecognized key type")

@@ -1,5 +1,5 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::{Parser, ValueEnum};
+use hotshot::helpers::initialize_logging;
 use log_panics::BacktraceMode;
 
 /// Controls how backtraces are logged on panic.
@@ -35,13 +35,12 @@ impl Config {
 
     /// Initialize logging and panic handlers based on this configuration.
     pub fn init(&self) {
-        setup_logging();
-        match self.backtrace_mode.unwrap_or_default() {
-            BacktraceLoggingMode::Full => setup_backtrace(),
-            BacktraceLoggingMode::Compact => {}
-            BacktraceLoggingMode::Json => log_panics::Config::new()
+        initialize_logging();
+
+        if let BacktraceLoggingMode::Json = self.backtrace_mode.unwrap_or_default() {
+            log_panics::Config::new()
                 .backtrace_mode(BacktraceMode::Resolved)
-                .install_panic_hook(),
+                .install_panic_hook();
         }
     }
 }

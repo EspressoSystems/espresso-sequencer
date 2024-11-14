@@ -1,8 +1,8 @@
 use std::pin::Pin;
 
 use anyhow::{bail, Context};
+use async_lock::RwLock;
 use async_once_cell::Lazy;
-use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use data_source::{CatchupDataSource, SubmitDataSource};
@@ -30,6 +30,7 @@ use hotshot_types::{
     utils::{View, ViewInner},
 };
 use jf_merkle_tree::MerkleTreeScheme;
+use std::sync::Arc;
 
 use self::data_source::{
     HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
@@ -58,7 +59,7 @@ struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: V
     state_signer: Arc<StateSigner<SequencerApiVersion>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
-    config: NetworkConfig<PubKey>,
+    network_config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
     handle: Arc<RwLock<Consensus<N, P, V>>>,
@@ -72,7 +73,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions>
             state_signer: ctx.state_signer(),
             event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
-            config: ctx.config(),
+            network_config: ctx.network_config(),
             handle: ctx.consensus(),
         }
     }
@@ -109,7 +110,13 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
     }
 
     async fn network_config(&self) -> NetworkConfig<PubKey> {
-        self.consensus.as_ref().get().await.get_ref().config.clone()
+        self.consensus
+            .as_ref()
+            .get()
+            .await
+            .get_ref()
+            .network_config
+            .clone()
     }
 }
 
@@ -458,10 +465,9 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> StateSig
 pub mod test_helpers {
     use std::time::Duration;
 
-    use async_std::task::sleep;
     use committable::Committable;
+    use tokio::{spawn, time::sleep};
 
-    use async_std::task::JoinHandle;
     use espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
@@ -485,6 +491,7 @@ pub mod test_helpers {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
     use tide_disco::{Api, App, Error, StatusCode};
+    use tokio::task::JoinHandle;
     use url::Url;
     use vbs::version::{StaticVersion, StaticVersionType};
 
@@ -1002,7 +1009,7 @@ pub mod test_helpers {
         let port = pick_unused_port().expect("no free port");
         let url: Url = Url::parse(&format!("http://localhost:{port}")).unwrap();
 
-        let handle = async_std::task::spawn({
+        let handle = spawn({
             let url = url.clone();
             async move {
                 let _ = app.serve(url, SequencerApiVersion::instance()).await;
@@ -1027,7 +1034,7 @@ mod api_tests {
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
     use hotshot_query_service::availability::{
-        AvailabilityDataSource, BlockQueryData, UpdateAvailabilityData, VidCommonQueryData,
+        AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
     use hotshot_types::{
         data::QuorumProposal, event::LeafInfo, simple_certificate::QuorumCertificate,
@@ -1051,25 +1058,25 @@ mod api_tests {
         testing::{wait_for_decide_on_handle, TestConfigBuilder},
     };
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         submit_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn status_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         status_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn state_signature_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         state_signature_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>() {
         setup_test();
 
@@ -1167,17 +1174,16 @@ mod api_tests {
         assert!(found_empty_block);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn catchup_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_non_consecutive_decide_with_failing_event_consumer<D>()
     where
         D: TestableSequencerDataSource + Debug + 'static,
-        for<'a> D: UpdateAvailabilityData<SeqTypes>,
     {
         #[derive(Clone, Copy, Debug)]
         struct FailConsumer;
@@ -1293,9 +1299,9 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use async_std::task::sleep;
     use committable::{Commitment, Committable};
     use std::{collections::BTreeMap, time::Duration};
+    use tokio::time::sleep;
 
     use espresso_types::{
         mock::MockStateCatchup,
@@ -1343,7 +1349,7 @@ mod test {
         testing::{TestConfig, TestConfigBuilder},
     };
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_healthcheck() {
         setup_test();
 
@@ -1365,27 +1371,27 @@ mod test {
         assert_eq!(health.status, HealthStatus::Available);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn status_test_without_query_module() {
         status_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn submit_test_without_query_module() {
         submit_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn state_signature_test_without_query_module() {
         state_signature_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn catchup_test_without_query_module() {
         catchup_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_test_merklized_state_api() {
         setup_test();
 
@@ -1469,7 +1475,7 @@ mod test {
         assert_eq!(expected, amount.0);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_catchup() {
         setup_test();
 
@@ -1567,7 +1573,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_from_instance() {
         // This test uses a ValidatedState which only has the default chain config commitment.
         // The NodeState has the full chain config.
@@ -1621,7 +1627,7 @@ mod test {
         drop(network);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_catchup() {
         // This test uses a ValidatedState with a non-default chain config
         // so it will be different from the NodeState chain config used by the TestNetwork.
@@ -1698,7 +1704,7 @@ mod test {
         drop(network);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_catchup_dishonest_peer() {
         // This test sets up a network of three nodes, each with the full chain config.
         // One of the nodes is connected to a dishonest peer.
@@ -1768,10 +1774,10 @@ mod test {
         peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
 
         network.server.shut_down().await;
-        handle.cancel().await;
+        handle.abort();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fee_upgrade_view_based() {
         setup_test();
 
@@ -1800,7 +1806,7 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fee_upgrade_time_based() {
         setup_test();
 
@@ -1831,7 +1837,7 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_upgrade_view_based() {
         setup_test();
 
@@ -1861,7 +1867,7 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_upgrade_time_based() {
         setup_test();
 
@@ -1996,7 +2002,7 @@ mod test {
         network.server.shut_down().await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn test_restart() {
         setup_test();
 
@@ -2135,7 +2141,7 @@ mod test {
         assert_eq!(chain, new_chain);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_config() {
         setup_test();
 
@@ -2163,23 +2169,13 @@ mod test {
 
         // Fetch the config from node 1, a different node than the one running the service.
         let validator = ValidatorConfig::generated_from_seed_indexed([0; 32], 1, 1, false);
-        let mut config = peers.fetch_config(validator.clone()).await.unwrap();
+        let config = peers.fetch_config(validator.clone()).await.unwrap();
 
         // Check the node-specific information in the recovered config is correct.
         assert_eq!(config.node_index, 1);
-        assert_eq!(
-            config.config.my_own_validator_config.public_key,
-            validator.public_key
-        );
-        assert_eq!(
-            config.config.my_own_validator_config.private_key,
-            validator.private_key
-        );
 
         // Check the public information is also correct (with respect to the node that actually
         // served the config, for public keys).
-        config.config.my_own_validator_config =
-            ValidatorConfig::generated_from_seed_indexed([0; 32], 0, 1, true);
         pretty_assertions::assert_eq!(
             serde_json::to_value(PublicHotShotConfig::from(config.config)).unwrap(),
             serde_json::to_value(PublicHotShotConfig::from(
@@ -2189,7 +2185,7 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_hotshot_event_streaming() {
         setup_test();
 

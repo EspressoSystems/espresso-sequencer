@@ -82,7 +82,7 @@ struct Args {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let args = Args::parse();
     args.logging.init();

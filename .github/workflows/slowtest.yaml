@@ -19,7 +19,6 @@ concurrency:
 
 # Build test binary with `testing` feature, which requires `hotshot_example` config
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg hotshot_example'
   CARGO_TERM_COLOR: always
   RUST_LOG: info,libp2p=off,node=error
 

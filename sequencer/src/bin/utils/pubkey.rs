@@ -7,6 +7,7 @@ use hotshot::traits::implementations::derive_libp2p_peer_id;
 use hotshot::types::SignatureKey;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
+use tagged_base64::TaggedBase64;
 
 #[derive(Clone, Debug)]
 enum PrivateKey {
@@ -18,9 +19,10 @@ impl FromStr for PrivateKey {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(key) = s.parse() {
+        let tb64 = TaggedBase64::parse(s)?;
+        if let Ok(key) = tb64.clone().try_into() {
             Ok(Self::Bls(key))
-        } else if let Ok(key) = s.parse() {
+        } else if let Ok(key) = tb64.try_into() {
             Ok(Self::Schnorr(key))
         } else {
             bail!("unrecognized key type")

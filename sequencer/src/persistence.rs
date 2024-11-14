@@ -42,7 +42,7 @@ mod persistence_tests {
     use std::collections::BTreeMap;
 
     use anyhow::bail;
-    use async_std::sync::{Arc, RwLock};
+    use async_lock::RwLock;
     use committable::Committable;
     use espresso_types::{
         traits::EventConsumer, Event, Leaf, NodeState, PubKey, SeqTypes, ValidatedState,
@@ -55,11 +55,12 @@ mod persistence_tests {
         message::Proposal,
         simple_certificate::{QuorumCertificate, UpgradeCertificate},
         simple_vote::UpgradeProposalData,
-        traits::{node_implementation::ConsensusTime, EncodeBytes},
+        traits::{block_contents::vid_commitment, node_implementation::ConsensusTime, EncodeBytes},
         vid::vid_scheme,
     };
     use jf_vid::VidScheme;
     use sequencer_utils::test_utils::setup_test;
+    use std::sync::Arc;
     use testing::TestablePersistence;
     use vbs::version::Version;
 
@@ -94,7 +95,7 @@ mod persistence_tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_voted_view<P: TestablePersistence>() {
         setup_test();
 
@@ -146,7 +147,7 @@ mod persistence_tests {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_append_and_decide<P: TestablePersistence>() {
         setup_test();
 
@@ -233,7 +234,7 @@ mod persistence_tests {
             .expect("Failed to sign block payload");
 
         let da_proposal_inner = DaProposal::<SeqTypes> {
-            encoded_transactions: leaf_payload_bytes_arc,
+            encoded_transactions: leaf_payload_bytes_arc.clone(),
             metadata: leaf_payload.ns_table().clone(),
             view_number: ViewNumber::new(0),
         };
@@ -244,7 +245,12 @@ mod persistence_tests {
             _pd: Default::default(),
         };
 
-        storage.append_da(&da_proposal).await.unwrap();
+        let vid_commitment = vid_commitment(&leaf_payload_bytes_arc, 2);
+
+        storage
+            .append_da(&da_proposal, vid_commitment)
+            .await
+            .unwrap();
 
         assert_eq!(
             storage.load_da_proposal(ViewNumber::new(0)).await.unwrap(),
@@ -253,7 +259,10 @@ mod persistence_tests {
 
         let mut da_proposal1 = da_proposal.clone();
         da_proposal1.data.view_number = ViewNumber::new(1);
-        storage.append_da(&da_proposal1.clone()).await.unwrap();
+        storage
+            .append_da(&da_proposal1.clone(), vid_commitment)
+            .await
+            .unwrap();
 
         assert_eq!(
             storage
@@ -265,7 +274,10 @@ mod persistence_tests {
 
         let mut da_proposal2 = da_proposal1.clone();
         da_proposal2.data.view_number = ViewNumber::new(2);
-        storage.append_da(&da_proposal2.clone()).await.unwrap();
+        storage
+            .append_da(&da_proposal2.clone(), vid_commitment)
+            .await
+            .unwrap();
 
         assert_eq!(
             storage
@@ -277,7 +289,10 @@ mod persistence_tests {
 
         let mut da_proposal3 = da_proposal2.clone();
         da_proposal3.data.view_number = ViewNumber::new(3);
-        storage.append_da(&da_proposal3.clone()).await.unwrap();
+        storage
+            .append_da(&da_proposal3.clone(), vid_commitment)
+            .await
+            .unwrap();
 
         assert_eq!(
             storage
@@ -483,7 +498,7 @@ mod persistence_tests {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_upgrade_certificate<P: TestablePersistence>() {
         setup_test();
 
@@ -532,7 +547,7 @@ mod persistence_tests {
         assert_eq!(view_number, new_view_number_for_certificate);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub async fn test_decide_with_failing_event_consumer<P: TestablePersistence>() {
         #[derive(Clone, Copy, Debug)]
         struct FailConsumer;
@@ -590,13 +605,15 @@ mod persistence_tests {
             .expect("Failed to sign block payload");
         let mut da_proposal = Proposal {
             data: DaProposal::<SeqTypes> {
-                encoded_transactions: leaf_payload_bytes_arc,
+                encoded_transactions: leaf_payload_bytes_arc.clone(),
                 metadata: leaf_payload.ns_table().clone(),
                 view_number: ViewNumber::new(0),
             },
             signature: block_payload_signature,
             _pd: Default::default(),
         };
+
+        let vid_commitment = vid_commitment(&leaf_payload_bytes_arc, 2);
 
         for i in 0..4 {
             quorum_proposal.view_number = ViewNumber::new(i);
@@ -611,7 +628,7 @@ mod persistence_tests {
         // Add proposals.
         for (_, _, vid, da) in &chain {
             tracing::info!(?da, ?vid, "insert proposal");
-            storage.append_da(da).await.unwrap();
+            storage.append_da(da, vid_commitment).await.unwrap();
             storage.append_vid(vid).await.unwrap();
         }
 

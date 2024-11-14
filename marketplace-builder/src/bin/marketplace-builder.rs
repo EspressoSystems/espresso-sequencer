@@ -1,11 +1,12 @@
 use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeAmount, FeeVersion, MarketplaceVersion,
     NamespaceId, SequencerVersions, V0_0,
 };
+use futures::future::pending;
+use hotshot::helpers::initialize_logging;
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
     data::ViewNumber,
@@ -109,10 +110,9 @@ struct NonPermissionedBuilderOptions {
     bid_amount: FeeAmount,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
 
     let opt = NonPermissionedBuilderOptions::parse();
 
@@ -194,7 +194,7 @@ async fn run<V: Versions>(
     .await?;
 
     // Sleep forever
-    async_std::future::pending::<()>().await;
+    pending::<()>().await;
 
     Ok(())
 }

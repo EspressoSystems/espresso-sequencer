@@ -1,5 +1,4 @@
 use anyhow::Context;
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use clap::Parser;
 use committable::Committable;
@@ -27,8 +26,10 @@ use hotshot_types::{
     simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
+    vid::VidSchemeType,
     vote::HasViewNumber,
 };
+use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, time::Duration};
@@ -649,6 +650,7 @@ impl SequencerPersistence for Persistence {
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.view_number().u64();
@@ -980,7 +982,7 @@ mod test {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::traits::signature_key::SignatureKey;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
         // Create some quorum proposals to test with.
         let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
