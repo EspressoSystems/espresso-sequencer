@@ -1,5 +1,4 @@
 use anyhow::Context;
-use async_std::task::sleep;
 use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header};
 use ethers::types::Address;
 use jf_merkle_tree::{
@@ -12,6 +11,7 @@ use surf_disco::{
     socket::{Connection, Unsupported},
     Url,
 };
+use tokio::time::sleep;
 use vbs::version::StaticVersion;
 
 pub type SequencerApiVersion = StaticVersion<0, 1>;
@@ -112,7 +112,7 @@ mod tests {
     use super::*;
     // Regression test for a bug where the block number underflowed. This test would panic
     // on the previous implementation, as long as overflow checks are enabled.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_regression_block_number_underflow() {
         let client = SequencerClient::new("http://dummy-url:3030".parse().unwrap());
         assert_eq!(

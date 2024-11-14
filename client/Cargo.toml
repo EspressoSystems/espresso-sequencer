@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
-async-std = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
@@ -15,5 +14,6 @@ futures = { workspace = true }
 jf-merkle-tree = { workspace = true }
 sequencer-utils = { path = "../utils" }
 surf-disco = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }

@@ -35,11 +35,11 @@ anyhow = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-broadcast = { workspace = true }
-async-compatibility-layer = { workspace = true }
+async-lock = { workspace = true }
 async-once-cell = { workspace = true }
-async-std = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
+parking_lot = "0.12"
 
 # CDN imports
 cdn-broker = { workspace = true }
@@ -98,7 +98,7 @@ snafu = "0.8"
 sqlx = { workspace = true, features = [
 	"bit-vec",
 	"postgres",
-	"runtime-async-std",
+	"runtime-tokio",
 	"sqlite",
 	"tls-native-tls",
 ] }
@@ -108,6 +108,7 @@ surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.18"
@@ -116,11 +117,6 @@ vbs = { workspace = true }
 vec1 = { workspace = true }
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(async_executor_impl, values("tokio", "async-std"))',
-] }
 
 [package.metadata.cargo-machete]
 ignored = ["vergen", "include_dir", "hotshot_builder_api"]

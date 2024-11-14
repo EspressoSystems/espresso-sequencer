@@ -1,12 +1,11 @@
 use anyhow::{anyhow, Result};
-use async_std::{future, task::sleep};
 use client::SequencerClient;
 use espresso_types::FeeAmount;
 use ethers::prelude::*;
 use futures::future::join_all;
-use reqwest::blocking;
 use std::{fmt, str::FromStr, time::Duration};
 use surf_disco::Url;
+use tokio::time::{sleep, timeout};
 
 const L1_PROVIDER_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 // TODO add to .env
@@ -229,8 +228,8 @@ pub async fn get_builder_address(url: Url) -> Address {
     let _ = wait_for_service(url.clone(), 1000, 200).await;
     for _ in 0..5 {
         // Try to get builder address somehow
-        if let Ok(body) = reqwest::blocking::get(url.clone()) {
-            return body.json::<Address>().unwrap();
+        if let Ok(body) = reqwest::get(url.clone()).await {
+            return body.json::<Address>().await.unwrap();
         } else {
             sleep(Duration::from_millis(400)).await
         }
@@ -238,11 +237,11 @@ pub async fn get_builder_address(url: Url) -> Address {
     panic!("Error: Failed to retrieve address from builder!");
 }
 
-async fn wait_for_service(url: Url, interval: u64, timeout: u64) -> Result<String> {
-    future::timeout(Duration::from_secs(timeout), async {
+async fn wait_for_service(url: Url, interval: u64, timeout_duration: u64) -> Result<String> {
+    timeout(Duration::from_secs(timeout_duration), async {
         loop {
-            if let Ok(body) = blocking::get(format!("{url}/healthcheck")) {
-                return body.text().map_err(|e| {
+            if let Ok(body) = reqwest::get(format!("{url}/healthcheck")).await {
+                return body.text().await.map_err(|e| {
                     anyhow!(
                         "Wait for service, could not decode response: ({}) {}",
                         url,

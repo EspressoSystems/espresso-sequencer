@@ -2,12 +2,12 @@ use core::fmt::Debug;
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{bail, ensure, Context};
-use async_std::stream::StreamExt;
 use espresso_types::{
     traits::StateCatchup, v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
     Leaf, ValidatedState,
 };
 use futures::future::Future;
+use futures::StreamExt;
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
@@ -17,6 +17,7 @@ use hotshot_query_service::{
     types::HeightIndexed,
 };
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
+use tokio::time::sleep;
 
 use crate::{
     catchup::{CatchupStorage, SqlStateCatchup},
@@ -290,7 +291,7 @@ where
                 Err(err) => {
                     tracing::error!(height = leaf.height(), "failed to updated state: {err:#}");
                     // If we fail, delay for a second and retry.
-                    async_std::task::sleep(Duration::from_secs(1)).await;
+                    sleep(Duration::from_secs(1)).await;
                 }
             }
         }

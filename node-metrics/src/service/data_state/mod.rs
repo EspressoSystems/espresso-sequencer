@@ -1,7 +1,7 @@
 pub mod location_details;
 pub mod node_identity;
 
-use async_std::{sync::RwLock, task::JoinHandle};
+use async_lock::RwLock;
 use bitvec::vec::BitVec;
 use circular_buffer::CircularBuffer;
 use espresso_types::{Header, Payload, SeqTypes};
@@ -25,6 +25,7 @@ pub use location_details::LocationDetails;
 pub use node_identity::NodeIdentity;
 use std::{collections::HashSet, iter::zip, sync::Arc};
 use time::OffsetDateTime;
+use tokio::{spawn, task::JoinHandle};
 
 /// MAX_HISTORY represents the last N records that are stored within the
 /// DataState structure for the various different sample types.
@@ -342,7 +343,7 @@ impl ProcessLeafStreamTask {
         K1: Sink<BlockDetail<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
         K2: Sink<BitVec<u16>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle = async_std::task::spawn(Self::process_leaf_stream(
+        let task_handle = spawn(Self::process_leaf_stream(
             leaf_receiver,
             data_state.clone(),
             block_detail_sender,
@@ -411,7 +412,7 @@ impl Drop for ProcessLeafStreamTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -489,7 +490,7 @@ impl ProcessNodeIdentityStreamTask {
         S: Stream<Item = NodeIdentity> + Send + Sync + Unpin + 'static,
         K: Sink<NodeIdentity, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle = async_std::task::spawn(Self::process_node_identity_stream(
+        let task_handle = spawn(Self::process_node_identity_stream(
             node_identity_receiver,
             data_state.clone(),
             node_identity_sender,
@@ -555,7 +556,7 @@ impl Drop for ProcessNodeIdentityStreamTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -566,16 +567,17 @@ mod tests {
     use crate::service::data_state::{
         LocationDetails, NodeIdentity, ProcessNodeIdentityStreamTask,
     };
-    use async_std::{prelude::FutureExt, sync::RwLock};
+    use async_lock::RwLock;
     use espresso_types::{
         v0_3::ChainConfig, BlockMerkleTree, FeeMerkleTree, Leaf, NodeState, ValidatedState,
     };
     use futures::{channel::mpsc, SinkExt, StreamExt};
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use std::{sync::Arc, time::Duration};
+    use tokio::time::timeout;
     use url::Url;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_leaf_error_debug() {
         let (mut sender, receiver) = mpsc::channel(1);
         // deliberately close the receiver.
@@ -595,7 +597,7 @@ mod tests {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_leaf_stream() {
         let data_state: DataState = Default::default();
         let data_state = Arc::new(RwLock::new(data_state));
@@ -654,18 +656,15 @@ mod tests {
         drop(block_receiver);
         drop(leaf_sender);
 
-        assert_eq!(
-            process_leaf_stream_task_handle
-                .task_handle
-                .take()
-                .unwrap()
-                .timeout(Duration::from_millis(200))
-                .await,
-            Ok(())
-        );
+        assert!(timeout(
+            Duration::from_millis(200),
+            process_leaf_stream_task_handle.task_handle.take().unwrap()
+        )
+        .await
+        .is_ok());
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_node_identity_stream() {
         let data_state: DataState = Default::default();
         let data_state = Arc::new(RwLock::new(data_state));
@@ -786,7 +785,7 @@ mod tests {
         if let Some(process_node_identity_task_handle) =
             process_node_identity_task_handle.task_handle.take()
         {
-            assert_eq!(process_node_identity_task_handle.cancel().await, None);
+            process_node_identity_task_handle.abort();
         }
     }
 }

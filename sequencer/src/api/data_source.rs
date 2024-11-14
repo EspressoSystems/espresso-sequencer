@@ -11,7 +11,7 @@ use espresso_types::{
 use futures::future::Future;
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::VersionedDataSource,
+    data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
@@ -71,6 +71,7 @@ pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + NodeDataSource<SeqTypes>
     + StatusDataSource
+    + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {
@@ -216,7 +217,6 @@ pub struct PublicHotShotConfig {
     num_nodes_with_stake: NonZeroUsize,
     known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
     known_da_nodes: Vec<PeerConfig<PubKey>>,
-    my_own_validator_config: PublicValidatorConfig,
     da_staked_committee_size: usize,
     fixed_leader_for_gpuvid: usize,
     next_view_timeout: u64,
@@ -246,7 +246,6 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_nodes_with_stake,
             known_nodes_with_stake,
             known_da_nodes,
-            my_own_validator_config,
             da_staked_committee_size,
             fixed_leader_for_gpuvid,
             next_view_timeout,
@@ -271,7 +270,6 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_nodes_with_stake,
             known_nodes_with_stake,
             known_da_nodes,
-            my_own_validator_config: my_own_validator_config.into(),
             da_staked_committee_size,
             fixed_leader_for_gpuvid,
             next_view_timeout,
@@ -294,16 +292,12 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
 }
 
 impl PublicHotShotConfig {
-    pub fn into_hotshot_config(
-        self,
-        my_own_validator_config: ValidatorConfig<PubKey>,
-    ) -> HotShotConfig<PubKey> {
+    pub fn into_hotshot_config(self) -> HotShotConfig<PubKey> {
         HotShotConfig {
             start_threshold: self.start_threshold,
             num_nodes_with_stake: self.num_nodes_with_stake,
             known_nodes_with_stake: self.known_nodes_with_stake,
             known_da_nodes: self.known_da_nodes,
-            my_own_validator_config,
             da_staked_committee_size: self.da_staked_committee_size,
             fixed_leader_for_gpuvid: self.fixed_leader_for_gpuvid,
             next_view_timeout: self.next_view_timeout,
@@ -406,7 +400,7 @@ impl PublicNetworkConfig {
             transaction_size: self.transaction_size,
             key_type_name: self.key_type_name,
             libp2p_config: self.libp2p_config,
-            config: self.config.into_hotshot_config(my_own_validator_config),
+            config: self.config.into_hotshot_config(),
             cdn_marshal_address: self.cdn_marshal_address,
             combined_network_config: self.combined_network_config,
             commit_sha: self.commit_sha,

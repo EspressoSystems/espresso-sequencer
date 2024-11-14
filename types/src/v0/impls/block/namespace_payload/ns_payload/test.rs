@@ -1,4 +1,4 @@
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use hotshot::helpers::initialize_logging;
 
 use crate::{
     v0::impls::block::{usize_max_from_byte_len, usize_to_bytes},
@@ -7,8 +7,7 @@ use crate::{
 
 #[test]
 fn ns_payload_len() {
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
     let ns_id = NamespaceId::from(69_u32); // dummy
 
     // ordinary valid ns_payload
@@ -97,8 +96,8 @@ fn ns_payload_len() {
 
 #[test]
 fn negative_len_txs() {
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
+
     let ns_id = NamespaceId::from(69_u32); // dummy
 
     // 1 negative-length tx at the end, no overlapping tx bytes
@@ -165,8 +164,8 @@ fn negative_len_txs() {
 
 #[test]
 fn negative_len_txs_and_abnormal_payload_len() {
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
+
     let ns_id = NamespaceId::from(69_u32); // dummy
 
     // 1 negative-length tx in the middle, overlapping tx bytes
@@ -240,8 +239,8 @@ fn negative_len_txs_and_abnormal_payload_len() {
 
 #[test]
 fn tx_table_header() {
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
+
     let ns_id = NamespaceId::from(69_u32); // dummy
 
     // header declares 1 fewer txs, tx table bytes appear in tx payloads, wasted

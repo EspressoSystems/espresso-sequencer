@@ -1,9 +1,9 @@
 use crate::common::TestConfig;
 use anyhow::Result;
-use async_std::task::sleep;
 use std::time::{Duration, Instant};
+use tokio::time::sleep;
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_smoke() -> Result<()> {
     let start = Instant::now();
     dotenvy::dotenv()?;

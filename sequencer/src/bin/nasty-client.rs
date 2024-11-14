@@ -13,10 +13,7 @@
 //! count of various types of actions performed and the number of open streams.
 
 use anyhow::{bail, ensure, Context};
-use async_std::{
-    sync::RwLock,
-    task::{sleep, spawn},
-};
+use async_lock::RwLock;
 use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
@@ -52,6 +49,7 @@ use strum::{EnumDiscriminants, VariantArray};
 use surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
+use tokio::{task::spawn, time::sleep};
 use toml::toml;
 use tracing::info_span;
 use vbs::version::StaticVersionType;
@@ -1273,7 +1271,7 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
     }
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let opt = Options::parse();
     opt.logging.init();

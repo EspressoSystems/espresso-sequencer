@@ -4,12 +4,8 @@ use anyhow::Context;
 use async_broadcast::{
     broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
 };
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
-};
+
 use async_lock::RwLock;
-use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0_3::{ChainConfig, RollupRegistration},
@@ -49,9 +45,11 @@ use marketplace_builder_core::{
 use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_solver::SolverError;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
+use std::sync::Arc;
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
+use tokio::{spawn, time::sleep};
 use vbs::version::{StaticVersion, StaticVersionType};
 
 use crate::hooks::{
@@ -108,7 +106,7 @@ impl BuilderConfig {
         .into_app()
         .context("Failed to construct builder API app")?;
 
-        async_spawn(async move {
+        spawn(async move {
             tracing::info!("Starting builder API app at {builder_api_url}");
             let res = app
                 .serve(builder_api_url, MarketplaceVersion::instance())
@@ -125,7 +123,7 @@ impl BuilderConfig {
         >::connect(events_api_url)
         .await?;
 
-        async_spawn(async move {
+        spawn(async move {
             let res = run_builder_service::<SeqTypes, _>(hooks, senders, stream).await;
             tracing::error!(?res, "Builder service exited");
             if res.is_err() {
@@ -275,12 +273,7 @@ mod test {
     };
 
     use anyhow::Error;
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        logging::{setup_backtrace, setup_logging},
-    };
     use async_lock::RwLock;
-    use async_std::{prelude::FutureExt, stream::StreamExt, task};
     use committable::Commitment;
     use committable::Committable;
     use espresso_types::{
@@ -290,8 +283,9 @@ mod test {
         Transaction,
     };
     use ethers::{core::k256::elliptic_curve::rand_core::block, utils::Anvil};
-    use futures::Stream;
+    use futures::{Stream, StreamExt};
     use hooks::connect_to_solver;
+    use hotshot::helpers::initialize_logging;
     use hotshot::types::{
         BLSPrivKey,
         EventType::{Decide, *},
@@ -338,6 +332,7 @@ mod test {
     };
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
+    use tokio::{task::spawn, time::sleep};
     use vbs::version::StaticVersion;
 
     use super::*;
@@ -544,7 +539,7 @@ mod test {
         builder_client: Client<ServerError, MarketplaceVersion>,
         transactions: Vec<Transaction>,
         urls: Urls,
-    ) -> Bundle<SeqTypes> {
+    ) -> (Bundle<SeqTypes>, u64) {
         // Subscribe to events.
         let events_service_client = Client::<
             hotshot_events_service::events::Error,
@@ -588,7 +583,10 @@ mod test {
         }
 
         // Fetch the bundle.
-        get_bundle(builder_client, parent_view_number, parent_commitment).await
+        (
+            get_bundle(builder_client, parent_view_number, parent_commitment).await,
+            parent_view_number,
+        )
     }
 
     async fn test_marketplace_reserve_builder(mempool: Mempool) {
@@ -653,7 +651,7 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
 
-        let bundle = match mempool {
+        let (bundle, parent_view_number) = match mempool {
             Mempool::Public => {
                 let server = &network.server;
                 let mut events = server.event_stream().await;
@@ -674,8 +672,11 @@ mod test {
                     .unwrap();
                 wait_for_transaction(&mut events, unregistered_transaction).await;
 
-                // Get the bundle.
-                get_bundle(builder_client, parent_view_number, parent_commitment).await
+                // Return the retrieved bundle and parent view number
+                (
+                    get_bundle(builder_client, parent_view_number, parent_commitment).await,
+                    parent_view_number,
+                )
             }
             Mempool::Private => {
                 submit_and_get_bundle_with_private_mempool(
@@ -709,6 +710,7 @@ mod test {
         let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
             &keypair,
             fees.as_u64().unwrap(),
+            parent_view_number + 1,
         )
         .unwrap();
 
@@ -781,7 +783,7 @@ mod test {
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
 
-        let bundle = match mempool {
+        let (bundle, parent_view_number) = match mempool {
             Mempool::Public => {
                 let server = &network.server;
                 let mut events = server.event_stream().await;
@@ -803,7 +805,10 @@ mod test {
                 wait_for_transaction(&mut events, unregistered_transaction.clone()).await;
 
                 // Get the bundle.
-                get_bundle(builder_client, parent_view_number, parent_commitment).await
+                (
+                    get_bundle(builder_client, parent_view_number, parent_commitment).await,
+                    parent_view_number,
+                )
             }
             Mempool::Private => {
                 submit_and_get_bundle_with_private_mempool(
@@ -837,6 +842,7 @@ mod test {
         let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
                     &keypair,
                     fees.as_u64().unwrap(),
+                    parent_view_number + 1,
                 )
                 .unwrap();
 
@@ -849,22 +855,22 @@ mod test {
         assert_eq!(bundle.sequencing_fee, sequencing_fee);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_reserve_builder_with_public_mempool() {
         test_marketplace_reserve_builder(Mempool::Public).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_reserve_builder_with_private_mempool() {
         test_marketplace_reserve_builder(Mempool::Private).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_fallback_builder_with_public_mempool() {
         test_marketplace_fallback_builder(Mempool::Public).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_fallback_builder_with_private_mempool() {
         test_marketplace_fallback_builder(Mempool::Private).await;
     }

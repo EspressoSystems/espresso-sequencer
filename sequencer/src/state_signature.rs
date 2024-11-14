@@ -4,7 +4,7 @@ use std::collections::{HashMap, VecDeque};
 
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
-use async_std::sync::RwLock;
+use async_lock::RwLock;
 use espresso_types::Leaf;
 use hotshot::types::{Event, EventType};
 use hotshot_stake_table::vec_based::StakeTable;
