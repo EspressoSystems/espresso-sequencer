@@ -3,12 +3,12 @@ CREATE TABLE IF NOT EXISTS hash (
 );
 
 CREATE TABLE fee_merkle_tree (
-  path JSONB NOT NULL, 
+  path INTEGER[] NOT NULL, 
   created BIGINT NOT NULL, 
   hash_id INT NOT NULL REFERENCES hash (id), 
-  children JSONB, 
+  children INT[], 
   children_bitvec BIT(256), 
-  idx JSONB, 
+  index JSONB, 
   entry JSONB
 );
 
@@ -20,12 +20,12 @@ ADD
 CREATE INDEX fee_merkle_tree_created ON fee_merkle_tree (created);
 
 CREATE TABLE block_merkle_tree (
-  path JSONB NOT NULL, 
+  path INTEGER[] NOT NULL, 
   created BIGINT NOT NULL, 
   hash_id INT NOT NULL REFERENCES hash (id), 
-  children JSONB, 
+  children INT[], 
   children_bitvec BIT(3), 
-  idx JSONB, 
+  index JSONB, 
   entry JSONB
 );
 
