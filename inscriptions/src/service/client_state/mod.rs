@@ -335,7 +335,6 @@ impl InternalClientMessageProcessingTask {
                     "internal client message processing encountered an error: {}",
                     err,
                 );
-                return;
             }
         }
     }
