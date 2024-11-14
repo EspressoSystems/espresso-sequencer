@@ -32,8 +32,8 @@ use jf_merkle_tree::{
     prelude::{MerkleNode, MerkleProof},
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
-use sqlx::{types::BitVec, Decode};
-use sqlx::{types::JsonValue, ColumnIndex};
+use sqlx::types::BitVec;
+use sqlx::types::JsonValue;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 #[async_trait]
@@ -59,11 +59,10 @@ where
 
         // Get all the nodes in the path to the index.
         // Order by pos DESC is to return nodes from the leaf to the root
-
         let (query, sql) = build_get_path_query(state_type, traversal_path.clone(), created)?;
         let rows = query.query(&sql).fetch_all(self.as_mut()).await?;
 
-        let nodes: Vec<Node> = rows.into_iter().map(|r| (&r).into()).collect();
+        let nodes: Vec<Node> = rows.into_iter().map(|r| r.into()).collect();
 
         // insert all the hash ids to a hashset which is used to query later
         // HashSet is used to avoid duplicates
@@ -119,8 +118,6 @@ where
                                 }
                             })?;
                         let mut children = children.iter();
-                        let children_bitvec: BitVec =
-                            BitVec::from_bytes(children_bitvec.clone().as_slice());
 
                         // Reconstruct the Children MerkleNodes from storage.
                         // Children bit_vec is used to create forgotten  or empty node
@@ -314,7 +311,9 @@ impl<Mode: TransactionMode> Transaction<Mode> {
         };
 
         // Make sure the requested snapshot is up to date.
+
         let height = self.get_last_state_height().await?;
+
         if height < (created as usize) {
             return Err(QueryError::NotFound);
         }
@@ -346,23 +345,33 @@ pub(crate) struct Node {
     pub(crate) created: i64,
     pub(crate) hash_id: i32,
     pub(crate) children: Option<JsonValue>,
-    pub(crate) children_bitvec: Option<Vec<u8>>,
+    pub(crate) children_bitvec: Option<BitVec>,
     pub(crate) idx: Option<JsonValue>,
     pub(crate) entry: Option<JsonValue>,
 }
 
-impl<'a, R> From<&'a R> for Node
-where
-    R: Row,
-    JsonValue: 'a + Decode<'a, <R as Row>::Database>,
-    Option<JsonValue>: Decode<'a, <R as Row>::Database>,
-    Vec<u8>: Decode<'a, <R as Row>::Database>,
-    i64: Decode<'a, <R as Row>::Database>,
-    i32: Decode<'a, <R as Row>::Database>,
+#[cfg(feature = "embedded-db")]
+impl From<sqlx::sqlite::SqliteRow> for Node {
+    fn from(row: sqlx::sqlite::SqliteRow) -> Self {
+        let bit_string: Option<String> = row.get_unchecked("children_bitvec");
+        let children_bitvec: Option<BitVec> =
+            bit_string.map(|b| b.chars().map(|c| c == '1').collect());
 
-    &'a str: ColumnIndex<R>,
-{
-    fn from(row: &'a R) -> Self {
+        Self {
+            path: row.get_unchecked("path"),
+            created: row.get_unchecked("created"),
+            hash_id: row.get_unchecked("hash_id"),
+            children: row.get_unchecked("children"),
+            children_bitvec,
+            idx: row.get_unchecked("idx"),
+            entry: row.get_unchecked("entry"),
+        }
+    }
+}
+
+#[cfg(not(feature = "embedded-db"))]
+impl From<sqlx::postgres::PgRow> for Node {
+    fn from(row: sqlx::postgres::PgRow) -> Self {
         Self {
             path: row.get_unchecked("path"),
             created: row.get_unchecked("created"),
@@ -394,12 +403,21 @@ impl Node {
             ],
             ["path", "created"],
             nodes.into_iter().map(|n| {
+                #[cfg(feature = "embedded-db")]
+                let children_bitvec: Option<String> = n
+                    .children_bitvec
+                    .clone()
+                    .map(|b| b.iter().map(|bit| if bit { '1' } else { '0' }).collect());
+
+                #[cfg(not(feature = "embedded-db"))]
+                let children_bitvec = n.children_bitvec.clone();
+
                 (
                     n.path.clone(),
                     n.created,
                     n.hash_id,
                     n.children.clone(),
-                    n.children_bitvec.clone(),
+                    children_bitvec,
                     n.idx.clone(),
                     n.entry.clone(),
                 )
@@ -420,14 +438,16 @@ fn build_get_path_query<'q>(
     // We iterate through the path vector skipping the first element after each iteration
     let len = traversal_path.len();
     let mut sub_queries = Vec::new();
+
+    query.bind(created)?;
+
     for _ in 0..=len {
         let path = traversal_path.clone().rev().collect::<Vec<_>>();
         let path: serde_json::Value = path.into();
         let node_path = query.bind(path)?;
-        let created = query.bind(created)?;
 
         let sub_query = format!(
-            "SELECT * FROM (SELECT * FROM {table} WHERE path = {node_path} AND created <= {created} ORDER BY created DESC LIMIT 1)",
+            "SELECT * FROM (SELECT * FROM {table} WHERE path = {node_path} AND created <= $1 ORDER BY created DESC LIMIT 1)",
         );
 
         sub_queries.push(sub_query);
@@ -605,7 +625,7 @@ mod test {
             .bind(serde_json::to_value(node_path).unwrap())
             .fetch(tx.as_mut());
 
-        let nodes: Vec<Node> = rows.map(|res| (&res.unwrap()).into()).collect().await;
+        let nodes: Vec<Node> = rows.map(|res| res.unwrap().into()).collect().await;
         // There should be only 2 versions of this node
         assert!(nodes.len() == 2, "incorrect number of nodes");
         assert_eq!(nodes[0].created, 1, "wrong block height");

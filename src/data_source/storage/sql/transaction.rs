@@ -52,16 +52,14 @@ use hotshot_types::traits::{
 };
 use itertools::Itertools;
 use jf_merkle_tree::prelude::{MerkleNode, MerkleProof};
-use sqlx::{
-    pool::Pool, query_builder::Separated, types::BitVec, Encode, FromRow, QueryBuilder, Type,
-};
+use sqlx::types::BitVec;
+pub use sqlx::Executor;
+use sqlx::{pool::Pool, query_builder::Separated, Encode, FromRow, QueryBuilder, Type};
 use std::{
     collections::{HashMap, HashSet},
     marker::PhantomData,
     time::Instant,
 };
-
-pub use sqlx::Executor;
 
 pub type Query<'q> = sqlx::query::Query<'q, Db, <Db as Database>::Arguments<'q>>;
 pub type QueryAs<'q, T> = sqlx::query::QueryAs<'q, Db, T, <Db as Database>::Arguments<'q>>;
@@ -627,12 +625,11 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
 
                     // insert internal node
                     let path = traversal_path.clone().rev().collect();
-                    let bit_vec_bytes = children_bitvec.to_bytes();
                     nodes.push((
                         Node {
                             path,
                             children: None,
-                            children_bitvec: Some(bit_vec_bytes),
+                            children_bitvec: Some(children_bitvec),
                             ..Default::default()
                         },
                         Some(children_values.clone()),
@@ -679,7 +676,9 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                 node.children = Some(children_hashes.into());
             }
         }
+
         Node::upsert(name, nodes.into_iter().map(|(n, _, _)| n), self).await?;
+
         Ok(())
     }
 }
