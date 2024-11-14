@@ -845,7 +845,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {
         test_api_helper().await;
     }

@@ -8,7 +8,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
       RUST_LOG: info
       RUST_MIN_STACK: "3145728"
     steps:
@@ -29,7 +28,6 @@ jobs:
           cargo build --workspace --all-features
 
       - name: Test
-        run: |
-          cargo test --workspace --all-features --no-run
-          cargo test --workspace --all-features --verbose -- --test-threads 2
+        run: 
+          cargo nextest run --workspace --all-features 
         timeout-minutes: 60

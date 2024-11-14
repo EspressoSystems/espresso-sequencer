@@ -20,7 +20,6 @@ use crate::{
     task::BackgroundTask,
     SignatureKey,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use futures::{
     future::{join_all, Future},
@@ -41,11 +40,16 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
     traits::{election::Membership, network::Topic, signature_key::SignatureKey as _},
-    HotShotConfig, PeerConfig, ValidatorConfig,
+    HotShotConfig, PeerConfig,
 };
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt::Display, str::FromStr};
+use tokio::{
+    runtime::Handle,
+    task::{block_in_place, yield_now},
+};
 use tracing::{info_span, Instrument};
 use url::Url;
 
@@ -129,7 +133,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             fixed_leader_for_gpuvid: 0,
             num_nodes_with_stake: num_staked_nodes,
             known_nodes_with_stake: known_nodes_with_stake.clone(),
-            my_own_validator_config: Default::default(),
             next_view_timeout: 10000,
             num_bootstrap: 0,
             da_staked_committee_size: pub_keys.len(),
@@ -159,14 +162,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                 .enumerate()
                 .map(|(node_id, priv_key)| {
                     let memberships = memberships.clone();
-                    let mut config = config.clone();
-                    config.my_own_validator_config = ValidatorConfig {
-                        public_key: pub_keys[node_id],
-                        private_key: priv_key.clone(),
-                        stake_value: stake,
-                        state_key_pair: state_key_pairs[node_id].clone(),
-                        is_da: true,
-                    };
+                    let config = config.clone();
 
                     let pub_keys = pub_keys.clone();
                     let master_map = master_map.clone();
@@ -293,7 +289,7 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
                         {
                             ds.handle_event(&event).await;
                         }
-                        async_std::task::yield_now().await;
+                        yield_now().await;
                     }
                 },
             ));
@@ -310,7 +306,9 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
 
 impl<D: DataSourceLifeCycle> Drop for MockNetwork<D> {
     fn drop(&mut self) {
-        async_std::task::block_on(self.shut_down_impl())
+        if let Ok(handle) = Handle::try_current() {
+            block_in_place(move || handle.block_on(self.shut_down_impl()));
+        }
     }
 }
 

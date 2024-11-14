@@ -13,6 +13,7 @@
 use futures::future::{BoxFuture, FutureExt};
 use snafu::{Error, ErrorCompat, IntoError, NoneError, OptionExt};
 use std::{future::IntoFuture, time::Duration};
+use tokio::time::timeout;
 
 /// An in-progress request to fetch some data.
 ///
@@ -88,10 +89,8 @@ impl<T: Send + 'static> Fetch<T> {
     ///
     /// This function is similar to [`resolve`](Self::resolve), but if the future does not resolve
     /// within `timeout`, then [`with_timeout`](Self::with_timeout) will resolve with [`None`].
-    pub async fn with_timeout(self, timeout: Duration) -> Option<T> {
-        async_std::future::timeout(timeout, self.into_future())
-            .await
-            .ok()
+    pub async fn with_timeout(self, timeout_duration: Duration) -> Option<T> {
+        timeout(timeout_duration, self.into_future()).await.ok()
     }
 }
 

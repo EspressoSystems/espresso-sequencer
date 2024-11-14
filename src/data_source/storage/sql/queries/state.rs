@@ -22,7 +22,6 @@ use crate::{
     QueryError, QueryResult,
 };
 use ark_serialize::CanonicalDeserialize;
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use futures::stream::TryStreamExt;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -32,6 +31,7 @@ use jf_merkle_tree::{
 };
 use sqlx::{types::BitVec, FromRow};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
 
 #[async_trait]
 impl<Mode, Types, State, const ARITY: usize> MerklizedStateStorage<Types, State, ARITY>
@@ -413,7 +413,7 @@ mod test {
         },
     };
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_merklized_state_storage() {
         // In this test we insert some entries into the tree and update the database
         // Each entry's merkle path is compared with the path from the tree
@@ -574,7 +574,7 @@ mod test {
         assert_eq!(path_with_bh_1, proof_bh_1);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_merklized_state_non_membership_proof() {
         // This test updates the Merkle tree with a new entry and inserts the corresponding Merkle nodes into the database with created = 1.
         // A Merkle node is then deleted from the tree.
@@ -706,7 +706,7 @@ mod test {
         assert_eq!(proof_bh_1, proof_before_remove, "merkle paths dont match");
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_merklized_state_non_membership_proof_unseen_entry() {
         setup_test();
 
@@ -774,7 +774,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_merklized_storage_with_commit() {
         // This test insert a merkle path into the database and queries the path using the merkle commitment
         setup_test();
@@ -832,7 +832,7 @@ mod test {
 
         assert_eq!(merkle_proof, proof.clone(), "merkle paths mismatch");
     }
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_merklized_state_missing_state() {
         // This test checks that header commitment matches the root hash.
         // For this, the header merkle root commitment field is not updated, which should result in an error
@@ -996,7 +996,7 @@ mod test {
         assert!(merkle_path.is_err());
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_merklized_state_snapshot() {
         setup_test();
 
@@ -1171,7 +1171,7 @@ mod test {
         validate(&storage, &test_tree, &expected, 1).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_merklized_state_missing_leaf() {
         // Check that if a leaf is missing but its ancestors are present/key is in the tree, we
         // catch it rather than interpreting the entry as an empty node by default. Note that this

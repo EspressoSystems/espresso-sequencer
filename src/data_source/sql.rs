@@ -377,7 +377,7 @@ mod test {
 
     // This function should be generic, but the file system data source does not currently support
     // storing VID common and later the corresponding share.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_vid_monotonicity() {
         use hotshot_example_types::node_types::TestVersions;
 

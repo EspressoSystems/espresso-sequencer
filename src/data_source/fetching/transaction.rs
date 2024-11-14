@@ -21,11 +21,11 @@ use crate::{
     },
     Payload, QueryResult,
 };
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use derive_more::From;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::node_implementation::NodeType;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, From)]
 pub(super) struct TransactionRequest<Types: NodeType>(TransactionHash<Types>);

@@ -118,7 +118,7 @@ mod test {
         },
         ApiState, Error,
     };
-    use async_std::sync::RwLock;
+    use async_lock::RwLock;
     use futures::FutureExt;
     use portpicker::pick_unused_port;
     use reqwest::redirect::Policy;
@@ -129,7 +129,7 @@ mod test {
     use tide_disco::{App, Url};
     use toml::toml;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {
         setup_test();
 
@@ -201,7 +201,7 @@ mod test {
         network.shut_down().await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_extensions() {
         setup_test();
 

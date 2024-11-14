@@ -39,7 +39,6 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::CanonicalSerialize;
-use async_std::task::sleep;
 use async_trait::async_trait;
 use committable::Committable;
 use derive_more::{Deref, DerefMut};
@@ -58,6 +57,7 @@ use std::{
     marker::PhantomData,
     time::{Duration, Instant},
 };
+use tokio::time::sleep;
 
 pub use sqlx::Executor;
 

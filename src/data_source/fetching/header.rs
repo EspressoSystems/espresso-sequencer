@@ -25,10 +25,10 @@ use crate::{
     Header, Payload,
 };
 use anyhow::Context;
-use async_std::sync::Arc;
 use derivative::Derivative;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::cmp::Ordering;
+use std::sync::Arc;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
