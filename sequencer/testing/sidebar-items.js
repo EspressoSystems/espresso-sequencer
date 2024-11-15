@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BUILDER_CHANNEL_CAPACITY_FOR_TEST","STAKE_TABLE_CAPACITY_FOR_TEST"],"fn":["run_marketplace_builder","run_test_builder","wait_for_decide_on_handle"],"struct":["MarketplaceBuilderImplementation","TestConfig","TestConfigBuilder"]};
