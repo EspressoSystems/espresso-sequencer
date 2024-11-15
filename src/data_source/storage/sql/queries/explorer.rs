@@ -217,14 +217,14 @@ where
         // returned results based on.
         let transaction_target_query = match target {
             TransactionIdentifier::Latest => query(
-                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t ORDER BY (t.block_height, t.index) DESC LIMIT 1",
+                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t ORDER BY t.block_height DESC, t.index DESC LIMIT 1",
             ),
             TransactionIdentifier::HeightAndOffset(height, _) => query(
-                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.block_height = $1 ORDER BY (t.block_height, t.index) DESC LIMIT 1",
+                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.block_height = $1 ORDER BY t.block_height DESC, t.index DESC LIMIT 1",
             )
             .bind(*height as i64),
             TransactionIdentifier::Hash(hash) => query(
-                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.hash = $1 ORDER BY (t.block_height, t.index) DESC LIMIT 1",
+                "SELECT t.block_height AS height, t.index AS index FROM transaction AS t WHERE t.hash = $1 ORDER BY t.block_height DESC, t.index DESC LIMIT 1",
             )
             .bind(hash.to_string()),
         };
@@ -264,7 +264,7 @@ where
                             SELECT t.block_height
                                 FROM transaction AS t
                                 WHERE (t.block_height, t.index) <= ({}, {})
-                                ORDER BY (t.block_height, t.index) DESC
+                                ORDER BY t.block_height DESC, t.index DESC
                                 LIMIT {}
                         )
                         ORDER BY h.height DESC",
@@ -350,7 +350,7 @@ where
                         SELECT t1.block_height
                             FROM transaction AS t1
                             WHERE t1.block_height = {}
-                            ORDER BY (t1.block_height, t1.index)
+                            ORDER BY t1.block_height, t1.index
                             OFFSET {}
                             LIMIT 1
                     )
@@ -366,7 +366,7 @@ where
                         SELECT t1.block_height
                             FROM transaction AS t1
                             WHERE t1.hash = {}
-                            ORDER BY (t1.block_height, t1.index) DESC
+                            ORDER BY t1.block_height DESC, t1.index DESC
                             LIMIT 1
                     )
                     ORDER BY h.height DESC",
