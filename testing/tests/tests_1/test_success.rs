@@ -17,6 +17,7 @@ use hotshot_macros::cross_tests;
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
+    spinning_task::{ChangeNode, NodeAction, SpinningTaskDescription},
     test_builder::TestDescription,
     view_sync_task::ViewSyncTaskDescription,
 };
@@ -149,5 +150,40 @@ cross_tests!(
             epoch_height: 10,
             ..TestDescription::default()
         }
+    },
+);
+
+// Test to make sure we can decide in just 3 views
+// This test fails with the old decide rule
+cross_tests!(
+    TestName: test_shorter_decide,
+    Impls: [MemoryImpl],
+    Types: [TestTypes],
+    Versions: [EpochsTestVersions],
+    Ignore: false,
+    Metadata: {
+        let mut metadata = TestDescription {
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                TimeBasedCompletionTaskDescription {
+                    duration: Duration::from_millis(100000),
+                },
+            ),
+            ..TestDescription::default()
+        };
+        // after the first 3 leaders the next leader is down. It's a hack to make sure we decide in
+        // 3 views or else we get a timeout
+        let dead_nodes = vec![
+            ChangeNode {
+                idx: 4,
+                updown: NodeAction::Down,
+            },
+
+        ];
+        metadata.spinning_properties = SpinningTaskDescription {
+            node_changes: vec![(1, dead_nodes)]
+        };
+        metadata.overall_safety_properties.num_successful_views = 1;
+        metadata.overall_safety_properties.num_failed_views = 0;
+        metadata
     },
 );

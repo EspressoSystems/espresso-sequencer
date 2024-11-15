@@ -26,11 +26,15 @@ use hotshot_types::{
 };
 use tracing::instrument;
 use utils::anytrace::*;
+use vbs::version::StaticVersionType;
 
 use super::QuorumVoteTaskState;
 use crate::{
     events::HotShotEvent,
-    helpers::{broadcast_event, decide_from_proposal, fetch_proposal, LeafChainTraversalOutcome},
+    helpers::{
+        broadcast_event, decide_from_proposal, decide_from_proposal_2, fetch_proposal,
+        LeafChainTraversalOutcome,
+    },
     quorum_vote::Versions,
 };
 
@@ -44,6 +48,11 @@ pub(crate) async fn handle_quorum_proposal_validated<
     proposal: &QuorumProposal<TYPES>,
     task_state: &mut QuorumVoteTaskState<TYPES, I, V>,
 ) -> Result<()> {
+    let version = task_state
+        .upgrade_lock
+        .version(proposal.view_number())
+        .await?;
+
     let LeafChainTraversalOutcome {
         new_locked_view_number,
         new_decided_view_number,
@@ -51,13 +60,23 @@ pub(crate) async fn handle_quorum_proposal_validated<
         leaf_views,
         included_txns,
         decided_upgrade_cert,
-    } = decide_from_proposal(
-        proposal,
-        OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
-        Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
-        &task_state.public_key,
-    )
-    .await;
+    } = if version >= V::Epochs::VERSION {
+        decide_from_proposal_2(
+            proposal,
+            OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
+            Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
+            &task_state.public_key,
+        )
+        .await
+    } else {
+        decide_from_proposal(
+            proposal,
+            OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
+            Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
+            &task_state.public_key,
+        )
+        .await
+    };
 
     if let Some(cert) = decided_upgrade_cert.clone() {
         let mut decided_certificate_lock = task_state

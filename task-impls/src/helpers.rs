@@ -9,7 +9,7 @@ use std::{
     sync::Arc,
 };
 
-use async_broadcast::{InactiveReceiver, Receiver, SendError, Sender};
+use async_broadcast::{Receiver, SendError, Sender};
 use async_lock::RwLock;
 use committable::{Commitment, Committable};
 use hotshot_task::dependency::{Dependency, EventDependency};
@@ -192,6 +192,89 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
     }
 }
 
+/// calculate the new decided leaf chain based on the rules of hostuff 2
+///
+/// # Panics
+/// Can't actually panic
+pub async fn decide_from_proposal_2<TYPES: NodeType>(
+    proposal: &QuorumProposal<TYPES>,
+    consensus: OuterConsensus<TYPES>,
+    existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    public_key: &TYPES::SignatureKey,
+) -> LeafChainTraversalOutcome<TYPES> {
+    let mut res = LeafChainTraversalOutcome::default();
+    let consensus_reader = consensus.read().await;
+    let proposed_leaf = Leaf::from_quorum_proposal(proposal);
+    res.new_locked_view_number = Some(proposed_leaf.justify_qc().view_number());
+
+    // If we don't have the proposals parent return early
+    let Some(parent_info) = consensus_reader.parent_leaf_info(&proposed_leaf, public_key) else {
+        return res;
+    };
+    // Get the parents parent and check if it's consecutive in view to the parent, if so we can decided
+    // the grandparents view.  If not we're done.
+    let Some(grand_parent_info) = consensus_reader.parent_leaf_info(&parent_info.leaf, public_key)
+    else {
+        return res;
+    };
+    if grand_parent_info.leaf.view_number() + 1 != parent_info.leaf.view_number() {
+        return res;
+    }
+    res.new_decide_qc = Some(parent_info.leaf.justify_qc().clone());
+    let decided_view_number = grand_parent_info.leaf.view_number();
+    res.new_decided_view_number = Some(decided_view_number);
+    // We've reached decide, now get the leaf chain all the way back to the last decided view, not including it.
+    let old_anchor_view = consensus_reader.last_decided_view();
+    let mut current_leaf_info = Some(grand_parent_info);
+    let existing_upgrade_cert_reader = existing_upgrade_cert.read().await;
+    let mut txns = HashSet::new();
+    while current_leaf_info
+        .as_ref()
+        .is_some_and(|info| info.leaf.view_number() > old_anchor_view)
+    {
+        // unwrap is safe, we just checked that he option is some
+        let info = &mut current_leaf_info.unwrap();
+        // Check if there's a new upgrade certificate available.
+        if let Some(cert) = info.leaf.upgrade_certificate() {
+            if info.leaf.upgrade_certificate() != *existing_upgrade_cert_reader {
+                if cert.data.decide_by < decided_view_number {
+                    tracing::warn!("Failed to decide an upgrade certificate in time. Ignoring.");
+                } else {
+                    tracing::info!("Reached decide on upgrade certificate: {:?}", cert);
+                    res.decided_upgrade_cert = Some(cert.clone());
+                }
+            }
+        }
+
+        res.leaf_views.push(info.clone());
+        // If the block payload is available for this leaf, include it in
+        // the leaf chain that we send to the client.
+        if let Some(encoded_txns) = consensus_reader
+            .saved_payloads()
+            .get(&info.leaf.view_number())
+        {
+            let payload =
+                BlockPayload::from_bytes(encoded_txns, info.leaf.block_header().metadata());
+
+            info.leaf.fill_block_payload_unchecked(payload);
+        }
+
+        if let Some(ref payload) = info.leaf.block_payload() {
+            for txn in payload.transaction_commitments(info.leaf.block_header().metadata()) {
+                txns.insert(txn);
+            }
+        }
+
+        current_leaf_info = consensus_reader.parent_leaf_info(&info.leaf, public_key);
+    }
+
+    if !txns.is_empty() {
+        res.included_txns = Some(txns);
+    }
+
+    res
+}
+
 /// Ascends the leaf chain by traversing through the parent commitments of the proposal. We begin
 /// by obtaining the parent view, and if we are in a chain (i.e. the next view from the parent is
 /// one view newer), then we begin attempting to form the chain. This is a direct impl from
@@ -344,7 +427,7 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
 pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
     next_proposal_view_number: TYPES::View,
     event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-    event_receiver: &InactiveReceiver<Arc<HotShotEvent<TYPES>>>,
+    event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
     public_key: TYPES::SignatureKey,
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
@@ -370,7 +453,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
         let _ = fetch_proposal(
             parent_view_number,
             event_sender.clone(),
-            event_receiver.activate_cloned(),
+            event_receiver.clone(),
             quorum_membership,
             consensus.clone(),
             public_key.clone(),

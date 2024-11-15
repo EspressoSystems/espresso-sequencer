@@ -26,6 +26,7 @@ use crate::{
     consensus::Versions, events::HotShotEvent, helpers::broadcast_event,
     vote_collection::handle_vote,
 };
+use vbs::version::StaticVersionType;
 
 /// Handle a `QuorumVoteRecv` event.
 pub(crate) async fn handle_quorum_vote_recv<
@@ -112,6 +113,30 @@ pub(crate) async fn handle_timeout_vote_recv<
     Ok(())
 }
 
+/// Send an event to the next leader containing the highest QC we have
+/// This is a necessary part of HotStuff 2 but not the original HotStuff
+///
+/// #Errors
+/// Returns and error if we can't get the version or the version doesn't
+/// yet support HS 2
+pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TYPES>>(
+    new_view_number: TYPES::View,
+    sender: &Sender<Arc<HotShotEvent<TYPES>>>,
+    task_state: &mut ConsensusTaskState<TYPES, I, V>,
+) -> Result<()> {
+    let version = task_state.upgrade_lock.version(new_view_number).await?;
+    ensure!(
+        version >= V::Epochs::VERSION,
+        debug!("HotStuff 2 updgrade not yet in effect")
+    );
+    let high_qc = task_state.consensus.read().await.high_qc().clone();
+    let leader = task_state
+        .quorum_membership
+        .leader(new_view_number, TYPES::Epoch::new(0))?;
+    broadcast_event(Arc::new(HotShotEvent::HighQcSend(high_qc, leader)), sender).await;
+    Ok(())
+}
+
 /// Handle a `ViewChange` event.
 #[instrument(skip_all)]
 pub(crate) async fn handle_view_change<
@@ -140,6 +165,15 @@ pub(crate) async fn handle_view_change<
     if *old_view_number / 100 != *new_view_number / 100 {
         tracing::info!("Progress: entered view {:>6}", *new_view_number);
     }
+
+    // Send our high qc to the next leader immediately upon finishing a view.
+    // Part of HotStuff 2
+    let _ = send_high_qc(new_view_number, sender, task_state)
+        .await
+        .inspect_err(|e| {
+            tracing::debug!("High QC sending failed with error: {:?}", e);
+        });
+
     // Move this node to the next view
     task_state.cur_view = new_view_number;
     task_state

@@ -30,11 +30,7 @@ use thiserror::Error;
 use tokio::{sync::mpsc::error::TrySendError, time::sleep};
 
 use super::{node_implementation::NodeType, signature_key::SignatureKey};
-use crate::{
-    data::ViewNumber,
-    message::{MessagePurpose, SequencingMessage},
-    BoxSyncFuture,
-};
+use crate::{data::ViewNumber, message::SequencingMessage, BoxSyncFuture};
 
 /// Centralized server specific errors
 #[derive(Debug, Error, Serialize, Deserialize)]
@@ -122,9 +118,6 @@ pub trait Id: Eq + PartialEq + Hash {}
 pub trait ViewMessage<TYPES: NodeType> {
     /// get the view out of the message
     fn view_number(&self) -> TYPES::View;
-    // TODO move out of this trait.
-    /// get the purpose of the message
-    fn purpose(&self) -> MessagePurpose;
 }
 
 /// A request for some data that the consensus layer is asking for.

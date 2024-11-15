@@ -29,7 +29,7 @@ use crate::{
     data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     request_response::ProposalRequestPayload,
     simple_certificate::{
-        DaCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
+        DaCertificate, QuorumCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
         ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
@@ -159,14 +159,6 @@ impl<TYPES: NodeType> ViewMessage<TYPES> for MessageKind<TYPES> {
             MessageKind::External(_) => TYPES::View::new(1),
         }
     }
-
-    fn purpose(&self) -> MessagePurpose {
-        match &self {
-            MessageKind::Consensus(message) => message.purpose(),
-            MessageKind::Data(_) => MessagePurpose::Data,
-            MessageKind::External(_) => MessagePurpose::External,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -212,8 +204,11 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
         <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ),
 
-    /// The leader has responded with a valid proposal.
-    LeaderProposalAvailable(Proposal<TYPES, QuorumProposal<TYPES>>),
+    /// A replica has responded with a valid proposal.
+    ProposalResponse(Proposal<TYPES, QuorumProposal<TYPES>>),
+
+    /// Message for the next leader containing our highest QC
+    HighQC(QuorumCertificate<TYPES>),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]
@@ -258,7 +253,7 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                         p.data.view_number()
                     }
                     GeneralConsensusMessage::ProposalRequested(req, _) => req.view_number,
-                    GeneralConsensusMessage::LeaderProposalAvailable(proposal) => {
+                    GeneralConsensusMessage::ProposalResponse(proposal) => {
                         proposal.data.view_number()
                     }
                     GeneralConsensusMessage::Vote(vote_message) => vote_message.view_number(),
@@ -279,6 +274,7 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     }
                     GeneralConsensusMessage::UpgradeProposal(message) => message.data.view_number(),
                     GeneralConsensusMessage::UpgradeVote(message) => message.view_number(),
+                    GeneralConsensusMessage::HighQC(qc) => qc.view_number(),
                 }
             }
             SequencingMessage::Da(da_message) => {
@@ -293,42 +289,6 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     DaConsensusMessage::VidDisperseMsg(disperse) => disperse.data.view_number(),
                 }
             }
-        }
-    }
-
-    // TODO: Disable panic after the `ViewSync` case is implemented.
-    /// Get the message purpos
-    #[allow(clippy::panic)]
-    fn purpose(&self) -> MessagePurpose {
-        match &self {
-            SequencingMessage::General(general_message) => match general_message {
-                GeneralConsensusMessage::Proposal(_) => MessagePurpose::Proposal,
-                GeneralConsensusMessage::ProposalRequested(_, _)
-                | GeneralConsensusMessage::LeaderProposalAvailable(_) => {
-                    MessagePurpose::LatestProposal
-                }
-                GeneralConsensusMessage::Vote(_) | GeneralConsensusMessage::TimeoutVote(_) => {
-                    MessagePurpose::Vote
-                }
-                GeneralConsensusMessage::ViewSyncPreCommitVote(_)
-                | GeneralConsensusMessage::ViewSyncCommitVote(_)
-                | GeneralConsensusMessage::ViewSyncFinalizeVote(_) => MessagePurpose::ViewSyncVote,
-
-                GeneralConsensusMessage::ViewSyncPreCommitCertificate(_)
-                | GeneralConsensusMessage::ViewSyncCommitCertificate(_)
-                | GeneralConsensusMessage::ViewSyncFinalizeCertificate(_) => {
-                    MessagePurpose::ViewSyncCertificate
-                }
-
-                GeneralConsensusMessage::UpgradeProposal(_) => MessagePurpose::UpgradeProposal,
-                GeneralConsensusMessage::UpgradeVote(_) => MessagePurpose::UpgradeVote,
-            },
-            SequencingMessage::Da(da_message) => match da_message {
-                DaConsensusMessage::DaProposal(_) => MessagePurpose::Proposal,
-                DaConsensusMessage::DaVote(_) => MessagePurpose::Vote,
-                DaConsensusMessage::DaCertificate(_) => MessagePurpose::DaCertificate,
-                DaConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
-            },
         }
     }
 }

@@ -23,7 +23,7 @@ pub use crate::utils::{View, ViewInner};
 use crate::{
     data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
     error::HotShotError,
-    event::HotShotAction,
+    event::{HotShotAction, LeafInfo},
     message::{Proposal, UpgradeLock},
     simple_certificate::{DaCertificate, QuorumCertificate},
     traits::{
@@ -37,7 +37,7 @@ use crate::{
         epoch_from_block_number, BuilderCommitment, LeafCommitment, StateAndDelta, Terminator,
     },
     vid::VidCommitment,
-    vote::HasViewNumber,
+    vote::{Certificate, HasViewNumber},
 };
 
 /// A type alias for `HashMap<Commitment<T>, T>`
@@ -497,6 +497,36 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         Ok(())
     }
 
+    /// Get the parent Leaf Info from a given leaf and our public key.
+    /// Returns None if we don't have the data in out state
+    pub fn parent_leaf_info(
+        &self,
+        leaf: &Leaf<TYPES>,
+        public_key: &TYPES::SignatureKey,
+    ) -> Option<LeafInfo<TYPES>> {
+        let parent_view_number = leaf.justify_qc().view_number();
+        let parent_leaf = self
+            .saved_leaves
+            .get(&leaf.justify_qc().data().leaf_commit)?;
+        let parent_state_and_delta = self.state_and_delta(parent_view_number);
+        let (Some(state), delta) = parent_state_and_delta else {
+            return None;
+        };
+        let parent_vid = self
+            .vid_shares()
+            .get(&parent_view_number)?
+            .get(public_key)
+            .cloned()
+            .map(|prop| prop.data);
+
+        Some(LeafInfo {
+            leaf: parent_leaf.clone(),
+            state,
+            delta,
+            vid_share: parent_vid,
+        })
+    }
+
     /// Update the current epoch.
     /// # Errors
     /// Can return an error when the new epoch_number is not higher than the existing epoch number.
@@ -788,13 +818,14 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// # Panics
     /// On inconsistent stored entries
     pub fn collect_garbage(&mut self, old_anchor_view: TYPES::View, new_anchor_view: TYPES::View) {
+        let gc_view = TYPES::View::new(new_anchor_view.saturating_sub(1));
         // state check
         let anchor_entry = self
             .validated_state_map
             .iter()
             .next()
             .expect("INCONSISTENT STATE: anchor leaf not in state map!");
-        if *anchor_entry.0 != old_anchor_view {
+        if **anchor_entry.0 != old_anchor_view.saturating_sub(1) {
             tracing::error!(
                 "Something about GC has failed. Older leaf exists than the previous anchor leaf."
             );
@@ -803,15 +834,15 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.saved_da_certs
             .retain(|view_number, _| *view_number >= old_anchor_view);
         self.validated_state_map
-            .range(old_anchor_view..new_anchor_view)
+            .range(old_anchor_view..gc_view)
             .filter_map(|(_view_number, view)| view.leaf_commitment())
             .for_each(|leaf| {
                 self.saved_leaves.remove(&leaf);
             });
-        self.validated_state_map = self.validated_state_map.split_off(&new_anchor_view);
-        self.saved_payloads = self.saved_payloads.split_off(&new_anchor_view);
-        self.vid_shares = self.vid_shares.split_off(&new_anchor_view);
-        self.last_proposals = self.last_proposals.split_off(&new_anchor_view);
+        self.validated_state_map = self.validated_state_map.split_off(&gc_view);
+        self.saved_payloads = self.saved_payloads.split_off(&gc_view);
+        self.vid_shares = self.vid_shares.split_off(&gc_view);
+        self.last_proposals = self.last_proposals.split_off(&gc_view);
     }
 
     /// Gets the last decided leaf.
@@ -885,15 +916,20 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         Some(())
     }
 
-    /// Return true if the high QC takes part in forming an eQC, i.e.
+    /// Return true if the QC takes part in forming an eQC, i.e.
     /// it is one of the 3-chain certificates but not the eQC itself
-    pub fn is_high_qc_forming_eqc(&self) -> bool {
-        let high_qc_leaf_commit = self.high_qc().data.leaf_commit;
+    pub fn is_qc_forming_eqc(&self, qc: &QuorumCertificate<TYPES>) -> bool {
+        let high_qc_leaf_commit = qc.data.leaf_commit;
         let is_high_qc_extended = self.is_leaf_extended(high_qc_leaf_commit);
         if is_high_qc_extended {
             tracing::debug!("We have formed an eQC!");
         }
         self.is_leaf_for_last_block(high_qc_leaf_commit) && !is_high_qc_extended
+    }
+
+    /// Returns true if our high qc is forming an eQC
+    pub fn is_high_qc_forming_eqc(&self) -> bool {
+        self.is_qc_forming_eqc(self.high_qc())
     }
 
     /// Return true if the given leaf takes part in forming an eQC, i.e.
@@ -950,7 +986,6 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             },
         ) {
             is_leaf_extended = false;
-            tracing::trace!("The chain is broken. Leaf ascension failed.");
             tracing::debug!("Leaf ascension failed; error={e}");
         }
         tracing::trace!("Can the given leaf form an eQC? {}", is_leaf_extended);
