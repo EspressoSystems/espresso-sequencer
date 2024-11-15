@@ -35,8 +35,8 @@ jobs:
       # as each individual feature enabled.
       - name: Check compilation for feature combinations
         run: |
-          cargo hack check --each-feature
+          cargo hack check --feature-powerset
 
       - name: Check compilation for feature combinations (--tests)
         run: |
-          cargo hack check --each-feature --tests
+          cargo hack check --feature-powerset --tests
