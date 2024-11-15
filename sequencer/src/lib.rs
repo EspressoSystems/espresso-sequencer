@@ -442,7 +442,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         response_size_maximum: network_params.libp2p_max_direct_transmit_size,
     };
 
-    // Initialize the Libp2p network (if enabled)
+    // Initialize the Libp2p network
     let network = {
         let p2p_network = Libp2pNetwork::from_config(
             network_config.clone(),
