@@ -7,8 +7,13 @@ use ethers::{
 };
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use tokio::{sync::Mutex, task::JoinHandle};
+use std::sync::atomic::AtomicBool;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+};
+use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -112,7 +117,17 @@ pub struct L1Client {
 #[derive(Clone, Debug)]
 pub(crate) enum RpcClient {
     Http(Http),
-    Ws(Ws),
+    Ws {
+        conn: Arc<RwLock<WsConn>>,
+        url: Url,
+        retry_delay: Duration,
+    },
+}
+
+#[derive(Debug)]
+pub(crate) struct WsConn {
+    pub(crate) inner: Ws,
+    pub(crate) resetting: AtomicBool,
 }
 
 /// In-memory view of the L1 state, updated asynchronously.

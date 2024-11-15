@@ -2868,6 +2868,7 @@ dependencies = [
  "lru 0.12.5",
  "num-traits",
  "paste",
+ "portpicker",
  "pretty_assertions",
  "rand 0.8.5",
  "sequencer-utils",
