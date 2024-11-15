@@ -226,7 +226,7 @@ where
                 JOIN payload AS p ON h.height = p.height
                 JOIN transaction AS t ON t.block_height = h.height
                 WHERE t.hash = {hash_param}
-                ORDER BY (t.block_height, t.index) ASC
+                ORDER BY t.block_height, t.index
                 LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
