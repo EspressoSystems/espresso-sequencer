@@ -34,21 +34,33 @@ Returns an integer.
 """
 
 [route.count_transactions]
-PATH = ["transactions/count"]
+PATH = ["transactions/count", "transactions/count/:to", "transactions/count/:from/:to"]
+":from" = "Integer"
+":to" = "Integer"
 DOC = """
 Get the number of transactions in the chain.
 
-Warning: count may be low if data is currently being indexed (see `sync-status`).
+If `:from` or `:to` is specified, they restrict the range of blocks considered.
+`transactions/count/:to` will return the number of transactions in all blocks up to and including
+block number `:to`, while `transactions/count/:from/:to` will count the transactions in all blocks
+between `:from` (inclusive) and `:to` (inclusive).
 
 Returns an integer.
 """
 
 [route.payload_size]
-PATH = ["payloads/total-size"]
+PATH = ["payloads/size", "payloads/size/:to", "payloads/size/:from/:to", "payloads/total-size"]
+":from" = "Integer"
+":to" = "Integer"
 DOC = """
 Get the size (in bytes) of all payload data in the chain.
 
-Warning: size may be low if data is currently being indexed (see `sync-status`).
+If `:from` or `:to` is specified, they restrict the range of blocks considered. `payloads/size/:to`
+will return the cumulative size of all payloads in blocks up to and including block number `:to`,
+while `payloads/size/:from/:to` will return the cumulative size in all blocks between `:from`
+(inclusive) and `:to` (inclusive).
+
+`payloads/total-size` is a deprecated alias for `payloads/size`.
 
 Returns an integer.
 """

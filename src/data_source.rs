@@ -680,11 +680,11 @@ pub mod node_tests {
             storage::{NodeStorage, UpdateAvailabilityStorage},
             update::Transaction,
         },
-        node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
+        node::{BlockId, NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
         testing::{
             consensus::{MockNetwork, TestableDataSource},
             mocks::{mock_transaction, MockPayload, MockTypes},
-            setup_test,
+            setup_test, sleep,
         },
         types::HeightIndexed,
         Header, VidShare,
@@ -704,6 +704,7 @@ pub mod node_tests {
         vid::{vid_scheme, VidSchemeType},
     };
     use jf_vid::VidScheme;
+    use std::time::Duration;
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn test_sync_status<D: TestableDataSource>()
@@ -867,11 +868,10 @@ pub mod node_tests {
         assert_eq!(ds.count_transactions().await.unwrap(), 0);
         assert_eq!(ds.payload_size().await.unwrap(), 0);
 
-        // Insert some transactions. We insert the blocks out of order to check that the counters
-        // account for missing blocks fetched later.
+        // Insert some transactions.
         let mut total_transactions = 0;
         let mut total_size = 0;
-        for i in [0, 2, 1] {
+        'outer: for i in [0, 1, 2] {
             // Using `i % 2` as the transaction data ensures we insert a duplicate transaction
             // (since we insert more than 2 transactions total). The query service should still
             // count these as separate transactions and should include both duplicates when
@@ -907,15 +907,39 @@ pub mod node_tests {
             .await;
             *leaf.leaf.block_header_mut() = header.clone();
             let block = BlockQueryData::new(header, payload);
-            ds.append(BlockInfo::new(leaf, Some(block), None, None))
+            ds.append(BlockInfo::new(leaf, Some(block.clone()), None, None))
                 .await
                 .unwrap();
+            assert_eq!(
+                NodeDataSource::<MockTypes>::block_height(&ds)
+                    .await
+                    .unwrap(),
+                (i + 1) as usize,
+            );
 
             total_transactions += 1;
             total_size += encoded.len();
 
-            assert_eq!(ds.count_transactions().await.unwrap(), total_transactions);
-            assert_eq!(ds.payload_size().await.unwrap(), total_size);
+            // Allow some time for the aggregator to update.
+            for retry in 0..5 {
+                let ds_transactions = ds.count_transactions().await.unwrap();
+                let ds_payload_size = ds.payload_size().await.unwrap();
+                if ds_transactions != total_transactions || ds_payload_size != total_size {
+                    tracing::info!(
+                        i,
+                        retry,
+                        total_transactions,
+                        ds_transactions,
+                        total_size,
+                        ds_payload_size,
+                        "waiting for statistics to update"
+                    );
+                    sleep(Duration::from_secs(1)).await;
+                } else {
+                    continue 'outer;
+                }
+            }
+            panic!("counters did not update in time");
         }
     }
 

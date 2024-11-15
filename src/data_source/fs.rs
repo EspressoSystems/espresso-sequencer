@@ -93,7 +93,6 @@ pub use super::storage::fs::Transaction;
 /// synchronize all persistent storage.
 ///
 /// ```
-/// # use async_std::{sync::{Arc, RwLock}, task::spawn};
 /// # use atomic_store::{AtomicStore, AtomicStoreLoader};
 /// # use futures::StreamExt;
 /// # use hotshot::types::SystemContextHandle;
@@ -106,8 +105,9 @@ pub use super::storage::fs::Transaction;
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions
 /// # };
 /// # use hotshot_example_types::node_types::TestVersions;
-/// # use std::path::Path;
+/// # use std::{path::Path, sync::Arc};
 /// # use tide_disco::App;
+/// # use tokio::{spawn, sync::RwLock};
 /// # use vbs::version::StaticVersionType;
 /// struct AppState {
 ///     // Top-level storage coordinator

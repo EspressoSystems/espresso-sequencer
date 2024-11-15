@@ -14,20 +14,22 @@
 
 use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AvailabilityStorage, NodeStorage,
+    AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
+    UpdateAvailabilityStorage,
 };
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::{storage::UpdateAvailabilityStorage, update, VersionedDataSource},
+    data_source::{update, VersionedDataSource},
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
+use anyhow::bail;
 use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::future::Future;
@@ -212,11 +214,17 @@ where
         Ok(self.height as usize)
     }
 
-    async fn count_transactions(&mut self) -> QueryResult<usize> {
+    async fn count_transactions_in_range(
+        &mut self,
+        _range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
         Err(QueryError::Missing)
     }
 
-    async fn payload_size(&mut self) -> QueryResult<usize> {
+    async fn payload_size_in_range(
+        &mut self,
+        _range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
         Err(QueryError::Missing)
     }
 
@@ -237,6 +245,21 @@ where
         _end: u64,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         Err(QueryError::Missing)
+    }
+}
+
+impl<'a> AggregatesStorage for Transaction<'a> {
+    async fn aggregates_height(&mut self) -> anyhow::Result<usize> {
+        bail!("no_storage mock read error")
+    }
+}
+
+impl<'a, Types> UpdateAggregatesStorage<Types> for Transaction<'a>
+where
+    Types: NodeType,
+{
+    async fn update_aggregates(&mut self, _block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -606,19 +629,27 @@ pub mod testing {
             }
         }
 
-        async fn count_transactions(&mut self) -> QueryResult<usize> {
+        async fn count_transactions_in_range(
+            &mut self,
+            range: impl RangeBounds<usize> + Send,
+        ) -> QueryResult<usize> {
             match self {
-                Transaction::Sql(tx) => tx.count_transactions().await,
+                Transaction::Sql(tx) => tx.count_transactions_in_range(range).await,
                 Transaction::NoStorage(tx) => {
-                    NodeStorage::<MockTypes>::count_transactions(tx).await
+                    NodeStorage::<MockTypes>::count_transactions_in_range(tx, range).await
                 }
             }
         }
 
-        async fn payload_size(&mut self) -> QueryResult<usize> {
+        async fn payload_size_in_range(
+            &mut self,
+            range: impl RangeBounds<usize> + Send,
+        ) -> QueryResult<usize> {
             match self {
-                Transaction::Sql(tx) => tx.payload_size().await,
-                Transaction::NoStorage(tx) => NodeStorage::<MockTypes>::payload_size(tx).await,
+                Transaction::Sql(tx) => tx.payload_size_in_range(range).await,
+                Transaction::NoStorage(tx) => {
+                    NodeStorage::<MockTypes>::payload_size_in_range(tx, range).await
+                }
             }
         }
 
@@ -681,17 +712,29 @@ pub mod testing {
             }
         }
 
-        async fn count_transactions(&self) -> QueryResult<usize> {
+        async fn count_transactions_in_range(
+            &self,
+            range: impl RangeBounds<usize> + Send,
+        ) -> QueryResult<usize> {
             match self {
-                DataSource::Sql(data_source) => data_source.count_transactions().await,
-                DataSource::NoStorage(data_source) => data_source.count_transactions().await,
+                DataSource::Sql(data_source) => {
+                    data_source.count_transactions_in_range(range).await
+                }
+                DataSource::NoStorage(data_source) => {
+                    data_source.count_transactions_in_range(range).await
+                }
             }
         }
 
-        async fn payload_size(&self) -> QueryResult<usize> {
+        async fn payload_size_in_range(
+            &self,
+            range: impl RangeBounds<usize> + Send,
+        ) -> QueryResult<usize> {
             match self {
-                DataSource::Sql(data_source) => data_source.payload_size().await,
-                DataSource::NoStorage(data_source) => data_source.payload_size().await,
+                DataSource::Sql(data_source) => data_source.payload_size_in_range(range).await,
+                DataSource::NoStorage(data_source) => {
+                    data_source.payload_size_in_range(range).await
+                }
             }
         }
 

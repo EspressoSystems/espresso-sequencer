@@ -26,8 +26,7 @@ use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
-use std::fmt::Display;
-use std::path::PathBuf;
+use std::{fmt::Display, ops::Bound, path::PathBuf};
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 use vbs::version::StaticVersionType;
 
@@ -114,11 +113,33 @@ where
         .get("block_height", |_req, state| {
             async move { state.block_height().await.context(QuerySnafu) }.boxed()
         })?
-        .get("count_transactions", |_req, state| {
-            async move { Ok(state.count_transactions().await?) }.boxed()
+        .get("count_transactions", |req, state| {
+            async move {
+                let from: Bound<usize> = match req.opt_integer_param("from")? {
+                    Some(from) => Bound::Included(from),
+                    None => Bound::Unbounded,
+                };
+                let to = match req.opt_integer_param("to")? {
+                    Some(to) => Bound::Included(to),
+                    None => Bound::Unbounded,
+                };
+                Ok(state.count_transactions_in_range((from, to)).await?)
+            }
+            .boxed()
         })?
-        .get("payload_size", |_req, state| {
-            async move { Ok(state.payload_size().await?) }.boxed()
+        .get("payload_size", |req, state| {
+            async move {
+                let from: Bound<usize> = match req.opt_integer_param("from")? {
+                    Some(from) => Bound::Included(from),
+                    None => Bound::Unbounded,
+                };
+                let to = match req.opt_integer_param("to")? {
+                    Some(to) => Bound::Included(to),
+                    None => Bound::Unbounded,
+                };
+                Ok(state.payload_size_in_range((from, to)).await?)
+            }
+            .boxed()
         })?
         .get("get_vid_share", |req, state| {
             async move {
@@ -168,8 +189,8 @@ mod test {
         data_source::ExtensibleDataSource,
         task::BackgroundTask,
         testing::{
-            consensus::{MockDataSource, MockNetwork},
-            mocks::{MockBase, MockTypes},
+            consensus::{MockDataSource, MockNetwork, MockSqlDataSource},
+            mocks::{mock_transaction, MockBase, MockTypes},
             setup_test,
         },
         ApiState, Error, Header, VidShare,
@@ -177,8 +198,13 @@ mod test {
     use async_lock::RwLock;
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
-    use hotshot_types::event::EventType;
-    use hotshot_types::event::LeafInfo;
+    use hotshot_types::{
+        event::{EventType, LeafInfo},
+        traits::{
+            block_contents::{BlockHeader, BlockPayload},
+            EncodeBytes,
+        },
+    };
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -346,6 +372,150 @@ mod test {
             .unwrap();
         assert_eq!(sync_status.missing_blocks, 0);
         assert_eq!(sync_status.missing_leaves, 0);
+
+        network.shut_down().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_aggregate_ranges() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockSqlDataSource>::init().await;
+        let mut events = network.handle().event_stream();
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "node",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
+        );
+
+        // Start a client.
+        let client =
+            Client::<Error, MockBase>::new(format!("http://localhost:{}", port).parse().unwrap());
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        // Wait until a few transactions have been sequenced.
+        let mut tx_heights = vec![];
+        let mut tx_sizes = vec![];
+        for i in [1, 2] {
+            let txn = mock_transaction(vec![0; i]);
+            let hash = txn.commit();
+
+            network.submit_transaction(txn).await;
+
+            let leaf = 'outer: loop {
+                let EventType::Decide { leaf_chain, .. } = events.next().await.unwrap().event
+                else {
+                    continue;
+                };
+                for info in leaf_chain.iter().rev() {
+                    let leaf = &info.leaf;
+                    if BlockPayload::<MockTypes>::transaction_commitments(
+                        &leaf.block_payload().unwrap(),
+                        BlockHeader::<MockTypes>::metadata(leaf.block_header()),
+                    )
+                    .contains(&hash)
+                    {
+                        break 'outer leaf.clone();
+                    }
+                }
+
+                tracing::info!("waiting for tx {i}");
+                sleep(Duration::from_secs(1)).await;
+            };
+            tx_heights.push(leaf.height());
+            tx_sizes.push(leaf.block_payload().unwrap().encode().len());
+        }
+        tracing::info!(?tx_heights, ?tx_sizes, "transactions sequenced");
+
+        // Range including empty blocks (genesis block) only
+        assert_eq!(
+            0,
+            client
+                .get::<usize>("node/transactions/count/0")
+                .send()
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            0,
+            client
+                .get::<usize>("node/payloads/size/0")
+                .send()
+                .await
+                .unwrap()
+        );
+
+        // First transaction only
+        assert_eq!(
+            1,
+            client
+                .get::<usize>(&format!("node/transactions/count/{}", tx_heights[0]))
+                .send()
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            tx_sizes[0],
+            client
+                .get::<usize>(&format!("node/payloads/size/{}", tx_heights[0]))
+                .send()
+                .await
+                .unwrap()
+        );
+
+        // Last transaction only
+        assert_eq!(
+            1,
+            client
+                .get::<usize>(&format!(
+                    "node/transactions/count/{}/{}",
+                    tx_heights[0] + 1,
+                    tx_heights[1]
+                ))
+                .send()
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            tx_sizes[1],
+            client
+                .get::<usize>(&format!(
+                    "node/payloads/size/{}/{}",
+                    tx_heights[0] + 1,
+                    tx_heights[1]
+                ))
+                .send()
+                .await
+                .unwrap()
+        );
+
+        // All transactions
+        assert_eq!(
+            2,
+            client
+                .get::<usize>("node/transactions/count",)
+                .send()
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            tx_sizes[0] + tx_sizes[1],
+            client
+                .get::<usize>("node/payloads/size",)
+                .send()
+                .await
+                .unwrap()
+        );
 
         network.shut_down().await;
     }
