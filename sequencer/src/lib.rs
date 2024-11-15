@@ -12,7 +12,7 @@ mod message_compat_tests;
 use anyhow::Context;
 use async_lock::RwLock;
 use catchup::StatePeers;
-use context::SequencerContext;
+use context::{ProposalFetcherConfig, SequencerContext};
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1Client, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
@@ -203,6 +203,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     is_da: bool,
     identity: Identity,
     marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P::Persistence>>,
+    proposal_fetcher_config: ProposalFetcherConfig,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, V>> {
     // Expose git information via status API.
     metrics
@@ -550,6 +551,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         event_consumer,
         seq_versions,
         marketplace_config,
+        proposal_fetcher_config,
     )
     .await?;
     if wait_for_orchestrator {
@@ -1066,6 +1068,7 @@ pub mod testing {
                     auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
                     fallback_builder_url: marketplace_builder_url,
                 },
+                Default::default(),
             )
             .await
             .unwrap()
