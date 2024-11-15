@@ -81,7 +81,7 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", ta
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.4.5", package = "cdn-broker" }
-cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.4.5", package = "cdn-marshal" }
+cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.5.4", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.1", features = [
   "test-apis",
