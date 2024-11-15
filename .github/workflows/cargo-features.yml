@@ -36,3 +36,7 @@ jobs:
       - name: Check compilation for feature combinations
         run: |
           cargo hack check --each-feature
+
+      - name: Check compilation for feature combinations (--tests)
+        run: |
+          cargo hack check --each-feature --tests

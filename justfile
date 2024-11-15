@@ -55,6 +55,9 @@ test-integration:
 clippy:
     cargo clippy --workspace --all-features --all-targets -- -D warnings
 
+check-features *args:
+    cargo hack check --each-feature {{args}}
+
 # Helpful shortcuts for local development
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1

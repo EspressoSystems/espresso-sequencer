@@ -6,7 +6,7 @@ edition = "2021"
 
 [features]
 testing = [
-	"hotshot-query-service",
+	"hotshot-query-service/testing",
 	"portpicker",
 ]
 
