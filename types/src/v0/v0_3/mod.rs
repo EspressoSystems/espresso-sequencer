@@ -12,7 +12,7 @@ pub use super::v0_1::{
     UpgradeType, ViewBasedUpgrade, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
     NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
-pub(crate) use super::v0_1::{L1Event, L1State, L1UpdateTask, RpcClient, WsConn};
+pub(crate) use super::v0_1::{L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient};
 
 pub const VERSION: Version = Version { major: 0, minor: 3 };
 

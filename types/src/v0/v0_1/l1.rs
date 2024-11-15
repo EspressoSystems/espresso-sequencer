@@ -7,7 +7,6 @@ use ethers::{
 };
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::AtomicBool;
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, RwLock},
@@ -118,16 +117,11 @@ pub struct L1Client {
 pub(crate) enum RpcClient {
     Http(Http),
     Ws {
-        conn: Arc<RwLock<WsConn>>,
+        conn: Arc<RwLock<Ws>>,
+        reconnect: Arc<Mutex<L1ReconnectTask>>,
         url: Url,
         retry_delay: Duration,
     },
-}
-
-#[derive(Debug)]
-pub(crate) struct WsConn {
-    pub(crate) inner: Ws,
-    pub(crate) resetting: AtomicBool,
 }
 
 /// In-memory view of the L1 state, updated asynchronously.
@@ -145,3 +139,11 @@ pub(crate) enum L1Event {
 
 #[derive(Debug, Default)]
 pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
+
+#[derive(Debug, Default)]
+pub(crate) enum L1ReconnectTask {
+    Reconnecting(JoinHandle<()>),
+    #[default]
+    Idle,
+    Cancelled,
+}
