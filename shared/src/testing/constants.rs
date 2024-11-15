@@ -26,3 +26,15 @@ pub const TEST_CHANNEL_BUFFER_SIZE: usize = 32;
 /// Governs the included transaction GC period used in tests.
 /// This is an arbitrary default value for testing.
 pub const TEST_INCLUDED_TX_GC_PERIOD: Duration = Duration::from_secs(1);
+
+/// Governs API timeout for builder API.
+/// This is an arbitrary default value for testing.
+pub const TEST_API_TIMEOUT: Duration = Duration::from_secs(1);
+
+/// Governs timeout when waiting to fill transaction queue on incoming bundle/block request.
+/// This is an arbitrary default value for testing.
+pub const TEST_MAXIMIZE_TX_CAPTURE_TIMEOUT: Duration = Duration::from_millis(100);
+
+/// Governs fee per byte used by builders.
+/// This is an arbitrary default value for testing.
+pub const TEST_BASE_FEE: u64 = 1;

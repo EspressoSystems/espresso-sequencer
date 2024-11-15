@@ -11,14 +11,8 @@
 // It also provides one API services external users:
 // 1. Serves a user's request to submit a private transaction
 
-// providing the core services to support above API services
-pub mod builder_state;
-
-// Core interaction with the HotShot network
+pub mod hooks;
 pub mod service;
-
-// utilities
-pub mod utils;
 
 // tracking the testing
 #[cfg(test)]
