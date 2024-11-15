@@ -34,7 +34,7 @@ jobs:
       - name: Format Check
         run: cargo fmt -- --check
 
-      # Run Clippy on all targets. The lint workflow doesn't run Clippy on testgs, because the tests
+      # Run Clippy on all targets. The lint workflow doesn't run Clippy on tests, because the tests
       # don't compile with all combinations of features.
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
