@@ -234,11 +234,17 @@ where
     async fn block_height(&self) -> QueryResult<usize> {
         self.data_source.block_height().await
     }
-    async fn count_transactions(&self) -> QueryResult<usize> {
-        self.data_source.count_transactions().await
+    async fn count_transactions_in_range(
+        &self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
+        self.data_source.count_transactions_in_range(range).await
     }
-    async fn payload_size(&self) -> QueryResult<usize> {
-        self.data_source.payload_size().await
+    async fn payload_size_in_range(
+        &self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
+        self.data_source.payload_size_in_range(range).await
     }
     async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
     where

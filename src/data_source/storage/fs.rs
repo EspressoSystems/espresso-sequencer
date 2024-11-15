@@ -15,7 +15,8 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AvailabilityStorage, NodeStorage, UpdateAvailabilityStorage,
+    AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
+    UpdateAvailabilityStorage,
 };
 
 use crate::{
@@ -31,7 +32,8 @@ use crate::{
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
     types::HeightIndexed,
-    ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
+    ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
+    VidCommitment, VidShare,
 };
 use async_lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use async_trait::async_trait;
@@ -623,11 +625,33 @@ where
         Ok(self.inner.leaf_storage.iter().len())
     }
 
-    async fn count_transactions(&mut self) -> QueryResult<usize> {
+    async fn count_transactions_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
+        if !matches!(range.start_bound(), Bound::Unbounded | Bound::Included(0))
+            || !matches!(range.end_bound(), Bound::Unbounded)
+        {
+            return Err(QueryError::Error {
+                message: "partial aggregates are not supported with file system backend".into(),
+            });
+        }
+
         Ok(self.inner.num_transactions)
     }
 
-    async fn payload_size(&mut self) -> QueryResult<usize> {
+    async fn payload_size_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
+        if !matches!(range.start_bound(), Bound::Unbounded | Bound::Included(0))
+            || !matches!(range.end_bound(), Bound::Unbounded)
+        {
+            return Err(QueryError::Error {
+                message: "partial aggregates are not supported with file system backend".into(),
+            });
+        }
+
         Ok(self.inner.payload_size)
     }
 
@@ -713,6 +737,21 @@ where
         }
 
         Ok(res)
+    }
+}
+
+impl<T: Revert + Send> AggregatesStorage for Transaction<T> {
+    async fn aggregates_height(&mut self) -> anyhow::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl<Types, T: Revert + Send> UpdateAggregatesStorage<Types> for Transaction<T>
+where
+    Types: NodeType,
+{
+    async fn update_aggregates(&mut self, _block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 

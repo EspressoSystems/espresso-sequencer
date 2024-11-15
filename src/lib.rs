@@ -39,11 +39,12 @@
 //!     ApiState, Error,
 //! };
 //!
-//! use async_std::{sync::Arc, task::spawn};
 //! use futures::StreamExt;
 //! use vbs::version::StaticVersionType;
 //! use hotshot::SystemContext;
+//! use std::sync::Arc;
 //! use tide_disco::App;
+//! use tokio::spawn;
 //!
 //! // Create or open a data source.
 //! let data_source = FileSystemDataSource::<AppTypes, NoFetching>::create(storage_path, NoFetching)
@@ -87,13 +88,13 @@
 //! nothing more):
 //!
 //! ```
-//! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
 //! # use vbs::version::StaticVersionType;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::fetching::provider::NoFetching;
 //! # use hotshot_query_service::testing::mocks::{MockBase, MockNodeImpl, MockTypes, MockVersions};
 //! # use std::path::Path;
+//! # use tokio::spawn;
 //! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl, MockVersions>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
@@ -167,7 +168,6 @@
 //! the availability API like so:
 //!
 //! ```
-//! # use async_std::sync::RwLock;
 //! # use async_trait::async_trait;
 //! # use futures::FutureExt;
 //! # use hotshot_query_service::availability::{
@@ -175,7 +175,7 @@
 //! # };
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
 //! # use hotshot_query_service::testing::mocks::MockBase;
-//! # use hotshot_query_service::Error;
+//! # use hotshot_query_service::{ApiState, Error};
 //! # use snafu::ResultExt;
 //! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
 //! # use vbs::version::StaticVersionType;
@@ -218,10 +218,10 @@
 //!     options: &availability::Options,
 //!     data_source: D,
 //!     bind_version: Ver,
-//! ) -> Result<App<RwLock<D>, Error>, availability::Error> {
+//! ) -> Result<App<ApiState<D>, Error>, availability::Error> {
 //!     let api = define_app_specific_availability_api(options, bind_version)
 //!         .map_err(availability::Error::internal)?;
-//!     let mut app = App::<_, _>::with_state(RwLock::new(data_source));
+//!     let mut app = App::<_, _>::with_state(ApiState::from(data_source));
 //!     app.register_module("availability", api).map_err(availability::Error::internal)?;
 //!     Ok(app)
 //! }
@@ -334,12 +334,18 @@
 //!         self.hotshot_qs.block_height().await
 //!     }
 //!
-//!     async fn count_transactions(&self) -> QueryResult<usize> {
-//!         self.hotshot_qs.count_transactions().await
+//!     async fn count_transactions_in_range(
+//!         &self,
+//!         range: impl RangeBounds<usize> + Send,
+//!     ) -> QueryResult<usize> {
+//!         self.hotshot_qs.count_transactions_in_range(range).await
 //!     }
 //!
-//!     async fn payload_size(&self) -> QueryResult<usize> {
-//!         self.hotshot_qs.payload_size().await
+//!     async fn payload_size_in_range(
+//!         &self,
+//!         range: impl RangeBounds<usize> + Send,
+//!     ) -> QueryResult<usize> {
+//!         self.hotshot_qs.payload_size_in_range(range).await
 //!     }
 //!
 //!     async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
@@ -688,11 +694,17 @@ mod test {
         async fn block_height(&self) -> QueryResult<usize> {
             StatusDataSource::block_height(self).await
         }
-        async fn count_transactions(&self) -> QueryResult<usize> {
-            self.hotshot_qs.count_transactions().await
+        async fn count_transactions_in_range(
+            &self,
+            range: impl RangeBounds<usize> + Send,
+        ) -> QueryResult<usize> {
+            self.hotshot_qs.count_transactions_in_range(range).await
         }
-        async fn payload_size(&self) -> QueryResult<usize> {
-            self.hotshot_qs.payload_size().await
+        async fn payload_size_in_range(
+            &self,
+            range: impl RangeBounds<usize> + Send,
+        ) -> QueryResult<usize> {
+            self.hotshot_qs.payload_size_in_range(range).await
         }
         async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
         where

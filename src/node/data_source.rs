@@ -30,6 +30,7 @@ use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
 use hotshot_types::traits::node_implementation::NodeType;
+use std::ops::RangeBounds;
 
 #[derive(Derivative, From)]
 #[derivative(Copy(bound = ""), Debug(bound = ""))]
@@ -50,8 +51,14 @@ impl<Types: NodeType> Clone for WindowStart<Types> {
 #[async_trait]
 pub trait NodeDataSource<Types: NodeType> {
     async fn block_height(&self) -> QueryResult<usize>;
-    async fn count_transactions(&self) -> QueryResult<usize>;
-    async fn payload_size(&self) -> QueryResult<usize>;
+    async fn count_transactions_in_range(
+        &self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize>;
+    async fn payload_size_in_range(
+        &self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize>;
     async fn vid_share<ID>(&self, id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
@@ -63,4 +70,12 @@ pub trait NodeDataSource<Types: NodeType> {
 
     /// Search the database for missing objects and generate a report.
     async fn sync_status(&self) -> QueryResult<SyncStatus>;
+
+    async fn count_transactions(&self) -> QueryResult<usize> {
+        self.count_transactions_in_range(0..).await
+    }
+
+    async fn payload_size(&self) -> QueryResult<usize> {
+        self.payload_size_in_range(0..).await
+    }
 }

@@ -47,6 +47,9 @@ jobs:
         run: |
           cargo nextest run --workspace --release --all-features
         timeout-minutes: 60
+
+      - name: Doc Test
+        run: cargo test --release --all-features --doc
         
       - name: Generate Documentation
         run: |

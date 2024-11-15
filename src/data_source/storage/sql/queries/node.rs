@@ -13,12 +13,14 @@
 //! Node storage implementation for a database query engine.
 
 use super::{
-    super::transaction::{query, query_as, Transaction, TransactionMode},
+    super::transaction::{query, query_as, Transaction, TransactionMode, Write},
     parse_header, DecodeError, QueryBuilder, HEADER_COLUMNS,
 };
 use crate::{
-    data_source::storage::NodeStorage,
+    availability::BlockQueryData,
+    data_source::storage::{AggregatesStorage, NodeStorage, UpdateAggregatesStorage},
     node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
+    types::HeightIndexed,
     Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, VidShare,
 };
 use async_trait::async_trait;
@@ -26,6 +28,7 @@ use futures::stream::{StreamExt, TryStreamExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use snafu::OptionExt;
 use sqlx::Row;
+use std::ops::{Bound, RangeBounds};
 
 #[async_trait]
 impl<Mode, Types> NodeStorage<Types> for Transaction<Mode>
@@ -50,18 +53,55 @@ where
         }
     }
 
-    async fn count_transactions(&mut self) -> QueryResult<usize> {
-        let (count,) = query_as::<(i64,)>("SELECT count(*) FROM transaction")
-            .fetch_one(self.as_mut())
-            .await?;
-        Ok(count as usize)
+    async fn count_transactions_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
+        let Some((from, to)) = aggregate_range_bounds(self, range).await? else {
+            return Ok(0);
+        };
+        let (count,) =
+            query_as::<(i64,)>("SELECT num_transactions FROM aggregate WHERE height = $1")
+                .bind(to as i64)
+                .fetch_one(self.as_mut())
+                .await?;
+        let mut count = count as usize;
+
+        if from > 0 {
+            let (prev_count,) =
+                query_as::<(i64,)>("SELECT num_transactions FROM aggregate WHERE height = $1")
+                    .bind((from - 1) as i64)
+                    .fetch_one(self.as_mut())
+                    .await?;
+            count = count.saturating_sub(prev_count as usize);
+        }
+
+        Ok(count)
     }
 
-    async fn payload_size(&mut self) -> QueryResult<usize> {
-        let (sum,) = query_as::<(Option<i64>,)>("SELECT sum(size) FROM payload")
+    async fn payload_size_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
+        let Some((from, to)) = aggregate_range_bounds(self, range).await? else {
+            return Ok(0);
+        };
+        let (size,) = query_as::<(i64,)>("SELECT payload_size FROM aggregate WHERE height = $1")
+            .bind(to as i64)
             .fetch_one(self.as_mut())
             .await?;
-        Ok(sum.unwrap_or(0) as usize)
+        let mut size = size as usize;
+
+        if from > 0 {
+            let (prev_size,) =
+                query_as::<(i64,)>("SELECT payload_size FROM aggregate WHERE height = $1")
+                    .bind((from - 1) as i64)
+                    .fetch_one(self.as_mut())
+                    .await?;
+            size = size.saturating_sub(prev_size as usize);
+        }
+
+        Ok(size)
     }
 
     async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
@@ -225,6 +265,48 @@ where
     }
 }
 
+impl<Mode: TransactionMode> AggregatesStorage for Transaction<Mode> {
+    async fn aggregates_height(&mut self) -> anyhow::Result<usize> {
+        let (height,): (i64,) = query_as("SELECT coalesce(max(height) + 1, 0) FROM aggregate")
+            .fetch_one(self.as_mut())
+            .await?;
+        Ok(height as usize)
+    }
+}
+
+impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
+    async fn update_aggregates(&mut self, block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+        let height = block.height();
+        let (prev_tx_count, prev_size) = if height == 0 {
+            (0, 0)
+        } else {
+            let (tx_count, size): (i64, i64) =
+                query_as("SELECT num_transactions, payload_size FROM aggregate WHERE height = $1")
+                    .bind((height - 1) as i64)
+                    .fetch_one(self.as_mut())
+                    .await
+                    .map_err(|err| {
+                        anyhow::Error::new(err).context(format!(
+                    "cannot update aggregates for block {height} because previous block is missing"
+                ))
+                    })?;
+            (tx_count as u64, size as u64)
+        };
+
+        self.upsert(
+            "aggregate",
+            ["height", "num_transactions", "payload_size"],
+            ["height"],
+            [(
+                height as i64,
+                (prev_tx_count + block.num_transactions()) as i64,
+                (prev_size + block.size()) as i64,
+            )],
+        )
+        .await
+    }
+}
+
 impl<Mode: TransactionMode> Transaction<Mode> {
     async fn time_window<Types: NodeType>(
         &mut self,
@@ -300,4 +382,40 @@ impl<Mode: TransactionMode> Transaction<Mode> {
 
         Ok(TimeWindowQueryData { window, prev, next })
     }
+}
+
+/// Get inclusive start and end bounds for a range to pull aggregate statistics.
+///
+/// Returns [`None`] if there are no blocks in the given range, in which case the result should be
+/// the default value of the aggregate statistic.
+async fn aggregate_range_bounds(
+    tx: &mut Transaction<impl TransactionMode>,
+    range: impl RangeBounds<usize>,
+) -> QueryResult<Option<(usize, usize)>> {
+    let from = match range.start_bound() {
+        Bound::Included(from) => *from,
+        Bound::Excluded(from) => *from + 1,
+        Bound::Unbounded => 0,
+    };
+    let to = match range.end_bound() {
+        Bound::Included(to) => *to,
+        Bound::Excluded(0) => return Ok(None),
+        Bound::Excluded(to) => *to - 1,
+        Bound::Unbounded => {
+            let height = tx
+                .aggregates_height()
+                .await
+                .map_err(|err| QueryError::Error {
+                    message: format!("{err:#}"),
+                })?;
+            if height == 0 {
+                return Ok(None);
+            }
+            if height < from {
+                return Ok(None);
+            }
+            height - 1
+        }
+    };
+    Ok(Some((from, to)))
 }
