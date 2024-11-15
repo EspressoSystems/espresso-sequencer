@@ -70,7 +70,6 @@ impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
     T: UpdateAvailabilityData<Types> + Send + Sync,
     Payload<Types>: QueryablePayload<Types>,
-    <Types as NodeType>::InstanceState: Default,
 {
     async fn update(&self, event: &Event<Types>) -> Result<(), u64> {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
@@ -154,10 +153,7 @@ where
 
 fn genesis_vid<Types: NodeType>(
     leaf: &Leaf<Types>,
-) -> anyhow::Result<(VidCommonQueryData<Types>, VidShare)>
-where
-    <Types as NodeType>::InstanceState: Default,
-{
+) -> anyhow::Result<(VidCommonQueryData<Types>, VidShare)> {
     let payload = Payload::<Types>::empty().0;
     let bytes = payload.encode();
     let mut disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
