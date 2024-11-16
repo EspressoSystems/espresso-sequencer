@@ -768,6 +768,10 @@ async fn collect_garbage(
         if let Some(proposal) = da_proposals.remove(&view) {
             let payload = Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
             leaf.fill_block_payload_unchecked(payload);
+        } else if view == ViewNumber::genesis().u64() {
+            // We don't get a DA proposal for the genesis view, but we know what the payload always
+            // is.
+            leaf.fill_block_payload_unchecked(Payload::empty().0);
         } else {
             tracing::debug!(view, "DA proposal not available at decide");
         }
