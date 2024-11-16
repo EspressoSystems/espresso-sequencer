@@ -24,6 +24,7 @@ use crate::{
     types::HeightIndexed,
     Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, VidShare,
 };
+use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::stream::{StreamExt, TryStreamExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
@@ -276,8 +277,9 @@ impl<Mode: TransactionMode> AggregatesStorage for Transaction<Mode> {
 }
 
 impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
-    async fn update_aggregates(&mut self, block: &PayloadMetadata<Types>) -> anyhow::Result<()> {
-        let height = block.height();
+    async fn update_aggregates(&mut self, blocks: &[PayloadMetadata<Types>]) -> anyhow::Result<()> {
+        // Get the cumulative statistics up to the block before this chunk.
+        let height = blocks[0].height();
         let (prev_tx_count, prev_size) = if height == 0 {
             (0, 0)
         } else {
@@ -294,15 +296,33 @@ impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
             (tx_count as u64, size as u64)
         };
 
+        // Cumulatively sum up new statistics for each block in this chunk.
+        let rows = blocks
+            .iter()
+            .scan(
+                (height, prev_tx_count, prev_size),
+                |(height, tx_count, size), block| {
+                    if *height != block.height {
+                        return Some(Err(anyhow!(
+                            "blocks in update_aggregates are not sequential; expected {}, got {}",
+                            *height,
+                            block.height()
+                        )));
+                    }
+                    *height += 1;
+
+                    *tx_count += block.num_transactions;
+                    *size += block.size;
+                    Some(Ok((block.height as i64, *tx_count as i64, *size as i64)))
+                },
+            )
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
         self.upsert(
             "aggregate",
             ["height", "num_transactions", "payload_size"],
             ["height"],
-            [(
-                height as i64,
-                (prev_tx_count + block.num_transactions) as i64,
-                (prev_size + block.size) as i64,
-            )],
+            rows,
         )
         .await
     }

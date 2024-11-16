@@ -517,8 +517,8 @@ where
     Types: NodeType,
     T: UpdateAggregatesStorage<Types> + Send + Sync,
 {
-    async fn update_aggregates(&mut self, block: &PayloadMetadata<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(&mut self, blocks: &[PayloadMetadata<Types>]) -> anyhow::Result<()> {
         self.maybe_fail_write(FailableAction::Any).await?;
-        self.inner.update_aggregates(block).await
+        self.inner.update_aggregates(blocks).await
     }
 }

@@ -769,7 +769,10 @@ impl<Types, T: Revert + Send> UpdateAggregatesStorage<Types> for Transaction<T>
 where
     Types: NodeType,
 {
-    async fn update_aggregates(&mut self, _block: &PayloadMetadata<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(
+        &mut self,
+        _blocks: &[PayloadMetadata<Types>],
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }

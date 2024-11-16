@@ -266,7 +266,7 @@ where
     /// Update aggregate statistics based on a new block.
     fn update_aggregates(
         &mut self,
-        block: &PayloadMetadata<Types>,
+        blocks: &[PayloadMetadata<Types>],
     ) -> impl Future<Output = anyhow::Result<()>> + Send;
 }
 

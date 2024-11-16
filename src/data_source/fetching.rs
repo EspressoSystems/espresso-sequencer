@@ -157,6 +157,7 @@ pub struct Builder<Types, S, P> {
     chunk_fetch_delay: Duration,
     proactive_fetching: bool,
     aggregator: bool,
+    aggregator_chunk_size: Option<usize>,
     _types: PhantomData<Types>,
 }
 
@@ -192,6 +193,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             chunk_fetch_delay: Duration::from_millis(100),
             proactive_fetching: true,
             aggregator: true,
+            aggregator_chunk_size: None,
             _types: Default::default(),
         }
     }
@@ -278,7 +280,7 @@ impl<Types, S, P> Builder<Types, S, P> {
     ///
     /// This is similar to [`Self::with_range_chunk_size`], but only affects the chunk size for
     /// proactive fetching scans, not for normal subscription streams. This can be useful to tune
-    /// the proactive scanner to be more or less greedy with the lock on persistent storage.
+    /// the proactive scanner to be more or less greedy with persistent storage resources.
     ///
     /// By default (i.e. if this method is not called) the proactive range chunk size will be set to
     /// whatever the normal range chunk size is.
@@ -332,6 +334,19 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// (such as transaction counts) not to update.
     pub fn disable_aggregator(mut self) -> Self {
         self.aggregator = false;
+        self
+    }
+
+    /// Set the number of items to process at a time when computing aggregate statistics.
+    ///
+    /// This is similar to [`Self::with_range_chunk_size`], but only affects the chunk size for
+    /// the aggregator task, not for normal subscription streams. This can be useful to tune
+    /// the aggregator to be more or less greedy with persistent storage resources.
+    ///
+    /// By default (i.e. if this method is not called) the proactive range chunk size will be set to
+    /// whatever the normal range chunk size is.
+    pub fn with_aggregator_chunk_size(mut self, chunk_size: usize) -> Self {
+        self.aggregator_chunk_size = Some(chunk_size);
         self
     }
 }
@@ -448,6 +463,9 @@ where
 
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let aggregator = builder.aggregator;
+        let aggregator_chunk_size = builder
+            .aggregator_chunk_size
+            .unwrap_or(builder.range_chunk_size);
         let proactive_fetching = builder.proactive_fetching;
         let minor_interval = builder.minor_scan_interval;
         let major_interval = builder.major_scan_interval;
@@ -477,7 +495,9 @@ where
         let aggregator = if aggregator {
             Some(BackgroundTask::spawn(
                 "aggregator",
-                fetcher.clone().aggregate(aggregator_metrics),
+                fetcher
+                    .clone()
+                    .aggregate(aggregator_chunk_size, aggregator_metrics),
             ))
         } else {
             None
@@ -1304,7 +1324,7 @@ where
     P: AvailabilityProvider<Types>,
 {
     #[tracing::instrument(skip_all)]
-    async fn aggregate(self: Arc<Self>, metrics: AggregatorMetrics) {
+    async fn aggregate(self: Arc<Self>, chunk_size: usize, metrics: AggregatorMetrics) {
         loop {
             let start = loop {
                 let mut tx = match self.read().await {
@@ -1327,15 +1347,29 @@ where
             tracing::info!(start, "starting aggregator");
             metrics.height.set(start);
 
-            let mut blocks = self.clone().get_range::<_, PayloadMetadata<Types>>(start..);
-            while let Some(block) = blocks.next().await {
-                let block = block.await;
-                let height = block.height();
-                tracing::debug!(height, "updating aggregate statistics for block");
+            let mut blocks = self
+                .clone()
+                .get_range_with_chunk_size::<_, PayloadMetadata<Types>>(chunk_size, start..)
+                .then(Fetch::resolve)
+                .ready_chunks(chunk_size)
+                .boxed();
+            while let Some(chunk) = blocks.next().await {
+                let Some(last) = chunk.last() else {
+                    // This is not supposed to happen, but if the chunk is empty, just skip it.
+                    tracing::warn!("ready_chunks returned an empty chunk");
+                    continue;
+                };
+                let height = last.height();
+                let num_blocks = chunk.len();
+                tracing::debug!(
+                    num_blocks,
+                    height,
+                    "updating aggregate statistics for chunk"
+                );
                 loop {
                     let res = async {
                         let mut tx = self.write().await.context("opening transaction")?;
-                        tx.update_aggregates(&block).await?;
+                        tx.update_aggregates(&chunk).await?;
                         tx.commit().await.context("committing transaction")
                     }
                     .await;
@@ -1343,8 +1377,9 @@ where
                         Ok(()) => break,
                         Err(err) => {
                             tracing::warn!(
+                                num_blocks,
                                 height,
-                                "failed to update aggregates for block: {err:#}"
+                                "failed to update aggregates for chunk: {err:#}"
                             );
                             sleep(Duration::from_secs(1)).await;
                         }
