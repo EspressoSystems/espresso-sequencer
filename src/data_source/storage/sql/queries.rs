@@ -18,6 +18,7 @@ use crate::{
         BlockId, BlockQueryData, LeafQueryData, PayloadQueryData, QueryablePayload,
         VidCommonQueryData,
     },
+    data_source::storage::PayloadMetadata,
     Header, Leaf, Payload, QueryError, QueryResult,
 };
 use anyhow::Context;
@@ -224,6 +225,30 @@ where
 {
     fn from_row(row: &'r <Db as Database>::Row) -> sqlx::Result<Self> {
         <BlockQueryData<Types> as FromRow<<Db as Database>::Row>>::from_row(row).map(Self::from)
+    }
+}
+
+const PAYLOAD_METADATA_COLUMNS: &str =
+    "h.height AS height, h.hash AS hash, h.payload_hash AS payload_hash, p.size AS payload_size, p.num_transactions AS num_transactions";
+
+impl<'r, Types> FromRow<'r, <Db as Database>::Row> for PayloadMetadata<Types>
+where
+    Types: NodeType,
+{
+    fn from_row(row: &'r <Db as Database>::Row) -> sqlx::Result<Self> {
+        Ok(Self {
+            height: row.try_get::<i64, _>("height")? as u64,
+            block_hash: row
+                .try_get::<String, _>("hash")?
+                .parse()
+                .decode_error("malformed block hash")?,
+            hash: row
+                .try_get::<String, _>("payload_hash")?
+                .parse()
+                .decode_error("malformed payload hash")?,
+            size: row.try_get::<i32, _>("payload_size")? as u64,
+            num_transactions: row.try_get::<i32, _>("num_transactions")? as u64,
+        })
     }
 }
 

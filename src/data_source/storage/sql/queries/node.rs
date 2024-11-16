@@ -17,8 +17,9 @@ use super::{
     parse_header, DecodeError, QueryBuilder, HEADER_COLUMNS,
 };
 use crate::{
-    availability::BlockQueryData,
-    data_source::storage::{AggregatesStorage, NodeStorage, UpdateAggregatesStorage},
+    data_source::storage::{
+        AggregatesStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
+    },
     node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
     Header, MissingSnafu, NotFoundSnafu, QueryError, QueryResult, VidShare,
@@ -275,7 +276,7 @@ impl<Mode: TransactionMode> AggregatesStorage for Transaction<Mode> {
 }
 
 impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
-    async fn update_aggregates(&mut self, block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(&mut self, block: &PayloadMetadata<Types>) -> anyhow::Result<()> {
         let height = block.height();
         let (prev_tx_count, prev_size) = if height == 0 {
             (0, 0)
@@ -299,8 +300,8 @@ impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
             ["height"],
             [(
                 height as i64,
-                (prev_tx_count + block.num_transactions()) as i64,
-                (prev_size + block.size()) as i64,
+                (prev_tx_count + block.num_transactions) as i64,
+                (prev_size + block.size) as i64,
             )],
         )
         .await

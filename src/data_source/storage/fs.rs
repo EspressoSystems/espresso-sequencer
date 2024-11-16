@@ -15,7 +15,7 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
+    AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
     UpdateAvailabilityStorage,
 };
 
@@ -455,6 +455,13 @@ where
         self.get_block(id).await.map(PayloadQueryData::from)
     }
 
+    async fn get_payload_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<PayloadMetadata<Types>> {
+        self.get_block(id).await.map(PayloadMetadata::from)
+    }
+
     async fn get_vid_common(
         &mut self,
         id: BlockId<Types>,
@@ -498,6 +505,18 @@ where
     {
         Ok(range_iter(self.inner.block_storage.iter(), range)
             .map(|res| res.map(PayloadQueryData::from))
+            .collect())
+    }
+
+    async fn get_payload_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        Ok(range_iter(self.inner.block_storage.iter(), range)
+            .map(|res| res.map(PayloadMetadata::from))
             .collect())
     }
 
@@ -750,7 +769,7 @@ impl<Types, T: Revert + Send> UpdateAggregatesStorage<Types> for Transaction<T>
 where
     Types: NodeType,
 {
-    async fn update_aggregates(&mut self, _block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(&mut self, _block: &PayloadMetadata<Types>) -> anyhow::Result<()> {
         Ok(())
     }
 }

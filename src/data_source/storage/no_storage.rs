@@ -14,7 +14,7 @@
 
 use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
+    AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
     UpdateAvailabilityStorage,
 };
 use crate::{
@@ -126,6 +126,13 @@ where
         Err(QueryError::Missing)
     }
 
+    async fn get_payload_metadata(
+        &mut self,
+        _id: BlockId<Types>,
+    ) -> QueryResult<PayloadMetadata<Types>> {
+        Err(QueryError::Missing)
+    }
+
     async fn get_vid_common(
         &mut self,
         _id: BlockId<Types>,
@@ -161,6 +168,16 @@ where
         R: RangeBounds<usize> + Send,
     {
         Ok(vec![])
+    }
+
+    async fn get_payload_metadata_range<R>(
+        &mut self,
+        _range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Err(QueryError::Missing)
     }
 
     async fn get_vid_common_range<R>(
@@ -258,7 +275,7 @@ impl<'a, Types> UpdateAggregatesStorage<Types> for Transaction<'a>
 where
     Types: NodeType,
 {
-    async fn update_aggregates(&mut self, _block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(&mut self, _block: &PayloadMetadata<Types>) -> anyhow::Result<()> {
         Ok(())
     }
 }

@@ -14,16 +14,17 @@
 
 use super::{
     super::transaction::{Transaction, TransactionMode},
-    QueryBuilder, BLOCK_COLUMNS, LEAF_COLUMNS, PAYLOAD_COLUMNS, VID_COMMON_COLUMNS,
+    QueryBuilder, BLOCK_COLUMNS, LEAF_COLUMNS, PAYLOAD_COLUMNS, PAYLOAD_METADATA_COLUMNS,
+    VID_COMMON_COLUMNS,
 };
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
         QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::storage::AvailabilityStorage,
+    data_source::storage::{AvailabilityStorage, PayloadMetadata},
     types::HeightIndexed,
-    ErrorSnafu, Header, Payload, QueryError, QueryResult,
+    ErrorSnafu, Header, MissingSnafu, Payload, QueryError, QueryResult,
 };
 use async_trait::async_trait;
 use futures::stream::{StreamExt, TryStreamExt};
@@ -93,6 +94,31 @@ where
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
         let payload = PayloadQueryData::from_row(&row)?;
+        Ok(payload)
+    }
+
+    async fn get_payload_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<PayloadMetadata<Types>> {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.header_where_clause(id)?;
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let sql = format!(
+            "SELECT {PAYLOAD_METADATA_COLUMNS}
+              FROM header AS h
+              JOIN payload AS p ON h.height = p.height
+              WHERE {where_clause} AND p.num_transactions != NULL
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
+        let row = query
+            .query(&sql)
+            .fetch_optional(self.as_mut())
+            .await?
+            .context(MissingSnafu)?;
+        let payload = PayloadMetadata::from_row(&row)?;
         Ok(payload)
     }
 
@@ -181,6 +207,31 @@ where
             .query(&sql)
             .fetch(self.as_mut())
             .map(|res| PayloadQueryData::from_row(&res?))
+            .map_err(QueryError::from)
+            .collect()
+            .await)
+    }
+
+    async fn get_payload_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.bounds_to_where_clause(range, "h.height")?;
+        let sql = format!(
+            "SELECT {PAYLOAD_METADATA_COLUMNS}
+              FROM header AS h
+              JOIN payload AS p ON h.height = p.height
+              {where_clause}
+              ORDER BY h.height ASC"
+        );
+        Ok(query
+            .query(&sql)
+            .fetch(self.as_mut())
+            .map(|res| PayloadMetadata::from_row(&res?))
             .map_err(QueryError::from)
             .collect()
             .await)

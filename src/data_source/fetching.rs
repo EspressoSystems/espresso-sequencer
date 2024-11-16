@@ -78,7 +78,8 @@ use super::{
     storage::{
         pruning::{PruneStorage, PrunedHeightStorage},
         AggregatesStorage, AvailabilityStorage, ExplorerStorage, MerklizedStateHeightStorage,
-        MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage, UpdateAvailabilityStorage,
+        MerklizedStateStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
+        UpdateAvailabilityStorage,
     },
     Transaction, VersionedDataSource,
 };
@@ -1227,14 +1228,13 @@ where
                 metrics.scanned_blocks.set(0);
                 metrics.scanned_vid.set(0);
 
-                // Iterate over all blocks that we should have. Fetching the block is enough to
-                // trigger an active fetch of the corresponding leaf if it too is missing. The
-                // chunking behavior of `get_range` automatically ensures that, no matter how big
-                // the range is, we will release the read lock on storage every `chunk_size` items,
-                // so we don't starve out would-be writers.
+                // Iterate over all blocks that we should have. Fetching the payload metadata is
+                // enough to trigger an active fetch of the corresponding leaf and the full block if
+                // they are missing, without loading the full payload from storage if we already
+                // have it.
                 let mut blocks = self
                     .clone()
-                    .get_range_with_chunk_size::<_, BlockQueryData<Types>>(
+                    .get_range_with_chunk_size::<_, PayloadMetadata<Types>>(
                         chunk_size,
                         start..block_height,
                     );
@@ -1327,7 +1327,7 @@ where
             tracing::info!(start, "starting aggregator");
             metrics.height.set(start);
 
-            let mut blocks = self.clone().get_range::<_, BlockQueryData<Types>>(start..);
+            let mut blocks = self.clone().get_range::<_, PayloadMetadata<Types>>(start..);
             while let Some(block) = blocks.next().await {
                 let block = block.await;
                 let height = block.height();

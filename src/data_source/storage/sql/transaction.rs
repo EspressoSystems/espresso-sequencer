@@ -521,9 +521,14 @@ where
         let payload = block.payload.encode();
         self.upsert(
             "payload",
-            ["height", "data", "size"],
+            ["height", "data", "size", "num_transactions"],
             ["height"],
-            [(block.height() as i64, payload.as_ref(), block.size() as i32)],
+            [(
+                block.height() as i64,
+                payload.as_ref(),
+                block.size() as i32,
+                block.num_transactions() as i32,
+            )],
         )
         .await?;
 

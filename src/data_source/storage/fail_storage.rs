@@ -22,7 +22,7 @@ use crate::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::{update, VersionedDataSource},
+    data_source::{storage::PayloadMetadata, update, VersionedDataSource},
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
@@ -44,11 +44,13 @@ pub enum FailableAction {
     GetLeaf,
     GetBlock,
     GetPayload,
+    GetPayloadMetadata,
     GetVidCommon,
     GetHeaderRange,
     GetLeafRange,
     GetBlockRange,
     GetPayloadRange,
+    GetPayloadMetadataRange,
     GetVidCommonRange,
     GetTransaction,
 
@@ -329,6 +331,15 @@ where
         self.inner.get_payload(id).await
     }
 
+    async fn get_payload_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<PayloadMetadata<Types>> {
+        self.maybe_fail_read(FailableAction::GetPayloadMetadata)
+            .await?;
+        self.inner.get_payload_metadata(id).await
+    }
+
     async fn get_vid_common(
         &mut self,
         id: BlockId<Types>,
@@ -369,6 +380,18 @@ where
         self.maybe_fail_read(FailableAction::GetPayloadRange)
             .await?;
         self.inner.get_payload_range(range).await
+    }
+
+    async fn get_payload_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read(FailableAction::GetPayloadMetadataRange)
+            .await?;
+        self.inner.get_payload_metadata_range(range).await
     }
 
     async fn get_vid_common_range<R>(
@@ -494,7 +517,7 @@ where
     Types: NodeType,
     T: UpdateAggregatesStorage<Types> + Send + Sync,
 {
-    async fn update_aggregates(&mut self, block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(&mut self, block: &PayloadMetadata<Types>) -> anyhow::Result<()> {
         self.maybe_fail_write(FailableAction::Any).await?;
         self.inner.update_aggregates(block).await
     }
