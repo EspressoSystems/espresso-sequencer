@@ -230,73 +230,73 @@ where
     T: SequencerStateDataSource,
     for<'a> T::Transaction<'a>: SequencerStateUpdate,
 {
-    let instance = instance.await;
-    let peers = SqlStateCatchup::new(storage.clone(), Default::default());
+    // let instance = instance.await;
+    // let peers = SqlStateCatchup::new(storage.clone(), Default::default());
 
-    // get last saved merklized state
-    let (last_height, parent_leaf, mut leaves) = {
-        let last_height = storage.get_last_state_height().await?;
-        let current_height = storage.block_height().await?;
-        tracing::info!(
-            node_id = instance.node_id,
-            last_height,
-            current_height,
-            "updating state storage"
-        );
+    // // get last saved merklized state
+    // let (last_height, parent_leaf, mut leaves) = {
+    //     let last_height = storage.get_last_state_height().await?;
+    //     let current_height = storage.block_height().await?;
+    //     tracing::info!(
+    //         node_id = instance.node_id,
+    //         last_height,
+    //         current_height,
+    //         "updating state storage"
+    //     );
 
-        let parent_leaf = storage.get_leaf(last_height).await;
-        let leaves = storage.subscribe_leaves(last_height + 1).await;
-        (last_height, parent_leaf, leaves)
-    };
-    // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not
-    // ready yet and another task needs a mutable lock on the state to produce the parent leaf.
-    let mut parent_leaf = parent_leaf.await;
-    let mut parent_state = ValidatedState::from_header(parent_leaf.header());
+    //     let parent_leaf = storage.get_leaf(last_height).await;
+    //     let leaves = storage.subscribe_leaves(last_height + 1).await;
+    //     (last_height, parent_leaf, leaves)
+    // };
+    // // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not
+    // // ready yet and another task needs a mutable lock on the state to produce the parent leaf.
+    // let mut parent_leaf = parent_leaf.await;
+    // let mut parent_state = ValidatedState::from_header(parent_leaf.header());
 
-    if last_height == 0 {
-        // If the last height is 0, we need to insert the genesis state, since this state is
-        // never the result of a state update and thus is not inserted in the loop below.
-        tracing::info!("storing genesis merklized state");
-        let tx = storage
-            .write()
-            .await
-            .context("starting transaction for genesis state")?;
-        store_genesis_state(tx, instance.chain_config, &instance.genesis_state)
-            .await
-            .context("storing genesis state")?;
-    }
+    // if last_height == 0 {
+    //     // If the last height is 0, we need to insert the genesis state, since this state is
+    //     // never the result of a state update and thus is not inserted in the loop below.
+    //     tracing::info!("storing genesis merklized state");
+    //     let tx = storage
+    //         .write()
+    //         .await
+    //         .context("starting transaction for genesis state")?;
+    //     store_genesis_state(tx, instance.chain_config, &instance.genesis_state)
+    //         .await
+    //         .context("storing genesis state")?;
+    // }
 
-    while let Some(leaf) = leaves.next().await {
-        loop {
-            tracing::debug!(
-                height = leaf.height(),
-                node_id = instance.node_id,
-                ?leaf,
-                "updating persistent merklized state"
-            );
-            match update_state_storage(
-                &parent_state,
-                &storage,
-                &instance,
-                &peers,
-                &parent_leaf,
-                &leaf,
-            )
-            .await
-            {
-                Ok(state) => {
-                    parent_leaf = leaf;
-                    parent_state = state;
-                    break;
-                }
-                Err(err) => {
-                    tracing::error!(height = leaf.height(), "failed to updated state: {err:#}");
-                    // If we fail, delay for a second and retry.
-                    sleep(Duration::from_secs(1)).await;
-                }
-            }
-        }
-    }
+    // while let Some(leaf) = leaves.next().await {
+    //     loop {
+    //         tracing::debug!(
+    //             height = leaf.height(),
+    //             node_id = instance.node_id,
+    //             ?leaf,
+    //             "updating persistent merklized state"
+    //         );
+    //         match update_state_storage(
+    //             &parent_state,
+    //             &storage,
+    //             &instance,
+    //             &peers,
+    //             &parent_leaf,
+    //             &leaf,
+    //         )
+    //         .await
+    //         {
+    //             Ok(state) => {
+    //                 parent_leaf = leaf;
+    //                 parent_state = state;
+    //                 break;
+    //             }
+    //             Err(err) => {
+    //                 tracing::error!(height = leaf.height(), "failed to updated state: {err:#}");
+    //                 // If we fail, delay for a second and retry.
+    //                 sleep(Duration::from_secs(1)).await;
+    //             }
+    //         }
+    //     }
+    // }
 
     Ok(())
 }

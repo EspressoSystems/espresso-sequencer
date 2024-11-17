@@ -10,7 +10,7 @@ use espresso_types::{
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
-use hotshot_query_service::data_source::storage::sql::Write;
+use hotshot_query_service::data_source::storage::sql::{Db, Write};
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
@@ -147,6 +147,9 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    #[clap(skip)]
+    pub(crate) pool: Option<sqlx::Pool<Db>>,
 }
 
 #[cfg(not(feature = "embedded-db"))]
@@ -219,6 +222,10 @@ impl TryFrom<Options> for Config {
             Some(uri) => uri.parse()?,
             None => Self::default(),
         };
+
+        if let Some(pool) = opt.pool {
+            cfg = cfg.pool(pool);
+        }
 
         #[cfg(not(feature = "embedded-db"))]
         {
@@ -351,13 +358,16 @@ impl From<PruningOptions> for PrunerCfg {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
-    async fn create(self) -> anyhow::Result<Persistence> {
+    async fn create(mut self) -> anyhow::Result<(Self, Self::Persistence)> {
+        let store_undecided_state = self.store_undecided_state;
+        let config = self.clone().try_into()?;
         let persistence = Persistence {
-            store_undecided_state: self.store_undecided_state,
-            db: SqlStorage::connect(self.try_into()?).await?,
+            store_undecided_state,
+            db: SqlStorage::connect(config).await?,
         };
         persistence.migrate_quorum_proposal_leaf_hashes().await?;
-        Ok(persistence)
+        self.pool = Some(persistence.db.pool());
+        Ok((self, persistence))
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -957,7 +967,7 @@ mod testing {
             #[cfg(feature = "embedded-db")]
             {
                 let opt: Options = SqliteOptions { path: db.path() }.into();
-                opt.create().await.unwrap()
+                opt.create().await.unwrap().1
             }
         }
     }

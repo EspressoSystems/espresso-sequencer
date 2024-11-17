@@ -39,15 +39,15 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
-            )
-            .await
-        }
+        // (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
+        //     run(
+        //         genesis,
+        //         modules,
+        //         opt,
+        //         SequencerVersions::<FeeVersion, MarketplaceVersion>::new(),
+        //     )
+        //     .await
+        // }
         (FeeVersion::VERSION, _) => {
             run(
                 genesis,
@@ -57,15 +57,15 @@ async fn main() -> anyhow::Result<()> {
             )
             .await
         }
-        (MarketplaceVersion::VERSION, _) => {
-            run(
-                genesis,
-                modules,
-                opt,
-                SequencerVersions::<MarketplaceVersion, V0_0>::new(),
-            )
-            .await
-        }
+        // (MarketplaceVersion::VERSION, _) => {
+        //     run(
+        //         genesis,
+        //         modules,
+        //         opt,
+        //         SequencerVersions::<MarketplaceVersion, V0_0>::new(),
+        //     )
+        //     .await
+        // }
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
         ),
@@ -123,6 +123,7 @@ async fn init_with_storage<S, V>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
+
     versions: V,
 ) -> anyhow::Result<SequencerContext<network::Production, S::Persistence, V>>
 where
@@ -180,6 +181,8 @@ where
         fallback_builder_url: opt.fallback_builder_url,
     };
 
+    let (persistence_opt, persistence) = storage_opt.create().await?;
+
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
@@ -188,7 +191,7 @@ where
             // Add optional API modules as requested.
             let mut http_opt = api::Options::from(http_opt);
             if let Some(query) = modules.query {
-                http_opt = storage_opt.enable_query_module(http_opt, query);
+                http_opt = persistence_opt.enable_query_module(http_opt, query);
             }
             if let Some(submit) = modules.submit {
                 http_opt = http_opt.submit(submit);
@@ -220,7 +223,7 @@ where
                             genesis,
                             network_params,
                             &*metrics,
-                            storage_opt,
+                            persistence_opt,
                             l1_params,
                             versions,
                             consumer,
@@ -239,7 +242,7 @@ where
                 genesis,
                 network_params,
                 &NoMetrics,
-                storage_opt,
+                persistence_opt,
                 l1_params,
                 versions,
                 NullEventConsumer,

@@ -11,6 +11,10 @@ demo-native:
     cargo build --profile test
     scripts/demo-native
 
+demo-native-sqlite:
+    cargo build --profile test --features embedded-db
+    scripts/demo-native -f process-compose-sqlite.yaml
+
 demo-native-mp:
     cargo build --release
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml
