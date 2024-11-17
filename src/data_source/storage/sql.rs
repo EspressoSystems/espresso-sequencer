@@ -217,6 +217,7 @@ pub struct Config {
     no_migrations: bool,
     pruner_cfg: Option<PrunerCfg>,
     archive: bool,
+    pool: Option<Pool<Db>>,
 }
 
 #[cfg(not(feature = "embedded-db"))]
@@ -235,6 +236,8 @@ impl Default for Config {
 impl Default for Config {
     fn default() -> Self {
         SqliteConnectOptions::default()
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
             .busy_timeout(Duration::from_secs(30))
             .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
             .create_if_missing(true)
@@ -253,6 +256,7 @@ impl From<SqliteConnectOptions> for Config {
             no_migrations: false,
             pruner_cfg: None,
             archive: false,
+            pool: None,
         }
     }
 }
@@ -269,6 +273,7 @@ impl From<PgConnectOptions> for Config {
             no_migrations: false,
             pruner_cfg: None,
             archive: false,
+            pool: None,
         }
     }
 }
@@ -360,6 +365,13 @@ impl Config {
 }
 
 impl Config {
+    /// Sets the database connection pool
+    /// This allows reusing an existing connection pool when building a new `SqlStorage` instance.
+    pub fn pool(mut self, pool: Pool<Db>) -> Self {
+        self.pool = Some(pool);
+        self
+    }
+
     /// Reset the schema on connection.
     ///
     /// When this [`Config`] is used to [`connect`](Self::connect) a
@@ -462,7 +474,7 @@ impl Config {
 }
 
 /// Storage for the APIs provided in this crate, backed by a remote PostgreSQL database.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SqlStorage {
     pool: Pool<Db>,
     metrics: PrometheusMetrics,
@@ -478,9 +490,25 @@ pub struct Pruner {
 }
 
 impl SqlStorage {
+    pub fn pool(&self) -> Pool<Db> {
+        self.pool.clone()
+    }
     /// Connect to a remote database.
     pub async fn connect(mut config: Config) -> Result<Self, Error> {
-        let pool = config.pool_opt;
+        let metrics = PrometheusMetrics::default();
+        let pool_metrics = PoolMetrics::new(&*metrics.subgroup("sql".into()));
+        let pool_opt = config.pool_opt;
+        let pruner_cfg = config.pruner_cfg;
+
+        // Re use the same pool and return
+        if let Some(pool) = config.pool {
+            return Ok(Self {
+                metrics,
+                pool_metrics,
+                pool,
+                pruner_cfg,
+            });
+        }
 
         #[cfg(not(feature = "embedded-db"))]
         let schema = config.schema.clone();
@@ -501,7 +529,7 @@ impl SqlStorage {
             std::fs::remove_file(config.db_opt.get_filename())?;
         }
 
-        let pool = pool.connect_with(config.db_opt).await?;
+        let pool = pool_opt.connect_with(config.db_opt).await?;
 
         // Create or connect to the schema for this query service.
         let mut conn = pool.acquire().await?;
@@ -560,12 +588,11 @@ impl SqlStorage {
                 .await?;
         }
 
-        let metrics = PrometheusMetrics::default();
         Ok(Self {
             pool,
-            pool_metrics: PoolMetrics::new(&*metrics.subgroup("sql".into())),
+            pool_metrics,
             metrics,
-            pruner_cfg: config.pruner_cfg,
+            pruner_cfg,
         })
     }
 }

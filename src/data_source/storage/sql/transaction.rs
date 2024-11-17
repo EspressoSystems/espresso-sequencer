@@ -98,6 +98,7 @@ impl TransactionMode for Write {
         #[cfg(not(feature = "embedded-db"))]
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             .await?;
+
         Ok(())
     }
 
@@ -112,6 +113,7 @@ impl TransactionMode for Read {
         #[cfg(not(feature = "embedded-db"))]
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE")
             .await?;
+
         Ok(())
     }
 
@@ -334,7 +336,7 @@ impl Transaction<Write> {
         let pk = pk.into_iter().join(",");
 
         let mut query_builder =
-            QueryBuilder::new(format!("INSERT INTO \"{table}\" ({columns_str})"));
+            QueryBuilder::new(format!("INSERT INTO \"{table}\" ({columns_str}) "));
         let mut num_rows = 0;
 
         query_builder.push_values(rows, |mut b, row| {
