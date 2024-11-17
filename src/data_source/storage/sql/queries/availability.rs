@@ -15,14 +15,14 @@
 use super::{
     super::transaction::{Transaction, TransactionMode},
     QueryBuilder, BLOCK_COLUMNS, LEAF_COLUMNS, PAYLOAD_COLUMNS, PAYLOAD_METADATA_COLUMNS,
-    VID_COMMON_COLUMNS,
+    VID_COMMON_COLUMNS, VID_COMMON_METADATA_COLUMNS,
 };
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
         QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::storage::{AvailabilityStorage, PayloadMetadata},
+    data_source::storage::{AvailabilityStorage, PayloadMetadata, VidCommonMetadata},
     types::HeightIndexed,
     ErrorSnafu, Header, MissingSnafu, Payload, QueryError, QueryResult,
 };
@@ -143,6 +143,27 @@ where
         Ok(common)
     }
 
+    async fn get_vid_common_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>> {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.header_where_clause(id)?;
+        // ORDER BY h.height ASC ensures that if there are duplicate blocks (this can happen when
+        // selecting by payload ID, as payloads are not unique), we return the first one.
+        let sql = format!(
+            "SELECT {VID_COMMON_METADATA_COLUMNS}
+              FROM header AS h
+              JOIN vid AS v ON h.height = v.height
+              WHERE {where_clause}
+              ORDER BY h.height ASC
+              LIMIT 1"
+        );
+        let row = query.query(&sql).fetch_one(self.as_mut()).await?;
+        let common = VidCommonMetadata::from_row(&row)?;
+        Ok(common)
+    }
+
     async fn get_leaf_range<R>(
         &mut self,
         range: R,
@@ -257,6 +278,31 @@ where
             .query(&sql)
             .fetch(self.as_mut())
             .map(|res| VidCommonQueryData::from_row(&res?))
+            .map_err(QueryError::from)
+            .collect()
+            .await)
+    }
+
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        let mut query = QueryBuilder::default();
+        let where_clause = query.bounds_to_where_clause(range, "h.height")?;
+        let sql = format!(
+            "SELECT {VID_COMMON_METADATA_COLUMNS}
+              FROM header AS h
+              JOIN vid AS v ON h.height = v.height
+              {where_clause}
+              ORDER BY h.height ASC"
+        );
+        Ok(query
+            .query(&sql)
+            .fetch(self.as_mut())
+            .map(|res| VidCommonMetadata::from_row(&res?))
             .map_err(QueryError::from)
             .collect()
             .await)

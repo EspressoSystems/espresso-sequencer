@@ -22,7 +22,10 @@ use crate::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::{storage::PayloadMetadata, update, VersionedDataSource},
+    data_source::{
+        storage::{PayloadMetadata, VidCommonMetadata},
+        update, VersionedDataSource,
+    },
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
@@ -348,6 +351,14 @@ where
         self.inner.get_vid_common(id).await
     }
 
+    async fn get_vid_common_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>> {
+        self.maybe_fail_read().await?;
+        self.inner.get_vid_common_metadata(id).await
+    }
+
     async fn get_leaf_range<R>(
         &mut self,
         range: R,
@@ -404,6 +415,17 @@ where
         self.maybe_fail_read(FailableAction::GetVidCommonRange)
             .await?;
         self.inner.get_vid_common_range(range).await
+    }
+
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read().await?;
+        self.inner.get_vid_common_metadata_range(range).await
     }
 
     async fn get_transaction(

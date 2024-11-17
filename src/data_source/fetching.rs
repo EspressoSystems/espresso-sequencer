@@ -79,7 +79,7 @@ use super::{
         pruning::{PruneStorage, PrunedHeightStorage},
         AggregatesStorage, AvailabilityStorage, ExplorerStorage, MerklizedStateHeightStorage,
         MerklizedStateStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
-        UpdateAvailabilityStorage,
+        UpdateAvailabilityStorage, VidCommonMetadata,
     },
     Transaction, VersionedDataSource,
 };
@@ -1277,7 +1277,7 @@ where
                 // independently of the block payload.
                 let mut vid = self
                     .clone()
-                    .get_range_with_chunk_size::<_, VidCommonQueryData<Types>>(
+                    .get_range_with_chunk_size::<_, VidCommonMetadata<Types>>(
                         chunk_size,
                         start..block_height,
                     );

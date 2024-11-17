@@ -15,7 +15,7 @@
 use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
-    UpdateAvailabilityStorage,
+    UpdateAvailabilityStorage, VidCommonMetadata,
 };
 use crate::{
     availability::{
@@ -140,6 +140,13 @@ where
         Err(QueryError::Missing)
     }
 
+    async fn get_vid_common_metadata(
+        &mut self,
+        _id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>> {
+        Err(QueryError::Missing)
+    }
+
     async fn get_leaf_range<R>(
         &mut self,
         _range: R,
@@ -188,6 +195,16 @@ where
         R: RangeBounds<usize> + Send,
     {
         Ok(vec![])
+    }
+
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        _range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Err(QueryError::Missing)
     }
 
     async fn get_transaction(

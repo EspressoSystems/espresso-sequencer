@@ -141,6 +141,42 @@ where
     }
 }
 
+/// A summary of a VID payload without all the data.
+///
+/// This is primarily useful when you want to check if a VID object exists, but not load the whole
+/// object.
+#[derive(Clone, Copy, Debug)]
+pub struct VidCommonMetadata<Types>
+where
+    Types: NodeType,
+{
+    pub height: u64,
+    pub block_hash: BlockHash<Types>,
+    pub payload_hash: VidCommitment,
+}
+
+impl<Types> HeightIndexed for VidCommonMetadata<Types>
+where
+    Types: NodeType,
+{
+    fn height(&self) -> u64 {
+        self.height
+    }
+}
+
+impl<Types> From<VidCommonQueryData<Types>> for VidCommonMetadata<Types>
+where
+    Types: NodeType,
+{
+    fn from(common: VidCommonQueryData<Types>) -> Self {
+        Self {
+            height: common.height(),
+            block_hash: common.block_hash(),
+            payload_hash: common.payload_hash(),
+        }
+    }
+}
+
 /// Persistent storage for a HotShot blockchain.
 ///
 /// This trait defines the interface which must be provided by the storage layer in order to
@@ -173,6 +209,10 @@ where
         &mut self,
         id: BlockId<Types>,
     ) -> QueryResult<VidCommonQueryData<Types>>;
+    async fn get_vid_common_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>>;
 
     async fn get_leaf_range<R>(
         &mut self,
@@ -202,6 +242,12 @@ where
         &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
 

@@ -16,7 +16,7 @@ use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
     AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
-    UpdateAvailabilityStorage,
+    UpdateAvailabilityStorage, VidCommonMetadata,
 };
 
 use crate::{
@@ -476,6 +476,13 @@ where
             .0)
     }
 
+    async fn get_vid_common_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>> {
+        self.get_vid_common(id).await.map(VidCommonMetadata::from)
+    }
+
     async fn get_leaf_range<R>(
         &mut self,
         range: R,
@@ -529,6 +536,18 @@ where
     {
         Ok(range_iter(self.inner.vid_storage.iter(), range)
             .map(|res| res.map(|(common, _)| common))
+            .collect())
+    }
+
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(range_iter(self.inner.vid_storage.iter(), range)
+            .map(|res| res.map(|(common, _)| common.into()))
             .collect())
     }
 
