@@ -106,7 +106,8 @@ use async_trait::async_trait;
 use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
 use derivative::Derivative;
 use futures::{
-    future::{join_all, BoxFuture, Future, FutureExt},
+    channel::oneshot,
+    future::{self, join_all, BoxFuture, Either, Future, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::{
@@ -118,6 +119,7 @@ use std::sync::Arc;
 use std::{
     cmp::min,
     fmt::{Debug, Display},
+    iter::repeat_with,
     marker::PhantomData,
     ops::{Bound, Range, RangeBounds},
     time::Duration,
@@ -788,21 +790,93 @@ where
         // Note the "someone" who later fetches the object and adds it to storage may be an active
         // fetch triggered by this very requests, in cases where that is possible, but it need not
         // be.
-        let passive = T::passive_fetch(&self.notifiers, req).await;
+        let passive_fetch = T::passive_fetch(&self.notifiers, req).await;
 
-        let mut tx = match self.read().await {
-            Ok(tx) => tx,
+        match self.try_get(req).await {
+            Ok(Some(obj)) => return Fetch::Ready(obj),
+            Ok(None) => return passive(req, passive_fetch),
             Err(err) => {
                 tracing::warn!(
                     ?req,
-                    "unable to start transaction to load object, falling back to fetching: {err:#}"
+                    "unable to fetch object; spawning a task to retry: {err:#}"
                 );
-                return self.fetch(None, passive, req).await;
             }
-        };
+        }
 
-        let res = T::load(&mut tx, req).await;
-        self.ok_or_fetch(Some(&mut tx), passive, req, res).await
+        // We'll use this channel to get the object back if we successfully load it on retry.
+        let (send, recv) = oneshot::channel();
+
+        let fetcher = self.clone();
+        let mut backoff = fetcher.backoff.clone();
+        let span = tracing::warn_span!("get retry", ?req);
+        spawn(
+            async move {
+                let mut delay = backoff.next_backoff().unwrap_or(Duration::from_secs(1));
+                loop {
+                    match fetcher.try_get(req).await {
+                        Ok(Some(obj)) => {
+                            // If the object was immediately available after all, signal the original
+                            // fetch. We probably just temporarily couldn't access it due to database
+                            // errors.
+                            tracing::info!(?req, "object was ready after retries");
+                            send.send(obj).ok();
+                            break;
+                        }
+                        Ok(None) => {
+                            // The object was not immediately available after all, but we have
+                            // successfully spawned a fetch for it if possible. The spawned fetch will
+                            // notify the original request once it completes.
+                            tracing::info!(?req, "spawned fetch after retries");
+                            break;
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                ?req,
+                                ?delay,
+                                "unable to fetch object, will retry: {err:#}"
+                            );
+                            sleep(delay).await;
+                            if let Some(next_delay) = backoff.next_backoff() {
+                                delay = next_delay;
+                            }
+                        }
+                    }
+                }
+            }
+            .instrument(span),
+        );
+
+        // Wait for the object to be fetched, either from the local database on retry or from
+        // another provider eventually.
+        passive(req, select_some(passive_fetch, recv.map(Result::ok)))
+    }
+
+    /// Try to get an object from local storage or initialize a fetch if it is missing.
+    ///
+    /// There are three possible scenarios in this function, indicated by the return type:
+    /// * `Ok(Some(obj))`: the requested object was available locally and successfully retrieved
+    ///   from the database; no fetch was spawned
+    /// * `Ok(None)`: the requested object was not available locally, but a fetch was successfully
+    ///   spawned if possible (in other words, if a fetch was not spawned, it was determined that
+    ///   the requested object is not fetchable)
+    /// * `Err(_)`: it could not be determined whether the object was available locally or whether
+    ///   it could be fetched; no fetch was spawned even though the object may be fetchable
+    async fn try_get<T>(self: &Arc<Self>, req: T::Request) -> anyhow::Result<Option<T>>
+    where
+        T: Fetchable<Types>,
+    {
+        let mut tx = self.read().await.context("opening read transaction")?;
+        match T::load(&mut tx, req).await {
+            Ok(t) => Ok(Some(t)),
+            Err(err) => {
+                tracing::info!(
+                    ?req,
+                    "error loading object from local storage, will try to fetch: {err:#}"
+                );
+                self.fetch::<T>(&mut tx, req).await?;
+                Ok(None)
+            }
+        }
     }
 
     /// Get a range of objects from local storage or a provider.
@@ -845,9 +919,10 @@ where
                     {
                         let chunk = self_clone.get_chunk(chunk).await;
 
-                        // Introduce a delay (`chunk_fetch_delay`) between fetching chunks.
-                        // This helps to limit constant high CPU usage when fetching long range of data,
-                        // especially for older streams that fetch most of the data from local storage
+                        // Introduce a delay (`chunk_fetch_delay`) between fetching chunks. This
+                        // helps to limit constant high CPU usage when fetching long range of data,
+                        // especially for older streams that fetch most of the data from local
+                        // storage.
                         sleep(chunk_fetch_delay).await;
                         chunk
                     }
@@ -856,8 +931,9 @@ where
             .flatten()
             .then(move |f| async move {
                 match f {
-                    // Introduce a delay (`active_fetch_delay`) for active fetches to reduce load on the catchup provider.
-                    // The delay applies between pending fetches, not between chunks.
+                    // Introduce a delay (`active_fetch_delay`) for active fetches to reduce load on
+                    // the catchup provider. The delay applies between pending fetches, not between
+                    // chunks.
                     Fetch::Pending(_) => sleep(active_fetch_delay).await,
                     Fetch::Ready(_) => (),
                 };
@@ -872,37 +948,125 @@ where
     /// * It fetches all desired objects together, as a single chunk
     /// * It loads the object or triggers fetches right now rather than providing a lazy stream
     ///   which only fetches objects when polled.
-    async fn get_chunk<T>(self: Arc<Self>, chunk: Range<usize>) -> impl Stream<Item = Fetch<T>>
+    async fn get_chunk<T>(self: &Arc<Self>, chunk: Range<usize>) -> impl Stream<Item = Fetch<T>>
     where
         T: RangedFetchable<Types>,
     {
         // Subscribe to notifications first. As in [`get`](Self::get), this ensures we won't miss
         // any notifications sent in between checking local storage and triggering a fetch if
         // necessary.
-        let mut passive = join_all(
+        let passive_fetches = join_all(
             chunk
                 .clone()
                 .map(|i| T::passive_fetch(&self.notifiers, i.into())),
         )
         .await;
 
-        let (mut tx, ts) = match self.read().await {
-            Ok(mut tx) => {
-                let ts = T::load_range(&mut tx, chunk.clone())
-                    .await
-                    .context(format!("when fetching items in range {chunk:?}"))
-                    .ok_or_trace()
-                    .unwrap_or_default();
-                (Some(tx), ts)
+        match self.try_get_chunk(&chunk).await {
+            Ok(objs) => {
+                // Convert to fetches. Objects which are not immediately available (`None` in the
+                // chunk) become passive fetches awaiting a notification of availability.
+                return stream::iter(objs.into_iter().zip(passive_fetches).enumerate().map(
+                    move |(i, (obj, passive_fetch))| match obj {
+                        Some(obj) => Fetch::Ready(obj),
+                        None => passive(T::Request::from(chunk.start + i), passive_fetch),
+                    },
+                ))
+                .boxed();
             }
             Err(err) => {
                 tracing::warn!(
                     ?chunk,
-                    "unable to open transaction to read chunk, falling back to fetching: {err:#}"
+                    "unable to fetch chunk; spawning a task to retry: {err:#}"
                 );
-                (None, vec![])
             }
-        };
+        }
+
+        // We'll use these channels to get the objects back that we successfully load on retry.
+        let (send, recv): (Vec<_>, Vec<_>) =
+            repeat_with(oneshot::channel).take(chunk.len()).unzip();
+
+        {
+            let fetcher = self.clone();
+            let mut backoff = fetcher.backoff.clone();
+            let chunk = chunk.clone();
+            let span = tracing::warn_span!("get_chunk retry", ?chunk);
+            spawn(
+                async move {
+                    let mut delay = backoff.next_backoff().unwrap_or(Duration::from_secs(1));
+                    loop {
+                        match fetcher.try_get_chunk(&chunk).await {
+                            Ok(objs) => {
+                                for (i, (obj, sender)) in objs.into_iter().zip(send).enumerate() {
+                                    if let Some(obj) = obj {
+                                        // If the object was immediately available after all, signal the
+                                        // original fetch. We probably just temporarily couldn't access it
+                                        // due to database errors.
+                                        tracing::info!(?chunk, i, "object was ready after retries");
+                                        sender.send(obj).ok();
+                                    } else {
+                                        // The object was not immediately available after all, but we have
+                                        // successfully spawned a fetch for it if possible. The spawned
+                                        // fetch will notify the original request once it completes.
+                                        tracing::info!(?chunk, i, "spawned fetch after retries");
+                                    }
+                                }
+                                break;
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    ?chunk,
+                                    ?delay,
+                                    "unable to fetch chunk, will retry: {err:#}"
+                                );
+                                sleep(delay).await;
+                                if let Some(next_delay) = backoff.next_backoff() {
+                                    delay = next_delay;
+                                }
+                            }
+                        }
+                    }
+                }
+                .instrument(span),
+            );
+        }
+
+        // Wait for the objects to be fetched, either from the local database on retry or from
+        // another provider eventually.
+        stream::iter(passive_fetches.into_iter().zip(recv).enumerate().map(
+            move |(i, (passive_fetch, recv))| {
+                passive(
+                    T::Request::from(chunk.start + i),
+                    select_some(passive_fetch, recv.map(Result::ok)),
+                )
+            },
+        ))
+        .boxed()
+    }
+
+    /// Try to get a range of objects from local storage, intializing fetches if any are missing.
+    ///
+    /// If this function succeeded, then for each object in the requested range, either:
+    /// * the object was available locally, and corresponds to `Some(_)` object in the result
+    /// * the object was not available locally (and corresponds to `None` in the result), but a
+    ///   fetch was successfully spawned if possible (in other words, if a fetch was not spawned, it
+    ///   was determined that the requested object is not fetchable)
+    ///
+    /// This function will fail if it could not be determined which objects in the requested range
+    /// are available locally, or if, for any missing object, it could not be determined whether
+    /// that object is fetchable. In this case, there may be no fetch spawned for certain objects in
+    /// the requested range, even if those objects are actually fetchable.
+    async fn try_get_chunk<T>(
+        self: &Arc<Self>,
+        chunk: &Range<usize>,
+    ) -> anyhow::Result<Vec<Option<T>>>
+    where
+        T: RangedFetchable<Types>,
+    {
+        let mut tx = self.read().await.context("opening read transaction")?;
+        let ts = T::load_range(&mut tx, chunk.clone())
+            .await
+            .context(format!("when fetching items in range {chunk:?}"))?;
 
         // Log and discard error information; we want a list of Option where None indicates an
         // object that needs to be fetched. Note that we don't use `FetchRequest::might_exist` to
@@ -911,128 +1075,58 @@ where
         // rather than returning `Err` objects, so if there are errors in here they are unexpected
         // and we do want to log them.
         let ts = ts.into_iter().filter_map(ResultExt::ok_or_trace);
+
         // Kick off a fetch for each missing object.
-        let mut fetches = Vec::with_capacity(chunk.len());
+        let mut results = Vec::with_capacity(chunk.len());
         for t in ts {
             // Fetch missing objects that should come before `t`.
-            while chunk.start + fetches.len() < t.height() as usize {
+            while chunk.start + results.len() < t.height() as usize {
                 tracing::debug!(
                     "item {} in chunk not available, will be fetched",
-                    fetches.len()
+                    results.len()
                 );
-                fetches.push(
-                    self.fetch(tx.as_mut(), passive.remove(0), chunk.start + fetches.len())
-                        .await,
-                );
+                self.fetch::<T>(&mut tx, (chunk.start + results.len()).into())
+                    .await?;
+                results.push(None);
             }
-            // `t` itself is already available, we don't have to trigger a fetch for it. Remove (and
-            // drop without awaiting) the passive fetch we preemptively started.
-            drop(passive.remove(0));
-            fetches.push(Fetch::Ready(t));
+
+            results.push(Some(t));
         }
         // Fetch missing objects from the end of the range.
-        while fetches.len() < chunk.len() {
-            fetches.push(
-                self.fetch(tx.as_mut(), passive.remove(0), chunk.start + fetches.len())
-                    .await,
-            );
+        while results.len() < chunk.len() {
+            self.fetch::<T>(&mut tx, (chunk.start + results.len()).into())
+                .await?;
+            results.push(None);
         }
 
-        stream::iter(fetches)
+        Ok(results)
     }
 
-    async fn ok_or_fetch<R, T>(
+    /// Spawn an active fetch for the requested object, if possible.
+    ///
+    /// On success, either an active fetch for `req` has been spawned, or it has been determined
+    /// that `req` is not fetchable. Fails if it cannot be determined (e.g. due to errors in the
+    /// local database) whether `req` is fetchable or not.
+    async fn fetch<T>(
         self: &Arc<Self>,
-        tx: Option<&mut <Self as VersionedDataSource>::ReadOnly<'_>>,
-        passive: PassiveFetch<T>,
-        req: R,
-        res: QueryResult<T>,
-    ) -> Fetch<T>
+        tx: &mut <Self as VersionedDataSource>::ReadOnly<'_>,
+        req: T::Request,
+    ) -> anyhow::Result<()>
     where
-        R: Into<T::Request> + Send,
-        T: Fetchable<Types> + Send + Sync + 'static,
-    {
-        let req = req.into();
-        self.some_or_fetch(
-            tx,
-            passive,
-            req,
-            res.context(format!("req: {req:?}")).ok_or_trace(),
-        )
-        .await
-    }
-
-    async fn some_or_fetch<R, T>(
-        self: &Arc<Self>,
-        tx: Option<&mut <Self as VersionedDataSource>::ReadOnly<'_>>,
-        passive: PassiveFetch<T>,
-        req: R,
-        res: Option<T>,
-    ) -> Fetch<T>
-    where
-        R: Into<T::Request> + Send,
-        T: Fetchable<Types> + Send + Sync + 'static,
-    {
-        match res {
-            Some(t) => Fetch::Ready(t),
-            None => self.fetch(tx, passive, req).await,
-        }
-    }
-
-    async fn fetch<R, T>(
-        self: &Arc<Self>,
-        tx: Option<&mut <Self as VersionedDataSource>::ReadOnly<'_>>,
-        passive: PassiveFetch<T>,
-        req: R,
-    ) -> Fetch<T>
-    where
-        R: Into<T::Request>,
         T: Fetchable<Types>,
     {
-        let req = req.into();
         tracing::debug!("fetching resource {req:?}");
 
-        // Subscribe to notifications so we are alerted when we get the resource.
-        let fut = passive.then(move |opt| async move {
-            match opt {
-                Some(t) => t,
-                None => {
-                    // If `passive_fetch` returns `None`, it means the notifier was dropped without
-                    // ever sending a notification. In this case, the correct behavior is actually
-                    // to block forever (unless the `Fetch` itself is dropped), since the semantics
-                    // of `Fetch` are to never fail. This is analogous to fetching an object which
-                    // doesn't actually exist: the `Fetch` will never return.
-                    //
-                    // However, for ease of debugging, and since this is never expected to happen in
-                    // normal usage, we panic instead. This should only happen in two cases:
-                    // * The server was shut down (dropping the notifier) without cleaning up some
-                    //   background tasks. This will not affect runtime behavior, but should be
-                    //   fixed if it happens.
-                    // * There is a very unexpected runtime bug resulting in the notifier being
-                    //   dropped. If this happens, things are very broken in any case, and it is
-                    //   better to panic loudly than simply block forever.
-                    panic!("notifier dropped without satisfying request {req:?}");
-                }
-            }
-        });
-
         // Trigger an active fetch from a remote provider if possible.
-        if let Some(tx) = tx {
-            if let Some(heights) = Heights::load(tx).await.ok_or_trace() {
-                if req.might_exist(heights) {
-                    T::active_fetch(tx, self.clone(), req).await;
-                } else {
-                    tracing::debug!("not fetching object {req:?} that cannot exist at {heights:?}");
-                }
-            } else {
-                tracing::warn!("failed to load heights; cannot definitively say object might exist; will skip active fetch");
-            }
+        let heights = Heights::load(tx)
+            .await
+            .context("failed to load heights; cannot definitively say object might exist")?;
+        if req.might_exist(heights) {
+            T::active_fetch(tx, self.clone(), req).await;
         } else {
-            tracing::warn!(?req, "unable to open transaction; will skip active fetch");
+            tracing::debug!("not fetching object {req:?} that cannot exist at {heights:?}");
         }
-
-        // Wait for the object to arrive.
-        Fetch::Pending(fut.boxed())
+        Ok(())
     }
 
     /// Proactively search for and retrieve missing objects.
@@ -1879,5 +1973,58 @@ impl AggregatorMetrics {
         Self {
             height: group.create_gauge("height".into(), None),
         }
+    }
+}
+
+/// Turn a fallible passive fetch future into an infallible "fetch".
+///
+/// Basically, we ignore failures due to a channel sender being dropped, which should never happen.
+fn passive<T>(
+    req: impl Debug + Send + 'static,
+    fut: impl Future<Output = Option<T>> + Send + 'static,
+) -> Fetch<T>
+where
+    T: Send + 'static,
+{
+    Fetch::Pending(
+        fut.then(move |opt| async move {
+            match opt {
+                Some(t) => t,
+                None => {
+                    // If `passive_fetch` returns `None`, it means the notifier was dropped without
+                    // ever sending a notification. In this case, the correct behavior is actually
+                    // to block forever (unless the `Fetch` itself is dropped), since the semantics
+                    // of `Fetch` are to never fail. This is analogous to fetching an object which
+                    // doesn't actually exist: the `Fetch` will never return.
+                    //
+                    // However, for ease of debugging, and since this is never expected to happen in
+                    // normal usage, we panic instead. This should only happen in two cases:
+                    // * The server was shut down (dropping the notifier) without cleaning up some
+                    //   background tasks. This will not affect runtime behavior, but should be
+                    //   fixed if it happens.
+                    // * There is a very unexpected runtime bug resulting in the notifier being
+                    //   dropped. If this happens, things are very broken in any case, and it is
+                    //   better to panic loudly than simply block forever.
+                    panic!("notifier dropped without satisfying request {req:?}");
+                }
+            }
+        })
+        .boxed(),
+    )
+}
+
+/// Get the result of the first future to return `Some`, if either do.
+async fn select_some<T>(
+    a: impl Future<Output = Option<T>> + Unpin,
+    b: impl Future<Output = Option<T>> + Unpin,
+) -> Option<T> {
+    match future::select(a, b).await {
+        // If the first future resolves with `Some`, immediately return the result.
+        Either::Left((Some(a), _)) => Some(a),
+        Either::Right((Some(b), _)) => Some(b),
+
+        // If the first future resolves with `None`, wait for the result of the second future.
+        Either::Left((None, b)) => b.await,
+        Either::Right((None, a)) => a.await,
     }
 }
