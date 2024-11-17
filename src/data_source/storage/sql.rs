@@ -497,7 +497,7 @@ impl SqlStorage {
     pub async fn connect(mut config: Config) -> Result<Self, Error> {
         let metrics = PrometheusMetrics::default();
         let pool_metrics = PoolMetrics::new(&*metrics.subgroup("sql".into()));
-        let pool_opt = config.pool_opt;
+        let pool = config.pool_opt.clone();
         let pruner_cfg = config.pruner_cfg;
 
         // re-use the same pool if present and return early
@@ -529,7 +529,7 @@ impl SqlStorage {
             std::fs::remove_file(config.db_opt.get_filename())?;
         }
 
-        let pool = pool_opt.connect_with(config.db_opt).await?;
+        let pool = pool.connect_with(config.db_opt).await?;
 
         // Create or connect to the schema for this query service.
         let mut conn = pool.acquire().await?;
@@ -1166,12 +1166,11 @@ mod test {
         // The SQL commands used here will fail if not run in order.
         let migrations = vec![
             Migration::unapplied(
-                "V203__create_test_table.sql",
+                "V999__create_test_table.sql",
                 "ALTER TABLE test ADD COLUMN data INTEGER;",
             )
             .unwrap(),
-            Migration::unapplied("V202__create_test_table.sql", "CREATE TABLE test (x int);")
-                .unwrap(),
+            Migration::unapplied("V998__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
         ];
         connect(true, migrations.clone()).await.unwrap();
 

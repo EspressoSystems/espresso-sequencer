@@ -14,14 +14,15 @@
 
 use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerCfg, PrunerConfig},
-    AvailabilityStorage, NodeStorage,
+    AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
+    UpdateAvailabilityStorage,
 };
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::{storage::UpdateAvailabilityStorage, update, VersionedDataSource},
+    data_source::{update, VersionedDataSource},
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
@@ -399,14 +400,20 @@ where
         self.inner.block_height().await
     }
 
-    async fn count_transactions(&mut self) -> QueryResult<usize> {
+    async fn count_transactions_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
         self.maybe_fail_read().await?;
-        self.inner.count_transactions().await
+        self.inner.count_transactions_in_range(range).await
     }
 
-    async fn payload_size(&mut self) -> QueryResult<usize> {
+    async fn payload_size_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize> {
         self.maybe_fail_read().await?;
-        self.inner.payload_size().await
+        self.inner.payload_size_in_range(range).await
     }
 
     async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
@@ -429,5 +436,26 @@ where
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         self.maybe_fail_read().await?;
         self.inner.get_header_window(start, end).await
+    }
+}
+
+impl<T> AggregatesStorage for Transaction<T>
+where
+    T: AggregatesStorage + Send + Sync,
+{
+    async fn aggregates_height(&mut self) -> anyhow::Result<usize> {
+        self.maybe_fail_read().await?;
+        self.inner.aggregates_height().await
+    }
+}
+
+impl<T, Types> UpdateAggregatesStorage<Types> for Transaction<T>
+where
+    Types: NodeType,
+    T: UpdateAggregatesStorage<Types> + Send + Sync,
+{
+    async fn update_aggregates(&mut self, block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+        self.maybe_fail_write().await?;
+        self.inner.update_aggregates(block).await
     }
 }

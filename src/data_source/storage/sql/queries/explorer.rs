@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionIndex},
-    data_source::storage::ExplorerStorage,
+    data_source::storage::{ExplorerStorage, NodeStorage},
     explorer::{
         self,
         errors::{self, NotFound},
@@ -460,24 +460,9 @@ where
         };
 
         let genesis_overview = {
-            let row = query(
-                "SELECT
-                    (SELECT MAX(height) + 1 FROM header) AS blocks,
-                    (SELECT COUNT(*) FROM transactions) AS transactions",
-            )
-            .fetch_one(self.as_mut())
-            .await?;
-
-            let blocks: i64 = row.try_get("blocks")?;
-            let transactions: i64 = row.try_get("transactions")?;
-
-            let blocks: u64 = blocks
-                .try_into()
-                .decode_error("failed to convert blocks to u64 {e}")?;
-            let transactions: u64 = transactions
-                .try_into()
-                .decode_error("failed to convert transactions to u64 {e}")?;
-
+            let blocks = NodeStorage::<Types>::block_height(self).await? as u64;
+            let transactions =
+                NodeStorage::<Types>::count_transactions_in_range(self, ..).await? as u64;
             GenesisOverview {
                 rollups: 0,
                 transactions,

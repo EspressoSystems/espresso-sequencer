@@ -1088,6 +1088,7 @@ mod test {
         let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
         let data_source = FetchingDataSource::builder(storage, provider)
             .disable_proactive_fetching()
+            .disable_aggregator()
             .with_max_retry_interval(Duration::from_millis(100))
             .with_retry_timeout(Duration::from_secs(1))
             .build()
@@ -1173,6 +1174,7 @@ mod test {
         let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
         let data_source = FetchingDataSource::builder(storage, provider)
             .disable_proactive_fetching()
+            .disable_aggregator()
             .with_min_retry_interval(Duration::from_millis(100))
             .build()
             .await

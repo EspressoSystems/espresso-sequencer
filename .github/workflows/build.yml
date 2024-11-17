@@ -6,9 +6,6 @@ on:
       - main
       - release-*
   pull_request:
-    branches:
-      - main
-      - release-*
   workflow_dispatch:
 
 concurrency:
@@ -39,7 +36,7 @@ jobs:
       # don't compile with all combinations of features.
       - name: Clippy(all-features)
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
-        
+
       - name: Clippy(no-storage)
         run: cargo clippy --workspace --features no-storage --all-targets -- -D warnings
 
@@ -66,10 +63,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
-       # Install nextest
+        # Install nextest
       - name: Install Nextest
         run: cargo install cargo-nextest
-      
+
       - name: Test
         run: |
           cargo nextest run --workspace --release --all-features

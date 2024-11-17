@@ -181,8 +181,14 @@ where
 #[async_trait]
 pub trait NodeStorage<Types: NodeType> {
     async fn block_height(&mut self) -> QueryResult<usize>;
-    async fn count_transactions(&mut self) -> QueryResult<usize>;
-    async fn payload_size(&mut self) -> QueryResult<usize>;
+    async fn count_transactions_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize>;
+    async fn payload_size_in_range(
+        &mut self,
+        range: impl RangeBounds<usize> + Send,
+    ) -> QueryResult<usize>;
     async fn vid_share<ID>(&mut self, id: ID) -> QueryResult<VidShare>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
@@ -194,6 +200,22 @@ pub trait NodeStorage<Types: NodeType> {
 
     /// Search the database for missing objects and generate a report.
     async fn sync_status(&mut self) -> QueryResult<SyncStatus>;
+}
+
+pub trait AggregatesStorage {
+    /// The block height for which aggregate statistics are currently available.
+    fn aggregates_height(&mut self) -> impl Future<Output = anyhow::Result<usize>> + Send;
+}
+
+pub trait UpdateAggregatesStorage<Types>
+where
+    Types: NodeType,
+{
+    /// Update aggregate statistics based on a new block.
+    fn update_aggregates(
+        &mut self,
+        block: &BlockQueryData<Types>,
+    ) -> impl Future<Output = anyhow::Result<()>> + Send;
 }
 
 /// An interface for querying Data and Statistics from the HotShot Blockchain.

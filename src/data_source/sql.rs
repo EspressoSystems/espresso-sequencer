@@ -243,7 +243,6 @@ impl Config {
 /// the steps in [custom migrations](#custom-migrations) to accomodate this.
 ///
 /// ```
-/// # use async_std::{sync::Arc, task::spawn};
 /// # use futures::StreamExt;
 /// # use hotshot::types::SystemContextHandle;
 /// # use hotshot_query_service::Error;
@@ -255,7 +254,9 @@ impl Config {
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions
 /// # };
 /// # use hotshot_example_types::node_types::TestVersions;
+/// # use std::sync::Arc;
 /// # use tide_disco::App;
+/// # use tokio::spawn;
 /// # use vbs::version::StaticVersionType;
 /// struct AppState {
 ///     hotshot_qs: SqlDataSource<AppTypes, NoFetching>,
