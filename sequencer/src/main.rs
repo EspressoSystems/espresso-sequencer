@@ -180,6 +180,9 @@ where
         fallback_builder_url: opt.fallback_builder_url,
     };
 
+    // TODO: cleanup this by using the persistence and passing it to init_node()
+    let (persistence_opt, _) = storage_opt.create().await?;
+
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
@@ -188,7 +191,7 @@ where
             // Add optional API modules as requested.
             let mut http_opt = api::Options::from(http_opt);
             if let Some(query) = modules.query {
-                http_opt = storage_opt.enable_query_module(http_opt, query);
+                http_opt = persistence_opt.enable_query_module(http_opt, query);
             }
             if let Some(submit) = modules.submit {
                 http_opt = http_opt.submit(submit);
@@ -220,7 +223,7 @@ where
                             genesis,
                             network_params,
                             &*metrics,
-                            storage_opt,
+                            persistence_opt,
                             l1_params,
                             versions,
                             consumer,
@@ -239,7 +242,7 @@ where
                 genesis,
                 network_params,
                 &NoMetrics,
-                storage_opt,
+                persistence_opt,
                 l1_params,
                 versions,
                 NullEventConsumer,

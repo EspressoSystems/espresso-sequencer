@@ -10,11 +10,11 @@ use espresso_types::{
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
-use hotshot_query_service::data_source::storage::sql::Write;
+use hotshot_query_service::data_source::storage::sql::Db;
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, query_as, Config, SqlStorage, Transaction},
+        sql::{include_migrations, query_as, Config, SqlStorage},
     },
     Transaction as _, VersionedDataSource,
 };
@@ -147,6 +147,16 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    // Keep the database connection pool when persistence is created,
+    // allowing it to be reused across multiple instances instead of creating
+    // a new pool each time such as for API, consensus storage etc
+    // This also ensures all storage instances adhere to the MAX_CONNECTIONS limit if set
+    //
+    // Note: Cloning the `Pool` is lightweight and efficient because it simply
+    // creates a new reference-counted handle to the underlying pool state.
+    #[clap(skip)]
+    pub(crate) pool: Option<sqlx::Pool<Db>>,
 }
 
 #[cfg(not(feature = "embedded-db"))]
@@ -219,6 +229,10 @@ impl TryFrom<Options> for Config {
             Some(uri) => uri.parse()?,
             None => Self::default(),
         };
+
+        if let Some(pool) = opt.pool {
+            cfg = cfg.pool(pool);
+        }
 
         #[cfg(not(feature = "embedded-db"))]
         {
@@ -351,13 +365,16 @@ impl From<PruningOptions> for PrunerCfg {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
-    async fn create(self) -> anyhow::Result<Persistence> {
+    async fn create(mut self) -> anyhow::Result<(Self, Self::Persistence)> {
+        let store_undecided_state = self.store_undecided_state;
+        let config = self.clone().try_into()?;
         let persistence = Persistence {
-            store_undecided_state: self.store_undecided_state,
-            db: SqlStorage::connect(self.try_into()?).await?,
+            store_undecided_state,
+            db: SqlStorage::connect(config).await?,
         };
         persistence.migrate_quorum_proposal_leaf_hashes().await?;
-        Ok(persistence)
+        self.pool = Some(persistence.db.pool());
+        Ok((self, persistence))
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -473,8 +490,8 @@ impl SequencerPersistence for Persistence {
         // Generate an event for the new leaves and, only if it succeeds, clean up data we no longer
         // need.
         let consumer = dyn_clone::clone(consumer);
-        let tx = self.db.write().await?;
-        if let Err(err) = collect_garbage(tx, view, consumer).await {
+
+        if let Err(err) = collect_garbage(self, view, consumer).await {
             // GC/event processing failure is not an error, since by this point we have at least
             // managed to persist the decided leaves successfully, and GC will just run again at the
             // next decide. Log an error but do not return it.
@@ -767,17 +784,21 @@ impl SequencerPersistence for Persistence {
 }
 
 async fn collect_garbage(
-    mut tx: Transaction<Write>,
+    storage: &Persistence,
     view: ViewNumber,
     consumer: impl EventConsumer,
 ) -> anyhow::Result<()> {
-    // Clean up and collect VID shares.
+    // In SQLite, overlapping read and write transactions can lead to database errors.
+    // To avoid this:
+    // - start a read transaction to query and collect all the necessary data.
+    // - Commit (or implicitly drop) the read transaction once the data is fetched.
+    // - use the collected data to generate a "decide" event for the consumer.
+    // - begin a write transaction to delete the data and update the event stream.
+    let mut tx = storage.db.read().await?;
 
+    // collect VID shares.
     let mut vid_shares = tx
-        .fetch_all(
-            query("DELETE FROM vid_share where view <= $1 RETURNING view, data")
-                .bind(view.u64() as i64),
-        )
+        .fetch_all(query("SELECT * FROM vid_share where view <= $1").bind(view.u64() as i64))
         .await?
         .into_iter()
         .map(|row| {
@@ -789,12 +810,9 @@ async fn collect_garbage(
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
 
-    // Clean up and collect DA proposals.
+    // collect DA proposals.
     let mut da_proposals = tx
-        .fetch_all(
-            query("DELETE FROM da_proposal where view <= $1 RETURNING view, data")
-                .bind(view.u64() as i64),
-        )
+        .fetch_all(query("SELECT * FROM da_proposal where view <= $1").bind(view.u64() as i64))
         .await?
         .into_iter()
         .map(|row| {
@@ -806,10 +824,7 @@ async fn collect_garbage(
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
 
-    // Clean up and collect leaves, except do not delete the most recent leaf: we need to remember
-    // this so that in case we restart, we can pick up from the last decided leaf. We still do
-    // include this leaf in the query results (the `UNION` clause) so we can include it in the
-    // decide event we send to the consumer.
+    // collect leaves
     let mut leaves = tx
         .fetch_all(
             query("SELECT view, leaf, qc FROM anchor_leaf WHERE view <= $1")
@@ -826,14 +841,6 @@ async fn collect_garbage(
             Ok((view as u64, (leaf, qc)))
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
-
-    tx.execute(query("DELETE FROM anchor_leaf WHERE view < $1").bind(view.u64() as i64))
-        .await?;
-
-    // Clean up old proposals. These are not part of the decide event we generate for the consumer,
-    // so we don't need to return them.
-    tx.execute(query("DELETE FROM quorum_proposals where view <= $1").bind(view.u64() as i64))
-        .await?;
 
     // Exclude from the decide event any leaves which have definitely already been processed. We may
     // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in
@@ -869,6 +876,8 @@ async fn collect_garbage(
     } else {
         leaves
     };
+
+    drop(tx);
 
     // Generate a decide event for each leaf, to be processed by the event consumer. We make a
     // separate event for each leaf because it is possible we have non-consecutive leaves in our
@@ -910,6 +919,7 @@ async fn collect_garbage(
             .await?;
     }
 
+    let mut tx = storage.db.write().await?;
     // Now that we have definitely processed leaves up to `view`, we can update
     // `last_processed_view` so we don't process these leaves again. We may still fail at this
     // point, or shut down, and fail to complete this update. At worst this will lead to us sending
@@ -922,6 +932,22 @@ async fn collect_garbage(
         [(1i32, view.u64() as i64)],
     )
     .await?;
+
+    tx.execute(query("DELETE FROM vid_share where view <= $1").bind(view.u64() as i64))
+        .await?;
+
+    tx.execute(query("DELETE FROM da_proposal where view <= $1").bind(view.u64() as i64))
+        .await?;
+
+    // Clean up leaves, but do not delete the most recent one (all leaves with a view number less than the given value).
+    // This is necessary to ensure that, in case of a restart, we can resume from the last decided leaf.
+    tx.execute(query("DELETE FROM anchor_leaf WHERE view < $1").bind(view.u64() as i64))
+        .await?;
+
+    // Clean up old proposals. These are not part of the decide event we generate for the consumer,
+    // so we don't need to return them.
+    tx.execute(query("DELETE FROM quorum_proposals where view <= $1").bind(view.u64() as i64))
+        .await?;
 
     tx.commit().await
 }
@@ -951,13 +977,15 @@ mod testing {
                     ..Default::default()
                 }
                 .into();
-                opt.create().await.unwrap()
+                let (_, storage) = opt.create().await.unwrap();
+                storage
             }
 
             #[cfg(feature = "embedded-db")]
             {
                 let opt: Options = SqliteOptions { path: db.path() }.into();
-                opt.create().await.unwrap()
+                let (_, storage) = opt.create().await.unwrap();
+                storage
             }
         }
     }

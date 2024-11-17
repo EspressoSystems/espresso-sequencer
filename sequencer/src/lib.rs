@@ -301,7 +301,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     )
     .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let persistence = persistence_opt.clone().create().await?;
+    let (_, persistence) = persistence_opt.clone().create().await?;
     let (mut network_config, wait_for_orchestrator) = match (
         persistence.load_config().await?,
         network_params.config_peers,
@@ -1044,6 +1044,8 @@ pub mod testing {
                 state_key = %my_peer_config.state_ver_key,
                 "starting node",
             );
+
+            let (_, persistence) = persistence_opt.create().await.unwrap();
             SequencerContext::init(
                 NetworkConfig {
                     config,
@@ -1054,7 +1056,7 @@ pub mod testing {
                 validator_config,
                 memberships,
                 node_state,
-                persistence_opt.create().await.unwrap(),
+                persistence,
                 network,
                 self.state_relay_url.clone(),
                 metrics,
