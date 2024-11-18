@@ -16,7 +16,7 @@ ark-std = { workspace = true }
 clap = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 displaydoc = { version = "0.2.3", default-features = false }
-espresso-types = { path = "../types", features = ["testing"] }
+espresso-types = { path = "../types" }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter = { workspace = true }

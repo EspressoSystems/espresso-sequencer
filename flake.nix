@@ -192,8 +192,9 @@
             # Rust tools
             cargo-audit
             cargo-edit
-            cargo-sort
+            cargo-hack
             cargo-nextest
+            cargo-sort
             typos
             just
             nightlyToolchain.passthru.availableComponents.rust-analyzer
