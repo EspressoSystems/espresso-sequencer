@@ -237,7 +237,6 @@ impl Default for Config {
     fn default() -> Self {
         SqliteConnectOptions::default()
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
             .busy_timeout(Duration::from_secs(30))
             .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
             .create_if_missing(true)
@@ -667,21 +666,7 @@ impl PruneStorage for SqlStorage {
 
         #[cfg(feature = "embedded-db")]
         let query = "
-        SELECT 
-            SUM(total_bytes)
-        FROM (
-            SELECT 
-                name,
-                (page_count * page_size) AS total_bytes
-            FROM 
-                pragma_page_size
-            JOIN 
-                pragma_page_count ON 1 = 1
-            JOIN 
-                sqlite_master ON type = 'table'
-            WHERE 
-                name NOT LIKE 'sqlite_%'
-        );";
+            SELECT( (SELECT page_count FROM pragma_page_count) * (SELECT * FROM pragma_page_size)) AS total_bytes";
 
         let row = tx.fetch_one(query).await?;
         let size: i64 = row.get(0);

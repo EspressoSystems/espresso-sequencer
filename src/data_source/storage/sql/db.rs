@@ -42,3 +42,9 @@
 pub type Db = sqlx::Sqlite;
 #[cfg(not(feature = "embedded-db"))]
 pub type Db = sqlx::Postgres;
+
+#[cfg(not(feature = "embedded-db"))]
+pub const MAX_FN: &str = "GREATEST";
+
+#[cfg(feature = "embedded-db")]
+pub const MAX_FN: &str = "MAX";
