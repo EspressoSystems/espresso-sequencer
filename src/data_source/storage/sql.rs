@@ -1062,7 +1062,7 @@ pub mod testing {
                     "TEXT",
                     "BLOB",
                     "INTEGER PRIMARY KEY AUTOINCREMENT",
-                    " (json_extract(data, '$.fields.fee_merkle_tree_root'))",
+                    " (json_extract(data, '$.test_merkle_tree_root'))",
                 )
             } else {
                 (
