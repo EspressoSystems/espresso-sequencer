@@ -1530,4 +1530,139 @@ mod test {
 
         assert_eq!(tx, fetch.await);
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_stream_begin_failure() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
+        );
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            MockBase::instance(),
+        ));
+        let db = TmpDb::init().await;
+        let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
+        let data_source = FetchingDataSource::builder(storage, provider)
+            .disable_proactive_fetching()
+            .disable_aggregator()
+            .with_min_retry_interval(Duration::from_millis(100))
+            .with_range_chunk_size(3)
+            .build()
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a few blocks are produced.
+        let leaves = network.data_source().subscribe_leaves(1).await;
+        let leaves = leaves.take(5).collect::<Vec<_>>().await;
+
+        // Send the last leaf to the disconnected data source so it learns about the height.
+        let last_leaf = leaves.last().unwrap();
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Stream the leaves; it should retry until it is able to determine each leaf is fetchable
+        // and trigger the fetch.
+        tracing::info!("stream with transaction failure");
+        data_source
+            .as_ref()
+            .fail_one_begin_read_only(FailableAction::Any)
+            .await;
+        assert_eq!(
+            leaves,
+            data_source
+                .subscribe_leaves(1)
+                .await
+                .take(5)
+                .collect::<Vec<_>>()
+                .await
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_stream_load_failure() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
+        );
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            MockBase::instance(),
+        ));
+        let db = TmpDb::init().await;
+        let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
+        let data_source = FetchingDataSource::builder(storage, provider)
+            .disable_proactive_fetching()
+            .disable_aggregator()
+            .with_min_retry_interval(Duration::from_millis(100))
+            .with_range_chunk_size(3)
+            .build()
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a few blocks are produced.
+        let leaves = network.data_source().subscribe_leaves(1).await;
+        let leaves = leaves.take(5).collect::<Vec<_>>().await;
+
+        // Send the last leaf to the disconnected data source, so the blocks becomes fetchable.
+        let last_leaf = leaves.last().unwrap();
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Stream the blocks with a period of database failures.
+        tracing::info!("stream with read failure");
+        data_source.as_ref().fail_reads(FailableAction::Any).await;
+        let fetches = data_source
+            .get_block_range(1..=5)
+            .await
+            .collect::<Vec<_>>()
+            .await;
+
+        // Give some time for a few reads to fail before letting them succeed.
+        sleep(Duration::from_secs(2)).await;
+        data_source.as_ref().pass().await;
+
+        for (leaf, fetch) in leaves.iter().zip(fetches) {
+            let block: BlockQueryData<MockTypes> = fetch.await;
+            assert_eq!(block.hash(), leaf.block_hash());
+        }
+    }
 }
