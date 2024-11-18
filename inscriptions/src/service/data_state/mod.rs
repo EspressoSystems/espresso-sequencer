@@ -91,8 +91,8 @@ impl<Persistence> DataState<Persistence> {
         self.latest_inscriptions.iter().cloned().collect()
     }
 
-    pub fn persistence(&self) -> &Persistence {
-        &self.persistence
+    pub fn persistence(&self) -> Arc<Persistence> {
+        self.persistence.clone()
     }
 
     /// [stats] returns the statistics that are being tracked by the service.
@@ -252,11 +252,14 @@ where
         );
     }
 
+    let persistence = {
+        let data_state_read_lock = data_state.read_arc().await;
+        data_state_read_lock.persistence()
+    };
+
     for inscription in inscriptions {
         {
-            let state = data_state.read_arc().await;
-            if let Err(err) = state
-                .persistence()
+            if let Err(err) = persistence
                 .record_confirmed_inscription_and_chain_details(&inscription)
                 .await
             {
