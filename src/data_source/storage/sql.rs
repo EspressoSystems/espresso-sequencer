@@ -1170,7 +1170,11 @@ mod test {
                 "ALTER TABLE test ADD COLUMN data INTEGER;",
             )
             .unwrap(),
-            Migration::unapplied("V998__create_test_table.sql", "CREATE TABLE test (x bigint);").unwrap(),
+            Migration::unapplied(
+                "V998__create_test_table.sql",
+                "CREATE TABLE test (x bigint);",
+            )
+            .unwrap(),
         ];
         connect(true, migrations.clone()).await.unwrap();
 

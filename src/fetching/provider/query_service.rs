@@ -1129,6 +1129,8 @@ mod test {
         tracing::info!("retrieve from storage");
         let fetch = data_source.get_leaf(1).await;
         assert_eq!(leaves[0], fetch.try_resolve().ok().unwrap());
+
+        drop(db);
     }
 
     #[tokio::test(flavor = "multi_thread")]
