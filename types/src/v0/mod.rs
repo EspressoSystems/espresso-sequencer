@@ -17,11 +17,14 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    get_l1_deposits, mock, retain_accounts, BuilderValidationError, FeeError,
-    ProposalValidationError, StateValidationError,
+    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
+    StateValidationError,
 };
 pub use utils::*;
 use vbs::version::{StaticVersion, StaticVersionType};
+
+#[cfg(any(test, feature = "testing"))]
+pub use impls::mock;
 
 // This is the single source of truth for minor versions supported by this major version.
 //

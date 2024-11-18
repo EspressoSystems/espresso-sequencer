@@ -2860,7 +2860,6 @@ dependencies = [
  "hotshot",
  "hotshot-orchestrator",
  "hotshot-query-service",
- "hotshot-testing",
  "hotshot-types",
  "itertools 0.12.1",
  "jf-merkle-tree",
@@ -4242,7 +4241,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.62"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.69#1335419bd0a451fe129185c849c8790f26c59547"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.70#b41a6307db861802c0c88ab216ae01ebd9e5a699"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -6330,6 +6329,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-types",
  "jf-signature 0.2.0",
+ "marketplace-solver",
  "portpicker",
  "rand 0.8.5",
  "serde",
@@ -6684,6 +6684,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-types",
+ "node-metrics",
  "prometheus-parse",
  "reqwest 0.12.9",
  "serde",
@@ -8705,6 +8706,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_distr",
  "reqwest 0.12.9",
+ "sequencer",
  "sequencer-utils",
  "serde",
  "serde_json",
