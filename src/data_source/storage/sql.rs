@@ -1082,7 +1082,7 @@ pub mod testing {
     
             ALTER TABLE header
             ADD column test_merkle_tree_root text
-            GENERATED ALWAYS as {root_stored_column} STORED
+            GENERATED ALWAYS as {root_stored_column} STORED;
 
             CREATE TABLE {name}
             (
