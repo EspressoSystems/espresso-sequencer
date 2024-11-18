@@ -1,3 +1,9 @@
+[default]
+extend-ignore-re = [
+  # Ignore any use of the address macro from alloy that includes hexadecimal.
+  "address!\\(\\\"[0-9a-fA-F]{40}\\\"\\)",
+]
+
 [files]
 extend-exclude = [
   "*.json",
