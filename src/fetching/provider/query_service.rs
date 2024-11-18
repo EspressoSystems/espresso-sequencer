@@ -1665,4 +1665,115 @@ mod test {
             assert_eq!(block.hash(), leaf.block_hash());
         }
     }
+
+    enum MetadataType {
+        Payload,
+        Vid,
+    }
+
+    async fn test_metadata_stream_begin_failure_helper(stream: MetadataType) {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
+        );
+
+        // Start a data source which is not receiving events from consensus, only from a peer.
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            MockBase::instance(),
+        ));
+        let db = TmpDb::init().await;
+        let storage = FailStorage::from(SqlStorage::connect(db.config()).await.unwrap());
+        let data_source = FetchingDataSource::builder(storage, provider)
+            .disable_proactive_fetching()
+            .disable_aggregator()
+            .with_min_retry_interval(Duration::from_millis(100))
+            .with_range_chunk_size(3)
+            .build()
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a few blocks are produced.
+        let leaves = network.data_source().subscribe_leaves(1).await;
+        let leaves = leaves.take(3).collect::<Vec<_>>().await;
+
+        // Send the last leaf to the disconnected data source, so the blocks becomes fetchable.
+        let last_leaf = leaves.last().unwrap();
+        let mut tx = data_source.write().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Send the first object to the disconnected data source, so we hit all the cases:
+        // * leaf present but not full object (from the last leaf)
+        // * full object present but inaccessible due to storage failures (first object)
+        // * nothing present (middle object)
+        let leaf = network.data_source().get_leaf(1).await.await;
+        let block = network.data_source().get_block(1).await.await;
+        let vid = network.data_source().get_vid_common(1).await.await;
+        data_source
+            .append(BlockInfo::new(leaf, Some(block), Some(vid), None))
+            .await
+            .unwrap();
+
+        // Stream the objects with a period of database failures.
+        tracing::info!("stream with transaction failure");
+        data_source
+            .as_ref()
+            .fail_begins_read_only(FailableAction::Any)
+            .await;
+        match stream {
+            MetadataType::Payload => {
+                let payloads = data_source.subscribe_payload_metadata(1).await.take(3);
+
+                // Give some time for a few reads to fail before letting them succeed.
+                sleep(Duration::from_secs(2)).await;
+                tracing::info!("stop failing transactions");
+                data_source.as_ref().pass().await;
+
+                let payloads = payloads.collect::<Vec<_>>().await;
+                for (leaf, payload) in leaves.iter().zip(payloads) {
+                    assert_eq!(payload.block_hash, leaf.block_hash());
+                }
+            }
+            MetadataType::Vid => {
+                let vids = data_source.subscribe_vid_common_metadata(1).await.take(3);
+
+                // Give some time for a few reads to fail before letting them succeed.
+                sleep(Duration::from_secs(2)).await;
+                tracing::info!("stop failing transactions");
+                data_source.as_ref().pass().await;
+
+                let vids = vids.collect::<Vec<_>>().await;
+                for (leaf, vid) in leaves.iter().zip(vids) {
+                    assert_eq!(vid.block_hash, leaf.block_hash());
+                }
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_metadata_stream_begin_failure_payload() {
+        test_metadata_stream_begin_failure_helper(MetadataType::Payload).await
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_metadata_stream_begin_failure_vid() {
+        test_metadata_stream_begin_failure_helper(MetadataType::Vid).await
+    }
 }

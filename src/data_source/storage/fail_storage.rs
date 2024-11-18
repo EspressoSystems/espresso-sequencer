@@ -22,7 +22,10 @@ use crate::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
         TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::{update, VersionedDataSource},
+    data_source::{
+        storage::{PayloadMetadata, VidCommonMetadata},
+        update, VersionedDataSource,
+    },
     metrics::PrometheusMetrics,
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
     status::HasMetrics,
@@ -44,12 +47,16 @@ pub enum FailableAction {
     GetLeaf,
     GetBlock,
     GetPayload,
+    GetPayloadMetadata,
     GetVidCommon,
+    GetVidCommonMetadata,
     GetHeaderRange,
     GetLeafRange,
     GetBlockRange,
     GetPayloadRange,
+    GetPayloadMetadataRange,
     GetVidCommonRange,
+    GetVidCommonMetadataRange,
     GetTransaction,
 
     /// Target any action for failure.
@@ -329,12 +336,30 @@ where
         self.inner.get_payload(id).await
     }
 
+    async fn get_payload_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<PayloadMetadata<Types>> {
+        self.maybe_fail_read(FailableAction::GetPayloadMetadata)
+            .await?;
+        self.inner.get_payload_metadata(id).await
+    }
+
     async fn get_vid_common(
         &mut self,
         id: BlockId<Types>,
     ) -> QueryResult<VidCommonQueryData<Types>> {
         self.maybe_fail_read(FailableAction::GetVidCommon).await?;
         self.inner.get_vid_common(id).await
+    }
+
+    async fn get_vid_common_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>> {
+        self.maybe_fail_read(FailableAction::GetVidCommonMetadata)
+            .await?;
+        self.inner.get_vid_common_metadata(id).await
     }
 
     async fn get_leaf_range<R>(
@@ -371,6 +396,18 @@ where
         self.inner.get_payload_range(range).await
     }
 
+    async fn get_payload_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read(FailableAction::GetPayloadMetadataRange)
+            .await?;
+        self.inner.get_payload_metadata_range(range).await
+    }
+
     async fn get_vid_common_range<R>(
         &mut self,
         range: R,
@@ -381,6 +418,18 @@ where
         self.maybe_fail_read(FailableAction::GetVidCommonRange)
             .await?;
         self.inner.get_vid_common_range(range).await
+    }
+
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.maybe_fail_read(FailableAction::GetVidCommonMetadataRange)
+            .await?;
+        self.inner.get_vid_common_metadata_range(range).await
     }
 
     async fn get_transaction(
@@ -494,8 +543,8 @@ where
     Types: NodeType,
     T: UpdateAggregatesStorage<Types> + Send + Sync,
 {
-    async fn update_aggregates(&mut self, block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(&mut self, blocks: &[PayloadMetadata<Types>]) -> anyhow::Result<()> {
         self.maybe_fail_write(FailableAction::Any).await?;
-        self.inner.update_aggregates(block).await
+        self.inner.update_aggregates(blocks).await
     }
 }

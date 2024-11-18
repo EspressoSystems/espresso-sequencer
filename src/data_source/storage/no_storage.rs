@@ -14,8 +14,8 @@
 
 use super::{
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AggregatesStorage, AvailabilityStorage, NodeStorage, UpdateAggregatesStorage,
-    UpdateAvailabilityStorage,
+    AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
+    UpdateAvailabilityStorage, VidCommonMetadata,
 };
 use crate::{
     availability::{
@@ -126,10 +126,24 @@ where
         Err(QueryError::Missing)
     }
 
+    async fn get_payload_metadata(
+        &mut self,
+        _id: BlockId<Types>,
+    ) -> QueryResult<PayloadMetadata<Types>> {
+        Err(QueryError::Missing)
+    }
+
     async fn get_vid_common(
         &mut self,
         _id: BlockId<Types>,
     ) -> QueryResult<VidCommonQueryData<Types>> {
+        Err(QueryError::Missing)
+    }
+
+    async fn get_vid_common_metadata(
+        &mut self,
+        _id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>> {
         Err(QueryError::Missing)
     }
 
@@ -163,10 +177,30 @@ where
         Ok(vec![])
     }
 
+    async fn get_payload_metadata_range<R>(
+        &mut self,
+        _range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(vec![])
+    }
+
     async fn get_vid_common_range<R>(
         &mut self,
         _range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send,
+    {
+        Ok(vec![])
+    }
+
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        _range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
     where
         R: RangeBounds<usize> + Send,
     {
@@ -258,7 +292,10 @@ impl<'a, Types> UpdateAggregatesStorage<Types> for Transaction<'a>
 where
     Types: NodeType,
 {
-    async fn update_aggregates(&mut self, _block: &BlockQueryData<Types>) -> anyhow::Result<()> {
+    async fn update_aggregates(
+        &mut self,
+        _blocks: &[PayloadMetadata<Types>],
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -520,7 +557,13 @@ pub mod testing {
         type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<MockTypes>>>
         where
             R: RangeBounds<usize> + Send;
+        type PayloadMetadataRange<R> = BoxStream<'static, Fetch<PayloadMetadata<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
         type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
+        type VidCommonMetadataRange<R> = BoxStream<'static, Fetch<VidCommonMetadata<MockTypes>>>
         where
             R: RangeBounds<usize> + Send;
 
@@ -554,6 +597,16 @@ pub mod testing {
             }
         }
 
+        async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_payload_metadata(id).await,
+                Self::NoStorage(data_source) => data_source.get_payload_metadata(id).await,
+            }
+        }
+
         async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
@@ -561,6 +614,16 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.get_vid_common(id).await,
                 Self::NoStorage(data_source) => data_source.get_vid_common(id).await,
+            }
+        }
+
+        async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_vid_common_metadata(id).await,
+                Self::NoStorage(data_source) => data_source.get_vid_common_metadata(id).await,
             }
         }
 
@@ -594,6 +657,20 @@ pub mod testing {
             }
         }
 
+        async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => {
+                    data_source.get_payload_metadata_range(range).await.boxed()
+                }
+                Self::NoStorage(data_source) => {
+                    data_source.get_payload_metadata_range(range).await.boxed()
+                }
+            }
+        }
+
         async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
         where
             R: RangeBounds<usize> + Send + 'static,
@@ -603,6 +680,25 @@ pub mod testing {
                 Self::NoStorage(data_source) => {
                     data_source.get_vid_common_range(range).await.boxed()
                 }
+            }
+        }
+
+        async fn get_vid_common_metadata_range<R>(
+            &self,
+            range: R,
+        ) -> Self::VidCommonMetadataRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => data_source
+                    .get_vid_common_metadata_range(range)
+                    .await
+                    .boxed(),
+                Self::NoStorage(data_source) => data_source
+                    .get_vid_common_metadata_range(range)
+                    .await
+                    .boxed(),
             }
         }
 

@@ -18,7 +18,7 @@ use super::{
     Storable,
 };
 use crate::{
-    availability::{BlockId, QueryablePayload, VidCommonQueryData},
+    availability::{BlockId, QueryablePayload, VidCommonMetadata, VidCommonQueryData},
     data_source::{
         storage::{AvailabilityStorage, UpdateAvailabilityStorage},
         VersionedDataSource,
@@ -234,5 +234,74 @@ where
         tracing::info!("fetched VID common {:?}", self.header.payload_commitment());
         let common = VidCommonQueryData::new(self.header, common);
         self.fetcher.store_and_notify(common).await;
+    }
+}
+
+#[async_trait]
+impl<Types> Fetchable<Types> for VidCommonMetadata<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    type Request = VidCommonRequest<Types>;
+
+    fn satisfies(&self, req: Self::Request) -> bool {
+        match req.0 {
+            BlockId::Number(n) => self.height == n as u64,
+            BlockId::Hash(h) => self.block_hash == h,
+            BlockId::PayloadHash(h) => self.payload_hash == h,
+        }
+    }
+
+    async fn passive_fetch(
+        notifiers: &Notifiers<Types>,
+        req: Self::Request,
+    ) -> BoxFuture<'static, Option<Self>> {
+        notifiers
+            .vid_common
+            .wait_for(move |vid| vid.satisfies(req))
+            .await
+            .into_future()
+            .map(|opt| opt.map(Self::from))
+            .boxed()
+    }
+
+    async fn active_fetch<S, P>(
+        tx: &mut impl AvailabilityStorage<Types>,
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        req: Self::Request,
+    ) -> anyhow::Result<()>
+    where
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        P: AvailabilityProvider<Types>,
+    {
+        // Trigger the full VID object to be fetched. This will be enough to satisfy this request
+        // for the summary.
+        VidCommonQueryData::active_fetch(tx, fetcher, req).await
+    }
+
+    async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>
+    where
+        S: AvailabilityStorage<Types>,
+    {
+        storage.get_vid_common_metadata(req.0).await
+    }
+}
+
+#[async_trait]
+impl<Types> RangedFetchable<Types> for VidCommonMetadata<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    type RangedRequest = VidCommonRequest<Types>;
+
+    async fn load_range<S, R>(storage: &mut S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
+    where
+        S: AvailabilityStorage<Types>,
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        storage.get_vid_common_metadata_range(range).await
     }
 }
