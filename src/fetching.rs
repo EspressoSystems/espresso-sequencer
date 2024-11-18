@@ -39,8 +39,6 @@ pub mod request;
 pub use provider::Provider;
 pub use request::Request;
 
-const DEFAULT_RATE_LIMIT: usize = 32;
-
 /// A callback to process the result of a request.
 ///
 /// Sometimes, we may fetch the same object for multiple purposes, so a request may have more than
@@ -68,25 +66,13 @@ pub struct Fetcher<T, C> {
     permit: Arc<Semaphore>,
 }
 
-impl<T, C> Default for Fetcher<T, C> {
-    fn default() -> Self {
+impl<T, C> Fetcher<T, C> {
+    pub fn new(permit: Arc<Semaphore>, backoff: ExponentialBackoff) -> Self {
         Self {
             in_progress: Default::default(),
-            backoff: Default::default(),
-            permit: Arc::new(Semaphore::new(DEFAULT_RATE_LIMIT)),
+            permit,
+            backoff,
         }
-    }
-}
-
-impl<T, C> Fetcher<T, C> {
-    pub fn with_backoff(mut self, backoff: ExponentialBackoff) -> Self {
-        self.backoff = backoff;
-        self
-    }
-
-    pub fn with_rate_limit(mut self, permit: Arc<Semaphore>) -> Self {
-        self.permit = permit;
-        self
     }
 }
 

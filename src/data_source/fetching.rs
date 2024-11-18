@@ -146,7 +146,7 @@ pub struct Builder<Types, S, P> {
     storage: S,
     provider: P,
     backoff: ExponentialBackoffBuilder,
-    rate_limit: Option<usize>,
+    rate_limit: usize,
     range_chunk_size: usize,
     minor_scan_interval: Duration,
     major_scan_interval: usize,
@@ -173,7 +173,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             storage,
             provider,
             backoff: default_backoff,
-            rate_limit: None,
+            rate_limit: 32,
             range_chunk_size: 25,
             // By default, we run minor proactive scans fairly frequently: once every minute. These
             // scans are cheap (moreso the more frequently they run) and can help us keep up with
@@ -227,7 +227,7 @@ impl<Types, S, P> Builder<Types, S, P> {
 
     /// Set the maximum number of simultaneous fetches.
     pub fn with_rate_limit(mut self, with_rate_limit: usize) -> Self {
-        self.rate_limit = Some(with_rate_limit);
+        self.rate_limit = with_rate_limit;
         self
     }
 
@@ -695,6 +695,9 @@ where
     chunk_fetch_delay: Duration,
     // Exponential backoff when retrying failed oeprations.
     backoff: ExponentialBackoff,
+    // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
+    // retry failed loads.
+    retry_semaphore: Arc<Semaphore>,
 }
 
 impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
@@ -726,22 +729,12 @@ where
     for<'a> S::ReadOnly<'a>: PrunedHeightStorage + NodeStorage<Types>,
 {
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+        let retry_semaphore = Arc::new(Semaphore::new(builder.rate_limit));
         let backoff = builder.backoff.build();
 
-        let mut payload_fetcher = fetching::Fetcher::default();
-        let mut leaf_fetcher = fetching::Fetcher::default();
-        let mut vid_common_fetcher = fetching::Fetcher::default();
-        payload_fetcher = payload_fetcher.with_backoff(backoff.clone());
-        leaf_fetcher = leaf_fetcher.with_backoff(backoff.clone());
-        vid_common_fetcher = vid_common_fetcher.with_backoff(backoff.clone());
-
-        if let Some(limit) = builder.rate_limit {
-            let permit = Arc::new(Semaphore::new(limit));
-
-            payload_fetcher = payload_fetcher.with_rate_limit(permit.clone());
-            leaf_fetcher = leaf_fetcher.with_rate_limit(permit.clone());
-            vid_common_fetcher = vid_common_fetcher.with_rate_limit(permit);
-        }
+        let payload_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
+        let leaf_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
+        let vid_common_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
 
         Ok(Self {
             storage: builder.storage,
@@ -754,6 +747,7 @@ where
             active_fetch_delay: builder.active_fetch_delay,
             chunk_fetch_delay: builder.chunk_fetch_delay,
             backoff,
+            retry_semaphore,
         })
     }
 }
@@ -805,19 +799,26 @@ where
             async move {
                 let mut delay = backoff.next_backoff().unwrap_or(Duration::from_secs(1));
                 loop {
-                    match fetcher.try_get(req).await {
+                    let res = {
+                        // Limit the number of simultaneous retry tasks hitting the database. When
+                        // the database is down, we might have a lot of these tasks running, and if
+                        // they all hit the DB at once, they are only going to make things worse.
+                        let _guard = fetcher.retry_semaphore.acquire().await;
+                        fetcher.try_get(req).await
+                    };
+                    match res {
                         Ok(Some(obj)) => {
-                            // If the object was immediately available after all, signal the original
-                            // fetch. We probably just temporarily couldn't access it due to database
-                            // errors.
+                            // If the object was immediately available after all, signal the
+                            // original fetch. We probably just temporarily couldn't access it due
+                            // to database errors.
                             tracing::info!(?req, "object was ready after retries");
                             send.send(obj).ok();
                             break;
                         }
                         Ok(None) => {
                             // The object was not immediately available after all, but we have
-                            // successfully spawned a fetch for it if possible. The spawned fetch will
-                            // notify the original request once it completes.
+                            // successfully spawned a fetch for it if possible. The spawned fetch
+                            // will notify the original request once it completes.
                             tracing::info!(?req, "spawned fetch after retries");
                             break;
                         }
@@ -991,19 +992,28 @@ where
                 async move {
                     let mut delay = backoff.next_backoff().unwrap_or(Duration::from_secs(1));
                     loop {
-                        match fetcher.try_get_chunk(&chunk).await {
+                        let res = {
+                            // Limit the number of simultaneous retry tasks hitting the database.
+                            // When the database is down, we might have a lot of these tasks
+                            // running, and if they all hit the DB at once, they are only going to
+                            // make things worse.
+                            let _guard = fetcher.retry_semaphore.acquire().await;
+                            fetcher.try_get_chunk(&chunk).await
+                        };
+                        match res {
                             Ok(objs) => {
                                 for (i, (obj, sender)) in objs.into_iter().zip(send).enumerate() {
                                     if let Some(obj) = obj {
-                                        // If the object was immediately available after all, signal the
-                                        // original fetch. We probably just temporarily couldn't access it
-                                        // due to database errors.
+                                        // If the object was immediately available after all, signal
+                                        // the original fetch. We probably just temporarily couldn't
+                                        // access it due to database errors.
                                         tracing::info!(?chunk, i, "object was ready after retries");
                                         sender.send(obj).ok();
                                     } else {
-                                        // The object was not immediately available after all, but we have
-                                        // successfully spawned a fetch for it if possible. The spawned
-                                        // fetch will notify the original request once it completes.
+                                        // The object was not immediately available after all, but
+                                        // we have successfully spawned a fetch for it if possible.
+                                        // The spawned fetch will notify the original request once
+                                        // it completes.
                                         tracing::info!(?chunk, i, "spawned fetch after retries");
                                     }
                                 }
