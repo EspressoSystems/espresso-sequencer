@@ -53,7 +53,7 @@ pub use anyhow::Error;
 // in the expansion of `include_migrations`, even when `include_migrations` is invoked from another
 // crate which doesn't have `include_dir` as a dependency.
 pub use crate::include_migrations;
-pub use db::Db;
+pub use db::*;
 pub use include_dir::include_dir;
 pub use queries::QueryBuilder;
 pub use refinery::Migration;

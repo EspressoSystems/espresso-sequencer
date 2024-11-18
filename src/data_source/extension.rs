@@ -14,8 +14,8 @@ use super::VersionedDataSource;
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
-        UpdateAvailabilityData, VidCommonQueryData,
+        PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash,
+        TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata, VidCommonQueryData,
     },
     explorer::{self, ExplorerDataSource, ExplorerHeader, ExplorerTransaction},
     merklized_state::{
@@ -153,7 +153,13 @@ where
     type PayloadRange<R> = D::PayloadRange<R>
     where
         R: RangeBounds<usize> + Send;
+    type PayloadMetadataRange<R> = D::PayloadMetadataRange<R>
+    where
+        R: RangeBounds<usize> + Send;
     type VidCommonRange<R> = D::VidCommonRange<R>
+    where
+        R: RangeBounds<usize> + Send;
+    type VidCommonMetadataRange<R> = D::VidCommonMetadataRange<R>
     where
         R: RangeBounds<usize> + Send;
 
@@ -175,11 +181,23 @@ where
     {
         self.data_source.get_payload(id).await
     }
+    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.data_source.get_payload_metadata(id).await
+    }
     async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
         self.data_source.get_vid_common(id).await
+    }
+    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.data_source.get_vid_common_metadata(id).await
     }
     async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
     where
@@ -199,11 +217,23 @@ where
     {
         self.data_source.get_payload_range(range).await
     }
+    async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.data_source.get_payload_metadata_range(range).await
+    }
     async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_vid_common_range(range).await
+    }
+    async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.data_source.get_vid_common_metadata_range(range).await
     }
     async fn get_transaction(
         &self,

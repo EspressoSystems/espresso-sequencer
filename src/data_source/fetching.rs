@@ -85,8 +85,8 @@ use super::{
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
-        UpdateAvailabilityData, VidCommonQueryData,
+        PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash,
+        TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata, VidCommonQueryData,
     },
     explorer::{self, ExplorerDataSource},
     fetching::{self, request, Provider},
@@ -100,13 +100,14 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
-use anyhow::Context;
+use anyhow::{bail, Context};
 use async_lock::Semaphore;
 use async_trait::async_trait;
 use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
 use derivative::Derivative;
 use futures::{
-    future::{join_all, BoxFuture, Future, FutureExt},
+    channel::oneshot,
+    future::{self, join_all, BoxFuture, Either, Future, FutureExt},
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::{
@@ -118,6 +119,7 @@ use std::sync::Arc;
 use std::{
     cmp::min,
     fmt::{Debug, Display},
+    iter::repeat_with,
     marker::PhantomData,
     ops::{Bound, Range, RangeBounds},
     time::Duration,
@@ -144,7 +146,7 @@ pub struct Builder<Types, S, P> {
     storage: S,
     provider: P,
     backoff: ExponentialBackoffBuilder,
-    rate_limit: Option<usize>,
+    rate_limit: usize,
     range_chunk_size: usize,
     minor_scan_interval: Duration,
     major_scan_interval: usize,
@@ -154,6 +156,7 @@ pub struct Builder<Types, S, P> {
     chunk_fetch_delay: Duration,
     proactive_fetching: bool,
     aggregator: bool,
+    aggregator_chunk_size: Option<usize>,
     _types: PhantomData<Types>,
 }
 
@@ -171,7 +174,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             storage,
             provider,
             backoff: default_backoff,
-            rate_limit: None,
+            rate_limit: 32,
             range_chunk_size: 25,
             // By default, we run minor proactive scans fairly frequently: once every minute. These
             // scans are cheap (moreso the more frequently they run) and can help us keep up with
@@ -189,6 +192,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             chunk_fetch_delay: Duration::from_millis(100),
             proactive_fetching: true,
             aggregator: true,
+            aggregator_chunk_size: None,
             _types: Default::default(),
         }
     }
@@ -225,7 +229,7 @@ impl<Types, S, P> Builder<Types, S, P> {
 
     /// Set the maximum number of simultaneous fetches.
     pub fn with_rate_limit(mut self, with_rate_limit: usize) -> Self {
-        self.rate_limit = Some(with_rate_limit);
+        self.rate_limit = with_rate_limit;
         self
     }
 
@@ -275,7 +279,7 @@ impl<Types, S, P> Builder<Types, S, P> {
     ///
     /// This is similar to [`Self::with_range_chunk_size`], but only affects the chunk size for
     /// proactive fetching scans, not for normal subscription streams. This can be useful to tune
-    /// the proactive scanner to be more or less greedy with the lock on persistent storage.
+    /// the proactive scanner to be more or less greedy with persistent storage resources.
     ///
     /// By default (i.e. if this method is not called) the proactive range chunk size will be set to
     /// whatever the normal range chunk size is.
@@ -329,6 +333,19 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// (such as transaction counts) not to update.
     pub fn disable_aggregator(mut self) -> Self {
         self.aggregator = false;
+        self
+    }
+
+    /// Set the number of items to process at a time when computing aggregate statistics.
+    ///
+    /// This is similar to [`Self::with_range_chunk_size`], but only affects the chunk size for
+    /// the aggregator task, not for normal subscription streams. This can be useful to tune
+    /// the aggregator to be more or less greedy with persistent storage resources.
+    ///
+    /// By default (i.e. if this method is not called) the proactive range chunk size will be set to
+    /// whatever the normal range chunk size is.
+    pub fn with_aggregator_chunk_size(mut self, chunk_size: usize) -> Self {
+        self.aggregator_chunk_size = Some(chunk_size);
         self
     }
 }
@@ -445,6 +462,9 @@ where
 
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
         let aggregator = builder.aggregator;
+        let aggregator_chunk_size = builder
+            .aggregator_chunk_size
+            .unwrap_or(builder.range_chunk_size);
         let proactive_fetching = builder.proactive_fetching;
         let minor_interval = builder.minor_scan_interval;
         let major_interval = builder.major_scan_interval;
@@ -474,7 +494,9 @@ where
         let aggregator = if aggregator {
             Some(BackgroundTask::spawn(
                 "aggregator",
-                fetcher.clone().aggregate(aggregator_metrics),
+                fetcher
+                    .clone()
+                    .aggregate(aggregator_chunk_size, aggregator_metrics),
             ))
         } else {
             None
@@ -546,7 +568,13 @@ where
     type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
+    type PayloadMetadataRange<R> = BoxStream<'static, Fetch<PayloadMetadata<Types>>>
+    where
+        R: RangeBounds<usize> + Send;
     type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<Types>>>
+    where
+        R: RangeBounds<usize> + Send;
+    type VidCommonMetadataRange<R> = BoxStream<'static, Fetch<VidCommonMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send;
 
@@ -571,7 +599,21 @@ where
         self.fetcher.get(id.into()).await
     }
 
+    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.fetcher.get(id.into()).await
+    }
+
     async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.fetcher.get(VidCommonRequest::from(id.into())).await
+    }
+
+    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
@@ -599,7 +641,21 @@ where
         self.fetcher.clone().get_range(range)
     }
 
+    async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.fetcher.clone().get_range(range)
+    }
+
     async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.fetcher.clone().get_range(range)
+    }
+
+    async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
@@ -620,7 +676,7 @@ where
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
-    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
     async fn append(&self, info: BlockInfo<Types>) -> anyhow::Result<()> {
@@ -635,25 +691,18 @@ where
             // we're triggering a fire-and-forget fetch; we don't need to block the caller on this.
             let fetcher = self.fetcher.clone();
             let span = tracing::info_span!("fetch missing data", height);
-            spawn(async move {
-                tracing::info!(fetch_block, fetch_vid, "fetching missing data");
-                let mut tx = match fetcher.read().await {
-                    Ok(tx) => tx,
-                    Err(err) => {
-                        tracing::warn!(
-                            height,
-                            "not fetching missing data at decide; could not open transactin: {err:#}"
-                        );
-                        return;
+            spawn(
+                async move {
+                    tracing::info!(fetch_block, fetch_vid, "fetching missing data");
+                    if fetch_block {
+                        fetcher.get::<PayloadMetadata<Types>>(height).await;
                     }
-                };
-                if fetch_block {
-                    BlockQueryData::active_fetch(&mut tx, fetcher.clone(), height.into()).await;
+                    if fetch_vid {
+                        fetcher.get::<VidCommonMetadata<Types>>(height).await;
+                    }
                 }
-                if fetch_vid {
-                    VidCommonQueryData::active_fetch(&mut tx, fetcher.clone(), height.into()).await;
-                }
-            }.instrument(span));
+                .instrument(span),
+            );
         }
         Ok(())
     }
@@ -700,6 +749,9 @@ where
     chunk_fetch_delay: Duration,
     // Exponential backoff when retrying failed oeprations.
     backoff: ExponentialBackoff,
+    // Semaphore limiting the number of simultaneous DB accesses we can have from tasks spawned to
+    // retry failed loads.
+    retry_semaphore: Arc<Semaphore>,
 }
 
 impl<Types, S, P> VersionedDataSource for Fetcher<Types, S, P>
@@ -731,22 +783,12 @@ where
     for<'a> S::ReadOnly<'a>: PrunedHeightStorage + NodeStorage<Types>,
 {
     async fn new(builder: Builder<Types, S, P>) -> anyhow::Result<Self> {
+        let retry_semaphore = Arc::new(Semaphore::new(builder.rate_limit));
         let backoff = builder.backoff.build();
 
-        let mut payload_fetcher = fetching::Fetcher::default();
-        let mut leaf_fetcher = fetching::Fetcher::default();
-        let mut vid_common_fetcher = fetching::Fetcher::default();
-        payload_fetcher = payload_fetcher.with_backoff(backoff.clone());
-        leaf_fetcher = leaf_fetcher.with_backoff(backoff.clone());
-        vid_common_fetcher = vid_common_fetcher.with_backoff(backoff.clone());
-
-        if let Some(limit) = builder.rate_limit {
-            let permit = Arc::new(Semaphore::new(limit));
-
-            payload_fetcher = payload_fetcher.with_rate_limit(permit.clone());
-            leaf_fetcher = leaf_fetcher.with_rate_limit(permit.clone());
-            vid_common_fetcher = vid_common_fetcher.with_rate_limit(permit);
-        }
+        let payload_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
+        let leaf_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
+        let vid_common_fetcher = fetching::Fetcher::new(retry_semaphore.clone(), backoff.clone());
 
         Ok(Self {
             storage: builder.storage,
@@ -759,6 +801,7 @@ where
             active_fetch_delay: builder.active_fetch_delay,
             chunk_fetch_delay: builder.chunk_fetch_delay,
             backoff,
+            retry_semaphore,
         })
     }
 }
@@ -772,10 +815,9 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    async fn get<T, R>(self: &Arc<Self>, req: R) -> Fetch<T>
+    async fn get<T>(self: &Arc<Self>, req: impl Into<T::Request> + Send) -> Fetch<T>
     where
         T: Fetchable<Types>,
-        R: Into<T::Request> + Send,
     {
         let req = req.into();
 
@@ -788,21 +830,104 @@ where
         // Note the "someone" who later fetches the object and adds it to storage may be an active
         // fetch triggered by this very requests, in cases where that is possible, but it need not
         // be.
-        let passive = T::passive_fetch(&self.notifiers, req).await;
+        let passive_fetch = T::passive_fetch(&self.notifiers, req).await;
 
-        let mut tx = match self.read().await {
-            Ok(tx) => tx,
+        match self.try_get(req).await {
+            Ok(Some(obj)) => return Fetch::Ready(obj),
+            Ok(None) => return passive(req, passive_fetch),
             Err(err) => {
                 tracing::warn!(
                     ?req,
-                    "unable to start transaction to load object, falling back to fetching: {err:#}"
+                    "unable to fetch object; spawning a task to retry: {err:#}"
                 );
-                return self.fetch(None, passive, req).await;
             }
-        };
+        }
 
-        let res = T::load(&mut tx, req).await;
-        self.ok_or_fetch(Some(&mut tx), passive, req, res).await
+        // We'll use this channel to get the object back if we successfully load it on retry.
+        let (send, recv) = oneshot::channel();
+
+        let fetcher = self.clone();
+        let mut backoff = fetcher.backoff.clone();
+        let span = tracing::warn_span!("get retry", ?req);
+        spawn(
+            async move {
+                let mut delay = backoff.next_backoff().unwrap_or(Duration::from_secs(1));
+                loop {
+                    let res = {
+                        // Limit the number of simultaneous retry tasks hitting the database. When
+                        // the database is down, we might have a lot of these tasks running, and if
+                        // they all hit the DB at once, they are only going to make things worse.
+                        let _guard = fetcher.retry_semaphore.acquire().await;
+                        fetcher.try_get(req).await
+                    };
+                    match res {
+                        Ok(Some(obj)) => {
+                            // If the object was immediately available after all, signal the
+                            // original fetch. We probably just temporarily couldn't access it due
+                            // to database errors.
+                            tracing::info!(?req, "object was ready after retries");
+                            send.send(obj).ok();
+                            break;
+                        }
+                        Ok(None) => {
+                            // The object was not immediately available after all, but we have
+                            // successfully spawned a fetch for it if possible. The spawned fetch
+                            // will notify the original request once it completes.
+                            tracing::info!(?req, "spawned fetch after retries");
+                            break;
+                        }
+                        Err(err) => {
+                            tracing::warn!(
+                                ?req,
+                                ?delay,
+                                "unable to fetch object, will retry: {err:#}"
+                            );
+                            sleep(delay).await;
+                            if let Some(next_delay) = backoff.next_backoff() {
+                                delay = next_delay;
+                            }
+                        }
+                    }
+                }
+            }
+            .instrument(span),
+        );
+
+        // Wait for the object to be fetched, either from the local database on retry or from
+        // another provider eventually.
+        passive(req, select_some(passive_fetch, recv.map(Result::ok)))
+    }
+
+    /// Try to get an object from local storage or initialize a fetch if it is missing.
+    ///
+    /// There are three possible scenarios in this function, indicated by the return type:
+    /// * `Ok(Some(obj))`: the requested object was available locally and successfully retrieved
+    ///   from the database; no fetch was spawned
+    /// * `Ok(None)`: the requested object was not available locally, but a fetch was successfully
+    ///   spawned if possible (in other words, if a fetch was not spawned, it was determined that
+    ///   the requested object is not fetchable)
+    /// * `Err(_)`: it could not be determined whether the object was available locally or whether
+    ///   it could be fetched; no fetch was spawned even though the object may be fetchable
+    async fn try_get<T>(self: &Arc<Self>, req: T::Request) -> anyhow::Result<Option<T>>
+    where
+        T: Fetchable<Types>,
+    {
+        let mut tx = self.read().await.context("opening read transaction")?;
+        match T::load(&mut tx, req).await {
+            Ok(t) => Ok(Some(t)),
+            Err(QueryError::Missing | QueryError::NotFound) => {
+                // We successfully queried the database, but the object wasn't there. Try to
+                // fetch it.
+                tracing::debug!(?req, "object missing from local storage, will try to fetch");
+                self.fetch::<T>(&mut tx, req).await?;
+                Ok(None)
+            }
+            Err(err) => {
+                // An error occurred while querying the database. We don't know if we need to fetch
+                // the object or not. Return an error so we can try again.
+                bail!("failed to fetch resource {req:?} from local storage: {err:#}");
+            }
+        }
     }
 
     /// Get a range of objects from local storage or a provider.
@@ -845,9 +970,10 @@ where
                     {
                         let chunk = self_clone.get_chunk(chunk).await;
 
-                        // Introduce a delay (`chunk_fetch_delay`) between fetching chunks.
-                        // This helps to limit constant high CPU usage when fetching long range of data,
-                        // especially for older streams that fetch most of the data from local storage
+                        // Introduce a delay (`chunk_fetch_delay`) between fetching chunks. This
+                        // helps to limit constant high CPU usage when fetching long range of data,
+                        // especially for older streams that fetch most of the data from local
+                        // storage.
                         sleep(chunk_fetch_delay).await;
                         chunk
                     }
@@ -856,8 +982,9 @@ where
             .flatten()
             .then(move |f| async move {
                 match f {
-                    // Introduce a delay (`active_fetch_delay`) for active fetches to reduce load on the catchup provider.
-                    // The delay applies between pending fetches, not between chunks.
+                    // Introduce a delay (`active_fetch_delay`) for active fetches to reduce load on
+                    // the catchup provider. The delay applies between pending fetches, not between
+                    // chunks.
                     Fetch::Pending(_) => sleep(active_fetch_delay).await,
                     Fetch::Ready(_) => (),
                 };
@@ -872,37 +999,134 @@ where
     /// * It fetches all desired objects together, as a single chunk
     /// * It loads the object or triggers fetches right now rather than providing a lazy stream
     ///   which only fetches objects when polled.
-    async fn get_chunk<T>(self: Arc<Self>, chunk: Range<usize>) -> impl Stream<Item = Fetch<T>>
+    async fn get_chunk<T>(self: &Arc<Self>, chunk: Range<usize>) -> impl Stream<Item = Fetch<T>>
     where
         T: RangedFetchable<Types>,
     {
         // Subscribe to notifications first. As in [`get`](Self::get), this ensures we won't miss
         // any notifications sent in between checking local storage and triggering a fetch if
         // necessary.
-        let mut passive = join_all(
+        let passive_fetches = join_all(
             chunk
                 .clone()
                 .map(|i| T::passive_fetch(&self.notifiers, i.into())),
         )
         .await;
 
-        let (mut tx, ts) = match self.read().await {
-            Ok(mut tx) => {
-                let ts = T::load_range(&mut tx, chunk.clone())
-                    .await
-                    .context(format!("when fetching items in range {chunk:?}"))
-                    .ok_or_trace()
-                    .unwrap_or_default();
-                (Some(tx), ts)
+        match self.try_get_chunk(&chunk).await {
+            Ok(objs) => {
+                // Convert to fetches. Objects which are not immediately available (`None` in the
+                // chunk) become passive fetches awaiting a notification of availability.
+                return stream::iter(objs.into_iter().zip(passive_fetches).enumerate().map(
+                    move |(i, (obj, passive_fetch))| match obj {
+                        Some(obj) => Fetch::Ready(obj),
+                        None => passive(T::Request::from(chunk.start + i), passive_fetch),
+                    },
+                ))
+                .boxed();
             }
             Err(err) => {
                 tracing::warn!(
                     ?chunk,
-                    "unable to open transaction to read chunk, falling back to fetching: {err:#}"
+                    "unable to fetch chunk; spawning a task to retry: {err:#}"
                 );
-                (None, vec![])
             }
-        };
+        }
+
+        // We'll use these channels to get the objects back that we successfully load on retry.
+        let (send, recv): (Vec<_>, Vec<_>) =
+            repeat_with(oneshot::channel).take(chunk.len()).unzip();
+
+        {
+            let fetcher = self.clone();
+            let mut backoff = fetcher.backoff.clone();
+            let chunk = chunk.clone();
+            let span = tracing::warn_span!("get_chunk retry", ?chunk);
+            spawn(
+                async move {
+                    let mut delay = backoff.next_backoff().unwrap_or(Duration::from_secs(1));
+                    loop {
+                        let res = {
+                            // Limit the number of simultaneous retry tasks hitting the database.
+                            // When the database is down, we might have a lot of these tasks
+                            // running, and if they all hit the DB at once, they are only going to
+                            // make things worse.
+                            let _guard = fetcher.retry_semaphore.acquire().await;
+                            fetcher.try_get_chunk(&chunk).await
+                        };
+                        match res {
+                            Ok(objs) => {
+                                for (i, (obj, sender)) in objs.into_iter().zip(send).enumerate() {
+                                    if let Some(obj) = obj {
+                                        // If the object was immediately available after all, signal
+                                        // the original fetch. We probably just temporarily couldn't
+                                        // access it due to database errors.
+                                        tracing::info!(?chunk, i, "object was ready after retries");
+                                        sender.send(obj).ok();
+                                    } else {
+                                        // The object was not immediately available after all, but
+                                        // we have successfully spawned a fetch for it if possible.
+                                        // The spawned fetch will notify the original request once
+                                        // it completes.
+                                        tracing::info!(?chunk, i, "spawned fetch after retries");
+                                    }
+                                }
+                                break;
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    ?chunk,
+                                    ?delay,
+                                    "unable to fetch chunk, will retry: {err:#}"
+                                );
+                                sleep(delay).await;
+                                if let Some(next_delay) = backoff.next_backoff() {
+                                    delay = next_delay;
+                                }
+                            }
+                        }
+                    }
+                }
+                .instrument(span),
+            );
+        }
+
+        // Wait for the objects to be fetched, either from the local database on retry or from
+        // another provider eventually.
+        stream::iter(passive_fetches.into_iter().zip(recv).enumerate().map(
+            move |(i, (passive_fetch, recv))| {
+                passive(
+                    T::Request::from(chunk.start + i),
+                    select_some(passive_fetch, recv.map(Result::ok)),
+                )
+            },
+        ))
+        .boxed()
+    }
+
+    /// Try to get a range of objects from local storage, intializing fetches if any are missing.
+    ///
+    /// If this function succeeded, then for each object in the requested range, either:
+    /// * the object was available locally, and corresponds to `Some(_)` object in the result
+    /// * the object was not available locally (and corresponds to `None` in the result), but a
+    ///   fetch was successfully spawned if possible (in other words, if a fetch was not spawned, it
+    ///   was determined that the requested object is not fetchable)
+    ///
+    /// This function will fail if it could not be determined which objects in the requested range
+    /// are available locally, or if, for any missing object, it could not be determined whether
+    /// that object is fetchable. In this case, there may be no fetch spawned for certain objects in
+    /// the requested range, even if those objects are actually fetchable.
+    async fn try_get_chunk<T>(
+        self: &Arc<Self>,
+        chunk: &Range<usize>,
+    ) -> anyhow::Result<Vec<Option<T>>>
+    where
+        T: RangedFetchable<Types>,
+    {
+        let mut tx = self.read().await.context("opening read transaction")?;
+        let ts = T::load_range(&mut tx, chunk.clone())
+            .await
+            .context(format!("when fetching items in range {chunk:?}"))?;
 
         // Log and discard error information; we want a list of Option where None indicates an
         // object that needs to be fetched. Note that we don't use `FetchRequest::might_exist` to
@@ -911,128 +1135,58 @@ where
         // rather than returning `Err` objects, so if there are errors in here they are unexpected
         // and we do want to log them.
         let ts = ts.into_iter().filter_map(ResultExt::ok_or_trace);
+
         // Kick off a fetch for each missing object.
-        let mut fetches = Vec::with_capacity(chunk.len());
+        let mut results = Vec::with_capacity(chunk.len());
         for t in ts {
             // Fetch missing objects that should come before `t`.
-            while chunk.start + fetches.len() < t.height() as usize {
+            while chunk.start + results.len() < t.height() as usize {
                 tracing::debug!(
                     "item {} in chunk not available, will be fetched",
-                    fetches.len()
+                    results.len()
                 );
-                fetches.push(
-                    self.fetch(tx.as_mut(), passive.remove(0), chunk.start + fetches.len())
-                        .await,
-                );
+                self.fetch::<T>(&mut tx, (chunk.start + results.len()).into())
+                    .await?;
+                results.push(None);
             }
-            // `t` itself is already available, we don't have to trigger a fetch for it. Remove (and
-            // drop without awaiting) the passive fetch we preemptively started.
-            drop(passive.remove(0));
-            fetches.push(Fetch::Ready(t));
+
+            results.push(Some(t));
         }
         // Fetch missing objects from the end of the range.
-        while fetches.len() < chunk.len() {
-            fetches.push(
-                self.fetch(tx.as_mut(), passive.remove(0), chunk.start + fetches.len())
-                    .await,
-            );
+        while results.len() < chunk.len() {
+            self.fetch::<T>(&mut tx, (chunk.start + results.len()).into())
+                .await?;
+            results.push(None);
         }
 
-        stream::iter(fetches)
+        Ok(results)
     }
 
-    async fn ok_or_fetch<R, T>(
+    /// Spawn an active fetch for the requested object, if possible.
+    ///
+    /// On success, either an active fetch for `req` has been spawned, or it has been determined
+    /// that `req` is not fetchable. Fails if it cannot be determined (e.g. due to errors in the
+    /// local database) whether `req` is fetchable or not.
+    async fn fetch<T>(
         self: &Arc<Self>,
-        tx: Option<&mut <Self as VersionedDataSource>::ReadOnly<'_>>,
-        passive: PassiveFetch<T>,
-        req: R,
-        res: QueryResult<T>,
-    ) -> Fetch<T>
+        tx: &mut <Self as VersionedDataSource>::ReadOnly<'_>,
+        req: T::Request,
+    ) -> anyhow::Result<()>
     where
-        R: Into<T::Request> + Send,
-        T: Fetchable<Types> + Send + Sync + 'static,
-    {
-        let req = req.into();
-        self.some_or_fetch(
-            tx,
-            passive,
-            req,
-            res.context(format!("req: {req:?}")).ok_or_trace(),
-        )
-        .await
-    }
-
-    async fn some_or_fetch<R, T>(
-        self: &Arc<Self>,
-        tx: Option<&mut <Self as VersionedDataSource>::ReadOnly<'_>>,
-        passive: PassiveFetch<T>,
-        req: R,
-        res: Option<T>,
-    ) -> Fetch<T>
-    where
-        R: Into<T::Request> + Send,
-        T: Fetchable<Types> + Send + Sync + 'static,
-    {
-        match res {
-            Some(t) => Fetch::Ready(t),
-            None => self.fetch(tx, passive, req).await,
-        }
-    }
-
-    async fn fetch<R, T>(
-        self: &Arc<Self>,
-        tx: Option<&mut <Self as VersionedDataSource>::ReadOnly<'_>>,
-        passive: PassiveFetch<T>,
-        req: R,
-    ) -> Fetch<T>
-    where
-        R: Into<T::Request>,
         T: Fetchable<Types>,
     {
-        let req = req.into();
         tracing::debug!("fetching resource {req:?}");
 
-        // Subscribe to notifications so we are alerted when we get the resource.
-        let fut = passive.then(move |opt| async move {
-            match opt {
-                Some(t) => t,
-                None => {
-                    // If `passive_fetch` returns `None`, it means the notifier was dropped without
-                    // ever sending a notification. In this case, the correct behavior is actually
-                    // to block forever (unless the `Fetch` itself is dropped), since the semantics
-                    // of `Fetch` are to never fail. This is analogous to fetching an object which
-                    // doesn't actually exist: the `Fetch` will never return.
-                    //
-                    // However, for ease of debugging, and since this is never expected to happen in
-                    // normal usage, we panic instead. This should only happen in two cases:
-                    // * The server was shut down (dropping the notifier) without cleaning up some
-                    //   background tasks. This will not affect runtime behavior, but should be
-                    //   fixed if it happens.
-                    // * There is a very unexpected runtime bug resulting in the notifier being
-                    //   dropped. If this happens, things are very broken in any case, and it is
-                    //   better to panic loudly than simply block forever.
-                    panic!("notifier dropped without satisfying request {req:?}");
-                }
-            }
-        });
-
         // Trigger an active fetch from a remote provider if possible.
-        if let Some(tx) = tx {
-            if let Some(heights) = Heights::load(tx).await.ok_or_trace() {
-                if req.might_exist(heights) {
-                    T::active_fetch(tx, self.clone(), req).await;
-                } else {
-                    tracing::debug!("not fetching object {req:?} that cannot exist at {heights:?}");
-                }
-            } else {
-                tracing::warn!("failed to load heights; cannot definitively say object might exist; will skip active fetch");
-            }
+        let heights = Heights::load(tx)
+            .await
+            .context("failed to load heights; cannot definitively say object might exist")?;
+        if req.might_exist(heights) {
+            T::active_fetch(tx, self.clone(), req).await?;
         } else {
-            tracing::warn!(?req, "unable to open transaction; will skip active fetch");
+            tracing::debug!("not fetching object {req:?} that cannot exist at {heights:?}");
         }
-
-        // Wait for the object to arrive.
-        Fetch::Pending(fut.boxed())
+        Ok(())
     }
 
     /// Proactively search for and retrieve missing objects.
@@ -1127,14 +1281,13 @@ where
                 metrics.scanned_blocks.set(0);
                 metrics.scanned_vid.set(0);
 
-                // Iterate over all blocks that we should have. Fetching the block is enough to
-                // trigger an active fetch of the corresponding leaf if it too is missing. The
-                // chunking behavior of `get_range` automatically ensures that, no matter how big
-                // the range is, we will release the read lock on storage every `chunk_size` items,
-                // so we don't starve out would-be writers.
+                // Iterate over all blocks that we should have. Fetching the payload metadata is
+                // enough to trigger an active fetch of the corresponding leaf and the full block if
+                // they are missing, without loading the full payload from storage if we already
+                // have it.
                 let mut blocks = self
                     .clone()
-                    .get_range_with_chunk_size::<_, BlockQueryData<Types>>(
+                    .get_range_with_chunk_size::<_, PayloadMetadata<Types>>(
                         chunk_size,
                         start..block_height,
                     );
@@ -1157,7 +1310,7 @@ where
                 // independently of the block payload.
                 let mut vid = self
                     .clone()
-                    .get_range_with_chunk_size::<_, VidCommonQueryData<Types>>(
+                    .get_range_with_chunk_size::<_, VidCommonMetadata<Types>>(
                         chunk_size,
                         start..block_height,
                     );
@@ -1204,7 +1357,7 @@ where
     P: AvailabilityProvider<Types>,
 {
     #[tracing::instrument(skip_all)]
-    async fn aggregate(self: Arc<Self>, metrics: AggregatorMetrics) {
+    async fn aggregate(self: Arc<Self>, chunk_size: usize, metrics: AggregatorMetrics) {
         loop {
             let start = loop {
                 let mut tx = match self.read().await {
@@ -1227,15 +1380,29 @@ where
             tracing::info!(start, "starting aggregator");
             metrics.height.set(start);
 
-            let mut blocks = self.clone().get_range::<_, BlockQueryData<Types>>(start..);
-            while let Some(block) = blocks.next().await {
-                let block = block.await;
-                let height = block.height();
-                tracing::debug!(height, "updating aggregate statistics for block");
+            let mut blocks = self
+                .clone()
+                .get_range_with_chunk_size::<_, PayloadMetadata<Types>>(chunk_size, start..)
+                .then(Fetch::resolve)
+                .ready_chunks(chunk_size)
+                .boxed();
+            while let Some(chunk) = blocks.next().await {
+                let Some(last) = chunk.last() else {
+                    // This is not supposed to happen, but if the chunk is empty, just skip it.
+                    tracing::warn!("ready_chunks returned an empty chunk");
+                    continue;
+                };
+                let height = last.height();
+                let num_blocks = chunk.len();
+                tracing::debug!(
+                    num_blocks,
+                    height,
+                    "updating aggregate statistics for chunk"
+                );
                 loop {
                     let res = async {
                         let mut tx = self.write().await.context("opening transaction")?;
-                        tx.update_aggregates(&block).await?;
+                        tx.update_aggregates(&chunk).await?;
                         tx.commit().await.context("committing transaction")
                     }
                     .await;
@@ -1243,8 +1410,9 @@ where
                         Ok(()) => break,
                         Err(err) => {
                             tracing::warn!(
+                                num_blocks,
                                 height,
-                                "failed to update aggregates for block: {err:#}"
+                                "failed to update aggregates for chunk: {err:#}"
                             );
                             sleep(Duration::from_secs(1)).await;
                         }
@@ -1653,19 +1821,21 @@ where
     ///   this function assumes `req.might_exist()` has already been checked before calling it, and
     ///   so may do unnecessary work if the caller does not ensure this.
     ///
-    /// If we do trigger an active fetch for an object, the provided callback will be called if and
-    /// when the fetch completes successfully. The callback should be responsible for notifying any
-    /// passive listeners that the object has been retrieved. If we do not trigger an active fetch
-    /// for an object, this function does nothing.
+    /// If we do trigger an active fetch for an object, any passive listeners for the object will be
+    /// notified once it has been retrieved. If we do not trigger an active fetch for an object,
+    /// this function does nothing. In either case, as long as the requested object does in fact
+    /// exist, we will eventually receive it passively, since we will eventually receive all blocks
+    /// and leaves that are ever produced. Active fetching merely helps us receive certain objects
+    /// sooner.
     ///
-    /// In either case, as long as the requested object does in fact exist, we will eventually
-    /// receive it passively, since we will eventually receive all blocks and leaves that are ever
-    /// produced. Active fetching merely helps us receive certain objects sooner.
+    /// This function fails if it _might_ be possible to actively fetch the requested object, but we
+    /// were unable to do so (e.g. due to errors in the database).
     async fn active_fetch<S, P>(
         tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>;
@@ -1879,5 +2049,58 @@ impl AggregatorMetrics {
         Self {
             height: group.create_gauge("height".into(), None),
         }
+    }
+}
+
+/// Turn a fallible passive fetch future into an infallible "fetch".
+///
+/// Basically, we ignore failures due to a channel sender being dropped, which should never happen.
+fn passive<T>(
+    req: impl Debug + Send + 'static,
+    fut: impl Future<Output = Option<T>> + Send + 'static,
+) -> Fetch<T>
+where
+    T: Send + 'static,
+{
+    Fetch::Pending(
+        fut.then(move |opt| async move {
+            match opt {
+                Some(t) => t,
+                None => {
+                    // If `passive_fetch` returns `None`, it means the notifier was dropped without
+                    // ever sending a notification. In this case, the correct behavior is actually
+                    // to block forever (unless the `Fetch` itself is dropped), since the semantics
+                    // of `Fetch` are to never fail. This is analogous to fetching an object which
+                    // doesn't actually exist: the `Fetch` will never return.
+                    //
+                    // However, for ease of debugging, and since this is never expected to happen in
+                    // normal usage, we panic instead. This should only happen in two cases:
+                    // * The server was shut down (dropping the notifier) without cleaning up some
+                    //   background tasks. This will not affect runtime behavior, but should be
+                    //   fixed if it happens.
+                    // * There is a very unexpected runtime bug resulting in the notifier being
+                    //   dropped. If this happens, things are very broken in any case, and it is
+                    //   better to panic loudly than simply block forever.
+                    panic!("notifier dropped without satisfying request {req:?}");
+                }
+            }
+        })
+        .boxed(),
+    )
+}
+
+/// Get the result of the first future to return `Some`, if either do.
+async fn select_some<T>(
+    a: impl Future<Output = Option<T>> + Unpin,
+    b: impl Future<Output = Option<T>> + Unpin,
+) -> Option<T> {
+    match future::select(a, b).await {
+        // If the first future resolves with `Some`, immediately return the result.
+        Either::Left((Some(a), _)) => Some(a),
+        Either::Right((Some(b), _)) => Some(b),
+
+        // If the first future resolves with `None`, wait for the result of the second future.
+        Either::Left((None, b)) => b.await,
+        Either::Right((None, a)) => a.await,
     }
 }

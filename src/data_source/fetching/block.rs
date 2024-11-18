@@ -18,7 +18,7 @@ use super::{
     Storable,
 };
 use crate::{
-    availability::{BlockId, BlockQueryData, PayloadQueryData, QueryablePayload},
+    availability::{BlockId, BlockQueryData, PayloadMetadata, PayloadQueryData, QueryablePayload},
     data_source::{
         storage::{AvailabilityStorage, UpdateAvailabilityStorage},
         VersionedDataSource,
@@ -85,7 +85,8 @@ where
         tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
@@ -204,7 +205,8 @@ where
         tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
@@ -279,5 +281,74 @@ where
         tracing::info!("fetched payload {:?}", self.header.payload_commitment());
         let block = BlockQueryData::new(self.header, payload);
         self.fetcher.store_and_notify(block).await;
+    }
+}
+
+#[async_trait]
+impl<Types> Fetchable<Types> for PayloadMetadata<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    type Request = BlockId<Types>;
+
+    fn satisfies(&self, req: Self::Request) -> bool {
+        match req {
+            BlockId::Number(n) => self.height == n as u64,
+            BlockId::Hash(h) => self.block_hash == h,
+            BlockId::PayloadHash(h) => self.hash == h,
+        }
+    }
+
+    async fn passive_fetch(
+        notifiers: &Notifiers<Types>,
+        req: Self::Request,
+    ) -> BoxFuture<'static, Option<Self>> {
+        notifiers
+            .block
+            .wait_for(move |block| block.satisfies(req))
+            .await
+            .into_future()
+            .map(|opt| opt.map(Self::from))
+            .boxed()
+    }
+
+    async fn active_fetch<S, P>(
+        tx: &mut impl AvailabilityStorage<Types>,
+        fetcher: Arc<Fetcher<Types, S, P>>,
+        req: Self::Request,
+    ) -> anyhow::Result<()>
+    where
+        S: VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        P: AvailabilityProvider<Types>,
+    {
+        // Trigger the full block to be fetched. This will be enough to satisfy this request for the
+        // payload summary.
+        BlockQueryData::active_fetch(tx, fetcher, req).await
+    }
+
+    async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>
+    where
+        S: AvailabilityStorage<Types>,
+    {
+        storage.get_payload_metadata(req).await
+    }
+}
+
+#[async_trait]
+impl<Types> RangedFetchable<Types> for PayloadMetadata<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    type RangedRequest = BlockId<Types>;
+
+    async fn load_range<S, R>(storage: &mut S, range: R) -> QueryResult<Vec<QueryResult<Self>>>
+    where
+        S: AvailabilityStorage<Types>,
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        storage.get_payload_metadata_range(range).await
     }
 }

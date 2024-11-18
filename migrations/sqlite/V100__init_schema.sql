@@ -20,7 +20,8 @@ CREATE TABLE payload
 (
     height BIGINT PRIMARY KEY REFERENCES header (height) ON DELETE CASCADE,
     size   INTEGER,
-    data   BLOB
+    data   BLOB,
+    num_transactions INTEGER
 );
 
 CREATE TABLE vid

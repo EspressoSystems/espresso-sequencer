@@ -66,7 +66,8 @@ where
         _tx: &mut impl AvailabilityStorage<Types>,
         _fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
@@ -75,6 +76,7 @@ where
         // no way of knowing whether a block with such a transaction actually exists, and we don't
         // want to bother peers with requests for non-existant transactions.
         tracing::debug!("not fetching unknown transaction {req:?}");
+        Ok(())
     }
 
     async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>

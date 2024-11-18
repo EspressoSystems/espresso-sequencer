@@ -81,12 +81,14 @@ where
         _tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
     {
-        fetch_leaf_with_callbacks(fetcher, req, None)
+        fetch_leaf_with_callbacks(fetcher, req, None);
+        Ok(())
     }
 
     async fn load<S>(storage: &mut S, req: Self::Request) -> QueryResult<Self>

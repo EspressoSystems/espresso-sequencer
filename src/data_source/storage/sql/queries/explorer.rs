@@ -415,7 +415,7 @@ where
                     h.timestamp AS timestamp,
                     h.timestamp - lead(timestamp) OVER (ORDER BY h.height DESC) AS time,
                     p.size AS size,
-                    (SELECT COUNT(*) AS transactions FROM transactions AS t WHERE t.block_height = h.height) as transactions
+                    p.num_transactions AS transactions
                 FROM header AS h
                 JOIN payload AS p ON
                     p.height = h.height
@@ -423,7 +423,8 @@ where
                     h.height IN (SELECT height FROM header ORDER BY height DESC LIMIT 50)
                 ORDER BY h.height 
                 ",
-            ).fetch(self.as_mut());
+            )
+            .fetch(self.as_mut());
 
             let histograms: Result<ExplorerHistograms, sqlx::Error> = historgram_query_result
                 .map(|row_stream| {
@@ -432,7 +433,7 @@ where
                         let timestamp: i64 = row.try_get("timestamp")?;
                         let time: Option<i64> = row.try_get("time")?;
                         let size: Option<i32> = row.try_get("size")?;
-                        let num_transactions: i64 = row.try_get("transactions")?;
+                        let num_transactions: i32 = row.try_get("transactions")?;
 
                         Ok((height, timestamp, time, size, num_transactions))
                     })
@@ -445,7 +446,7 @@ where
                         block_heights: Vec::with_capacity(50),
                     },
                     |mut histograms: ExplorerHistograms,
-                     row: sqlx::Result<(i64, i64, Option<i64>, Option<i32>, i64)>| async {
+                     row: sqlx::Result<(i64, i64, Option<i64>, Option<i32>, i32)>| async {
                         let (height, _timestamp, time, size, num_transactions) = row?;
                         histograms.block_time.push(time.map(|i| i as u64));
                         histograms.block_size.push(size.map(|i| i as u64));

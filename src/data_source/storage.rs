@@ -59,8 +59,9 @@
 
 use crate::{
     availability::{
-        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
-        QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadMetadata, PayloadQueryData,
+        QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
+        VidCommonMetadata, VidCommonQueryData,
     },
     explorer::{
         query_data::{
@@ -123,10 +124,18 @@ where
     async fn get_block(&mut self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
     async fn get_header(&mut self, id: BlockId<Types>) -> QueryResult<Header<Types>>;
     async fn get_payload(&mut self, id: BlockId<Types>) -> QueryResult<PayloadQueryData<Types>>;
+    async fn get_payload_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<PayloadMetadata<Types>>;
     async fn get_vid_common(
         &mut self,
         id: BlockId<Types>,
     ) -> QueryResult<VidCommonQueryData<Types>>;
+    async fn get_vid_common_metadata(
+        &mut self,
+        id: BlockId<Types>,
+    ) -> QueryResult<VidCommonMetadata<Types>>;
 
     async fn get_leaf_range<R>(
         &mut self,
@@ -146,10 +155,22 @@ where
     ) -> QueryResult<Vec<QueryResult<PayloadQueryData<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
+    async fn get_payload_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<PayloadMetadata<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static;
     async fn get_vid_common_range<R>(
         &mut self,
         range: R,
     ) -> QueryResult<Vec<QueryResult<VidCommonQueryData<Types>>>>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+    async fn get_vid_common_metadata_range<R>(
+        &mut self,
+        range: R,
+    ) -> QueryResult<Vec<QueryResult<VidCommonMetadata<Types>>>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
@@ -214,7 +235,7 @@ where
     /// Update aggregate statistics based on a new block.
     fn update_aggregates(
         &mut self,
-        block: &BlockQueryData<Types>,
+        blocks: &[PayloadMetadata<Types>],
     ) -> impl Future<Output = anyhow::Result<()>> + Send;
 }
 

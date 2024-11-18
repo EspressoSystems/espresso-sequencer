@@ -18,6 +18,7 @@ use crate::{
         BlockId, BlockQueryData, LeafQueryData, PayloadQueryData, QueryablePayload,
         VidCommonQueryData,
     },
+    data_source::storage::{PayloadMetadata, VidCommonMetadata},
     Header, Leaf, Payload, QueryError, QueryResult,
 };
 use anyhow::Context;
@@ -228,6 +229,30 @@ where
     }
 }
 
+const PAYLOAD_METADATA_COLUMNS: &str =
+    "h.height AS height, h.hash AS hash, h.payload_hash AS payload_hash, p.size AS payload_size, p.num_transactions AS num_transactions";
+
+impl<'r, Types> FromRow<'r, <Db as Database>::Row> for PayloadMetadata<Types>
+where
+    Types: NodeType,
+{
+    fn from_row(row: &'r <Db as Database>::Row) -> sqlx::Result<Self> {
+        Ok(Self {
+            height: row.try_get::<i64, _>("height")? as u64,
+            block_hash: row
+                .try_get::<String, _>("hash")?
+                .parse()
+                .decode_error("malformed block hash")?,
+            hash: row
+                .try_get::<String, _>("payload_hash")?
+                .parse()
+                .decode_error("malformed payload hash")?,
+            size: row.try_get::<i32, _>("payload_size")? as u64,
+            num_transactions: row.try_get::<i32, _>("num_transactions")? as u64,
+        })
+    }
+}
+
 const VID_COMMON_COLUMNS: &str = "h.height AS height, h.hash AS block_hash, h.payload_hash AS payload_hash, v.common AS common_data";
 
 impl<'r, Types> FromRow<'r, <Db as Database>::Row> for VidCommonQueryData<Types>
@@ -251,6 +276,30 @@ where
             block_hash,
             payload_hash,
             common,
+        })
+    }
+}
+
+const VID_COMMON_METADATA_COLUMNS: &str =
+    "h.height AS height, h.hash AS block_hash, h.payload_hash AS payload_hash";
+
+impl<'r, Types> FromRow<'r, <Db as Database>::Row> for VidCommonMetadata<Types>
+where
+    Types: NodeType,
+    Payload<Types>: QueryablePayload<Types>,
+{
+    fn from_row(row: &'r <Db as Database>::Row) -> sqlx::Result<Self> {
+        let height = row.try_get::<i64, _>("height")? as u64;
+        let block_hash: String = row.try_get("block_hash")?;
+        let block_hash = block_hash.parse().decode_error("malformed block hash")?;
+        let payload_hash: String = row.try_get("payload_hash")?;
+        let payload_hash = payload_hash
+            .parse()
+            .decode_error("malformed payload hash")?;
+        Ok(Self {
+            height,
+            block_hash,
+            payload_hash,
         })
     }
 }
