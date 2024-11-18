@@ -584,6 +584,9 @@ async fn fetch_proposals<N, P, V>(
         if let Err(err) = res {
             tracing::warn!("failed to fetch proposal: {err:#}");
 
+            // Avoid busy loop when operations are failing.
+            sleep(Duration::from_secs(1)).await;
+
             // If we fail fetching the proposal, don't let it clog up the fetching task. Just push
             // it back onto the queue and move onto the next proposal.
             sender.broadcast_direct((view, leaf)).await.ok();
