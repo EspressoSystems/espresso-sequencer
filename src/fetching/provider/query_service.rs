@@ -171,9 +171,10 @@ mod test {
         data_source::{
             sql::{self, SqlDataSource},
             storage::{
+                fail_storage::{FailStorage, FailableAction},
                 pruning::{PrunedHeightStorage, PrunerCfg},
                 sql::testing::TmpDb,
-                AvailabilityStorage, FailStorage, SqlStorage, UpdateAvailabilityStorage,
+                AvailabilityStorage, SqlStorage, UpdateAvailabilityStorage,
             },
             AvailabilityProvider, FetchingDataSource, Transaction, VersionedDataSource,
         },
@@ -1111,9 +1112,14 @@ mod test {
         // Trigger a fetch of the first leaf; it should resolve even if we fail to store the leaf.
         tracing::info!("fetch with write failure");
         match failure {
-            FailureType::Begin => data_source.as_ref().fail_begins_writable().await,
-            FailureType::Write => data_source.as_ref().fail_writes().await,
-            FailureType::Commit => data_source.as_ref().fail_commits().await,
+            FailureType::Begin => {
+                data_source
+                    .as_ref()
+                    .fail_begins_writable(FailableAction::Any)
+                    .await
+            }
+            FailureType::Write => data_source.as_ref().fail_writes(FailableAction::Any).await,
+            FailureType::Commit => data_source.as_ref().fail_commits(FailableAction::Any).await,
         }
         assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
         data_source.as_ref().pass().await;
@@ -1196,9 +1202,24 @@ mod test {
         // Trigger a fetch of the first leaf; it should retry until it successfully stores the leaf.
         tracing::info!("fetch with write failure");
         match failure {
-            FailureType::Begin => data_source.as_ref().fail_one_begin_writable().await,
-            FailureType::Write => data_source.as_ref().fail_one_write().await,
-            FailureType::Commit => data_source.as_ref().fail_one_commit().await,
+            FailureType::Begin => {
+                data_source
+                    .as_ref()
+                    .fail_one_begin_writable(FailableAction::Any)
+                    .await
+            }
+            FailureType::Write => {
+                data_source
+                    .as_ref()
+                    .fail_one_write(FailableAction::Any)
+                    .await
+            }
+            FailureType::Commit => {
+                data_source
+                    .as_ref()
+                    .fail_one_commit(FailableAction::Any)
+                    .await
+            }
         }
         assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
 
@@ -1337,7 +1358,10 @@ mod test {
         // Trigger a fetch of the first leaf; it should retry until it is able to determine
         // the leaf is fetchable and trigger the fetch.
         tracing::info!("fetch with transaction failure");
-        data_source.as_ref().fail_one_begin_read_only().await;
+        data_source
+            .as_ref()
+            .fail_one_begin_read_only(FailableAction::Any)
+            .await;
         assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
     }
 
@@ -1391,8 +1415,22 @@ mod test {
 
         // Trigger a fetch of the block by hash; it should retry until it is able to determine the
         // leaf is available, thus the block is fetchable, trigger the fetch.
+        //
+        // Failing only on the `get_header` call here hits an edge case which is only possible when
+        // fetching blocks: we successfully determine that the object is not available locally and
+        // that it might exist, so we actually call `active_fetch` to try and get it. If we then
+        // fail to load the header and erroneously treat this as the header not being available, we
+        // will give up and consider the object unfetchable (since the next step would be to fetch
+        // the corresponding leaf, but we cannot do this with just a block hash).
+        //
+        // Thus, this test will only pass if we correctly retry the `active_fetch` until we are
+        // successfully able to load the header from storage and determine that the block is
+        // fetchable.
         tracing::info!("fetch with read failure");
-        data_source.as_ref().fail_reads().await;
+        data_source
+            .as_ref()
+            .fail_one_read(FailableAction::GetHeader)
+            .await;
         let fetch = data_source.get_block(leaf.block_hash()).await;
 
         // Give some time for a few reads to fail before letting them succeed.
@@ -1472,16 +1510,23 @@ mod test {
         tracing::info!("fetch success");
         assert_eq!(tx, data_source.get_transaction(tx.hash()).await.await);
 
-        // Fetch the transaction with storage failures. Since a transaction is not active-fetchable,
-        // this will only succeed if we retry the initial load of the transaction until we discover
-        // that it was in fact in the database all along.
+        // Fetch the transaction with storage failures.
+        //
+        // Failing only one read here hits an edge case that only exists for unfetchable objects
+        // (e.g. transactions). This will cause the initial aload of the transaction to fail, but,
+        // if we erroneously treat this load failure as the transaction being missing, we will
+        // succeed in calling `fetch`, since subsequent loads succeed. However, since a transaction
+        // is not active-fetchable, no active fetch will actually be spawned, and this fetch will
+        // never resolve.
+        //
+        // Thus, the test should only pass if we correctly retry the initial load until it succeeds
+        // and we discover that the transaction doesn't need to be fetched at all.
         tracing::info!("fetch with read failure");
-        data_source.as_ref().fail_reads().await;
+        data_source
+            .as_ref()
+            .fail_one_read(FailableAction::Any)
+            .await;
         let fetch = data_source.get_transaction(tx.hash()).await;
-
-        // Give some time for a few reads to fail before letting them succeed.
-        sleep(Duration::from_secs(2)).await;
-        data_source.as_ref().pass().await;
 
         assert_eq!(tx, fetch.await);
     }

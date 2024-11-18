@@ -100,7 +100,7 @@ use crate::{
     types::HeightIndexed,
     Header, Payload, QueryError, QueryResult, VidShare,
 };
-use anyhow::Context;
+use anyhow::{bail, Context};
 use async_lock::Semaphore;
 use async_trait::async_trait;
 use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
@@ -622,7 +622,7 @@ where
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
-    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
     async fn append(&self, info: BlockInfo<Types>) -> anyhow::Result<()> {
@@ -637,25 +637,18 @@ where
             // we're triggering a fire-and-forget fetch; we don't need to block the caller on this.
             let fetcher = self.fetcher.clone();
             let span = tracing::info_span!("fetch missing data", height);
-            spawn(async move {
-                tracing::info!(fetch_block, fetch_vid, "fetching missing data");
-                let mut tx = match fetcher.read().await {
-                    Ok(tx) => tx,
-                    Err(err) => {
-                        tracing::warn!(
-                            height,
-                            "not fetching missing data at decide; could not open transactin: {err:#}"
-                        );
-                        return;
+            spawn(
+                async move {
+                    tracing::info!(fetch_block, fetch_vid, "fetching missing data");
+                    if fetch_block {
+                        fetcher.get::<BlockQueryData<Types>>(height).await;
                     }
-                };
-                if fetch_block {
-                    BlockQueryData::active_fetch(&mut tx, fetcher.clone(), height.into()).await;
+                    if fetch_vid {
+                        fetcher.get::<VidCommonQueryData<Types>>(height).await;
+                    }
                 }
-                if fetch_vid {
-                    VidCommonQueryData::active_fetch(&mut tx, fetcher.clone(), height.into()).await;
-                }
-            }.instrument(span));
+                .instrument(span),
+            );
         }
         Ok(())
     }
@@ -774,10 +767,9 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    async fn get<T, R>(self: &Arc<Self>, req: R) -> Fetch<T>
+    async fn get<T>(self: &Arc<Self>, req: impl Into<T::Request> + Send) -> Fetch<T>
     where
         T: Fetchable<Types>,
-        R: Into<T::Request> + Send,
     {
         let req = req.into();
 
@@ -868,13 +860,17 @@ where
         let mut tx = self.read().await.context("opening read transaction")?;
         match T::load(&mut tx, req).await {
             Ok(t) => Ok(Some(t)),
-            Err(err) => {
-                tracing::info!(
-                    ?req,
-                    "error loading object from local storage, will try to fetch: {err:#}"
-                );
+            Err(QueryError::Missing | QueryError::NotFound) => {
+                // We successfully queried the database, but the object wasn't there. Try to
+                // fetch it.
+                tracing::debug!(?req, "object missing from local storage, will try to fetch");
                 self.fetch::<T>(&mut tx, req).await?;
                 Ok(None)
+            }
+            Err(err) => {
+                // An error occurred while querying the database. We don't know if we need to fetch
+                // the object or not. Return an error so we can try again.
+                bail!("failed to fetch resource {req:?} from local storage: {err:#}");
             }
         }
     }
@@ -1122,7 +1118,7 @@ where
             .await
             .context("failed to load heights; cannot definitively say object might exist")?;
         if req.might_exist(heights) {
-            T::active_fetch(tx, self.clone(), req).await;
+            T::active_fetch(tx, self.clone(), req).await?;
         } else {
             tracing::debug!("not fetching object {req:?} that cannot exist at {heights:?}");
         }
@@ -1747,19 +1743,21 @@ where
     ///   this function assumes `req.might_exist()` has already been checked before calling it, and
     ///   so may do unnecessary work if the caller does not ensure this.
     ///
-    /// If we do trigger an active fetch for an object, the provided callback will be called if and
-    /// when the fetch completes successfully. The callback should be responsible for notifying any
-    /// passive listeners that the object has been retrieved. If we do not trigger an active fetch
-    /// for an object, this function does nothing.
+    /// If we do trigger an active fetch for an object, any passive listeners for the object will be
+    /// notified once it has been retrieved. If we do not trigger an active fetch for an object,
+    /// this function does nothing. In either case, as long as the requested object does in fact
+    /// exist, we will eventually receive it passively, since we will eventually receive all blocks
+    /// and leaves that are ever produced. Active fetching merely helps us receive certain objects
+    /// sooner.
     ///
-    /// In either case, as long as the requested object does in fact exist, we will eventually
-    /// receive it passively, since we will eventually receive all blocks and leaves that are ever
-    /// produced. Active fetching merely helps us receive certain objects sooner.
+    /// This function fails if it _might_ be possible to actively fetch the requested object, but we
+    /// were unable to do so (e.g. due to errors in the database).
     async fn active_fetch<S, P>(
         tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>;
