@@ -932,7 +932,7 @@ pub mod testing {
                 .port(self.port());
 
             cfg = cfg.migrations(vec![Migration::unapplied(
-                "V11__create_test_merkle_tree_table.sql",
+                "V101__create_test_merkle_tree_table.sql",
                 &TestMerkleTreeMigration::create("test_tree"),
             )
             .unwrap()]);
@@ -1057,31 +1057,32 @@ pub mod testing {
 
     impl TestMerkleTreeMigration {
         fn create(name: &str) -> String {
-            #[cfg(feature = "embedded-db")]
-            let bitvec_type = "TEXT";
-            #[cfg(not(feature = "embedded-db"))]
-            let bitvec_type = "BIT(8)";
-
-            #[cfg(feature = "embedded-db")]
-            let binary_data_type = "BLOB";
-            #[cfg(not(feature = "embedded-db"))]
-            let binary_data_type = "BYTEA";
-
-            #[cfg(feature = "embedded-db")]
-            let hash_pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT";
-            #[cfg(not(feature = "embedded-db"))]
-            let hash_pk_type = "SERIAL PRIMARY KEY";
+            let (bit_vec, binary, hash_pk, root_stored_column) = if cfg!(feature = "embedded-db") {
+                (
+                    "TEXT",
+                    "BLOB",
+                    "INTEGER PRIMARY KEY AUTOINCREMENT",
+                    " (json_extract(data, '$.fields.fee_merkle_tree_root'))",
+                )
+            } else {
+                (
+                    "BIT(8)",
+                    "BYTEA",
+                    "SERIAL PRIMARY KEY",
+                    "(data->>'test_merkle_tree_root')",
+                )
+            };
 
             format!(
                 "CREATE TABLE IF NOT EXISTS hash
             (
-                id {hash_pk_type},
-                value {binary_data_type}  NOT NULL UNIQUE
+                id {hash_pk},
+                value {binary}  NOT NULL UNIQUE
             );
     
             ALTER TABLE header
             ADD column test_merkle_tree_root text
-            GENERATED ALWAYS as (data->>'test_merkle_tree_root') STORED;
+            GENERATED ALWAYS as {root_stored_column} STORED
 
             CREATE TABLE {name}
             (
@@ -1089,7 +1090,7 @@ pub mod testing {
                 created BIGINT NOT NULL,
                 hash_id INT NOT NULL,
                 children JSONB,
-                children_bitvec {bitvec_type},
+                children_bitvec {bit_vec},
                 idx JSONB,
                 entry JSONB,
                 PRIMARY KEY (path, created)
