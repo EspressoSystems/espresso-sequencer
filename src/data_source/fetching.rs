@@ -695,10 +695,10 @@ where
                 async move {
                     tracing::info!(fetch_block, fetch_vid, "fetching missing data");
                     if fetch_block {
-                        fetcher.get::<BlockQueryData<Types>>(height).await;
+                        fetcher.get::<PayloadMetadata<Types>>(height).await;
                     }
                     if fetch_vid {
-                        fetcher.get::<VidCommonQueryData<Types>>(height).await;
+                        fetcher.get::<VidCommonMetadata<Types>>(height).await;
                     }
                 }
                 .instrument(span),
