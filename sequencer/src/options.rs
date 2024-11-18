@@ -19,7 +19,7 @@ use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use url::Url;
 
-use crate::{api, persistence};
+use crate::{api, context::ProposalFetcherConfig, persistence};
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
 // can be added, in any combination, to the service. These include, for example, the API server.
@@ -376,6 +376,9 @@ pub struct Options {
 
     #[clap(flatten)]
     pub identity: Identity,
+
+    #[clap(flatten)]
+    pub proposal_fetcher_config: ProposalFetcherConfig,
 }
 
 impl Options {

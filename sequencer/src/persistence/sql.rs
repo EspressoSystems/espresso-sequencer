@@ -377,8 +377,15 @@ impl SequencerPersistence for Persistence {
         let values = leaf_chain
             .into_iter()
             .map(|(info, qc)| {
+                // The leaf may come with a large payload attached. We don't care about this payload
+                // because we already store it separately, as part of the DA proposal. Storing it
+                // here contributes to load on the DB for no reason, so we remove it before
+                // serializing the leaf.
+                let mut leaf = info.leaf.clone();
+                leaf.unfill_block_payload();
+
                 let view = qc.view_number.u64() as i64;
-                let leaf_bytes = bincode::serialize(&info.leaf)?;
+                let leaf_bytes = bincode::serialize(&leaf)?;
                 let qc_bytes = bincode::serialize(&qc)?;
                 Ok((view, leaf_bytes, qc_bytes))
             })
@@ -800,6 +807,10 @@ async fn collect_garbage(
         if let Some(proposal) = da_proposals.remove(&view) {
             let payload = Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
             leaf.fill_block_payload_unchecked(payload);
+        } else if view == ViewNumber::genesis().u64() {
+            // We don't get a DA proposal for the genesis view, but we know what the payload always
+            // is.
+            leaf.fill_block_payload_unchecked(Payload::empty().0);
         } else {
             tracing::debug!(view, "DA proposal not available at decide");
         }

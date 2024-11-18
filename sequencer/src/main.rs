@@ -179,6 +179,7 @@ where
         }),
         fallback_builder_url: opt.fallback_builder_url,
     };
+    let proposal_fetcher_config = opt.proposal_fetcher_config;
 
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
@@ -227,6 +228,7 @@ where
                             opt.is_da,
                             opt.identity,
                             marketplace_config,
+                            proposal_fetcher_config,
                         )
                         .await
                     }
@@ -246,6 +248,7 @@ where
                 opt.is_da,
                 opt.identity,
                 marketplace_config,
+                proposal_fetcher_config,
             )
             .await?
         }
