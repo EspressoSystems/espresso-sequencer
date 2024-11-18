@@ -1,10 +1,13 @@
 use std::{fmt::Display, sync::Arc};
 
 use anyhow::Context;
+use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
+use clap::Parser;
 use committable::{Commitment, Committable};
 use derivative::Derivative;
 use espresso_types::{
+    parse_duration,
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
     NodeState, PubKey, Transaction, ValidatedState,
 };
@@ -51,6 +54,37 @@ use crate::{
 
 /// The consensus handle
 pub type Consensus<N, P, V> = SystemContextHandle<SeqTypes, Node<N, P>, V>;
+
+#[derive(Clone, Copy, Debug, Parser)]
+pub struct ProposalFetcherConfig {
+    #[clap(
+        long = "proposal-fetcher-num-workers",
+        env = "ESPRESSO_SEQUENCER_PROPOSAL_FETCHER_NUM_WORKERS",
+        default_value = "2"
+    )]
+    pub num_workers: usize,
+
+    #[clap(
+        long = "proposal-fetcher-channel-capacity",
+        env = "ESPRESSO_SEQUENCER_PROPOSAL_FETCHER_CHANNEL_CAPACITY",
+        default_value = "100"
+    )]
+    pub channel_capacity: usize,
+
+    #[clap(
+        long = "proposal-fetcher-fetch-timeout",
+        env = "ESPRESSO_SEQUENCER_PROPOSAL_FETCHER_FETCH_TIMEOUT",
+        default_value = "2s",
+        value_parser = parse_duration,
+    )]
+    pub fetch_timeout: Duration,
+}
+
+impl Default for ProposalFetcherConfig {
+    fn default() -> Self {
+        Self::parse_from(std::iter::empty::<String>())
+    }
+}
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative, Clone)]
@@ -100,6 +134,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         event_consumer: impl PersistenceEventConsumer + 'static,
         _: V,
         marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
+        proposal_fetcher_cfg: ProposalFetcherConfig,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = validator_config.public_key;
@@ -111,7 +146,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             .set(instance_state.node_id as usize);
 
         // Start L1 client if it isn't already.
-        instance_state.l1_client.start().await;
+        instance_state.l1_client.spawn_tasks().await;
 
         // Load saved consensus state from storage.
         let (initializer, anchor_view) = persistence
@@ -174,6 +209,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             validator_config,
             event_consumer,
             anchor_view,
+            proposal_fetcher_cfg,
         )
         .with_task_list(tasks))
     }
@@ -191,11 +227,12 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
         event_consumer: impl PersistenceEventConsumer + 'static,
         anchor_view: Option<ViewNumber>,
+        proposal_fetcher_cfg: ProposalFetcherConfig,
     ) -> Self {
         let events = handle.event_stream();
 
         let node_id = node_state.node_id;
-        let ctx = Self {
+        let mut ctx = Self {
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
             tasks: Default::default(),
@@ -207,20 +244,35 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             validator_config,
         };
 
-        // Spawn event handling loops. These can run in the background (detached from `ctx.tasks`
-        // and thus not explicitly cancelled on `shut_down`) because they each exit on their own
-        // when the consensus event stream ends.
-        spawn(fetch_proposals(ctx.handle.clone(), persistence.clone()));
-        spawn(handle_events(
-            node_id,
-            events,
-            persistence,
-            ctx.state_signer.clone(),
-            external_event_handler,
-            Some(event_streamer.clone()),
-            event_consumer,
-            anchor_view,
-        ));
+        // Spawn proposal fetching tasks.
+        let (send, recv) = broadcast(proposal_fetcher_cfg.channel_capacity);
+        ctx.spawn("proposal scanner", scan_proposals(ctx.handle.clone(), send));
+        for i in 0..proposal_fetcher_cfg.num_workers {
+            ctx.spawn(
+                format!("proposal fetcher {i}"),
+                fetch_proposals(
+                    ctx.handle.clone(),
+                    persistence.clone(),
+                    recv.clone(),
+                    proposal_fetcher_cfg.fetch_timeout,
+                ),
+            );
+        }
+
+        // Spawn event handling loop.
+        ctx.spawn(
+            "event handler",
+            handle_events(
+                node_id,
+                events,
+                persistence,
+                ctx.state_signer.clone(),
+                external_event_handler,
+                Some(event_streamer.clone()),
+                event_consumer,
+                anchor_view,
+            ),
+        );
 
         ctx
     }
@@ -325,7 +377,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         tracing::info!("shutting down SequencerContext");
         self.handle.write().await.shut_down().await;
         self.tasks.shut_down();
-        self.node_state.l1_client.stop().await;
+        self.node_state.l1_client.shut_down_tasks().await;
 
         // Since we've already shut down, we can set `detached` so the drop
         // handler doesn't call `shut_down` again.
@@ -366,7 +418,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
                 tracing::info!("shutting down SequencerContext");
                 handle_clone.write().await.shut_down().await;
                 tasks_clone.shut_down();
-                node_state_clone.l1_client.stop().await;
+                node_state_clone.l1_client.shut_down_tasks().await;
             });
 
             // Set `detached` so the drop handler doesn't call `shut_down` again.
@@ -424,15 +476,14 @@ async fn handle_events<V: Versions>(
 }
 
 #[tracing::instrument(skip_all)]
-async fn fetch_proposals<N, P, V>(
+async fn scan_proposals<N, P, V>(
     consensus: Arc<RwLock<Consensus<N, P, V>>>,
-    persistence: Arc<impl SequencerPersistence>,
+    fetcher: Sender<(ViewNumber, Commitment<Leaf<SeqTypes>>)>,
 ) where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     V: Versions,
 {
-    let mut tasks = TaskList::default();
     let mut events = consensus.read().await.event_stream();
     while let Some(event) = events.next().await {
         let EventType::QuorumProposal { proposal, .. } = event.event else {
@@ -442,78 +493,63 @@ async fn fetch_proposals<N, P, V>(
         // to the anchor. This allows state replay from the decided state.
         let parent_view = proposal.data.justify_qc.view_number;
         let parent_leaf = proposal.data.justify_qc.data.leaf_commit;
-        tasks.spawn_short_lived(
-            format!("fetch proposal {parent_view:?},{parent_leaf}"),
-            fetch_proposal_chain(
-                consensus.clone(),
-                persistence.clone(),
-                parent_view,
-                parent_leaf,
-            ),
-        );
+        fetcher
+            .broadcast_direct((parent_view, parent_leaf))
+            .await
+            .ok();
     }
-    tasks.shut_down();
 }
 
-#[tracing::instrument(skip(consensus, persistence))]
-async fn fetch_proposal_chain<N, P, V>(
+#[tracing::instrument(skip_all)]
+async fn fetch_proposals<N, P, V>(
     consensus: Arc<RwLock<Consensus<N, P, V>>>,
     persistence: Arc<impl SequencerPersistence>,
-    mut view: ViewNumber,
-    mut leaf: Commitment<Leaf<SeqTypes>>,
+    mut scanner: Receiver<(ViewNumber, Commitment<Leaf<SeqTypes>>)>,
+    fetch_timeout: Duration,
 ) where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     V: Versions,
 {
-    while view > load_anchor_view(&*persistence).await {
-        match persistence.load_quorum_proposal(view).await {
-            Ok(proposal) => {
-                // If we already have the proposal in storage, keep traversing the chain to its
-                // parent.
-                view = proposal.data.justify_qc.view_number;
-                leaf = proposal.data.justify_qc.data.leaf_commit;
-                continue;
+    let sender = scanner.new_sender();
+    while let Some((view, leaf)) = scanner.next().await {
+        let span = tracing::warn_span!("fetch proposal", ?view, %leaf);
+        let res: anyhow::Result<()> = async {
+            let anchor_view = load_anchor_view(&*persistence).await;
+            if view <= anchor_view {
+                tracing::debug!(?anchor_view, "skipping already-decided proposal");
+                return Ok(());
             }
-            Err(err) => {
-                tracing::info!(?view, %leaf, "proposal missing from storage; fetching from network: {err:#}");
-            }
-        }
 
-        let future =
-            match consensus
-                .read()
-                .await
-                .request_proposal(view, EpochNumber::genesis(), leaf)
-            {
-                Ok(future) => future,
-                Err(err) => {
-                    tracing::info!(?view, %leaf, "failed to request proposal: {err:#}");
-                    sleep(Duration::from_secs(1)).await;
-                    continue;
+            match persistence.load_quorum_proposal(view).await {
+                Ok(proposal) => {
+                    // If we already have the proposal in storage, keep traversing the chain to its
+                    // parent.
+                    let view = proposal.data.justify_qc.view_number;
+                    let leaf = proposal.data.justify_qc.data.leaf_commit;
+                    sender.broadcast_direct((view, leaf)).await.ok();
+                    return Ok(());
                 }
-            };
-        let proposal = match timeout(Duration::from_secs(30), future).await {
-            Ok(Ok(proposal)) => proposal,
-            Ok(Err(err)) => {
-                tracing::info!("error fetching proposal: {err:#}");
-                sleep(Duration::from_secs(1)).await;
-                continue;
+                Err(err) => {
+                    tracing::info!("proposal missing from storage; fetching from network: {err:#}");
+                }
             }
-            Err(_) => {
-                tracing::info!("timed out fetching proposal");
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
 
-        while let Err(err) = persistence.append_quorum_proposal(&proposal).await {
-            tracing::warn!("error saving fetched proposal: {err:#}");
-            sleep(Duration::from_secs(1)).await;
-        }
+            let future =
+                consensus
+                    .read()
+                    .await
+                    .request_proposal(view, EpochNumber::genesis(), leaf)?;
+            let proposal = timeout(fetch_timeout, future)
+                .await
+                .context("timed out fetching proposal")?
+                .context("error fetching proposal")?;
+            persistence
+                .append_quorum_proposal(&proposal)
+                .await
+                .context("error saving fetched proposal")?;
 
-        // Add the fetched leaf to HotShot state, so consensus can make use of it.
-        {
+            // Add the fetched leaf to HotShot state, so consensus can make use of it.
             let leaf = Leaf::from_quorum_proposal(&proposal.data);
             let handle = consensus.read().await;
             let consensus = handle.consensus();
@@ -533,20 +569,28 @@ async fn fetch_proposal_chain<N, P, V>(
                     },
                 };
                 if let Err(err) = consensus.update_validated_state_map(view, v) {
-                    tracing::warn!(?view, "unable to update validated state map: {err:#}");
+                    tracing::warn!("unable to update validated state map: {err:#}");
                 }
                 consensus
                     .update_saved_leaves(leaf, &handle.hotshot.upgrade_lock)
                     .await;
-                tracing::debug!(
-                    ?view,
-                    "added view to validated state map view proposal fetcher"
-                );
+                tracing::debug!("added view to validated state map view proposal fetcher");
             }
-        }
 
-        view = proposal.data.justify_qc.view_number;
-        leaf = proposal.data.justify_qc.data.leaf_commit;
+            Ok(())
+        }
+        .instrument(span)
+        .await;
+        if let Err(err) = res {
+            tracing::warn!("failed to fetch proposal: {err:#}");
+
+            // Avoid busy loop when operations are failing.
+            sleep(Duration::from_secs(1)).await;
+
+            // If we fail fetching the proposal, don't let it clog up the fetching task. Just push
+            // it back onto the queue and move onto the next proposal.
+            sender.broadcast_direct((view, leaf)).await.ok();
+        }
     }
 }
 

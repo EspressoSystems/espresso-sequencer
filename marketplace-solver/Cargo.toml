@@ -6,7 +6,7 @@ edition = "2021"
 
 [features]
 testing = [
-	"hotshot-query-service",
+	"hotshot-query-service/testing",
 	"portpicker",
 ]
 embedded-db  = []
@@ -19,7 +19,7 @@ bincode = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
-espresso-types = { path = "../types", features = [ "testing" ] }
+espresso-types = { path = "../types" }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-events-service = { workspace = true }
@@ -40,4 +40,5 @@ tracing = { workspace = true }
 vbs = { workspace = true }
 
 [dev-dependencies]
+marketplace-solver = { path = ".", features = [ "testing" ] }
 portpicker = { workspace = true }

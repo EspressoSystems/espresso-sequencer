@@ -71,6 +71,9 @@ clippy:
     @echo 'features: "testing"'
     cargo clippy --workspace --all-features --features testing -- -D warnings
 
+check-features *args:
+    cargo hack check --each-feature {{args}}
+
 # Helpful shortcuts for local development
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1

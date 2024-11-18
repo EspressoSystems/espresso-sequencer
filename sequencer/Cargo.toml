@@ -6,9 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["libp2p"]
-testing = ["hotshot-testing", "marketplace-builder-core", "marketplace-builder-shared", "hotshot-builder-api"]
-libp2p = []
+testing = [
+  "hotshot-testing",
+  "marketplace-builder-core",
+  "marketplace-builder-shared",
+  "hotshot-builder-api",
+  "espresso-types/testing",
+  "sequencer-utils/testing",
+  "hotshot-query-service/testing",
+]
 benchmarking = []
 embedded-db = ["hotshot-query-service/embedded-db"]
 
@@ -20,12 +26,15 @@ required-features = ["testing", "embedded-db"]
 escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-example-types = { workspace = true }
-hotshot-query-service = { workspace = true, features = ["testing"] }
+hotshot-query-service = { workspace = true }
 hotshot-testing = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
 tempfile = { workspace = true }
+
+# Enable "testing" feature when running tests
+sequencer = { path = ".", features = [ "testing" ] }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -55,7 +64,7 @@ derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
 dyn-clone = { workspace = true }
-espresso-types = { path = "../types", features = ["testing"] }
+espresso-types = { path = "../types" }
 ethers = { workspace = true }
 futures = { workspace = true }
 
@@ -116,6 +125,7 @@ tracing-subscriber = "0.3.18"
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
+
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
 

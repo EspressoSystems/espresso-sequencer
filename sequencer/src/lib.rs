@@ -12,13 +12,12 @@ mod message_compat_tests;
 use anyhow::Context;
 use async_lock::RwLock;
 use catchup::StatePeers;
-use context::SequencerContext;
+use context::{ProposalFetcherConfig, SequencerContext};
 use espresso_types::{
     traits::EventConsumer, BackoffParams, L1Client, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers::types::U256;
-#[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::L1Finalized;
 use hotshot::traits::election::static_committee::StaticCommittee;
@@ -33,15 +32,9 @@ use tracing::info;
 use url::Url;
 pub mod persistence;
 pub mod state;
-
-#[cfg(feature = "libp2p")]
-use std::time::Duration;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
-
 use derivative::Derivative;
 use espresso_types::v0::traits::SequencerPersistence;
 pub use genesis::Genesis;
-#[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{
     derive_libp2p_multiaddr, CombinedNetworks, GossipConfig, Libp2pNetwork, RequestResponseConfig,
 };
@@ -71,6 +64,8 @@ use hotshot_types::{
 };
 pub use options::Options;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
 use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
 
@@ -203,6 +198,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     is_da: bool,
     identity: Identity,
     marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P>>,
+    proposal_fetcher_config: ProposalFetcherConfig,
 ) -> anyhow::Result<SequencerContext<network::Production, P, V>> {
     // Expose git information via status API.
     metrics
@@ -446,8 +442,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         response_size_maximum: network_params.libp2p_max_direct_transmit_size,
     };
 
-    // Initialize the Libp2p network (if enabled)
-    #[cfg(feature = "libp2p")]
+    // Initialize the Libp2p network
     let network = {
         let p2p_network = Libp2pNetwork::from_config(
             network_config.clone(),
@@ -487,15 +482,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         ))
     };
 
-    // Wait for the CDN network to be ready if we're not using the P2P network
-    #[cfg(not(feature = "libp2p"))]
-    let network = {
-        tracing::warn!("Waiting for the CDN connection to be initialized");
-        cdn_network.wait_for_ready().await;
-        tracing::warn!("CDN connection initialized");
-        Arc::from(cdn_network)
-    };
-
     let mut genesis_state = ValidatedState {
         chain_config: genesis.chain_config.into(),
         ..Default::default()
@@ -506,7 +492,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     }
 
     let l1_client = l1_params.options.connect(l1_params.url).await?;
-    l1_client.start().await;
+    l1_client.spawn_tasks().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,
@@ -549,6 +535,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         event_consumer,
         seq_versions,
         marketplace_config,
+        proposal_fetcher_config,
     )
     .await?;
     if wait_for_orchestrator {
@@ -565,10 +552,10 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 pub mod testing {
     use std::{collections::HashMap, time::Duration};
 
+    use catchup::NullStateCatchup;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
-        mock::MockStateCatchup,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
         Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
         Upgrade,
@@ -927,7 +914,7 @@ pub mod testing {
                     i,
                     ValidatedState::default(),
                     no_storage::Options,
-                    MockStateCatchup::default(),
+                    NullStateCatchup::default(),
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     NullEventConsumer,
@@ -1069,6 +1056,7 @@ pub mod testing {
                     auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
                     fallback_builder_url: marketplace_builder_url,
                 },
+                Default::default(),
             )
             .await
             .unwrap()

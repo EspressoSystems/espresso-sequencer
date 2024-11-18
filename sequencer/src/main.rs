@@ -179,6 +179,7 @@ where
         }),
         fallback_builder_url: opt.fallback_builder_url,
     };
+    let proposal_fetcher_config = opt.proposal_fetcher_config;
 
     let persistence = storage_opt.create().await?;
 
@@ -229,6 +230,7 @@ where
                             opt.is_da,
                             opt.identity,
                             marketplace_config,
+                            proposal_fetcher_config,
                         )
                         .await
                     }
@@ -248,6 +250,7 @@ where
                 opt.is_da,
                 opt.identity,
                 marketplace_config,
+                proposal_fetcher_config,
             )
             .await?
         }
