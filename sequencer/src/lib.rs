@@ -492,7 +492,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     }
 
     let l1_client = l1_params.options.connect(l1_params.url).await?;
-    l1_client.start().await;
+    l1_client.spawn_tasks().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
         L1Finalized::Number { number } => l1_client.wait_for_finalized_block(number).await,

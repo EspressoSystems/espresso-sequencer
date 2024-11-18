@@ -92,7 +92,7 @@ impl RpcClient {
         })
     }
 
-    async fn stop(&self) {
+    async fn shut_down(&self) {
         if let Self::Ws { reconnect, .. } = self {
             *reconnect.lock().await = L1ReconnectTask::Cancelled;
         }
@@ -319,7 +319,7 @@ impl L1Client {
     }
 
     /// Start the background tasks which keep the L1 client up to date.
-    pub async fn start(&self) {
+    pub async fn spawn_tasks(&self) {
         let mut update_task = self.update_task.0.lock().await;
         if update_task.is_none() {
             *update_task = Some(spawn(self.update_loop()));
@@ -330,11 +330,11 @@ impl L1Client {
     ///
     /// The L1 client will still be usable, but will stop updating until [`start`](Self::start) is
     /// called again.
-    pub async fn stop(&self) {
+    pub async fn shut_down_tasks(&self) {
         if let Some(update_task) = self.update_task.0.lock().await.take() {
             update_task.abort();
         }
-        (*self.provider).as_ref().stop().await;
+        (*self.provider).as_ref().shut_down().await;
     }
 
     pub fn provider(&self) -> &impl Middleware<Error: 'static> {
@@ -794,7 +794,7 @@ mod test {
         .await
         .unwrap();
 
-        client.start().await;
+        client.spawn_tasks().await;
         client
     }
 
