@@ -3,6 +3,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use alloy::primitives::Address;
 use espresso_types::SeqTypes;
 use hotshot_query_service::availability::BlockQueryData;
 
@@ -117,5 +118,15 @@ where
             .store(stats.num_transactions, Ordering::SeqCst);
 
         Ok(stats)
+    }
+
+    async fn retrieved_latest_inscriptions_for_address(
+        &self,
+        address: Address,
+    ) -> Result<Vec<InscriptionAndChainDetails>, RetrieveLatestInscriptionAndChainDetailsError>
+    {
+        self.persistence
+            .retrieved_latest_inscriptions_for_address(address)
+            .await
     }
 }

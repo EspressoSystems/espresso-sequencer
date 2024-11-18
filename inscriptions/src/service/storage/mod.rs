@@ -2,6 +2,7 @@ use std::num::NonZero;
 pub mod in_memory;
 pub mod postgres;
 
+use alloy::primitives::Address;
 use espresso_types::SeqTypes;
 use hotshot_query_service::availability::BlockQueryData;
 
@@ -222,4 +223,12 @@ pub trait InscriptionPersistence {
     /// to help bootstrap the block stream to ensure that we do not miss
     /// processing any blocks.
     async fn retrieve_last_received_block(&self) -> Result<Stats, RetrieveLastReceivedBlockError>;
+
+    /// [retrieved_latest_inscriptions_for_address] retrieves the latest
+    /// inscriptions for a given address.  This is used to retrieve the latest
+    /// inscriptions that have been submitted by a given address.
+    async fn retrieved_latest_inscriptions_for_address(
+        &self,
+        address: Address,
+    ) -> Result<Vec<InscriptionAndChainDetails>, RetrieveLatestInscriptionAndChainDetailsError>;
 }

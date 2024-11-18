@@ -1,3 +1,4 @@
+use alloy::primitives::Address;
 use espresso_types::{Payload, SeqTypes};
 use futures::StreamExt;
 use hotshot_query_service::availability::{BlockQueryData, QueryablePayload};
@@ -340,5 +341,34 @@ impl InscriptionPersistence for PostgresPersistence {
             num_transactions: num_transaction as u64,
             num_inscriptions: number_of_inscriptions as u64,
         })
+    }
+
+    async fn retrieved_latest_inscriptions_for_address(
+        &self,
+        address: Address,
+    ) -> Result<Vec<InscriptionAndChainDetails>, RetrieveLatestInscriptionAndChainDetailsError>
+    {
+        tracing::debug!("Retrieving latest inscriptions for address: {}", address);
+
+        let mut conn = self.pool.acquire().await?;
+
+        let mut rows = sqlx::query("SELECT ins_address, ins_time, chain_block_height, chain_txn_offset FROM confirmed_inscriptions WHERE ins_address = $1 ORDER BY ins_time DESC, id DESC LIMIT 10")
+            .bind(address.to_string())
+            .fetch(&mut *conn);
+
+        let mut inscription_and_chain_details = Vec::new();
+
+        while let Some(row) = rows.next().await {
+            let row = row?;
+            let inscription = self.inscription_from_row(&row)?;
+            let chain_details = self.chain_details_from_row(&row)?;
+
+            inscription_and_chain_details.push(InscriptionAndChainDetails {
+                inscription,
+                chain_details,
+            });
+        }
+
+        Ok(inscription_and_chain_details)
     }
 }

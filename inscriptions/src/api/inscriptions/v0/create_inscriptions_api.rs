@@ -15,10 +15,7 @@ use crate::{
         data_state::{DataState, ProcessBlockStreamTask, Stats, MAX_LOCAL_INSCRIPTION_HISTORY},
         espresso_inscription::EspressoInscription,
         server_message::ServerMessage,
-        storage::{
-            in_memory::HeightCachingInMemory, postgres::PostgresPersistence,
-            InscriptionPersistence, RetrieveLastReceivedBlockError,
-        },
+        storage::{InscriptionPersistence, RetrieveLastReceivedBlockError},
     },
     Options,
 };
@@ -59,10 +56,6 @@ pub struct InscriptionsConfig {
     /// the number of inscriptions that can be submitted to the Espresso
     /// Transaction mempool per second.
     put_inscriptions_per_second: u32,
-
-    /// postgres_url is the URL to the Postgres database that is used to store
-    /// the inscriptions.
-    postgres_url: Url,
 
     /// minimum_start_block is the minimum block that the inscriptions service
     /// should start processing from.
@@ -109,7 +102,6 @@ impl TryFrom<&Options> for InscriptionsConfig {
             block_stream_source_base_url: options.block_stream_source_base_url(),
             submit_url: options.submit_base_url(),
             inscription_namespace_id: options.inscriptions_namespace_id(),
-            postgres_url,
             put_inscriptions_per_second: options.put_inscriptions_per_second(),
             minimum_start_block: options.minimum_block_height(),
         })
@@ -142,12 +134,6 @@ impl InscriptionsConfig {
         self.minimum_start_block
     }
 
-    /// postgres_url returns the URL to the Postgres database that is used to
-    /// store the inscriptions service persistent state.
-    fn postgres_url(&self) -> Url {
-        self.postgres_url.clone()
-    }
-
     /// block_stream_source_base_url returns the base URL to the block stream
     /// source that originates from the availability API of the HotShot
     /// Query Service.
@@ -158,11 +144,10 @@ impl InscriptionsConfig {
 
 #[cfg(test)]
 impl InscriptionsConfig {
-    fn new_testing(block_stream_source_base_url: Url, submit_url: Url, postgres_url: Url) -> Self {
+    fn new_testing(block_stream_source_base_url: Url, submit_url: Url) -> Self {
         InscriptionsConfig {
             block_stream_source_base_url,
             submit_url,
-            postgres_url,
             inscription_namespace_id: NamespaceId::from(0x7e57u32),
             put_inscriptions_per_second: 20,
             minimum_start_block: 0,
@@ -209,14 +194,18 @@ impl From<RetrieveLastReceivedBlockError> for CreateInscriptionsProcessingError 
  * from the various sources.  This function will also create the data state that
  * will be used to store the state of the network.
  */
-pub async fn create_inscriptions_processing(
+pub async fn create_inscriptions_processing<Persistence>(
     config: InscriptionsConfig,
+    persistence: Arc<Persistence>,
     internal_client_message_receiver: Receiver<InternalClientMessage<Sender<ServerMessage>>>,
     put_inscription_record_receiver: Receiver<EspressoInscription>,
     put_inscription_to_chain_receiver: Receiver<EspressoInscription>,
     put_inscription_to_chain_sender: Sender<EspressoInscription>,
     signer: PrivateKeySigner,
-) -> Result<InscriptionsAPI, CreateInscriptionsProcessingError> {
+) -> Result<InscriptionsAPI, CreateInscriptionsProcessingError>
+where
+    Persistence: InscriptionPersistence + Send + Sync + 'static,
+{
     let client_thread_state = ClientThreadState::<Sender<ServerMessage>>::new(
         Default::default(),
         ClientId::from_count(1),
@@ -230,19 +219,9 @@ pub async fn create_inscriptions_processing(
         RateLimiter::direct(Quota::per_second(non_zero_limit))
     };
 
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
-        .connect(config.postgres_url().to_string().as_str())
-        .await?;
-
-    // Run all of the migrations
-    sqlx::migrate!().run(&pool).await?;
-
-    let persistence = Arc::new(HeightCachingInMemory::new(PostgresPersistence::new(pool)));
+    let mut data_state = DataState::new(Default::default(), persistence.clone(), signer.address());
 
     let (block_sender, block_receiver) = mpsc::channel(10);
-
-    let mut data_state = DataState::new(Default::default(), persistence.clone(), signer.address());
 
     let Stats {
         num_blocks: block_height,
@@ -367,23 +346,106 @@ pub async fn create_inscriptions_processing(
 
 #[cfg(test)]
 mod test {
+    use std::{num::NonZero, sync::Arc};
+
     use crate::{
-        api::inscriptions::v0::{Error, StateClientMessageSender, STATIC_VER_0_1},
+        api::inscriptions::v0::{
+            Error, PersistenceRetriever, StateClientMessageSender, STATIC_VER_0_1,
+        },
         service::{
-            client_message::InternalClientMessage, espresso_inscription::EspressoInscription,
+            client_message::InternalClientMessage,
+            data_state::Stats,
+            espresso_inscription::{EspressoInscription, InscriptionAndChainDetails},
             server_message::ServerMessage,
+            storage::{
+                InscriptionPersistence, RecordConfirmedInscriptionAndChainDetailsError,
+                RecordLastReceivedBlockError, RecordPendingPutInscriptionError,
+                ResolvePendingPutInscriptionError, RetrieveLastReceivedBlockError,
+                RetrieveLatestInscriptionAndChainDetailsError, RetrievePendingPutInscriptionsError,
+            },
         },
     };
-    use alloy::signers::local::PrivateKeySigner;
-    use futures::channel::mpsc::{self, Sender};
-    use tide_disco::App;
+    use alloy::{primitives::Address, signers::local::PrivateKeySigner};
+    use espresso_types::SeqTypes;
+    use futures::{
+        channel::mpsc::{self, Sender},
+        future::BoxFuture,
+    };
+    use hotshot_query_service::availability::BlockQueryData;
+    use tide_disco::{method::ReadState, App};
     use url::Url;
+
+    struct TestPersistence {}
+
+    #[async_trait::async_trait]
+    impl InscriptionPersistence for TestPersistence {
+        async fn record_pending_put_inscription(
+            &self,
+            _inscription: &EspressoInscription,
+        ) -> Result<(), RecordPendingPutInscriptionError> {
+            Ok(())
+        }
+
+        async fn record_submit_put_inscription(
+            &self,
+            _inscription: &EspressoInscription,
+        ) -> Result<(), ResolvePendingPutInscriptionError> {
+            Ok(())
+        }
+
+        async fn retrieve_pending_put_inscriptions(
+            &self,
+        ) -> Result<Vec<EspressoInscription>, RetrievePendingPutInscriptionsError> {
+            Ok(vec![])
+        }
+
+        async fn record_confirmed_inscription_and_chain_details(
+            &self,
+            _inscription_and_block_details: &InscriptionAndChainDetails,
+        ) -> Result<(), RecordConfirmedInscriptionAndChainDetailsError> {
+            Ok(())
+        }
+
+        async fn retrieve_latest_inscription_and_chain_details(
+            &self,
+            _number_of_inscriptions: NonZero<usize>,
+        ) -> Result<Vec<InscriptionAndChainDetails>, RetrieveLatestInscriptionAndChainDetailsError>
+        {
+            Ok(vec![])
+        }
+
+        async fn record_last_received_block(
+            &self,
+            _block: &BlockQueryData<SeqTypes>,
+        ) -> Result<(), RecordLastReceivedBlockError> {
+            Ok(())
+        }
+
+        async fn retrieve_last_received_block(
+            &self,
+        ) -> Result<Stats, RetrieveLastReceivedBlockError> {
+            Ok(Stats {
+                num_blocks: 0,
+                num_transactions: 0,
+                num_inscriptions: 0,
+            })
+        }
+
+        async fn retrieved_latest_inscriptions_for_address(
+            &self,
+            _address: Address,
+        ) -> Result<Vec<InscriptionAndChainDetails>, RetrieveLatestInscriptionAndChainDetailsError>
+        {
+            Ok(vec![])
+        }
+    }
 
     #[derive(Clone)]
     struct TestState(
         Sender<InternalClientMessage<Sender<ServerMessage>>>,
         Sender<EspressoInscription>,
         Sender<EspressoInscription>,
+        Arc<TestPersistence>,
     );
 
     #[async_trait::async_trait]
@@ -418,6 +480,24 @@ mod test {
         }
     }
 
+    #[async_trait::async_trait]
+    impl ReadState for TestState {
+        type State = TestState;
+
+        async fn read<T>(
+            &self,
+            op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+        ) -> T {
+            op(self).await
+        }
+    }
+
+    impl PersistenceRetriever<TestPersistence> for TestState {
+        fn get_persistence(&self) -> Arc<TestPersistence> {
+            self.3.clone()
+        }
+    }
+
     #[async_std::test]
     #[ignore]
     async fn test_full_setup_example() {
@@ -429,10 +509,11 @@ mod test {
             internal_client_message_sender,
             put_inscription_record_sender,
             put_inscription_to_chain_sender.clone(),
+            Arc::new(TestPersistence {}),
         );
 
         let mut app: App<_, crate::api::inscriptions::v0::Error> = App::with_state(state);
-        let inscriptions_api_result = super::super::define_api::<TestState>();
+        let inscriptions_api_result = super::super::define_api();
         let inscriptions_api = match inscriptions_api_result {
             Ok(inscriptions_api) => inscriptions_api,
             Err(err) => {
@@ -451,8 +532,8 @@ mod test {
             super::InscriptionsConfig::new_testing(
                 Url::parse("http://query.main.net.espresso.network/v0/").unwrap(),
                 Url::parse("http://localhost:8000/v0/submit/submit").unwrap(),
-                Url::parse("postgres://localhost/inscriptions").unwrap(),
             ),
+            Arc::new(TestPersistence {}),
             internal_client_message_receiver,
             put_inscription_record_receiver,
             put_inscription_to_chain_receiver,

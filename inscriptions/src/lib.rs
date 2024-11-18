@@ -2,16 +2,25 @@ pub mod api;
 pub mod service;
 
 use api::inscriptions::v0::{
-    create_inscriptions_api::{create_inscriptions_processing, InscriptionsConfig},
-    Error, StateClientMessageSender, STATIC_VER_0_1,
+    create_inscriptions_api::{
+        create_inscriptions_processing, CreateInscriptionsConfigError, InscriptionsConfig,
+    },
+    Error, PersistenceRetriever, StateClientMessageSender, STATIC_VER_0_1,
 };
 use async_std::sync::RwLock;
 use clap::Parser;
 use espresso_types::NamespaceId;
-use futures::channel::mpsc::{self, Sender};
-use service::{client_message::InternalClientMessage, espresso_inscription::EspressoInscription};
+use futures::{
+    channel::mpsc::{self, Sender},
+    future::BoxFuture,
+};
+use service::{
+    client_message::InternalClientMessage,
+    espresso_inscription::EspressoInscription,
+    storage::{in_memory::HeightCachingInMemory, postgres::PostgresPersistence},
+};
 use std::sync::Arc;
-use tide_disco::App;
+use tide_disco::{method::ReadState, App};
 use url::Url;
 
 /// Options represents the configuration options that are available for running
@@ -217,6 +226,29 @@ impl Options {
         self.postgres_password.clone()
     }
 
+    /// postgres_url returns the URL that is used to connect to the PostgreSQL
+    /// database that is used to store the inscriptions services persistent state.
+    /// This is used to connect to the database.
+    pub fn postgres_url(&self) -> Result<Url, CreateInscriptionsConfigError> {
+        let mut postgres_url = Url::parse("postgres://localhost/")?;
+
+        postgres_url.set_path(self.postgres_database().as_str());
+        postgres_url
+            .set_port(Some(self.postgres_port()))
+            .or(Err(CreateInscriptionsConfigError::SetPortError))?;
+        postgres_url
+            .set_username(self.postgres_user().as_str())
+            .or(Err(CreateInscriptionsConfigError::SetUsernameError))?;
+        postgres_url
+            .set_password(Some(self.postgres_password().as_str()))
+            .or(Err(CreateInscriptionsConfigError::SetPasswordError))?;
+        postgres_url
+            .set_host(Some(self.postgres_host().as_str()))
+            .or(Err(CreateInscriptionsConfigError::SetHostError))?;
+
+        Ok(postgres_url)
+    }
+
     /// minimum_block_height returns the minimum block height that the service
     /// will start processing inscriptions from.  This is used to ensure that
     /// the service does not process inscriptions that are older than the block
@@ -228,16 +260,18 @@ impl Options {
 
 /// MainState represents the State of the application this is available to
 /// tide_disco.
-struct MainState<K> {
+struct MainState<K, Persistence> {
     internal_client_message_sender: Sender<InternalClientMessage<K>>,
     put_inscription_record_sender: Sender<EspressoInscription>,
     put_inscription_to_chain_sender: Arc<RwLock<Sender<EspressoInscription>>>,
+    persistence: Arc<Persistence>,
 }
 
 #[async_trait::async_trait]
-impl<K> StateClientMessageSender<K> for MainState<K>
+impl<K, Persistence> StateClientMessageSender<K> for MainState<K, Persistence>
 where
     K: Send,
+    Persistence: Send + Sync,
 {
     fn internal_client_message_sender(&self) -> Sender<InternalClientMessage<K>> {
         self.internal_client_message_sender.clone()
@@ -263,6 +297,28 @@ where
     }
 }
 
+#[async_trait::async_trait]
+impl<K, Persistence> ReadState for MainState<K, Persistence>
+where
+    K: Send + 'static,
+    Persistence: Send + Sync + 'static,
+{
+    type State = MainState<K, Persistence>;
+
+    async fn read<T>(
+        &self,
+        op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+    ) -> T {
+        op(self).await
+    }
+}
+
+impl<K, Persistence> PersistenceRetriever<Persistence> for MainState<K, Persistence> {
+    fn get_persistence(&self) -> Arc<Persistence> {
+        self.persistence.clone()
+    }
+}
+
 /// Run the service by itself.
 ///
 /// This function will run the inscription demo as its own service.  It has some
@@ -274,25 +330,6 @@ pub async fn run_standalone_service(options: Options) {
         mpsc::channel(options.put_inscription_buffer_size);
     let (put_inscription_to_chain_sender, put_inscription_to_chain_receiver) =
         mpsc::channel(options.put_inscription_buffer_size);
-
-    let state = MainState {
-        internal_client_message_sender,
-        put_inscription_record_sender,
-        put_inscription_to_chain_sender: Arc::new(RwLock::new(
-            put_inscription_to_chain_sender.clone(),
-        )),
-    };
-
-    let mut app: App<_, api::inscriptions::v0::Error> = App::with_state(state);
-    let inscriptions_api =
-        api::inscriptions::v0::define_api().expect("error defining inscriptions api");
-
-    match app.register_module("inscriptions", inscriptions_api) {
-        Ok(_) => {}
-        Err(err) => {
-            panic!("error registering inscriptions api: {:?}", err);
-        }
-    }
 
     let signer = match alloy::signers::local::MnemonicBuilder::<
         alloy::signers::local::coins_bip39::English,
@@ -309,8 +346,53 @@ pub async fn run_standalone_service(options: Options) {
         }
     };
 
+    let config =
+        InscriptionsConfig::try_from(&options).expect("successfully create InscriptionsConfig");
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(
+            options
+                .postgres_url()
+                .expect("should be able to generate postgres url")
+                .to_string()
+                .as_str(),
+        )
+        .await
+        .expect("successfully connected to postgres");
+
+    // Run all of the migrations
+    sqlx::migrate!()
+        .run(&pool)
+        .await
+        .expect("successfully ran migrations");
+
+    let persistence: Arc<HeightCachingInMemory<PostgresPersistence>> =
+        Arc::new(HeightCachingInMemory::new(PostgresPersistence::new(pool)));
+
+    let state = MainState {
+        internal_client_message_sender,
+        put_inscription_record_sender,
+        put_inscription_to_chain_sender: Arc::new(RwLock::new(
+            put_inscription_to_chain_sender.clone(),
+        )),
+        persistence: persistence.clone(),
+    };
+
+    let mut app: App<_, api::inscriptions::v0::Error> = App::with_state(state);
+    let inscriptions_api =
+        api::inscriptions::v0::define_api().expect("error defining inscriptions api");
+
+    match app.register_module("inscriptions", inscriptions_api) {
+        Ok(_) => {}
+        Err(err) => {
+            panic!("error registering inscriptions api: {:?}", err);
+        }
+    }
+
     let _inscriptions_task_state = match create_inscriptions_processing(
-        InscriptionsConfig::try_from(&options).expect("successfully create InscriptionsConfig"),
+        config,
+        persistence,
         internal_client_message_receiver,
         put_inscription_record_receiver,
         put_inscription_to_chain_receiver,

@@ -6,6 +6,7 @@ use crate::service::espresso_inscription::{EspressoInscription, InscriptionAndSi
 use crate::service::server_message::ServerMessage;
 use crate::service::storage::InscriptionPersistence;
 use crate::service::{validate_inscription_and_signature, InscriptionVerificationError};
+use alloy::primitives::Address;
 use async_std::task::JoinHandle;
 use espresso_types::{BackoffParams, SeqTypes};
 use futures::channel::mpsc::SendError;
@@ -21,6 +22,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use tide_disco::method::ReadState;
 use tide_disco::socket::Connection;
 use tide_disco::RequestError;
 use tide_disco::{api::ApiError, Api};
@@ -193,12 +195,28 @@ pub trait StateClientMessageSender<K> {
     async fn put_inscription(&self, inscription: EspressoInscription) -> Result<(), Error>;
 }
 
+/// [PersistenceRetriever] allows for the retrieval of the [Persistence] instance
+/// for the service.
+pub trait PersistenceRetriever<Persistence> {
+    /// [persistence] retrieves the [Persistence] instance for the service.
+    /// This allows for the retrieval of the [Persistence] instance for the
+    /// service.
+    fn get_persistence(&self) -> Arc<Persistence>;
+}
+
 #[derive(Debug)]
 pub enum EndpointError {}
 
-pub fn define_api<State>() -> Result<Api<State, Error, Version01>, DefineApiError>
+pub fn define_api<State, Persistence, Retriever>(
+) -> Result<Api<State, Error, Version01>, DefineApiError>
 where
-    State: StateClientMessageSender<Sender<ServerMessage>> + Send + Sync + 'static,
+    State: StateClientMessageSender<Sender<ServerMessage>>
+        + ReadState<State = Retriever>
+        + Send
+        + Sync
+        + 'static,
+    Retriever: PersistenceRetriever<Persistence> + Send + Sync + 'static,
+    Persistence: InscriptionPersistence + Send + Sync,
 {
     let mut api = load_api::<State, Version01>(include_str!("./inscriptions.toml"))?;
 
@@ -334,6 +352,34 @@ where
                 tracing::debug!("successfully send put_inscription message to server");
 
                 Ok(())
+            }
+            .boxed()
+        })?
+        .get("inscriptions_for_wallet_address", |params, state| {
+            async move {
+                let wallet_address_string = params
+                    .string_param("address")
+                    .map_err(|_| Error::UnhandledTideDisco(tide_disco::StatusCode::BAD_REQUEST, "address is required".to_string()))?;
+
+                let wallet_address : Address = wallet_address_string.parse().map_err(|_| Error::UnhandledTideDisco(tide_disco::StatusCode::BAD_REQUEST, "address is invalid".to_string()))?;
+
+                // Alright, we successfully have a wallet_address, let's see what
+                // we can find!
+
+                let persistence = state.get_persistence();
+
+                let retrieve_result = persistence.retrieved_latest_inscriptions_for_address(wallet_address).await;
+
+                match retrieve_result {
+                    Ok(inscriptions) => {
+                        Ok(inscriptions)
+                    }
+
+                    Err(err) => {
+                        tracing::error!("failed to retrieve inscriptions for address: {:?}", err);
+                        Err(Error::UnhandledTideDisco(tide_disco::StatusCode::INTERNAL_SERVER_ERROR, "failed to retrieve inscriptions for address".to_string()))
+                    }
+                }
             }
             .boxed()
         })?;

@@ -714,7 +714,7 @@ pub mod tests {
             RetrieveLatestInscriptionAndChainDetailsError, RetrievePendingPutInscriptionsError,
         },
     };
-    use alloy::signers::local::PrivateKeySigner;
+    use alloy::{primitives::Address, signers::local::PrivateKeySigner};
     use async_std::sync::RwLock;
     use espresso_types::SeqTypes;
     use futures::channel::mpsc::{self, Sender};
@@ -778,6 +778,14 @@ pub mod tests {
         async fn retrieve_last_received_block(
             &self,
         ) -> Result<Stats, RetrieveLastReceivedBlockError> {
+            todo!();
+        }
+
+        async fn retrieved_latest_inscriptions_for_address(
+            &self,
+            _address: Address,
+        ) -> Result<Vec<InscriptionAndChainDetails>, RetrieveLatestInscriptionAndChainDetailsError>
+        {
             todo!();
         }
     }

@@ -48,3 +48,13 @@ Block Chain provided they meet the following criteria:
 - The Inscription service is not currently over capacity for submitting
   data to the Block Chain.
 """
+
+[route.inscriptions_for_wallet_address]
+PATH = ["inscriptions_for_wallet_address/:address"]
+":address" = "Literal"
+DOC = """
+Retrieve a collection of the most recent inscriptions for the given Wallet
+Address.
+
+It will return the confirmed inscriptions from the Mainnet.
+"""
