@@ -9,7 +9,6 @@ use ethers::{
 };
 use reqwest::{header::AUTHORIZATION, Client};
 use serde::Deserialize;
-use std::collections::HashMap;
 use url::Url;
 
 const URL: &str = "https://api.blocknative.com/gasprices/blockprices";
@@ -31,9 +30,8 @@ pub struct Response {
     pub system: String,
     pub network: String,
     pub unit: String,
-    pub max_price: u64,
+    pub max_price: f64,
     pub block_prices: Vec<BlockPrice>,
-    pub estimated_base_fees: Option<Vec<HashMap<String, Vec<BaseFeeEstimate>>>>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -42,6 +40,7 @@ pub struct BlockPrice {
     pub block_number: u64,
     pub estimated_transaction_count: u64,
     pub base_fee_per_gas: f64,
+    pub blob_base_fee_per_gas: f64,
     pub estimated_prices: Vec<GasEstimate>,
 }
 
