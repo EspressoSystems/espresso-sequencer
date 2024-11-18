@@ -140,7 +140,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Err(QueryError::Missing)
+        Ok(vec![])
     }
 
     async fn get_block_range<R>(
@@ -150,7 +150,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Err(QueryError::Missing)
+        Ok(vec![])
     }
 
     async fn get_payload_range<R>(
@@ -160,7 +160,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Err(QueryError::Missing)
+        Ok(vec![])
     }
 
     async fn get_vid_common_range<R>(
@@ -170,7 +170,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Err(QueryError::Missing)
+        Ok(vec![])
     }
 
     async fn get_transaction(

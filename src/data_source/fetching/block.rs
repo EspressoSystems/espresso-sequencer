@@ -85,7 +85,8 @@ where
         tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,
@@ -204,7 +205,8 @@ where
         tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,

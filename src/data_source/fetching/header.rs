@@ -14,7 +14,7 @@
 
 use super::{
     block::fetch_block_with_header, leaf::fetch_leaf_with_callbacks,
-    vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher, ResultExt,
+    vid::fetch_vid_common_with_header, AvailabilityProvider, Fetcher,
 };
 use crate::{
     availability::{BlockId, QueryablePayload},
@@ -22,9 +22,9 @@ use crate::{
         storage::{AvailabilityStorage, UpdateAvailabilityStorage},
         update::VersionedDataSource,
     },
-    Header, Payload,
+    Header, Payload, QueryError,
 };
-use anyhow::Context;
+use anyhow::bail;
 use derivative::Derivative;
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::cmp::Ordering;
@@ -112,7 +112,8 @@ pub(super) async fn fetch_header_and_then<Types, S, P>(
     tx: &mut impl AvailabilityStorage<Types>,
     req: BlockId<Types>,
     callback: HeaderCallback<Types, S, P>,
-) where
+) -> anyhow::Result<()>
+where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
@@ -127,14 +128,21 @@ pub(super) async fn fetch_header_and_then<Types, S, P>(
     //    be able to provide certain data. For example, the HotShot DA committee members may be able
     //    to provide paylaods, but not full blocks. Or, in the case where VID recovery is needed,
     //    the VID common data may be available but the full block may not exist anywhere.
-    if let Some(header) = tx
-        .get_header(req)
-        .await
-        .context(format!("loading header for block {req}"))
-        .ok_or_trace()
-    {
-        callback.run(header);
-        return;
+    match tx.get_header(req).await {
+        Ok(header) => {
+            callback.run(header);
+            return Ok(());
+        }
+        Err(QueryError::Missing | QueryError::NotFound) => {
+            // We successfully queried the database, but the header wasn't there. Fall through to
+            // fetching it.
+            tracing::debug!(?req, "header not available locally; trying fetch");
+        }
+        Err(QueryError::Error { message }) => {
+            // An error occurred while querying the database. We don't know if we need to fetch the
+            // header or not. Return an error so we can try again.
+            bail!("failed to fetch header for block {req}: {message}");
+        }
     }
 
     // If the header is _not_ present, we may still be able to fetch the request, but we need to
@@ -155,4 +163,6 @@ pub(super) async fn fetch_header_and_then<Types, S, P>(
             tracing::debug!("not fetching block with unknown payload {h}");
         }
     }
+
+    Ok(())
 }
