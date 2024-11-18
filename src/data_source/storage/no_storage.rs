@@ -184,7 +184,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Err(QueryError::Missing)
+        Ok(vec![])
     }
 
     async fn get_vid_common_range<R>(
@@ -204,7 +204,7 @@ where
     where
         R: RangeBounds<usize> + Send,
     {
-        Err(QueryError::Missing)
+        Ok(vec![])
     }
 
     async fn get_transaction(
@@ -557,7 +557,13 @@ pub mod testing {
         type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<MockTypes>>>
         where
             R: RangeBounds<usize> + Send;
+        type PayloadMetadataRange<R> = BoxStream<'static, Fetch<PayloadMetadata<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
         type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<MockTypes>>>
+        where
+            R: RangeBounds<usize> + Send;
+        type VidCommonMetadataRange<R> = BoxStream<'static, Fetch<VidCommonMetadata<MockTypes>>>
         where
             R: RangeBounds<usize> + Send;
 
@@ -591,6 +597,16 @@ pub mod testing {
             }
         }
 
+        async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_payload_metadata(id).await,
+                Self::NoStorage(data_source) => data_source.get_payload_metadata(id).await,
+            }
+        }
+
         async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<MockTypes>>
         where
             ID: Into<BlockId<MockTypes>> + Send + Sync,
@@ -598,6 +614,16 @@ pub mod testing {
             match self {
                 Self::Sql(data_source) => data_source.get_vid_common(id).await,
                 Self::NoStorage(data_source) => data_source.get_vid_common(id).await,
+            }
+        }
+
+        async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<MockTypes>>
+        where
+            ID: Into<BlockId<MockTypes>> + Send + Sync,
+        {
+            match self {
+                Self::Sql(data_source) => data_source.get_vid_common_metadata(id).await,
+                Self::NoStorage(data_source) => data_source.get_vid_common_metadata(id).await,
             }
         }
 
@@ -631,6 +657,20 @@ pub mod testing {
             }
         }
 
+        async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => {
+                    data_source.get_payload_metadata_range(range).await.boxed()
+                }
+                Self::NoStorage(data_source) => {
+                    data_source.get_payload_metadata_range(range).await.boxed()
+                }
+            }
+        }
+
         async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
         where
             R: RangeBounds<usize> + Send + 'static,
@@ -640,6 +680,25 @@ pub mod testing {
                 Self::NoStorage(data_source) => {
                     data_source.get_vid_common_range(range).await.boxed()
                 }
+            }
+        }
+
+        async fn get_vid_common_metadata_range<R>(
+            &self,
+            range: R,
+        ) -> Self::VidCommonMetadataRange<R>
+        where
+            R: RangeBounds<usize> + Send + 'static,
+        {
+            match self {
+                Self::Sql(data_source) => data_source
+                    .get_vid_common_metadata_range(range)
+                    .await
+                    .boxed(),
+                Self::NoStorage(data_source) => data_source
+                    .get_vid_common_metadata_range(range)
+                    .await
+                    .boxed(),
             }
         }
 

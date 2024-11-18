@@ -18,9 +18,9 @@ use super::{
     Storable,
 };
 use crate::{
-    availability::{BlockId, QueryablePayload, VidCommonQueryData},
+    availability::{BlockId, QueryablePayload, VidCommonMetadata, VidCommonQueryData},
     data_source::{
-        storage::{AvailabilityStorage, UpdateAvailabilityStorage, VidCommonMetadata},
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
         VersionedDataSource,
     },
     fetching::{self, request, Callback},
@@ -270,7 +270,8 @@ where
         tx: &mut impl AvailabilityStorage<Types>,
         fetcher: Arc<Fetcher<Types, S, P>>,
         req: Self::Request,
-    ) where
+    ) -> anyhow::Result<()>
+    where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
         P: AvailabilityProvider<Types>,

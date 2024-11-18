@@ -78,16 +78,15 @@ use super::{
     storage::{
         pruning::{PruneStorage, PrunedHeightStorage},
         AggregatesStorage, AvailabilityStorage, ExplorerStorage, MerklizedStateHeightStorage,
-        MerklizedStateStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
-        UpdateAvailabilityStorage, VidCommonMetadata,
+        MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage, UpdateAvailabilityStorage,
     },
     Transaction, VersionedDataSource,
 };
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
-        UpdateAvailabilityData, VidCommonQueryData,
+        PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash,
+        TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata, VidCommonQueryData,
     },
     explorer::{self, ExplorerDataSource},
     fetching::{self, request, Provider},
@@ -569,7 +568,13 @@ where
     type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
+    type PayloadMetadataRange<R> = BoxStream<'static, Fetch<PayloadMetadata<Types>>>
+    where
+        R: RangeBounds<usize> + Send;
     type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<Types>>>
+    where
+        R: RangeBounds<usize> + Send;
+    type VidCommonMetadataRange<R> = BoxStream<'static, Fetch<VidCommonMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send;
 
@@ -594,7 +599,21 @@ where
         self.fetcher.get(id.into()).await
     }
 
+    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.fetcher.get(id.into()).await
+    }
+
     async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync,
+    {
+        self.fetcher.get(VidCommonRequest::from(id.into())).await
+    }
+
+    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync,
     {
@@ -622,7 +641,21 @@ where
         self.fetcher.clone().get_range(range)
     }
 
+    async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.fetcher.clone().get_range(range)
+    }
+
     async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static,
+    {
+        self.fetcher.clone().get_range(range)
+    }
+
+    async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
     where
         R: RangeBounds<usize> + Send + 'static,
     {

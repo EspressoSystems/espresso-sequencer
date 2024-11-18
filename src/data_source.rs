@@ -393,16 +393,25 @@ pub mod availability_tests {
 
         let mut leaves = ds.get_leaf_range(range.clone()).await;
         let mut blocks = ds.get_block_range(range.clone()).await;
+        let mut payloads = ds.get_payload_range(range.clone()).await;
+        let mut payloads_meta = ds.get_payload_metadata_range(range.clone()).await;
         let mut vid_common = ds.get_vid_common_range(range.clone()).await;
+        let mut vid_common_meta = ds.get_vid_common_metadata_range(range.clone()).await;
 
         for i in expected_indices {
             tracing::info!(i, "check entries");
             let leaf = leaves.next().await.unwrap().await;
             let block = blocks.next().await.unwrap().await;
+            let payload = payloads.next().await.unwrap().await;
+            let payload_meta = payloads_meta.next().await.unwrap().await;
             let common = vid_common.next().await.unwrap().await;
+            let common_meta = vid_common_meta.next().await.unwrap().await;
             assert_eq!(leaf.height(), i);
             assert_eq!(block.height(), i);
+            assert_eq!(payload, ds.get_payload(i as usize).await.await);
+            assert_eq!(payload_meta, block.into());
             assert_eq!(common, ds.get_vid_common(i as usize).await.await);
+            assert_eq!(common_meta, common.into());
         }
 
         if range.end_bound() == Bound::Unbounded {
@@ -411,11 +420,17 @@ pub mod availability_tests {
             loop {
                 let fetch_leaf = leaves.next().await.unwrap();
                 let fetch_block = blocks.next().await.unwrap();
+                let fetch_payload = payloads.next().await.unwrap();
+                let fetch_payload_meta = payloads_meta.next().await.unwrap();
                 let fetch_common = vid_common.next().await.unwrap();
+                let fetch_common_meta = vid_common_meta.next().await.unwrap();
 
                 if fetch_leaf.try_resolve().is_ok()
                     && fetch_block.try_resolve().is_ok()
+                    && fetch_payload.try_resolve().is_ok()
+                    && fetch_payload_meta.try_resolve().is_ok()
                     && fetch_common.try_resolve().is_ok()
+                    && fetch_common_meta.try_resolve().is_ok()
                 {
                     tracing::info!("searching for end of available objects");
                 } else {
@@ -426,7 +441,10 @@ pub mod availability_tests {
             // If the range is bounded, it should end where expected.
             assert!(leaves.next().await.is_none());
             assert!(blocks.next().await.is_none());
+            assert!(payloads.next().await.is_none());
+            assert!(payloads_meta.next().await.is_none());
             assert!(vid_common.next().await.is_none());
+            assert!(vid_common_meta.next().await.is_none());
         }
     }
 

@@ -49,12 +49,14 @@ pub enum FailableAction {
     GetPayload,
     GetPayloadMetadata,
     GetVidCommon,
+    GetVidCommonMetadata,
     GetHeaderRange,
     GetLeafRange,
     GetBlockRange,
     GetPayloadRange,
     GetPayloadMetadataRange,
     GetVidCommonRange,
+    GetVidCommonMetadataRange,
     GetTransaction,
 
     /// Target any action for failure.
@@ -355,7 +357,8 @@ where
         &mut self,
         id: BlockId<Types>,
     ) -> QueryResult<VidCommonMetadata<Types>> {
-        self.maybe_fail_read().await?;
+        self.maybe_fail_read(FailableAction::GetVidCommonMetadata)
+            .await?;
         self.inner.get_vid_common_metadata(id).await
     }
 
@@ -424,7 +427,8 @@ where
     where
         R: RangeBounds<usize> + Send + 'static,
     {
-        self.maybe_fail_read().await?;
+        self.maybe_fail_read(FailableAction::GetVidCommonMetadataRange)
+            .await?;
         self.inner.get_vid_common_metadata_range(range).await
     }
 

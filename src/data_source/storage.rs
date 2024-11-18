@@ -59,9 +59,9 @@
 
 use crate::{
     availability::{
-        BlockHash, BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData,
+        BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadMetadata, PayloadQueryData,
         QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
-        VidCommonQueryData,
+        VidCommonMetadata, VidCommonQueryData,
     },
     explorer::{
         query_data::{
@@ -75,8 +75,7 @@ use crate::{
     },
     merklized_state::{MerklizedState, Snapshot},
     node::{SyncStatus, TimeWindowQueryData, WindowStart},
-    types::HeightIndexed,
-    Header, Payload, QueryResult, Transaction, VidCommitment, VidShare,
+    Header, Payload, QueryResult, Transaction, VidShare,
 };
 use async_trait::async_trait;
 use futures::future::Future;
@@ -100,82 +99,6 @@ pub use fs::FileSystemStorage;
 pub use no_storage::NoStorage;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlStorage;
-
-/// A summary of a payload without all the data.
-///
-/// This type is useful when you only want information about a payload, such as its size or
-/// transaction count, but you don't want to load the entire payload, which might be very large.
-#[derive(Clone, Copy, Debug)]
-pub struct PayloadMetadata<Types>
-where
-    Types: NodeType,
-{
-    pub height: u64,
-    pub block_hash: BlockHash<Types>,
-    pub hash: VidCommitment,
-    pub size: u64,
-    pub num_transactions: u64,
-}
-
-impl<Types> HeightIndexed for PayloadMetadata<Types>
-where
-    Types: NodeType,
-{
-    fn height(&self) -> u64 {
-        self.height
-    }
-}
-
-impl<Types> From<BlockQueryData<Types>> for PayloadMetadata<Types>
-where
-    Types: NodeType,
-{
-    fn from(block: BlockQueryData<Types>) -> Self {
-        Self {
-            height: block.height(),
-            block_hash: block.hash(),
-            hash: block.payload_hash(),
-            size: block.size(),
-            num_transactions: block.num_transactions(),
-        }
-    }
-}
-
-/// A summary of a VID payload without all the data.
-///
-/// This is primarily useful when you want to check if a VID object exists, but not load the whole
-/// object.
-#[derive(Clone, Copy, Debug)]
-pub struct VidCommonMetadata<Types>
-where
-    Types: NodeType,
-{
-    pub height: u64,
-    pub block_hash: BlockHash<Types>,
-    pub payload_hash: VidCommitment,
-}
-
-impl<Types> HeightIndexed for VidCommonMetadata<Types>
-where
-    Types: NodeType,
-{
-    fn height(&self) -> u64 {
-        self.height
-    }
-}
-
-impl<Types> From<VidCommonQueryData<Types>> for VidCommonMetadata<Types>
-where
-    Types: NodeType,
-{
-    fn from(common: VidCommonQueryData<Types>) -> Self {
-        Self {
-            height: common.height(),
-            block_hash: common.block_hash(),
-            payload_hash: common.payload_hash(),
-        }
-    }
-}
 
 /// Persistent storage for a HotShot blockchain.
 ///

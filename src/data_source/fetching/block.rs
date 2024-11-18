@@ -18,9 +18,9 @@ use super::{
     Storable,
 };
 use crate::{
-    availability::{BlockId, BlockQueryData, PayloadQueryData, QueryablePayload},
+    availability::{BlockId, BlockQueryData, PayloadMetadata, PayloadQueryData, QueryablePayload},
     data_source::{
-        storage::{AvailabilityStorage, PayloadMetadata, UpdateAvailabilityStorage},
+        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
         VersionedDataSource,
     },
     fetching::{

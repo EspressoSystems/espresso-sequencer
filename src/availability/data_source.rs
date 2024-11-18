@@ -13,8 +13,9 @@
 use super::{
     fetch::Fetch,
     query_data::{
-        BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionQueryData, VidCommonQueryData,
+        BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadMetadata, PayloadQueryData,
+        QueryablePayload, TransactionHash, TransactionQueryData, VidCommonMetadata,
+        VidCommonQueryData,
     },
 };
 use crate::{types::HeightIndexed, Payload, VidCommitment, VidShare};
@@ -130,7 +131,19 @@ where
     type PayloadRange<R>: Stream<Item = Fetch<PayloadQueryData<Types>>> + Unpin + Send + 'static
     where
         R: RangeBounds<usize> + Send;
+    type PayloadMetadataRange<R>: Stream<Item = Fetch<PayloadMetadata<Types>>>
+        + Unpin
+        + Send
+        + 'static
+    where
+        R: RangeBounds<usize> + Send;
     type VidCommonRange<R>: Stream<Item = Fetch<VidCommonQueryData<Types>>> + Unpin + Send + 'static
+    where
+        R: RangeBounds<usize> + Send;
+    type VidCommonMetadataRange<R>: Stream<Item = Fetch<VidCommonMetadata<Types>>>
+        + Unpin
+        + Send
+        + 'static
     where
         R: RangeBounds<usize> + Send;
 
@@ -146,7 +159,15 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
+    async fn get_payload_metadata<ID>(&self, id: ID) -> Fetch<PayloadMetadata<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync;
+
     async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<Types>>
+    where
+        ID: Into<BlockId<Types>> + Send + Sync;
+
+    async fn get_vid_common_metadata<ID>(&self, id: ID) -> Fetch<VidCommonMetadata<Types>>
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
@@ -162,7 +183,15 @@ where
     where
         R: RangeBounds<usize> + Send + 'static;
 
+    async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+
     async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+    where
+        R: RangeBounds<usize> + Send + 'static;
+
+    async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
     where
         R: RangeBounds<usize> + Send + 'static;
 
@@ -186,6 +215,16 @@ where
             .boxed()
     }
 
+    async fn subscribe_payload_metadata(
+        &self,
+        from: usize,
+    ) -> BoxStream<'static, PayloadMetadata<Types>> {
+        self.get_payload_metadata_range(from..)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
+
     async fn subscribe_leaves(&self, from: usize) -> BoxStream<'static, LeafQueryData<Types>> {
         self.get_leaf_range(from..)
             .await
@@ -198,6 +237,16 @@ where
         from: usize,
     ) -> BoxStream<'static, VidCommonQueryData<Types>> {
         self.get_vid_common_range(from..)
+            .await
+            .then(Fetch::resolve)
+            .boxed()
+    }
+
+    async fn subscribe_vid_common_metadata(
+        &self,
+        from: usize,
+    ) -> BoxStream<'static, VidCommonMetadata<Types>> {
+        self.get_vid_common_metadata_range(from..)
             .await
             .then(Fetch::resolve)
             .boxed()
