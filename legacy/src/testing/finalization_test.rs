@@ -363,7 +363,7 @@ async fn progress_round_with_transactions(
 /// |> to propose, consensus will retry a few times before giving up. As a
 /// |> result the number of times that consensus has to ask the Builder for
 /// |> block is an integral part of this test.
-#[async_std::test]
+#[tokio::test]
 async fn test_empty_block_rate() {
     let (proxy_global_state, _, da_proposal_sender, quorum_proposal_sender, _) =
         setup_builder_for_test();
@@ -414,7 +414,7 @@ async fn test_empty_block_rate() {
 /// |> to propose, consensus will retry a few times before giving up. As a
 /// |> result the number of times that consensus has to ask the Builder for
 /// |> block is an integral part of this test.
-#[async_std::test]
+#[tokio::test]
 async fn test_eager_block_rate() {
     let (proxy_global_state, _, da_proposal_sender, quorum_proposal_sender, _) =
         setup_builder_for_test();

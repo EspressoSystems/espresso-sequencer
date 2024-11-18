@@ -1,9 +1,53 @@
 //! Shared types dealing with block information
 
-use committable::Commitment;
+use std::time::Instant;
+
+use committable::{Commitment, Committable};
+use hotshot_types::data::fake_commitment;
+use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
-    data::Leaf, traits::node_implementation::NodeType, utils::BuilderCommitment, vid::VidCommitment,
+    data::Leaf,
+    traits::{block_contents::Transaction, node_implementation::NodeType},
+    utils::BuilderCommitment,
+    vid::VidCommitment,
 };
+
+/// Enum to hold the different sources of the transaction
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransactionSource {
+    /// Transaction from private mempool
+    Private,
+    /// Transaction from public mempool
+    Public,
+}
+
+/// [`ReceivedTransaction`] represents receipt information concerning a received
+/// [`NodeType::Transaction`].
+#[derive(Debug, Clone)]
+pub struct ReceivedTransaction<Types: NodeType> {
+    /// the transaction
+    pub transaction: Types::Transaction,
+    /// transaction's hash
+    pub commit: Commitment<Types::Transaction>,
+    /// transaction's esitmated length
+    pub min_block_size: u64,
+    /// transaction's source
+    pub source: TransactionSource,
+    /// received time
+    pub time_in: Instant,
+}
+
+impl<Types: NodeType> ReceivedTransaction<Types> {
+    pub fn new(transaction: Types::Transaction, source: TransactionSource) -> Self {
+        Self {
+            commit: transaction.commit(),
+            min_block_size: transaction.minimum_block_size(),
+            source,
+            time_in: Instant::now(),
+            transaction,
+        }
+    }
+}
 
 /// Unique identifier for a block
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -31,7 +75,7 @@ impl<Types: NodeType> std::fmt::Display for BlockId<Types> {
 /// and view of the block it targets to extend, i.e.
 /// builder with given state ID assumes blocks/bundles it's building
 /// are going to be included immediately after the parent block.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BuilderStateId<Types: NodeType> {
     /// View number of the parent block
     pub parent_view: Types::View,
@@ -50,12 +94,27 @@ impl<Types: NodeType> std::fmt::Display for BuilderStateId<Types> {
 }
 
 /// References to the parent block that is extended to spawn the new builder state.
-#[derive(Debug, Clone)]
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub struct ParentBlockReferences<Types: NodeType> {
     pub view_number: Types::View,
     pub vid_commitment: VidCommitment,
     pub leaf_commit: Commitment<Leaf<Types>>,
     pub builder_commitment: BuilderCommitment,
+}
+
+impl<Types> ParentBlockReferences<Types>
+where
+    Types: NodeType,
+{
+    /// Create mock references for bootstrap (don't correspond to a real block)
+    pub fn bootstrap() -> Self {
+        Self {
+            view_number: Types::View::genesis(),
+            vid_commitment: VidCommitment::default(),
+            leaf_commit: fake_commitment(),
+            builder_commitment: BuilderCommitment::from_bytes([0; 32]),
+        }
+    }
 }
 
 // implement display for the derived info

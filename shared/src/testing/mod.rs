@@ -8,10 +8,12 @@ use hotshot_testing::{block_builder::TestBuilderImplementation, test_builder::Te
 use hotshot_types::traits::node_implementation::Versions;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
+use tracing_subscriber::EnvFilter;
 use validation::BuilderValidationConfig;
 
 pub mod constants;
 pub mod generation;
+pub mod mock;
 pub mod validation;
 
 /// Transaction payload used in testing to track various properties
@@ -57,8 +59,10 @@ pub async fn run_test<V: Versions, BuilderImpl: TestBuilderImplementation<TestTy
     validation_config: BuilderValidationConfig,
     transaction_generation_config: TransactionGenerationConfig,
 ) {
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
+    // Setup logging
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .try_init();
 
     let test_runner = hotshot_testing::test_builder::TestDescription::<
         TestTypes,

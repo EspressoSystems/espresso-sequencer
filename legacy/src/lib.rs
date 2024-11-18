@@ -21,9 +21,9 @@ pub mod service;
 #[cfg(test)]
 pub mod testing;
 
-use async_compatibility_layer::channel::UnboundedReceiver;
 use hotshot_builder_api::v0_1::builder::BuildError;
 use hotshot_types::traits::node_implementation::NodeType;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 /// `WaitAndKeep` is a helper enum that allows for the lazy polling of a single
 /// value from an unbound receiver.
@@ -64,7 +64,7 @@ impl<T: Clone> WaitAndKeep<T> {
                 let got = fut
                     .recv()
                     .await
-                    .map_err(|_| WaitAndKeepGetError::FailedToResolvedVidCommitmentFromChannel);
+                    .ok_or(WaitAndKeepGetError::FailedToResolvedVidCommitmentFromChannel);
                 if let Ok(got) = &got {
                     let mut replace = WaitAndKeep::Keep(got.clone());
                     core::mem::swap(self, &mut replace);
