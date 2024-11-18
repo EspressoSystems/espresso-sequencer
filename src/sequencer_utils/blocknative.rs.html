@@ -147,7 +147,6 @@
 <a href="#147" id="147">147</a>
 <a href="#148" id="148">148</a>
 <a href="#149" id="149">149</a>
-<a href="#150" id="150">150</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Copy from &lt;https://github.com/gakonst/ethers-rs/blob/master/ethers-middleware/src/gas_oracle/blocknative.rs&gt;
 //! which is unmaintained and out-of-sync with the latest blocknative feed
 //!
@@ -159,7 +158,6 @@
 };
 <span class="kw">use </span>reqwest::{header::AUTHORIZATION, Client};
 <span class="kw">use </span>serde::Deserialize;
-<span class="kw">use </span>std::collections::HashMap;
 <span class="kw">use </span>url::Url;
 
 <span class="kw">const </span>URL: <span class="kw-2">&amp;</span>str = <span class="string">"https://api.blocknative.com/gasprices/blockprices"</span>;
@@ -181,9 +179,8 @@
     <span class="kw">pub </span>system: String,
     <span class="kw">pub </span>network: String,
     <span class="kw">pub </span>unit: String,
-    <span class="kw">pub </span>max_price: u64,
+    <span class="kw">pub </span>max_price: f64,
     <span class="kw">pub </span>block_prices: Vec&lt;BlockPrice&gt;,
-    <span class="kw">pub </span>estimated_base_fees: <span class="prelude-ty">Option</span>&lt;Vec&lt;HashMap&lt;String, Vec&lt;BaseFeeEstimate&gt;&gt;&gt;&gt;,
 }
 
 <span class="attr">#[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -192,6 +189,7 @@
     <span class="kw">pub </span>block_number: u64,
     <span class="kw">pub </span>estimated_transaction_count: u64,
     <span class="kw">pub </span>base_fee_per_gas: f64,
+    <span class="kw">pub </span>blob_base_fee_per_gas: f64,
     <span class="kw">pub </span>estimated_prices: Vec&lt;GasEstimate&gt;,
 }
 
