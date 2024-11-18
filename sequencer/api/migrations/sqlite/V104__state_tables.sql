@@ -13,8 +13,6 @@ CREATE TABLE fee_merkle_tree (
   PRIMARY KEY (path, created)
 );
 
-CREATE INDEX fee_merkle_tree_created ON fee_merkle_tree (created);
-
 CREATE TABLE block_merkle_tree (
   path JSONB NOT NULL, 
   created BIGINT NOT NULL, 
@@ -25,5 +23,3 @@ CREATE TABLE block_merkle_tree (
   entry JSONB,
   PRIMARY KEY (path, created)
 );
-
-CREATE INDEX block_merkle_tree_created ON block_merkle_tree (created);

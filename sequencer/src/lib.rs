@@ -39,7 +39,7 @@ use std::time::Duration;
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
 
 use derivative::Derivative;
-use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
+use espresso_types::v0::traits::SequencerPersistence;
 pub use genesis::Genesis;
 #[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{
@@ -192,18 +192,18 @@ pub struct L1Params {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn init_node<P: PersistenceOptions, V: Versions>(
+pub async fn init_node<P: SequencerPersistence, V: Versions>(
     genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    persistence_opt: P,
+    persistence: P,
     l1_params: L1Params,
     seq_versions: V,
     event_consumer: impl EventConsumer + 'static,
     is_da: bool,
     identity: Identity,
-    marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P::Persistence>>,
-) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, V>> {
+    marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P>>,
+) -> anyhow::Result<SequencerContext<network::Production, P, V>> {
     // Expose git information via status API.
     metrics
         .text_family(
@@ -301,7 +301,6 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     )
     .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let (_, persistence) = persistence_opt.clone().create().await?;
     let (mut network_config, wait_for_orchestrator) = match (
         persistence.load_config().await?,
         network_params.config_peers,
@@ -524,7 +523,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         genesis_state,
         l1_genesis: Some(l1_genesis),
         peers: catchup::local_and_remote(
-            persistence_opt,
+            persistence.clone(),
             StatePeers::<SequencerApiVersion>::from_urls(
                 network_params.state_peers,
                 network_params.catchup_backoff,
@@ -970,7 +969,7 @@ pub mod testing {
             &self,
             i: usize,
             mut state: ValidatedState,
-            persistence_opt: P,
+            mut persistence_opt: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
             stake_table_capacity: u64,
@@ -1009,11 +1008,13 @@ pub mod testing {
             let builder_account = Self::builder_key().fee_account();
             tracing::info!(%builder_account, "prefunding builder account");
             state.prefund_account(builder_account, U256::max_value().into());
+
+            let persistence = persistence_opt.create().await.unwrap();
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(self.l1_url.clone()).await.unwrap(),
-                catchup::local_and_remote(persistence_opt.clone(), catchup).await,
+                catchup::local_and_remote(persistence.clone(), catchup).await,
                 V::Base::VERSION,
             )
             .with_current_version(V::Base::version())
@@ -1045,7 +1046,7 @@ pub mod testing {
                 "starting node",
             );
 
-            let (_, persistence) = persistence_opt.create().await.unwrap();
+            let persistence = persistence_opt.create().await.unwrap();
             SequencerContext::init(
                 NetworkConfig {
                     config,

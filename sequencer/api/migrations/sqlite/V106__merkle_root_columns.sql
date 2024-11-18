@@ -7,5 +7,6 @@ GENERATED ALWAYS AS (json_extract(data, '$.fields.block_merkle_tree_root')) STOR
 ALTER TABLE header
 ADD COLUMN fee_merkle_tree_root TEXT
 GENERATED ALWAYS AS (json_extract(data, '$.fields.fee_merkle_tree_root')) STORED NOT NULL;
+
 CREATE INDEX header_block_merkle_tree_root_idx ON header (block_merkle_tree_root);
 CREATE INDEX header_fee_merkle_tree_root_idx ON header (fee_merkle_tree_root);

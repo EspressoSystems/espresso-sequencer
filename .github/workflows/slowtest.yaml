@@ -61,7 +61,7 @@ jobs:
           NEXTEST_PROFILE: slow
         run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast --nocapture
         timeout-minutes: 40
-slow-tests-postgres:
+  slow-tests-postgres:
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check

@@ -1198,7 +1198,7 @@ mod api_tests {
         setup_test();
 
         let storage = D::create_storage().await;
-        let (_, persistence) = D::persistence_options(&storage).create().await.unwrap();
+        let persistence = D::persistence_options(&storage).create().await.unwrap();
         let data_source: Arc<StorageState<network::Memory, NoStorage, _, MockSequencerVersions>> =
             Arc::new(StorageState::new(
                 D::create(D::persistence_options(&storage), Default::default(), false)

@@ -404,7 +404,7 @@ impl From<PruningOptions> for PrunerCfg {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
-    async fn create(mut self) -> anyhow::Result<(Self, Self::Persistence)> {
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
         let store_undecided_state = self.store_undecided_state;
         let config = self.clone().try_into()?;
         let persistence = Persistence {
@@ -413,7 +413,7 @@ impl PersistenceOptions for Options {
         };
         persistence.migrate_quorum_proposal_leaf_hashes().await?;
         self.pool = Some(persistence.db.pool());
-        Ok((self, persistence))
+        Ok(persistence)
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -423,6 +423,7 @@ impl PersistenceOptions for Options {
 }
 
 /// Postgres-backed persistence.
+#[derive(Clone)]
 pub struct Persistence {
     db: SqlStorage,
     store_undecided_state: bool,
@@ -999,16 +1000,16 @@ mod testing {
 
     #[async_trait]
     impl TestablePersistence for Persistence {
-        type Storage = TmpDb;
+        type Storage = Arc<TmpDb>;
 
         async fn tmp_storage() -> Self::Storage {
-            TmpDb::persistent().await
+            Arc::new(TmpDb::persistent().await)
         }
 
         async fn connect(db: &Self::Storage) -> Self {
             #[cfg(not(feature = "embedded-db"))]
             {
-                let opt: Options = PostgresOptions {
+                let mut opt: Options = PostgresOptions {
                     port: Some(db.port()),
                     host: Some(db.host()),
                     user: Some("postgres".into()),
@@ -1016,15 +1017,13 @@ mod testing {
                     ..Default::default()
                 }
                 .into();
-                let (_, storage) = opt.create().await.unwrap();
-                storage
+                opt.create().await.unwrap()
             }
 
             #[cfg(feature = "embedded-db")]
             {
-                let opt: Options = SqliteOptions { path: db.path() }.into();
-                let (_, storage) = opt.create().await.unwrap();
-                storage
+                let mut opt: Options = SqliteOptions { path: db.path() }.into();
+                opt.create().await.unwrap()
             }
         }
     }
