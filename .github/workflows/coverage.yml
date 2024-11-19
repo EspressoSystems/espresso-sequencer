@@ -31,11 +31,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-
       - uses: dtolnay/rust-toolchain@nightly
 
       - name: Enable Rust Caching
