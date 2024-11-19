@@ -17,6 +17,7 @@ use std::{
 
 use async_lock::RwLock;
 use cdn_proto::util::mnemonic;
+use committable::Committable;
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use utils::anytrace::*;
@@ -26,7 +27,9 @@ use vbs::{
 };
 
 use crate::{
-    data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
+    data::{
+        DaProposal, Leaf, Leaf2, QuorumProposal, QuorumProposal2, UpgradeProposal, VidDisperseShare,
+    },
     request_response::ProposalRequestPayload,
     simple_certificate::{
         DaCertificate, QuorumCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
@@ -208,7 +211,7 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
     ProposalResponse(Proposal<TYPES, QuorumProposal<TYPES>>),
 
     /// Message for the next leader containing our highest QC
-    HighQC(QuorumCertificate<TYPES>),
+    HighQc(QuorumCertificate<TYPES>),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]
@@ -274,7 +277,7 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     }
                     GeneralConsensusMessage::UpgradeProposal(message) => message.data.view_number(),
                     GeneralConsensusMessage::UpgradeVote(message) => message.view_number(),
-                    GeneralConsensusMessage::HighQC(qc) => qc.view_number(),
+                    GeneralConsensusMessage::HighQc(qc) => qc.view_number(),
                 }
             }
             SequencingMessage::Da(da_message) => {
@@ -323,6 +326,22 @@ pub struct Proposal<TYPES: NodeType, PROPOSAL: HasViewNumber<TYPES> + Deserializ
     pub _pd: PhantomData<TYPES>,
 }
 
+/// Convert a `Proposal` by converting the underlying proposal type
+pub fn convert_proposal<TYPES, PROPOSAL, PROPOSAL2>(
+    proposal: Proposal<TYPES, PROPOSAL>,
+) -> Proposal<TYPES, PROPOSAL2>
+where
+    TYPES: NodeType,
+    PROPOSAL: HasViewNumber<TYPES> + DeserializeOwned,
+    PROPOSAL2: HasViewNumber<TYPES> + DeserializeOwned + From<PROPOSAL>,
+{
+    Proposal {
+        data: proposal.data.into(),
+        signature: proposal.signature,
+        _pd: proposal._pd,
+    }
+}
+
 impl<TYPES> Proposal<TYPES, QuorumProposal<TYPES>>
 where
     TYPES: NodeType,
@@ -345,6 +364,31 @@ where
                 &self.signature,
                 proposed_leaf.commit(upgrade_lock).await.as_ref()
             ),
+            "Proposal signature is invalid."
+        );
+
+        Ok(())
+    }
+}
+
+impl<TYPES> Proposal<TYPES, QuorumProposal2<TYPES>>
+where
+    TYPES: NodeType,
+{
+    /// Checks that the signature of the quorum proposal is valid.
+    /// # Errors
+    /// Returns an error when the proposal signature is invalid.
+    pub fn validate_signature(
+        &self,
+        quorum_membership: &TYPES::Membership,
+        epoch: TYPES::Epoch,
+    ) -> Result<()> {
+        let view_number = self.data.view_number();
+        let view_leader_key = quorum_membership.leader(view_number, epoch)?;
+        let proposed_leaf = Leaf2::from_quorum_proposal(&self.data);
+
+        ensure!(
+            view_leader_key.validate(&self.signature, proposed_leaf.commit().as_ref()),
             "Proposal signature is invalid."
         );
 

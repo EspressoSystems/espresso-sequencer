@@ -13,20 +13,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, parent_leaf_and_state},
-    quorum_proposal::{UpgradeLock, Versions},
-};
 use anyhow::{ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
+use committable::Committable;
 use hotshot_task::dependency_task::HandleDepOutput;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
-    data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
+    data::{Leaf2, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
         block_contents::BlockHeader,
         node_implementation::{ConsensusTime, NodeType},
@@ -38,19 +34,25 @@ use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, parent_leaf_and_state},
+    quorum_proposal::{UpgradeLock, Versions},
+};
+
 /// Proposal dependency types. These types represent events that precipitate a proposal.
 #[derive(PartialEq, Debug)]
 pub(crate) enum ProposalDependency {
     /// For the `SendPayloadCommitmentAndMetadata` event.
     PayloadAndMetadata,
 
-    /// For the `QcFormed` event.
+    /// For the `Qc2Formed` event.
     Qc,
 
     /// For the `ViewSyncFinalizeCertificate2Recv` event.
     ViewSyncCert,
 
-    /// For the `QcFormed` event timeout branch.
+    /// For the `Qc2Formed` event timeout branch.
     TimeoutCert,
 
     /// For the `QuroumProposalRecv` event.
@@ -109,15 +111,15 @@ pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
     pub view_start_time: Instant,
 
     /// The higest_qc we've seen at the start of this task
-    pub highest_qc: QuorumCertificate<TYPES>,
+    pub highest_qc: QuorumCertificate2<TYPES>,
 }
 
 impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
-    /// Return the next HighQC we get from the event stream
+    /// Return the next HighQc we get from the event stream
     async fn wait_for_qc_event(
         &self,
         rx: &mut Receiver<Arc<HotShotEvent<TYPES>>>,
-    ) -> Option<QuorumCertificate<TYPES>> {
+    ) -> Option<QuorumCertificate2<TYPES>> {
         while let Ok(event) = rx.recv_direct().await {
             if let HotShotEvent::HighQcRecv(qc, _sender) = event.as_ref() {
                 if qc
@@ -134,7 +136,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         }
         None
     }
-    /// Waits for the ocnfigured timeout for nodes to send HighQC messages to us.  We'll
+    /// Waits for the ocnfigured timeout for nodes to send HighQc messages to us.  We'll
     /// then propose with the higest QC from among these proposals.
     async fn wait_for_highest_qc(&mut self) {
         tracing::error!("waiting for QC");
@@ -188,7 +190,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         view_change_evidence: Option<ViewChangeEvidence<TYPES>>,
         formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
         decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
-        parent_qc: QuorumCertificate<TYPES>,
+        parent_qc: QuorumCertificate2<TYPES>,
     ) -> Result<()> {
         let (parent_leaf, state) = parent_leaf_and_state(
             self.view_number,
@@ -293,23 +295,22 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let proposal = QuorumProposal {
             block_header,
             view_number: self.view_number,
-            justify_qc: parent_qc,
+            justify_qc: parent_qc.to_qc(),
             upgrade_certificate,
             proposal_certificate,
-        };
+        }
+        .into();
 
-        let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
+        let proposed_leaf = Leaf2::from_quorum_proposal(&proposal);
         ensure!(
-            proposed_leaf.parent_commitment() == parent_leaf.commit(&self.upgrade_lock).await,
+            proposed_leaf.parent_commitment() == parent_leaf.commit(),
             "Proposed leaf parent does not equal high qc"
         );
 
-        let signature = TYPES::SignatureKey::sign(
-            &self.private_key,
-            proposed_leaf.commit(&self.upgrade_lock).await.as_ref(),
-        )
-        .wrap()
-        .context(error!("Failed to compute proposed_leaf.commit()"))?;
+        let signature =
+            TYPES::SignatureKey::sign(&self.private_key, proposed_leaf.commit().as_ref())
+                .wrap()
+                .context(error!("Failed to compute proposed_leaf.commit()"))?;
 
         let message = Proposal {
             data: proposal,
@@ -363,7 +364,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                         auction_result: auction_result.clone(),
                     });
                 }
-                HotShotEvent::QcFormed(cert) => match cert {
+                HotShotEvent::Qc2Formed(cert) => match cert {
                     either::Right(timeout) => {
                         timeout_certificate = Some(timeout.clone());
                     }

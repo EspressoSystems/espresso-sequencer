@@ -15,7 +15,7 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{EpochNumber, Leaf, ViewNumber},
+    data::{EpochNumber, Leaf2, ViewNumber},
     traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
 };
 use itertools::Itertools;
@@ -55,12 +55,10 @@ async fn test_vote_dependency_handle() {
         vids.push(view.vid_proposal.clone());
         consensus_writer
             .update_leaf(
-                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Leaf2::from_quorum_proposal(&view.quorum_proposal.data),
                 Arc::new(TestValidatedState::default()),
                 None,
-                &handle.hotshot.upgrade_lock,
             )
-            .await
             .unwrap();
     }
     drop(consensus_writer);

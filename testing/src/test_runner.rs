@@ -183,12 +183,14 @@ where
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await,
+            .await
+            .into(),
             high_qc: QuorumCertificate::genesis::<V>(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await,
+            .await
+            .to_qc2(),
             async_delay_config: launcher.metadata.async_delay_config,
             restart_contexts: HashMap::new(),
             channel_generator: launcher.resource_generator.channel_generator,
@@ -645,7 +647,6 @@ where
             internal_channel,
             external_channel,
         )
-        .await
     }
 }
 

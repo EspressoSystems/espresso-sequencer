@@ -26,9 +26,9 @@ use hotshot_example_types::{
 };
 use hotshot_types::{
     constants::EVENT_CHANNEL_SIZE,
-    data::Leaf,
+    data::Leaf2,
     event::Event,
-    simple_certificate::QuorumCertificate,
+    simple_certificate::{QuorumCertificate, QuorumCertificate2},
     traits::{
         network::{AsyncGenerator, ConnectedNetwork},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
@@ -62,9 +62,9 @@ pub struct SpinningTask<
     /// most recent view seen by spinning task
     pub(crate) latest_view: Option<TYPES::View>,
     /// Last decided leaf that can be used as the anchor leaf to initialize the node.
-    pub(crate) last_decided_leaf: Leaf<TYPES>,
+    pub(crate) last_decided_leaf: Leaf2<TYPES>,
     /// Highest qc seen in the test for restarting nodes
-    pub(crate) high_qc: QuorumCertificate<TYPES>,
+    pub(crate) high_qc: QuorumCertificate2<TYPES>,
     /// Add specified delay to async calls
     pub(crate) async_delay_config: DelayConfig,
     /// Context stored for nodes to be restarted with
@@ -247,7 +247,8 @@ where
                                             &TestValidatedState::default(),
                                             &TestInstanceState::default(),
                                         )
-                                        .await,
+                                        .await
+                                        .to_qc2(),
                                     ),
                                     read_storage.decided_upgrade_certificate().await,
                                     Vec::new(),

@@ -8,11 +8,6 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use self::handlers::handle_quorum_proposal_recv;
-use crate::{
-    events::{HotShotEvent, ProposalMissing},
-    helpers::{broadcast_event, fetch_proposal},
-};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -35,6 +30,12 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 use utils::anytrace::{bail, Result};
 use vbs::version::Version;
+
+use self::handlers::handle_quorum_proposal_recv;
+use crate::{
+    events::{HotShotEvent, ProposalMissing},
+    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
+};
 /// Event handlers for this task.
 mod handlers;
 

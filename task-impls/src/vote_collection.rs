@@ -17,12 +17,13 @@ use either::Either::{self, Left, Right};
 use hotshot_types::{
     message::UpgradeLock,
     simple_certificate::{
-        DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
-        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DaCertificate, QuorumCertificate, QuorumCertificate2, TimeoutCertificate,
+        UpgradeCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+        ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DaVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
-        ViewSyncPreCommitVote,
+        DaVote, QuorumVote, QuorumVote2, TimeoutVote, UpgradeVote, ViewSyncCommitVote,
+        ViewSyncFinalizeVote, ViewSyncPreCommitVote,
     },
     traits::{
         election::Membership,
@@ -300,7 +301,7 @@ where
 
 /// Alias for Quorum vote accumulator
 type QuorumVoteState<TYPES, V> =
-    VoteCollectionTaskState<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>, V>;
+    VoteCollectionTaskState<TYPES, QuorumVote2<TYPES>, QuorumCertificate2<TYPES>, V>;
 /// Alias for DA vote accumulator
 type DaVoteState<TYPES, V> = VoteCollectionTaskState<TYPES, DaVote<TYPES>, DaCertificate<TYPES>, V>;
 /// Alias for Timeout vote accumulator
@@ -342,6 +343,24 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, QuorumVote<TYPES>, QuorumCertifica
         _key: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
         HotShotEvent::QcFormed(Left(certificate))
+    }
+}
+
+impl<TYPES: NodeType> AggregatableVote<TYPES, QuorumVote2<TYPES>, QuorumCertificate2<TYPES>>
+    for QuorumVote2<TYPES>
+{
+    fn leader(
+        &self,
+        membership: &TYPES::Membership,
+        epoch: TYPES::Epoch,
+    ) -> Result<TYPES::SignatureKey> {
+        membership.leader(self.view_number() + 1, epoch)
+    }
+    fn make_cert_event(
+        certificate: QuorumCertificate2<TYPES>,
+        _key: &TYPES::SignatureKey,
+    ) -> HotShotEvent<TYPES> {
+        HotShotEvent::Qc2Formed(Left(certificate))
     }
 }
 
@@ -395,7 +414,7 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, TimeoutVote<TYPES>, TimeoutCertifi
         certificate: TimeoutCertificate<TYPES>,
         _key: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
-        HotShotEvent::QcFormed(Right(certificate))
+        HotShotEvent::Qc2Formed(Right(certificate))
     }
 }
 
@@ -459,14 +478,14 @@ impl<TYPES: NodeType>
 // Handlers for all vote accumulators
 #[async_trait]
 impl<TYPES: NodeType, V: Versions>
-    HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>
+    HandleVoteEvent<TYPES, QuorumVote2<TYPES>, QuorumCertificate2<TYPES>>
     for QuorumVoteState<TYPES, V>
 {
     async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-    ) -> Result<Option<QuorumCertificate<TYPES>>> {
+    ) -> Result<Option<QuorumCertificate2<TYPES>>> {
         match event.as_ref() {
             HotShotEvent::QuorumVoteRecv(vote) => self.accumulate_vote(vote, sender).await,
             _ => Ok(None),

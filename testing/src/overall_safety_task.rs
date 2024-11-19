@@ -15,10 +15,10 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot::{traits::TestableNodeImplementation, HotShotError};
 use hotshot_types::{
-    data::Leaf,
+    data::Leaf2,
     error::RoundTimedoutState,
     event::{Event, EventType, LeafChain},
-    simple_certificate::QuorumCertificate,
+    simple_certificate::QuorumCertificate2,
     traits::node_implementation::{ConsensusTime, NodeType, Versions},
     vid::VidCommitment,
 };
@@ -311,7 +311,7 @@ pub struct RoundResult<TYPES: NodeType> {
 
     /// Nodes that committed this round
     /// id -> (leaf, qc)
-    success_nodes: HashMap<u64, (LeafChain<TYPES>, QuorumCertificate<TYPES>)>,
+    success_nodes: HashMap<u64, (LeafChain<TYPES>, QuorumCertificate2<TYPES>)>,
 
     /// Nodes that failed to commit this round
     pub failed_nodes: HashMap<u64, Arc<HotShotError<TYPES>>>,
@@ -322,7 +322,7 @@ pub struct RoundResult<TYPES: NodeType> {
     /// NOTE: technically a map is not needed
     /// left one anyway for ease of viewing
     /// leaf -> # entries decided on that leaf
-    pub leaf_map: HashMap<Leaf<TYPES>, usize>,
+    pub leaf_map: HashMap<Leaf2<TYPES>, usize>,
 
     /// block -> # entries decided on that block
     pub block_map: HashMap<VidCommitment, usize>,
@@ -403,9 +403,9 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     pub fn insert_into_result(
         &mut self,
         idx: usize,
-        result: (LeafChain<TYPES>, QuorumCertificate<TYPES>),
+        result: (LeafChain<TYPES>, QuorumCertificate2<TYPES>),
         maybe_block_size: Option<u64>,
-    ) -> Option<Leaf<TYPES>> {
+    ) -> Option<Leaf2<TYPES>> {
         self.success_nodes.insert(idx as u64, result.clone());
 
         let maybe_leaf = result.0.first();
@@ -458,7 +458,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
         &mut self,
         threshold: usize,
         total_num_nodes: usize,
-        key: &Leaf<TYPES>,
+        key: &Leaf2<TYPES>,
         check_leaf: bool,
         check_block: bool,
         transaction_threshold: u64,
@@ -530,8 +530,8 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
     /// generate leaves
     #[must_use]
-    pub fn gen_leaves(&self) -> HashMap<Leaf<TYPES>, usize> {
-        let mut leaves = HashMap::<Leaf<TYPES>, usize>::new();
+    pub fn gen_leaves(&self) -> HashMap<Leaf2<TYPES>, usize> {
+        let mut leaves = HashMap::<Leaf2<TYPES>, usize>::new();
 
         for (leaf_vec, _) in self.success_nodes.values() {
             let most_recent_leaf = leaf_vec.iter().last();

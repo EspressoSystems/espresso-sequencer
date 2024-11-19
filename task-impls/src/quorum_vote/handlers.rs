@@ -9,12 +9,13 @@ use std::sync::Arc;
 use async_broadcast::{InactiveReceiver, Sender};
 use async_lock::RwLock;
 use chrono::Utc;
+use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{Leaf, QuorumProposal, VidDisperseShare},
+    data::{Leaf2, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
-    simple_vote::{QuorumData, QuorumVote},
+    simple_vote::{QuorumData2, QuorumVote2},
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
@@ -45,7 +46,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
     I: NodeImplementation<TYPES>,
     V: Versions,
 >(
-    proposal: &QuorumProposal<TYPES>,
+    proposal: &QuorumProposal2<TYPES>,
     task_state: &mut QuorumVoteTaskState<TYPES, I, V>,
 ) -> Result<()> {
     let version = task_state
@@ -172,7 +173,7 @@ pub(crate) async fn update_shared_state<
     view_number: TYPES::View,
     instance_state: Arc<TYPES::InstanceState>,
     storage: Arc<RwLock<I::Storage>>,
-    proposed_leaf: &Leaf<TYPES>,
+    proposed_leaf: &Leaf2<TYPES>,
     vid_share: &Proposal<TYPES, VidDisperseShare<TYPES>>,
     parent_view_number: Option<TYPES::View>,
 ) -> Result<()> {
@@ -259,15 +260,11 @@ pub(crate) async fn update_shared_state<
     // Now that we've rounded everyone up, we need to update the shared state
     let mut consensus_writer = consensus.write().await;
 
-    if let Err(e) = consensus_writer
-        .update_leaf(
-            proposed_leaf.clone(),
-            Arc::clone(&state),
-            Some(Arc::clone(&delta)),
-            &upgrade_lock,
-        )
-        .await
-    {
+    if let Err(e) = consensus_writer.update_leaf(
+        proposed_leaf.clone(),
+        Arc::clone(&state),
+        Some(Arc::clone(&delta)),
+    ) {
         tracing::trace!("{e:?}");
     }
 
@@ -280,7 +277,7 @@ pub(crate) async fn update_shared_state<
     storage
         .write()
         .await
-        .update_undecided_state(new_leaves, new_state)
+        .update_undecided_state2(new_leaves, new_state)
         .await
         .wrap()
         .context(error!("Failed to update undecided state"))?;
@@ -300,7 +297,7 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     view_number: TYPES::View,
     epoch_number: TYPES::Epoch,
     storage: Arc<RwLock<I::Storage>>,
-    leaf: Leaf<TYPES>,
+    leaf: Leaf2<TYPES>,
     vid_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
     extended_vote: bool,
 ) -> Result<()> {
@@ -313,9 +310,9 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     );
 
     // Create and send the vote.
-    let vote = QuorumVote::<TYPES>::create_signed_vote(
-        QuorumData {
-            leaf_commit: leaf.commit(&upgrade_lock).await,
+    let vote = QuorumVote2::<TYPES>::create_signed_vote(
+        QuorumData2 {
+            leaf_commit: leaf.commit(),
         },
         view_number,
         &public_key,

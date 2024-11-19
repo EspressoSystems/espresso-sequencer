@@ -9,9 +9,10 @@ use std::{collections::BTreeMap, marker::PhantomData};
 
 use anyhow::{bail, ensure, Context, Result};
 use async_trait::async_trait;
+use committable::Committable;
 use hotshot_example_types::block_types::TestBlockHeader;
 use hotshot_types::{
-    data::Leaf,
+    data::Leaf2,
     event::{Event, EventType},
     message::UpgradeLock,
     traits::node_implementation::{ConsensusTime, NodeType, Versions},
@@ -24,10 +25,10 @@ use crate::{
 };
 
 /// Map from views to leaves for a single node, allowing multiple leaves for each view (because the node may a priori send us multiple leaves for a given view).
-pub type NodeMap<TYPES> = BTreeMap<<TYPES as NodeType>::View, Vec<Leaf<TYPES>>>;
+pub type NodeMap<TYPES> = BTreeMap<<TYPES as NodeType>::View, Vec<Leaf2<TYPES>>>;
 
 /// A sanitized map from views to leaves for a single node, with only a single leaf per view.
-pub type NodeMapSanitized<TYPES> = BTreeMap<<TYPES as NodeType>::View, Leaf<TYPES>>;
+pub type NodeMapSanitized<TYPES> = BTreeMap<<TYPES as NodeType>::View, Leaf2<TYPES>>;
 
 /// Validate that the `NodeMap` only has a single leaf per view.
 fn sanitize_node_map<TYPES: NodeType>(
@@ -104,7 +105,7 @@ async fn validate_node_map<TYPES: NodeType, V: Versions>(
         // We want to make sure the commitment matches,
         // but allow for the possibility that we may have skipped views in between.
         if child.justify_qc().view_number == parent.view_number()
-            && child.justify_qc().data.leaf_commit != parent.commit(&upgrade_lock).await
+            && child.justify_qc().data.leaf_commit != parent.commit()
         {
             bail!("The node has provided leaf:\n\n{child:?}\n\nwhich points to:\n\n{parent:?}\n\nbut the commits do not match.");
         }
@@ -144,7 +145,7 @@ fn sanitize_network_map<TYPES: NodeType>(
     Ok(result)
 }
 
-pub type ViewMap<TYPES> = BTreeMap<<TYPES as NodeType>::View, BTreeMap<usize, Leaf<TYPES>>>;
+pub type ViewMap<TYPES> = BTreeMap<<TYPES as NodeType>::View, BTreeMap<usize, Leaf2<TYPES>>>;
 
 // Invert the network map by interchanging the roles of the node_id and view number.
 //
@@ -171,7 +172,7 @@ async fn invert_network_map<TYPES: NodeType, V: Versions>(
 }
 
 /// A view map, sanitized to have exactly one leaf per view.
-pub type ViewMapSanitized<TYPES> = BTreeMap<<TYPES as NodeType>::View, Leaf<TYPES>>;
+pub type ViewMapSanitized<TYPES> = BTreeMap<<TYPES as NodeType>::View, Leaf2<TYPES>>;
 
 fn sanitize_view_map<TYPES: NodeType>(
     view_map: &ViewMap<TYPES>,

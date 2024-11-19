@@ -20,7 +20,7 @@ use hotshot_task::{
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
 use hotshot_types::{
     consensus::Consensus,
-    data::{Leaf, QuorumProposal},
+    data::{Leaf2, QuorumProposal2},
     error::HotShotError,
     message::{Message, MessageKind, Proposal, RecipientList},
     request_response::ProposalRequestPayload,
@@ -141,8 +141,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         &self,
         view: TYPES::View,
         epoch: TYPES::Epoch,
-        leaf_commitment: Commitment<Leaf<TYPES>>,
-    ) -> Result<impl futures::Future<Output = Result<Proposal<TYPES, QuorumProposal<TYPES>>>>> {
+        leaf_commitment: Commitment<Leaf2<TYPES>>,
+    ) -> Result<impl futures::Future<Output = Result<Proposal<TYPES, QuorumProposal2<TYPES>>>>>
+    {
         // We need to be able to sign this request before submitting it to the network. Compute the
         // payload first.
         let signed_proposal_request = ProposalRequestPayload {
@@ -157,7 +158,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         )?;
 
         let mem = self.memberships.quorum_membership.clone();
-        let upgrade_lock = self.hotshot.upgrade_lock.clone();
         let receiver = self.internal_event_stream.1.activate_cloned();
         let sender = self.internal_event_stream.0.clone();
         Ok(async move {
@@ -188,15 +188,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                 if let HotShotEvent::QuorumProposalResponseRecv(quorum_proposal) = hs_event.as_ref()
                 {
                     // Make sure that the quorum_proposal is valid
-                    if let Err(err) = quorum_proposal
-                        .validate_signature(&mem, epoch, &upgrade_lock)
-                        .await
-                    {
+                    if let Err(err) = quorum_proposal.validate_signature(&mem, epoch) {
                         tracing::warn!("Invalid Proposal Received after Request.  Err {:?}", err);
                         continue;
                     }
-                    let proposed_leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
-                    let commit = proposed_leaf.commit(&upgrade_lock).await;
+                    let proposed_leaf = Leaf2::from_quorum_proposal(&quorum_proposal.data);
+                    let commit = proposed_leaf.commit();
                     if commit == leaf_commitment {
                         return Ok(quorum_proposal.clone());
                     }
@@ -255,7 +252,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
     ///
     /// # Panics
     /// If the internal consensus is in an inconsistent state.
-    pub async fn decided_leaf(&self) -> Leaf<TYPES> {
+    pub async fn decided_leaf(&self) -> Leaf2<TYPES> {
         self.hotshot.decided_leaf().await
     }
 
@@ -265,7 +262,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
     /// # Panics
     /// Panics if internal consensus is in an inconsistent state.
     #[must_use]
-    pub fn try_decided_leaf(&self) -> Option<Leaf<TYPES>> {
+    pub fn try_decided_leaf(&self) -> Option<Leaf2<TYPES>> {
         self.hotshot.try_decided_leaf()
     }
 

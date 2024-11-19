@@ -25,7 +25,7 @@ use vbs::version::Version;
 
 use super::signature_key::BuilderSignatureKey;
 use crate::{
-    data::Leaf,
+    data::Leaf2,
     traits::{node_implementation::NodeType, states::InstanceState, ValidatedState},
     utils::BuilderCommitment,
     vid::{vid_scheme, VidCommitment, VidCommon, VidSchemeType},
@@ -199,7 +199,7 @@ pub trait BlockHeader<TYPES: NodeType>:
     fn new_legacy(
         parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
-        parent_leaf: &Leaf<TYPES>,
+        parent_leaf: &Leaf2<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
@@ -215,7 +215,7 @@ pub trait BlockHeader<TYPES: NodeType>:
     fn new_marketplace(
         parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
-        parent_leaf: &Leaf<TYPES>,
+        parent_leaf: &Leaf2<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,

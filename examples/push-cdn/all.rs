@@ -14,7 +14,6 @@ use cdn_broker::{
     reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
     Broker,
 };
-
 use cdn_marshal::Marshal;
 use hotshot::{
     helpers::initialize_logging,

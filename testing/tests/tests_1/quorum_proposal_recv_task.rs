@@ -27,9 +27,8 @@ use hotshot_testing::{
     serial,
     view_generator::TestViewGenerator,
 };
-use hotshot_types::data::EpochNumber;
 use hotshot_types::{
-    data::{Leaf, ViewNumber},
+    data::{EpochNumber, Leaf2, ViewNumber},
     request_response::ProposalRequestPayload,
     traits::{
         consensus_api::ConsensusApi,
@@ -78,12 +77,10 @@ async fn test_quorum_proposal_recv_task() {
         // to that, we'll just put them in here.
         consensus_writer
             .update_leaf(
-                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Leaf2::from_quorum_proposal(&view.quorum_proposal.data),
                 Arc::new(TestValidatedState::default()),
                 None,
-                &handle.hotshot.upgrade_lock,
             )
-            .await
             .unwrap();
     }
     drop(consensus_writer);
@@ -125,7 +122,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
         helpers::{build_fake_view_with_leaf, build_fake_view_with_leaf_and_state},
         script::{Expectations, TaskScript},
     };
-    use hotshot_types::{data::Leaf, vote::HasViewNumber};
+    use hotshot_types::{data::Leaf2, vote::HasViewNumber};
 
     hotshot::helpers::initialize_logging();
 

@@ -57,3 +57,77 @@ fn version_number_at_start_of_serialization() {
     assert_eq!(version.major, version_read.major);
     assert_eq!(version.minor, version_read.minor);
 }
+
+#[cfg(test)]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_certificate2_validity() {
+    use futures::StreamExt;
+    use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
+    use hotshot_testing::{helpers::build_system_handle, view_generator::TestViewGenerator};
+    use hotshot_types::{
+        data::{EpochNumber, Leaf, Leaf2},
+        traits::node_implementation::ConsensusTime,
+        vote::Certificate,
+    };
+
+    hotshot::helpers::initialize_logging();
+
+    let node_id = 1;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
+        .await
+        .0;
+    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+
+    let mut proposals = Vec::new();
+    let mut leaders = Vec::new();
+    let mut leaves = Vec::new();
+    let mut vids = Vec::new();
+    let mut vid_dispersals = Vec::new();
+
+    for view in (&mut generator).take(4).collect::<Vec<_>>().await {
+        proposals.push(view.quorum_proposal.clone());
+        leaders.push(view.leader_public_key);
+        leaves.push(view.leaf.clone());
+        vids.push(view.vid_proposal.clone());
+        vid_dispersals.push(view.vid_disperse.clone());
+    }
+
+    let proposal = proposals[3].clone();
+    let parent_proposal = proposals[2].clone();
+
+    // ensure that we don't break certificate validation
+    let qc2 = proposal.data.justify_qc.clone();
+    let qc = qc2.clone().to_qc();
+
+    assert!(
+        qc.is_valid_cert(
+            &quorum_membership,
+            EpochNumber::new(0),
+            &handle.hotshot.upgrade_lock
+        )
+        .await
+    );
+
+    assert!(
+        qc2.is_valid_cert(
+            &quorum_membership,
+            EpochNumber::new(0),
+            &handle.hotshot.upgrade_lock
+        )
+        .await
+    );
+
+    // ensure that we don't break the leaf commitment chain
+    let leaf2 = Leaf2::from_quorum_proposal(&proposal.data);
+    let parent_leaf2 = Leaf2::from_quorum_proposal(&parent_proposal.data);
+
+    let leaf = Leaf::from_quorum_proposal(&proposal.data.into());
+    let parent_leaf = Leaf::from_quorum_proposal(&parent_proposal.data.into());
+
+    assert!(leaf.parent_commitment() == parent_leaf.commit(&handle.hotshot.upgrade_lock).await);
+
+    assert!(leaf2.parent_commitment() == parent_leaf2.commit());
+}

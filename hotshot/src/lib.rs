@@ -11,6 +11,7 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
+use committable::Committable;
 use futures::future::{select, Either};
 use hotshot_types::{
     message::UpgradeLock,
@@ -48,10 +49,10 @@ pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, OuterConsensus, View, ViewInner},
     constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
-    data::{Leaf, QuorumProposal},
+    data::{Leaf, Leaf2, QuorumProposal, QuorumProposal2},
     event::{EventType, LeafInfo},
-    message::{DataMessage, Message, MessageKind, Proposal},
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    message::{convert_proposal, DataMessage, Message, MessageKind, Proposal},
+    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -59,6 +60,7 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
+        storage::Storage,
         EncodeBytes,
     },
     HotShotConfig,
@@ -138,7 +140,7 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
     pub(crate) external_event_stream: (Sender<Event<TYPES>>, InactiveReceiver<Event<TYPES>>),
 
     /// Anchored leaf provided by the initializer.
-    anchored_leaf: Leaf<TYPES>,
+    anchored_leaf: Leaf2<TYPES>,
 
     /// access to the internal event stream, in case we need to, say, shut something down
     #[allow(clippy::type_complexity)]
@@ -195,6 +197,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// well.
     ///
     /// Use this instead of `init` if you want to start the tasks manually
+    ///
+    /// # Panics
+    ///
+    /// Panics if storage migration fails.
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         public_key: TYPES::SignatureKey,
@@ -208,6 +214,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         storage: I::Storage,
         marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> Arc<Self> {
+        #[allow(clippy::panic)]
+        match storage
+            .migrate_consensus(
+                Into::<Leaf2<TYPES>>::into,
+                convert_proposal::<TYPES, QuorumProposal<TYPES>, QuorumProposal2<TYPES>>,
+            )
+            .await
+        {
+            Ok(()) => {}
+            Err(e) => {
+                panic!("Failed to migrate consensus storage: {e}");
+            }
+        }
+
         let interal_chan = broadcast(EVENT_CHANNEL_SIZE);
         let external_chan = broadcast(EXTERNAL_EVENT_CHANNEL_SIZE);
 
@@ -225,7 +245,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             interal_chan,
             external_chan,
         )
-        .await
     }
 
     /// Creates a new [`Arc<SystemContext>`] with the given configuration options.
@@ -236,7 +255,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// Use this function if you want to use some prexisting channels and to spin up the tasks
     /// and start consensus manually.  Mostly useful for tests
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-    pub async fn new_from_channels(
+    pub fn new_from_channels(
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
@@ -287,7 +306,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             anchored_leaf.view_number(),
             View {
                 view_inner: ViewInner::Leaf {
-                    leaf: anchored_leaf.commit(&upgrade_lock).await,
+                    leaf: anchored_leaf.commit(),
                     state: Arc::clone(&validated_state),
                     delta: initializer.state_delta.clone(),
                 },
@@ -299,13 +318,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
 
         let mut saved_leaves = HashMap::new();
         let mut saved_payloads = BTreeMap::new();
-        saved_leaves.insert(
-            anchored_leaf.commit(&upgrade_lock).await,
-            anchored_leaf.clone(),
-        );
+        saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
 
         for leaf in initializer.undecided_leafs {
-            saved_leaves.insert(leaf.commit(&upgrade_lock).await, leaf.clone());
+            saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
             let encoded_txns = payload.encode();
@@ -365,7 +381,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         inner
     }
 
-    /// "Starts" consensus by sending a `QcFormed`, `ViewChange` events
+    /// "Starts" consensus by sending a `Qc2Formed`, `ViewChange` events
     ///
     /// # Panics
     /// Panics if sending genesis fails
@@ -412,13 +428,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         #[allow(clippy::panic)]
         self.internal_event_stream
             .0
-            .broadcast_direct(Arc::new(HotShotEvent::QcFormed(either::Left(
+            .broadcast_direct(Arc::new(HotShotEvent::Qc2Formed(either::Left(
                 consensus.high_qc().clone(),
             ))))
             .await
             .unwrap_or_else(|_| {
                 panic!(
-                    "Genesis Broadcast failed; event = QcFormed(either::Left({:?}))",
+                    "Genesis Broadcast failed; event = Qc2Formed(either::Left({:?}))",
                     consensus.high_qc()
                 )
             });
@@ -432,7 +448,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
 
                 let qc = Arc::new(
                     QuorumCertificate::genesis::<V>(&validated_state, self.instance_state.as_ref())
-                        .await,
+                        .await
+                        .to_qc2(),
                 );
 
                 broadcast_event(
@@ -532,7 +549,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// # Panics
     /// Panics if internal leaf for consensus is inconsistent
     #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
-    pub async fn decided_leaf(&self) -> Leaf<TYPES> {
+    pub async fn decided_leaf(&self) -> Leaf2<TYPES> {
         self.consensus.read().await.decided_leaf()
     }
 
@@ -543,7 +560,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// Panics if internal state for consensus is inconsistent
     #[must_use]
     #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
-    pub fn try_decided_leaf(&self) -> Option<Leaf<TYPES>> {
+    pub fn try_decided_leaf(&self) -> Option<Leaf2<TYPES>> {
         self.consensus.try_read().map(|guard| guard.decided_leaf())
     }
 
@@ -957,7 +974,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusApi<TY
 /// initializer struct for creating starting block
 pub struct HotShotInitializer<TYPES: NodeType> {
     /// the leaf specified initialization
-    inner: Leaf<TYPES>,
+    inner: Leaf2<TYPES>,
 
     /// Instance-level state.
     instance_state: TYPES::InstanceState,
@@ -983,16 +1000,16 @@ pub struct HotShotInitializer<TYPES: NodeType> {
     /// Highest QC that was seen, for genesis it's the genesis QC.  It should be for a view greater
     /// than `inner`s view number for the non genesis case because we must have seen higher QCs
     /// to decide on the leaf.
-    high_qc: QuorumCertificate<TYPES>,
+    high_qc: QuorumCertificate2<TYPES>,
     /// Previously decided upgrade certificate; this is necessary if an upgrade has happened and we are not restarting with the new version
     decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     /// Undecided leafs that were seen, but not yet decided on.  These allow a restarting node
     /// to vote and propose right away if they didn't miss anything while down.
-    undecided_leafs: Vec<Leaf<TYPES>>,
+    undecided_leafs: Vec<Leaf2<TYPES>>,
     /// Not yet decided state
     undecided_state: BTreeMap<TYPES::View, View<TYPES>>,
     /// Proposals we have sent out to provide to others for catchup
-    saved_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>>,
+    saved_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal2<TYPES>>>,
 }
 
 impl<TYPES: NodeType> HotShotInitializer<TYPES> {
@@ -1003,10 +1020,14 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         instance_state: TYPES::InstanceState,
     ) -> Result<Self, HotShotError<TYPES>> {
         let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
-        let high_qc = QuorumCertificate::genesis::<V>(&validated_state, &instance_state).await;
+        let high_qc = QuorumCertificate::genesis::<V>(&validated_state, &instance_state)
+            .await
+            .to_qc2();
 
         Ok(Self {
-            inner: Leaf::genesis(&validated_state, &instance_state).await,
+            inner: Leaf::genesis(&validated_state, &instance_state)
+                .await
+                .into(),
             validated_state: Some(Arc::new(validated_state)),
             state_delta: Some(Arc::new(state_delta)),
             start_view: TYPES::View::new(0),
@@ -1030,16 +1051,16 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     ///     `SystemContext`.
     #[allow(clippy::too_many_arguments)]
     pub fn from_reload(
-        anchor_leaf: Leaf<TYPES>,
+        anchor_leaf: Leaf2<TYPES>,
         instance_state: TYPES::InstanceState,
         validated_state: Option<Arc<TYPES::ValidatedState>>,
         start_view: TYPES::View,
         start_epoch: TYPES::Epoch,
         actioned_view: TYPES::View,
-        saved_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>>,
-        high_qc: QuorumCertificate<TYPES>,
+        saved_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal2<TYPES>>>,
+        high_qc: QuorumCertificate2<TYPES>,
         decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
-        undecided_leafs: Vec<Leaf<TYPES>>,
+        undecided_leafs: Vec<Leaf2<TYPES>>,
         undecided_state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Self {
         Self {

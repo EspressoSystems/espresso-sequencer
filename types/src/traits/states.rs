@@ -17,7 +17,7 @@ use vbs::version::Version;
 
 use super::block_contents::TestableBlock;
 use crate::{
-    data::Leaf,
+    data::Leaf2,
     traits::{
         node_implementation::{ConsensusTime, NodeType},
         BlockPayload,
@@ -69,7 +69,7 @@ pub trait ValidatedState<TYPES: NodeType>:
     fn validate_and_apply_header(
         &self,
         instance: &Self::Instance,
-        parent_leaf: &Leaf<TYPES>,
+        parent_leaf: &Leaf2<TYPES>,
         proposed_header: &TYPES::BlockHeader,
         vid_common: VidCommon,
         version: Version,

@@ -25,7 +25,6 @@ either = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }
 cdn-proto = { workspace = true }
-serde-inline-default = "0.2"
 lazy_static = { workspace = true }
 memoize = { workspace = true }
 rand = { workspace = true }
@@ -41,6 +40,8 @@ jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
+serde-inline-default = { workspace = true }
+serde_bytes = { workspace = true }
 tagged-base64 = { workspace = true }
 vbs = { workspace = true }
 displaydoc = { version = "0.2.5", default-features = false }

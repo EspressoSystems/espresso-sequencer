@@ -26,7 +26,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
+    data::{Leaf, Leaf2, QuorumProposal, VidDisperse, VidDisperseShare},
     message::{GeneralConsensusMessage, Proposal, UpgradeLock},
     simple_certificate::DaCertificate,
     simple_vote::{DaData, DaVote, QuorumData, QuorumVote, SimpleVote, VersionedVoteData},
@@ -437,7 +437,7 @@ where
 
 /// This function will create a fake [`View`] from a provided [`Leaf`].
 pub async fn build_fake_view_with_leaf<V: Versions>(
-    leaf: Leaf<TestTypes>,
+    leaf: Leaf2<TestTypes>,
     upgrade_lock: &UpgradeLock<TestTypes, V>,
 ) -> View<TestTypes> {
     build_fake_view_with_leaf_and_state(leaf, TestValidatedState::default(), upgrade_lock).await
@@ -445,13 +445,13 @@ pub async fn build_fake_view_with_leaf<V: Versions>(
 
 /// This function will create a fake [`View`] from a provided [`Leaf`] and `state`.
 pub async fn build_fake_view_with_leaf_and_state<V: Versions>(
-    leaf: Leaf<TestTypes>,
+    leaf: Leaf2<TestTypes>,
     state: TestValidatedState,
-    upgrade_lock: &UpgradeLock<TestTypes, V>,
+    _upgrade_lock: &UpgradeLock<TestTypes, V>,
 ) -> View<TestTypes> {
     View {
         view_inner: ViewInner::Leaf {
-            leaf: leaf.commit(upgrade_lock).await,
+            leaf: leaf.commit(),
             state: state.into(),
             delta: None,
         },

@@ -30,7 +30,7 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    data::{null_block, EpochNumber, Leaf, ViewNumber},
+    data::{null_block, EpochNumber, Leaf2, ViewNumber},
     simple_vote::UpgradeProposalData,
     traits::{
         election::Membership,
@@ -96,12 +96,10 @@ async fn test_upgrade_task_with_proposal() {
         views.push(view.clone());
         consensus_writer
             .update_leaf(
-                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Leaf2::from_quorum_proposal(&view.quorum_proposal.data),
                 Arc::new(TestValidatedState::default()),
                 None,
-                &handle.hotshot.upgrade_lock,
             )
-            .await
             .unwrap();
     }
 
@@ -117,12 +115,10 @@ async fn test_upgrade_task_with_proposal() {
         views.push(view.clone());
         consensus_writer
             .update_leaf(
-                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Leaf2::from_quorum_proposal(&view.quorum_proposal.data),
                 Arc::new(TestValidatedState::default()),
                 None,
-                &handle.hotshot.upgrade_lock,
             )
-            .await
             .unwrap();
     }
     drop(consensus_writer);
@@ -155,7 +151,7 @@ async fn test_upgrade_task_with_proposal() {
 
     let inputs = vec![
         random![
-            QcFormed(either::Left(genesis_cert.clone())),
+            Qc2Formed(either::Left(genesis_cert.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(
                     &quorum_membership,
@@ -174,7 +170,7 @@ async fn test_upgrade_task_with_proposal() {
         ],
         random![
             QuorumProposalPreliminarilyValidated(proposals[0].clone()),
-            QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
+            Qc2Formed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(
                     &quorum_membership,
@@ -192,7 +188,7 @@ async fn test_upgrade_task_with_proposal() {
         InputOrder::Random(upgrade_vote_recvs),
         random![
             QuorumProposalPreliminarilyValidated(proposals[1].clone()),
-            QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
+            Qc2Formed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment::<TestTypes>(
                     &quorum_membership,

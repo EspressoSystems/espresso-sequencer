@@ -13,7 +13,7 @@ use std::{
 use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
-    data::{BlockError, Leaf},
+    data::{BlockError, Leaf2},
     traits::{
         block_contents::{BlockHeader, BuilderFee, EncodeBytes, TestableBlock, Transaction},
         node_implementation::NodeType,
@@ -272,7 +272,7 @@ pub struct TestBlockHeader {
 
 impl TestBlockHeader {
     pub fn new<TYPES: NodeType<BlockHeader = Self>>(
-        parent_leaf: &Leaf<TYPES>,
+        parent_leaf: &Leaf2<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: TestMetadata,
@@ -312,7 +312,7 @@ impl<
     async fn new_legacy(
         _parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
-        parent_leaf: &Leaf<TYPES>,
+        parent_leaf: &Leaf2<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
@@ -332,7 +332,7 @@ impl<
     async fn new_marketplace(
         _parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
-        parent_leaf: &Leaf<TYPES>,
+        parent_leaf: &Leaf2<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,

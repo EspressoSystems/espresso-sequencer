@@ -13,14 +13,13 @@ use async_broadcast::{Receiver, SendError, Sender};
 use async_lock::RwLock;
 use committable::{Commitment, Committable};
 use hotshot_task::dependency::{Dependency, EventDependency};
-use hotshot_types::utils::epoch_from_block_number;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{Leaf, QuorumProposal, ViewChangeEvidence},
+    data::{Leaf2, QuorumProposal2, ViewChangeEvidence},
     event::{Event, EventType, LeafInfo},
     message::{Proposal, UpgradeLock},
     request_response::ProposalRequestPayload,
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
         block_contents::BlockHeader,
         election::Membership,
@@ -28,7 +27,7 @@ use hotshot_types::{
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
-    utils::{Terminator, View, ViewInner},
+    utils::{epoch_from_block_number, Terminator, View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
 use tokio::time::timeout;
@@ -49,7 +48,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     sender_public_key: TYPES::SignatureKey,
     sender_private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: &UpgradeLock<TYPES, V>,
-) -> Result<(Leaf<TYPES>, View<TYPES>)> {
+) -> Result<(Leaf2<TYPES>, View<TYPES>)> {
     // We need to be able to sign this request before submitting it to the network. Compute the
     // payload first.
     let signed_proposal_request = ProposalRequestPayload {
@@ -105,7 +104,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
                         hs_event.as_ref()
                     {
                         // Make sure that the quorum_proposal is valid
-                        if quorum_proposal.validate_signature(&mem, cur_epoch, upgrade_lock).await.is_ok() {
+                        if quorum_proposal.validate_signature(&mem, cur_epoch).is_ok() {
                             proposal = Some(quorum_proposal.clone());
                         }
 
@@ -132,20 +131,17 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
         bail!("Invalid justify_qc in proposal for view {}", *view_number);
     }
     let mut consensus_writer = consensus.write().await;
-    let leaf = Leaf::from_quorum_proposal(&proposal.data);
+    let leaf = Leaf2::from_quorum_proposal(&proposal.data);
     let state = Arc::new(
         <TYPES::ValidatedState as ValidatedState<TYPES>>::from_header(&proposal.data.block_header),
     );
 
-    if let Err(e) = consensus_writer
-        .update_leaf(leaf.clone(), Arc::clone(&state), None, upgrade_lock)
-        .await
-    {
+    if let Err(e) = consensus_writer.update_leaf(leaf.clone(), Arc::clone(&state), None) {
         tracing::trace!("{e:?}");
     }
     let view = View {
         view_inner: ViewInner::Leaf {
-            leaf: leaf.commit(upgrade_lock).await,
+            leaf: leaf.commit(),
             state,
             delta: None,
         },
@@ -163,7 +159,7 @@ pub struct LeafChainTraversalOutcome<TYPES: NodeType> {
     pub new_decided_view_number: Option<TYPES::View>,
 
     /// The qc for the decided chain.
-    pub new_decide_qc: Option<QuorumCertificate<TYPES>>,
+    pub new_decide_qc: Option<QuorumCertificate2<TYPES>>,
 
     /// The decided leaves with corresponding validated state and VID info.
     pub leaf_views: Vec<LeafInfo<TYPES>>,
@@ -197,14 +193,14 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
 /// # Panics
 /// Can't actually panic
 pub async fn decide_from_proposal_2<TYPES: NodeType>(
-    proposal: &QuorumProposal<TYPES>,
+    proposal: &QuorumProposal2<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
 ) -> LeafChainTraversalOutcome<TYPES> {
     let mut res = LeafChainTraversalOutcome::default();
     let consensus_reader = consensus.read().await;
-    let proposed_leaf = Leaf::from_quorum_proposal(proposal);
+    let proposed_leaf = Leaf2::from_quorum_proposal(proposal);
     res.new_locked_view_number = Some(proposed_leaf.justify_qc().view_number());
 
     // If we don't have the proposals parent return early
@@ -303,7 +299,7 @@ pub async fn decide_from_proposal_2<TYPES: NodeType>(
 /// Upon receipt then of a proposal for view 9, assuming it is valid, this entire process will repeat, and
 /// the anchor view will be set to view 6, with the locked view as view 7.
 pub async fn decide_from_proposal<TYPES: NodeType>(
-    proposal: &QuorumProposal<TYPES>,
+    proposal: &QuorumProposal2<TYPES>,
     consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     public_key: &TYPES::SignatureKey,
@@ -434,7 +430,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType, V: Versions>(
     consensus: OuterConsensus<TYPES>,
     upgrade_lock: &UpgradeLock<TYPES, V>,
     parent_view_number: TYPES::View,
-) -> Result<(Leaf<TYPES>, Arc<<TYPES as NodeType>::ValidatedState>)> {
+) -> Result<(Leaf2<TYPES>, Arc<<TYPES as NodeType>::ValidatedState>)> {
     let consensus_reader = consensus.read().await;
     let cur_epoch = consensus_reader.cur_epoch();
     ensure!(
@@ -504,18 +500,17 @@ pub async fn validate_proposal_safety_and_liveness<
     I: NodeImplementation<TYPES>,
     V: Versions,
 >(
-    proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
-    parent_leaf: Leaf<TYPES>,
+    proposal: Proposal<TYPES, QuorumProposal2<TYPES>>,
+    parent_leaf: Leaf2<TYPES>,
     validation_info: &ValidationInfo<TYPES, I, V>,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     sender: TYPES::SignatureKey,
 ) -> Result<()> {
     let view_number = proposal.data.view_number();
 
-    let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
+    let proposed_leaf = Leaf2::from_quorum_proposal(&proposal.data);
     ensure!(
-        proposed_leaf.parent_commitment()
-            == parent_leaf.commit(&validation_info.upgrade_lock).await,
+        proposed_leaf.parent_commitment() == parent_leaf.commit(),
         "Proposed leaf does not extend the parent leaf."
     );
 
@@ -525,15 +520,7 @@ pub async fn validate_proposal_safety_and_liveness<
 
     {
         let mut consensus_writer = validation_info.consensus.write().await;
-        if let Err(e) = consensus_writer
-            .update_leaf(
-                proposed_leaf.clone(),
-                state,
-                None,
-                &validation_info.upgrade_lock,
-            )
-            .await
-        {
+        if let Err(e) = consensus_writer.update_leaf(proposed_leaf.clone(), state, None) {
             tracing::trace!("{e:?}");
         }
 
@@ -657,7 +644,7 @@ pub(crate) async fn validate_proposal_view_and_certs<
     I: NodeImplementation<TYPES>,
     V: Versions,
 >(
-    proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
+    proposal: &Proposal<TYPES, QuorumProposal2<TYPES>>,
     validation_info: &ValidationInfo<TYPES, I, V>,
 ) -> Result<()> {
     let view_number = proposal.data.view_number();
@@ -668,18 +655,15 @@ pub(crate) async fn validate_proposal_view_and_certs<
     );
 
     // Validate the proposal's signature. This should also catch if the leaf_commitment does not equal our calculated parent commitment
-    proposal
-        .validate_signature(
-            &validation_info.quorum_membership,
-            validation_info.cur_epoch,
-            &validation_info.upgrade_lock,
-        )
-        .await?;
+    proposal.validate_signature(
+        &validation_info.quorum_membership,
+        validation_info.cur_epoch,
+    )?;
 
     // Verify a timeout certificate OR a view sync certificate exists and is valid.
     if proposal.data.justify_qc.view_number() != view_number - 1 {
         let received_proposal_cert =
-            proposal.data.proposal_certificate.clone().context(debug!(
+            proposal.data.view_change_evidence.clone().context(debug!(
                 "Quorum proposal for view {} needed a timeout or view sync certificate, but did not have one",
                 *view_number
         ))?;

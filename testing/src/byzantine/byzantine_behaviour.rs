@@ -19,9 +19,9 @@ use hotshot_task_impls::{
 };
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
-    data::QuorumProposal,
+    data::QuorumProposal2,
     message::{Proposal, UpgradeLock},
-    simple_vote::QuorumVote,
+    simple_vote::QuorumVote2,
     traits::node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
 };
 
@@ -106,7 +106,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> EventTransforme
 /// An `EventHandlerState` that modifies justify_qc on `QuorumProposalSend` to that of a previous view to mock dishonest leader
 pub struct DishonestLeader<TYPES: NodeType> {
     /// Store events from previous views
-    pub validated_proposals: Vec<QuorumProposal<TYPES>>,
+    pub validated_proposals: Vec<QuorumProposal2<TYPES>>,
     /// How many times current node has been elected leader and sent proposal
     pub total_proposals_from_node: u64,
     /// Which proposals to be dishonest at
@@ -126,7 +126,7 @@ impl<TYPES: NodeType> DishonestLeader<TYPES> {
     async fn handle_proposal_send_event(
         &self,
         event: &HotShotEvent<TYPES>,
-        proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
+        proposal: &Proposal<TYPES, QuorumProposal2<TYPES>>,
         sender: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
         let length = self.validated_proposals.len();
@@ -319,7 +319,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
     ) -> Vec<HotShotEvent<TYPES>> {
         if let HotShotEvent::QuorumVoteSend(vote) = event {
             let new_view = vote.view_number + self.view_increment;
-            let spoofed_vote = QuorumVote::<TYPES>::create_signed_vote(
+            let spoofed_vote = QuorumVote2::<TYPES>::create_signed_vote(
                 vote.data.clone(),
                 new_view,
                 public_key,
@@ -373,7 +373,7 @@ impl<TYPES: NodeType> std::fmt::Debug for DishonestVoting<TYPES> {
 /// An `EventHandlerState` that will send a vote for a bad proposal
 pub struct DishonestVoter<TYPES: NodeType> {
     /// Collect all votes the node sends
-    pub votes_sent: Vec<QuorumVote<TYPES>>,
+    pub votes_sent: Vec<QuorumVote2<TYPES>>,
     /// Shared state with views numbers that leaders were dishonest at
     pub dishonest_proposal_view_numbers: Arc<RwLock<HashSet<TYPES::View>>>,
 }
@@ -402,7 +402,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + std::fmt::Debug, V: Version
                     // Create a vote using data from most recent vote and the current event number
                     // We wont update internal consensus state for this Byzantine replica but we are at least
                     // Going to send a vote to the next honest leader
-                    let vote = QuorumVote::<TYPES>::create_signed_vote(
+                    let vote = QuorumVote2::<TYPES>::create_signed_vote(
                         self.votes_sent.last().unwrap().data.clone(),
                         event.view_number().unwrap(),
                         public_key,

@@ -24,7 +24,7 @@ use tagged_base64::tagged;
 use typenum::Unsigned;
 
 use crate::{
-    data::Leaf,
+    data::Leaf2,
     traits::{node_implementation::NodeType, ValidatedState},
     vid::VidCommitment,
 };
@@ -70,7 +70,7 @@ impl<TYPES: NodeType> Clone for ViewInner<TYPES> {
     }
 }
 /// The hash of a leaf.
-pub type LeafCommitment<TYPES> = Commitment<Leaf<TYPES>>;
+pub type LeafCommitment<TYPES> = Commitment<Leaf2<TYPES>>;
 
 /// Optional validated state and state delta.
 pub type StateAndDelta<TYPES> = (

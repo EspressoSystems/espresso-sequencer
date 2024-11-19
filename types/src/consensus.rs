@@ -21,15 +21,15 @@ use vec1::Vec1;
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
-    data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
+    data::{Leaf2, QuorumProposal2, VidDisperse, VidDisperseShare},
     error::HotShotError,
     event::{HotShotAction, LeafInfo},
-    message::{Proposal, UpgradeLock},
-    simple_certificate::{DaCertificate, QuorumCertificate},
+    message::Proposal,
+    simple_certificate::{DaCertificate, QuorumCertificate2},
     traits::{
         block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
@@ -291,7 +291,7 @@ pub struct Consensus<TYPES: NodeType> {
 
     /// Last proposals we sent out, None if we haven't proposed yet.
     /// Prevents duplicate proposals, and can be served to those trying to catchup
-    last_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>>,
+    last_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal2<TYPES>>>,
 
     /// last view had a successful decide event
     last_decided_view: TYPES::View,
@@ -302,7 +302,7 @@ pub struct Consensus<TYPES: NodeType> {
     /// Map of leaf hash -> leaf
     /// - contains undecided leaves
     /// - includes the MOST RECENT decided leaf
-    saved_leaves: CommitmentMap<Leaf<TYPES>>,
+    saved_leaves: CommitmentMap<Leaf2<TYPES>>,
 
     /// Bundle of views which we performed the most recent action
     /// visibible to the network.  Actions are votes and proposals
@@ -315,7 +315,7 @@ pub struct Consensus<TYPES: NodeType> {
     saved_payloads: BTreeMap<TYPES::View, Arc<[u8]>>,
 
     /// the highqc per spec
-    high_qc: QuorumCertificate<TYPES>,
+    high_qc: QuorumCertificate2<TYPES>,
 
     /// A reference to the metrics trait
     pub metrics: Arc<ConsensusMetricsValue>,
@@ -405,10 +405,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         locked_view: TYPES::View,
         last_decided_view: TYPES::View,
         last_actioned_view: TYPES::View,
-        last_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>>,
-        saved_leaves: CommitmentMap<Leaf<TYPES>>,
+        last_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal2<TYPES>>>,
+        saved_leaves: CommitmentMap<Leaf2<TYPES>>,
         saved_payloads: BTreeMap<TYPES::View, Arc<[u8]>>,
-        high_qc: QuorumCertificate<TYPES>,
+        high_qc: QuorumCertificate2<TYPES>,
         metrics: Arc<ConsensusMetricsValue>,
         epoch_height: u64,
     ) -> Self {
@@ -451,7 +451,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Get the high QC.
-    pub fn high_qc(&self) -> &QuorumCertificate<TYPES> {
+    pub fn high_qc(&self) -> &QuorumCertificate2<TYPES> {
         &self.high_qc
     }
 
@@ -461,7 +461,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Get the saved leaves.
-    pub fn saved_leaves(&self) -> &CommitmentMap<Leaf<TYPES>> {
+    pub fn saved_leaves(&self) -> &CommitmentMap<Leaf2<TYPES>> {
         &self.saved_leaves
     }
 
@@ -481,7 +481,9 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Get the map of our recent proposals
-    pub fn last_proposals(&self) -> &BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal<TYPES>>> {
+    pub fn last_proposals(
+        &self,
+    ) -> &BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal2<TYPES>>> {
         &self.last_proposals
     }
 
@@ -501,7 +503,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Returns None if we don't have the data in out state
     pub fn parent_leaf_info(
         &self,
-        leaf: &Leaf<TYPES>,
+        leaf: &Leaf2<TYPES>,
         public_key: &TYPES::SignatureKey,
     ) -> Option<LeafInfo<TYPES>> {
         let parent_view_number = leaf.justify_qc().view_number();
@@ -578,7 +580,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Can return an error when the new view_number is not higher than the existing proposed view number.
     pub fn update_proposed_view(
         &mut self,
-        proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
+        proposal: Proposal<TYPES, QuorumProposal2<TYPES>>,
     ) -> Result<()> {
         ensure!(
             proposal.data.view_number()
@@ -640,23 +642,22 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// # Errors
     /// Can return an error when the new view contains less information than the exisiting view
     /// with the same view number.
-    pub async fn update_leaf<V: Versions>(
+    pub fn update_leaf(
         &mut self,
-        leaf: Leaf<TYPES>,
+        leaf: Leaf2<TYPES>,
         state: Arc<TYPES::ValidatedState>,
         delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
-        upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> Result<()> {
         let view_number = leaf.view_number();
         let view = View {
             view_inner: ViewInner::Leaf {
-                leaf: leaf.commit(upgrade_lock).await,
+                leaf: leaf.commit(),
                 state,
                 delta,
             },
         };
         self.update_validated_state_map(view_number, view)?;
-        self.update_saved_leaves(leaf, upgrade_lock).await;
+        self.update_saved_leaves(leaf);
         Ok(())
     }
 
@@ -695,13 +696,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Update the saved leaves with a new leaf.
-    async fn update_saved_leaves<V: Versions>(
-        &mut self,
-        leaf: Leaf<TYPES>,
-        upgrade_lock: &UpgradeLock<TYPES, V>,
-    ) {
-        self.saved_leaves
-            .insert(leaf.commit(upgrade_lock).await, leaf);
+    fn update_saved_leaves(&mut self, leaf: Leaf2<TYPES>) {
+        self.saved_leaves.insert(leaf.commit(), leaf);
     }
 
     /// Update the saved payloads with a new encoded transaction.
@@ -724,7 +720,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Update the high QC if given a newer one.
     /// # Errors
     /// Can return an error when the provided high_qc is not newer than the existing entry.
-    pub fn update_high_qc(&mut self, high_qc: QuorumCertificate<TYPES>) -> Result<()> {
+    pub fn update_high_qc(&mut self, high_qc: QuorumCertificate2<TYPES>) -> Result<()> {
         ensure!(
             high_qc.view_number > self.high_qc.view_number || high_qc == self.high_qc,
             debug!("High QC with an equal or higher view exists.")
@@ -764,7 +760,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     ) -> std::result::Result<(), HotShotError<TYPES>>
     where
         F: FnMut(
-            &Leaf<TYPES>,
+            &Leaf2<TYPES>,
             Arc<<TYPES as NodeType>::ValidatedState>,
             Option<Arc<<<TYPES as NodeType>::ValidatedState as ValidatedState<TYPES>>::Delta>>,
         ) -> bool,
@@ -851,7 +847,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// if the last decided view's leaf does not exist in the state map or saved leaves, which
     /// should never happen.
     #[must_use]
-    pub fn decided_leaf(&self) -> Leaf<TYPES> {
+    pub fn decided_leaf(&self) -> Leaf2<TYPES> {
         let decided_view_num = self.last_decided_view;
         let view = self.validated_state_map.get(&decided_view_num).unwrap();
         let leaf = view
@@ -918,7 +914,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
 
     /// Return true if the QC takes part in forming an eQC, i.e.
     /// it is one of the 3-chain certificates but not the eQC itself
-    pub fn is_qc_forming_eqc(&self, qc: &QuorumCertificate<TYPES>) -> bool {
+    pub fn is_qc_forming_eqc(&self, qc: &QuorumCertificate2<TYPES>) -> bool {
         let high_qc_leaf_commit = qc.data.leaf_commit;
         let is_high_qc_extended = self.is_leaf_extended(high_qc_leaf_commit);
         if is_high_qc_extended {
@@ -1007,14 +1003,14 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Returns true if the `parent_leaf` formed an eQC for the previous epoch to the `proposed_leaf`
-    pub fn check_eqc(&self, proposed_leaf: &Leaf<TYPES>, parent_leaf: &Leaf<TYPES>) -> bool {
+    pub fn check_eqc(&self, proposed_leaf: &Leaf2<TYPES>, parent_leaf: &Leaf2<TYPES>) -> bool {
         if parent_leaf.view_number() == TYPES::View::genesis() {
             return true;
         }
         let new_epoch = epoch_from_block_number(proposed_leaf.height(), self.epoch_height);
         let old_epoch = epoch_from_block_number(parent_leaf.height(), self.epoch_height);
-        let parent_leaf_commit = <Leaf<TYPES> as Committable>::commit(parent_leaf);
-        new_epoch - 1 == old_epoch && self.is_leaf_extended(parent_leaf_commit)
+
+        new_epoch - 1 == old_epoch && self.is_leaf_extended(parent_leaf.commit())
     }
 }
 

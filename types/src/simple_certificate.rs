@@ -23,7 +23,7 @@ use crate::{
     data::serialize_signature2,
     message::UpgradeLock,
     simple_vote::{
-        DaData, QuorumData, TimeoutData, UpgradeProposalData, VersionedVoteData,
+        DaData, QuorumData, QuorumData2, TimeoutData, UpgradeProposalData, VersionedVoteData,
         ViewSyncCommitData, ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
     },
     traits::{
@@ -249,8 +249,52 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     }
 }
 
-/// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
+impl<TYPES: NodeType> QuorumCertificate<TYPES> {
+    /// Convert a `QuorumCertificate` into a `QuorumCertificate2`
+    pub fn to_qc2(self) -> QuorumCertificate2<TYPES> {
+        let bytes: [u8; 32] = self.data.leaf_commit.into();
+        let data = QuorumData2 {
+            leaf_commit: Commitment::from_raw(bytes),
+        };
+
+        let bytes: [u8; 32] = self.vote_commitment.into();
+        let vote_commitment = Commitment::from_raw(bytes);
+
+        SimpleCertificate {
+            data,
+            vote_commitment,
+            view_number: self.view_number,
+            signatures: self.signatures.clone(),
+            _pd: PhantomData,
+        }
+    }
+}
+
+impl<TYPES: NodeType> QuorumCertificate2<TYPES> {
+    /// Convert a `QuorumCertificate2` into a `QuorumCertificate`
+    pub fn to_qc(self) -> QuorumCertificate<TYPES> {
+        let bytes: [u8; 32] = self.data.leaf_commit.into();
+        let data = QuorumData {
+            leaf_commit: Commitment::from_raw(bytes),
+        };
+
+        let bytes: [u8; 32] = self.vote_commitment.into();
+        let vote_commitment = Commitment::from_raw(bytes);
+
+        SimpleCertificate {
+            data,
+            vote_commitment,
+            view_number: self.view_number,
+            signatures: self.signatures.clone(),
+            _pd: PhantomData,
+        }
+    }
+}
+
+/// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` over `QuorumData`
 pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>, SuccessThreshold>;
+/// Type alias for a `QuorumCertificate2`, which is a `SimpleCertificate` over `QuorumData2`
+pub type QuorumCertificate2<TYPES> = SimpleCertificate<TYPES, QuorumData2<TYPES>, SuccessThreshold>;
 /// Type alias for a DA certificate over `DaData`
 pub type DaCertificate<TYPES> = SimpleCertificate<TYPES, DaData, SuccessThreshold>;
 /// Type alias for a Timeout certificate over a view number

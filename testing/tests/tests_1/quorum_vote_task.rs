@@ -23,7 +23,7 @@ use hotshot_testing::{
     script::{Expectations, InputOrder, TaskScript},
 };
 use hotshot_types::{
-    data::{EpochNumber, Leaf, ViewNumber},
+    data::{EpochNumber, Leaf2, ViewNumber},
     traits::node_implementation::ConsensusTime,
 };
 
@@ -64,12 +64,10 @@ async fn test_quorum_vote_task_success() {
         vids.push(view.vid_proposal.clone());
         consensus_writer
             .update_leaf(
-                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Leaf2::from_quorum_proposal(&view.quorum_proposal.data),
                 Arc::new(TestValidatedState::default()),
                 None,
-                &handle.hotshot.upgrade_lock,
             )
-            .await
             .unwrap();
     }
     drop(consensus_writer);
@@ -136,12 +134,10 @@ async fn test_quorum_vote_task_miss_dependency() {
 
         consensus_writer
             .update_leaf(
-                Leaf::from_quorum_proposal(&view.quorum_proposal.data),
+                Leaf2::from_quorum_proposal(&view.quorum_proposal.data),
                 Arc::new(TestValidatedState::default()),
                 None,
-                &handle.hotshot.upgrade_lock,
             )
-            .await
             .unwrap();
     }
     drop(consensus_writer);

@@ -11,17 +11,18 @@ use either::Either;
 use hotshot_task::task::TaskEvent;
 use hotshot_types::{
     data::{
-        DaProposal, Leaf, PackedBundle, QuorumProposal, UpgradeProposal, VidDisperse,
+        DaProposal, Leaf2, PackedBundle, QuorumProposal2, UpgradeProposal, VidDisperse,
         VidDisperseShare,
     },
     message::Proposal,
     request_response::ProposalRequestPayload,
     simple_certificate::{
-        DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
-        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        DaCertificate, QuorumCertificate, QuorumCertificate2, TimeoutCertificate,
+        UpgradeCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+        ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DaVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DaVote, QuorumVote2, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::{
@@ -49,7 +50,7 @@ pub struct ProposalMissing<TYPES: NodeType> {
     /// View of missing proposal
     pub view: TYPES::View,
     /// Channel to send the response back to
-    pub response_chan: Sender<Option<Proposal<TYPES, QuorumProposal<TYPES>>>>,
+    pub response_chan: Sender<Option<Proposal<TYPES, QuorumProposal2<TYPES>>>>,
 }
 
 impl<TYPES: NodeType> PartialEq for ProposalMissing<TYPES> {
@@ -71,9 +72,9 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Shutdown the task
     Shutdown,
     /// A quorum proposal has been received from the network; handled by the consensus task
-    QuorumProposalRecv(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
+    QuorumProposalRecv(Proposal<TYPES, QuorumProposal2<TYPES>>, TYPES::SignatureKey),
     /// A quorum vote has been received from the network; handled by the consensus task
-    QuorumVoteRecv(QuorumVote<TYPES>),
+    QuorumVoteRecv(QuorumVote2<TYPES>),
     /// A timeout vote received from the network; handled by consensus task
     TimeoutVoteRecv(TimeoutVote<TYPES>),
     /// Send a timeout vote to the network; emitted by consensus task replicas
@@ -89,18 +90,18 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// A DAC is validated.
     DaCertificateValidated(DaCertificate<TYPES>),
     /// Send a quorum proposal to the network; emitted by the leader in the consensus task
-    QuorumProposalSend(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
+    QuorumProposalSend(Proposal<TYPES, QuorumProposal2<TYPES>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
-    QuorumVoteSend(QuorumVote<TYPES>),
+    QuorumVoteSend(QuorumVote2<TYPES>),
     /// Broadcast a quorum vote to form an eQC; emitted by a replica in the consensus task after seeing a valid quorum proposal
-    ExtendedQuorumVoteSend(QuorumVote<TYPES>),
+    ExtendedQuorumVoteSend(QuorumVote2<TYPES>),
     /// A quorum proposal with the given parent leaf is validated.
     /// The full validation checks include:
     /// 1. The proposal is not for an old view
     /// 2. The proposal has been correctly signed by the leader of the current view
     /// 3. The justify QC is valid
     /// 4. The proposal passes either liveness or safety check.
-    QuorumProposalValidated(Proposal<TYPES, QuorumProposal<TYPES>>, Leaf<TYPES>),
+    QuorumProposalValidated(Proposal<TYPES, QuorumProposal2<TYPES>>, Leaf2<TYPES>),
     /// A quorum proposal is missing for a view that we need.
     QuorumProposalRequestSend(
         ProposalRequestPayload<TYPES>,
@@ -112,15 +113,17 @@ pub enum HotShotEvent<TYPES: NodeType> {
         <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ),
     /// A quorum proposal was missing for a view. As the leader, we send a reply to the recipient with their key.
-    QuorumProposalResponseSend(TYPES::SignatureKey, Proposal<TYPES, QuorumProposal<TYPES>>),
+    QuorumProposalResponseSend(TYPES::SignatureKey, Proposal<TYPES, QuorumProposal2<TYPES>>),
     /// A quorum proposal was requested by a node for a view.
-    QuorumProposalResponseRecv(Proposal<TYPES, QuorumProposal<TYPES>>),
+    QuorumProposalResponseRecv(Proposal<TYPES, QuorumProposal2<TYPES>>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DaProposalSend(Proposal<TYPES, DaProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
     DaVoteSend(DaVote<TYPES>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
     QcFormed(Either<QuorumCertificate<TYPES>, TimeoutCertificate<TYPES>>),
+    /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
+    Qc2Formed(Either<QuorumCertificate2<TYPES>, TimeoutCertificate<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -175,7 +178,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ),
     /// Event when the transactions task has sequenced transactions. Contains the encoded transactions, the metadata, and the view number
     BlockRecv(PackedBundle<TYPES>),
-
     /// Send VID shares to VID storage nodes; emitted by the DA leader
     ///
     /// Like [`HotShotEvent::DaProposalSend`].
@@ -199,13 +201,12 @@ pub enum HotShotEvent<TYPES: NodeType> {
     UpgradeVoteSend(UpgradeVote<TYPES>),
     /// Upgrade certificate has been sent to the network
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
-
     /// A quorum proposal has been preliminarily validated.
     /// The preliminary checks include:
     /// 1. The proposal is not for an old view
     /// 2. The proposal has been correctly signed by the leader of the current view
     /// 3. The justify QC is valid
-    QuorumProposalPreliminarilyValidated(Proposal<TYPES, QuorumProposal<TYPES>>),
+    QuorumProposalPreliminarilyValidated(Proposal<TYPES, QuorumProposal2<TYPES>>),
 
     /// Send a VID request to the network; emitted to on of the members of DA committee.
     /// Includes the data request, node's public key and signature as well as public key of DA committee who we want to send to.
@@ -238,10 +239,10 @@ pub enum HotShotEvent<TYPES: NodeType> {
     ),
 
     /// A replica send us a High QC
-    HighQcRecv(QuorumCertificate<TYPES>, TYPES::SignatureKey),
+    HighQcRecv(QuorumCertificate2<TYPES>, TYPES::SignatureKey),
 
-    /// Send our HighQC to the next leader, should go to the same leader as our vote
-    HighQcSend(QuorumCertificate<TYPES>, TYPES::SignatureKey),
+    /// Send our HighQc to the next leader, should go to the same leader as our vote
+    HighQcSend(QuorumCertificate2<TYPES>, TYPES::SignatureKey),
 }
 
 impl<TYPES: NodeType> HotShotEvent<TYPES> {
@@ -256,8 +257,8 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             HotShotEvent::QuorumProposalRecv(proposal, _)
             | HotShotEvent::QuorumProposalSend(proposal, _)
             | HotShotEvent::QuorumProposalValidated(proposal, _)
-            | HotShotEvent::QuorumProposalResponseSend(_, proposal)
             | HotShotEvent::QuorumProposalResponseRecv(proposal)
+            | HotShotEvent::QuorumProposalResponseSend(_, proposal)
             | HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
                 Some(proposal.data.view_number())
             }
@@ -271,6 +272,10 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
                 Some(vote.view_number())
             }
             HotShotEvent::QcFormed(cert) => match cert {
+                either::Left(qc) => Some(qc.view_number()),
+                either::Right(tc) => Some(tc.view_number()),
+            },
+            HotShotEvent::Qc2Formed(cert) => match cert {
                 either::Left(qc) => Some(qc.view_number()),
                 either::Right(tc) => Some(tc.view_number()),
             },
@@ -393,6 +398,10 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 write!(f, "DaVoteSend(view_number={:?})", vote.view_number())
             }
             HotShotEvent::QcFormed(cert) => match cert {
+                either::Left(qc) => write!(f, "QcFormed(view_number={:?})", qc.view_number()),
+                either::Right(tc) => write!(f, "QcFormed(view_number={:?})", tc.view_number()),
+            },
+            HotShotEvent::Qc2Formed(cert) => match cert {
                 either::Left(qc) => write!(f, "QcFormed(view_number={:?})", qc.view_number()),
                 either::Right(tc) => write!(f, "QcFormed(view_number={:?})", tc.view_number()),
             },
