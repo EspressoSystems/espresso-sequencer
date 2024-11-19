@@ -26,7 +26,12 @@ jobs:
   slow-tests:
     runs-on: ubuntu-latest
     steps:
+      # These tests need the `anvil` binary provided by foundry
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
       - uses: taiki-e/install-action@nextest
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
