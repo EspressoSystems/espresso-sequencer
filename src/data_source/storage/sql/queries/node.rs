@@ -203,6 +203,7 @@ where
         &mut self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
+        limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         // Find the specific block that starts the requested window.
         let first_block = match start.into() {
@@ -211,7 +212,7 @@ where
                 // use a different method to find the window, as detecting whether we have
                 // sufficient data to answer the query is not as simple as just trying `load_header`
                 // for a specific block ID.
-                return self.time_window::<Types>(t, end).await;
+                return self.time_window::<Types>(t, end, limit).await;
             }
             WindowStart::Height(h) => h,
             WindowStart::Hash(h) => self.load_header::<Types>(h).await?.block_number(),
@@ -224,15 +225,17 @@ where
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.height >= $1 AND h.timestamp < $2
-              ORDER BY h.height"
+              ORDER BY h.height
+              LIMIT $3"
         );
         let rows = query(&sql)
             .bind(first_block as i64)
             .bind(end as i64)
+            .bind(limit as i64)
             .fetch(self.as_mut());
         let window = rows
             .map(|row| parse_header::<Types>(row?))
-            .try_collect()
+            .try_collect::<Vec<_>>()
             .await?;
 
         // Find the block just before the window.
@@ -242,26 +245,35 @@ where
             None
         };
 
-        // Find the block just after the window. We order by timestamp _then_ height, because the
-        // timestamp order allows the query planner to use the index on timestamp to also
-        // efficiently solve the WHERE clause, but this process may turn up multiple results, due to
-        // the 1-second resolution of block timestamps. The final sort by height guarantees us a
-        // unique, deterministic result (the first block with a given timestamp). This sort may not
-        // be able to use an index, but it shouldn't be too expensive, since there will never be
-        // more than a handful of blocks with the same timestamp.
-        let sql = format!(
-            "SELECT {HEADER_COLUMNS}
+        let next = if window.len() < limit {
+            // If we are not limited, complete the window by finding the block just after the
+            // window. We order by timestamp _then_ height, because the timestamp order allows the
+            // query planner to use the index on timestamp to also efficiently solve the WHERE
+            // clause, but this process may turn up multiple results, due to the 1-second resolution
+            // of block timestamps. The final sort by height guarantees us a unique, deterministic
+            // result (the first block with a given timestamp). This sort may not be able to use an
+            // index, but it shouldn't be too expensive, since there will never be more than a
+            // handful of blocks with the same timestamp.
+            let sql = format!(
+                "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
               ORDER BY h.timestamp, h.height
               LIMIT 1"
-        );
-        let next = query(&sql)
-            .bind(end as i64)
-            .fetch_optional(self.as_mut())
-            .await?
-            .map(parse_header::<Types>)
-            .transpose()?;
+            );
+            query(&sql)
+                .bind(end as i64)
+                .fetch_optional(self.as_mut())
+                .await?
+                .map(parse_header::<Types>)
+                .transpose()?
+        } else {
+            // If we have been limited, return a `null` next block indicating an incomplete window.
+            // The client will have to query again with an adjusted starting point to get subsequent
+            // results.
+            tracing::debug!(limit, "cutting off header window request due to limit");
+            None
+        };
 
         Ok(TimeWindowQueryData { window, prev, next })
     }
@@ -333,6 +345,7 @@ impl<Mode: TransactionMode> Transaction<Mode> {
         &mut self,
         start: u64,
         end: u64,
+        limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         // Find all blocks whose timestamps fall within the window [start, end). Block timestamps
         // are monotonically increasing, so this query is guaranteed to return a contiguous range of
@@ -349,31 +362,41 @@ impl<Mode: TransactionMode> Transaction<Mode> {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1 AND h.timestamp < $2
-              ORDER BY h.timestamp, h.height"
+              ORDER BY h.timestamp, h.height
+              LIMIT $3"
         );
         let rows = query(&sql)
             .bind(start as i64)
             .bind(end as i64)
+            .bind(limit as i64)
             .fetch(self.as_mut());
         let window: Vec<_> = rows
             .map(|row| parse_header::<Types>(row?))
             .try_collect()
             .await?;
 
-        // Find the block just after the window.
-        let sql = format!(
-            "SELECT {HEADER_COLUMNS}
+        let next = if window.len() < limit {
+            // If we are not limited, complete the window by finding the block just after.
+            let sql = format!(
+                "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
               ORDER BY h.timestamp, h.height
               LIMIT 1"
-        );
-        let next = query(&sql)
-            .bind(end as i64)
-            .fetch_optional(self.as_mut())
-            .await?
-            .map(parse_header::<Types>)
-            .transpose()?;
+            );
+            query(&sql)
+                .bind(end as i64)
+                .fetch_optional(self.as_mut())
+                .await?
+                .map(parse_header::<Types>)
+                .transpose()?
+        } else {
+            // If we have been limited, return a `null` next block indicating an incomplete window.
+            // The client will have to query again with an adjusted starting point to get subsequent
+            // results.
+            tracing::debug!(limit, "cutting off header window request due to limit");
+            None
+        };
 
         // If the `next` block exists, _or_ if any block in the window exists, we know we have
         // enough information to definitively say at least where the window starts (we may or may

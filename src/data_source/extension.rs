@@ -289,8 +289,9 @@ where
         &self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
+        limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
-        self.data_source.get_header_window(start, end).await
+        self.data_source.get_header_window(start, end, limit).await
     }
 }
 

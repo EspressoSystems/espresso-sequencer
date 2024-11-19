@@ -717,3 +717,9 @@ where
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Limits {
+    pub small_object_range_limit: usize,
+    pub large_object_range_limit: usize,
+}

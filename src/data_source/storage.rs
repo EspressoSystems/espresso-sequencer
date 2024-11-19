@@ -217,6 +217,7 @@ pub trait NodeStorage<Types: NodeType> {
         &mut self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
+        limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>>;
 
     /// Search the database for missing objects and generate a report.
