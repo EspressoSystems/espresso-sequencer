@@ -394,7 +394,7 @@ impl Transaction<Write> {
     ) -> anyhow::Result<()>
     where
         R: IntoIterator,
-        R::Item: 'p + FixedLengthParams<'p, N> + Clone,
+        R::Item: 'p + FixedLengthParams<'p, N>,
     {
         let set_columns = columns
             .iter()
@@ -428,7 +428,7 @@ impl Transaction<Write> {
                   VALUES {values}
              ON CONFLICT ({pk}) DO UPDATE SET {set_columns}"
         );
-        let rows_modified = self.execute_many_with_retries(&stmt, params).await?;
+        let rows_modified = self.execute_many(params.bind(query(&stmt))).await?;
         if rows_modified != num_rows {
             tracing::error!(
                 stmt,
@@ -470,6 +470,21 @@ where
     Header<Types>: QueryableHeader<Types>,
 {
     async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
+        let height = leaf.height();
+
+        // Ignore the leaf if it is below the pruned height. This can happen if, for instance, the
+        // fetcher is racing with the pruner.
+        if let Some(pruned_height) = self.load_pruned_height().await? {
+            if height <= pruned_height {
+                tracing::info!(
+                    height,
+                    pruned_height,
+                    "ignoring leaf which is already pruned"
+                );
+                return Ok(());
+            }
+        }
+
         // While we don't necessarily have the full block for this leaf yet, we can initialize the
         // header table with block metadata taken from the leaf.
         let header_json = serde_json::to_value(leaf.leaf().block_header())
@@ -479,7 +494,7 @@ where
             ["height", "hash", "payload_hash", "data", "timestamp"],
             ["height"],
             [(
-                leaf.height() as i64,
+                height as i64,
                 leaf.block_hash().to_string(),
                 leaf.leaf().block_header().payload_commitment().to_string(),
                 header_json,
@@ -491,7 +506,7 @@ where
         // Similarly, we can initialize the payload table with a null payload, which can help us
         // distinguish between blocks that haven't been produced yet and blocks we haven't received
         // yet when answering queries.
-        self.upsert("payload", ["height"], ["height"], [(leaf.height() as i64,)])
+        self.upsert("payload", ["height"], ["height"], [(height as i64,)])
             .await?;
 
         // Finally, we insert the leaf itself, which references the header row we created.
@@ -503,7 +518,7 @@ where
             ["height", "hash", "block_hash", "leaf", "qc"],
             ["height"],
             [(
-                leaf.height() as i64,
+                height as i64,
                 leaf.hash().to_string(),
                 leaf.block_hash().to_string(),
                 leaf_json,
@@ -516,6 +531,21 @@ where
     }
 
     async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()> {
+        let height = block.height();
+
+        // Ignore the block if it is below the pruned height. This can happen if, for instance, the
+        // fetcher is racing with the pruner.
+        if let Some(pruned_height) = self.load_pruned_height().await? {
+            if height <= pruned_height {
+                tracing::info!(
+                    height,
+                    pruned_height,
+                    "ignoring block which is already pruned"
+                );
+                return Ok(());
+            }
+        }
+
         // The header and payload tables should already have been initialized when we inserted the
         // corresponding leaf. All we have to do is add the payload itself and its size.
         let payload = block.payload.encode();
@@ -524,7 +554,7 @@ where
             ["height", "data", "size", "num_transactions"],
             ["height"],
             [(
-                block.height() as i64,
+                height as i64,
                 payload.as_ref(),
                 block.size() as i32,
                 block.num_transactions() as i32,
@@ -537,7 +567,7 @@ where
         for (txn_ix, txn) in block.enumerate() {
             let txn_ix =
                 serde_json::to_value(&txn_ix).context("failed to serialize transaction index")?;
-            rows.push((txn.commit().to_string(), block.height() as i64, txn_ix));
+            rows.push((txn.commit().to_string(), height as i64, txn_ix));
         }
         if !rows.is_empty() {
             self.upsert(
@@ -557,6 +587,21 @@ where
         common: VidCommonQueryData<Types>,
         share: Option<VidShare>,
     ) -> anyhow::Result<()> {
+        let height = common.height();
+
+        // Ignore the object if it is below the pruned height. This can happen if, for instance, the
+        // fetcher is racing with the pruner.
+        if let Some(pruned_height) = self.load_pruned_height().await? {
+            if height <= pruned_height {
+                tracing::info!(
+                    height,
+                    pruned_height,
+                    "ignoring VID common which is already pruned"
+                );
+                return Ok(());
+            }
+        }
+
         let common_data =
             bincode::serialize(common.common()).context("failed to serialize VID common data")?;
         if let Some(share) = share {
@@ -565,7 +610,7 @@ where
                 "vid",
                 ["height", "common", "share"],
                 ["height"],
-                [(common.height() as i64, common_data, share_data)],
+                [(height as i64, common_data, share_data)],
             )
             .await
         } else {
@@ -576,7 +621,7 @@ where
                 "vid",
                 ["height", "common"],
                 ["height"],
-                [(common.height() as i64, common_data)],
+                [(height as i64, common_data)],
             )
             .await
         }

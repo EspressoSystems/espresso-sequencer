@@ -1047,6 +1047,7 @@ mod test {
                 break;
             }
             tracing::info!(?sync_status, "waiting for node to sync");
+            sleep(Duration::from_secs(1)).await;
         }
 
         // The node remains fully synced even after some time; no pruning.

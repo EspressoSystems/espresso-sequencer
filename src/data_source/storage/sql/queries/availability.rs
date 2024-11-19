@@ -246,7 +246,7 @@ where
             "SELECT {PAYLOAD_METADATA_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
-              {where_clause}
+              {where_clause} AND p.num_transactions IS NOT NULL
               ORDER BY h.height ASC"
         );
         Ok(query
