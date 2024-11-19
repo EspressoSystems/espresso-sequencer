@@ -379,15 +379,11 @@ where
             .await
     }
 
-    async fn claim_tx_status(
+    async fn txn_status(
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        self.global_state
-            .read_arc()
-            .await
-            .claim_tx_status(txn_hash)
-            .await
+        self.read(|state| state.txn_status(txn_hash)).await
     }
 }
 

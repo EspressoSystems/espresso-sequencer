@@ -528,11 +528,7 @@ async fn test_eager_block_rate() {
         .await;
     }
     let tx = TestTransaction::new(vec![1]);
-    tracing::error!(
-        "In finalization_test, status of transaction {:?} is {:?}",
-        tx,
-        proxy_global_state.claim_tx_status(tx.commit()).await
-    );
+
     // rounds 2 + ALLOW_EMPTY_BLOCK_PERIOD through 9 should not propose empty
     for round in (2 + ALLOW_EMPTY_BLOCK_PERIOD)..10 {
         let (attempts, available_blocks_result) = process_available_blocks_round(

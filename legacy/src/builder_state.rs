@@ -670,7 +670,7 @@ impl<Types: NodeType> BuilderState<Types> {
             let _ = self.global_state.write_arc().await.set_tx_status(
                 *tx,
                 TransactionStatus::Sequenced {
-                    block: self.parent_block_references.view_number.u64(),
+                    leaf: self.parent_block_references.view_number.u64(),
                 },
             );
         }

@@ -396,7 +396,7 @@ impl<Types: NodeType> GlobalState<Types> {
 
     // get transaction status
     // return one of "pending", "sequenced", "rejected" or "unknown"
-    pub fn claim_tx_status(
+    pub fn txn_status(
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
@@ -1122,11 +1122,11 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
         response.into_iter().collect()
     }
 
-    async fn claim_tx_status(
+    async fn txn_status(
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        self.global_state.read_arc().await.claim_tx_status(txn_hash)
+        self.global_state.read_arc().await.txn_status(txn_hash)
     }
 }
 #[async_trait]
@@ -4654,7 +4654,7 @@ mod test {
         }
         // tx submitted in round 1 should be pending
         for tx in txns.clone() {
-            match proxy_global_state.claim_tx_status(tx.commit()).await {
+            match proxy_global_state.txn_status(tx.commit()).await {
                 Ok(txn_status) => {
                     assert_eq!(txn_status, TransactionStatus::Pending);
                 }
@@ -4695,7 +4695,7 @@ mod test {
         }
         // tx submitted in round 1 should be sequenced
         for tx in txns.clone() {
-            match proxy_global_state.claim_tx_status(tx.commit()).await {
+            match proxy_global_state.txn_status(tx.commit()).await {
                 Ok(txn_status) => {
                     matches!(txn_status, TransactionStatus::Sequenced { .. });
                 }
@@ -4706,7 +4706,7 @@ mod test {
         }
         // tx submitted in round 2 should be pending
         for tx in txns_2.clone() {
-            match proxy_global_state.claim_tx_status(tx.commit()).await {
+            match proxy_global_state.txn_status(tx.commit()).await {
                 Ok(txn_status) => {
                     assert_eq!(txn_status, TransactionStatus::Pending);
                 }
@@ -4725,7 +4725,7 @@ mod test {
         ])];
         let _ = proxy_global_state.submit_txns(big_txns.clone()).await;
         for tx in big_txns {
-            match proxy_global_state.claim_tx_status(tx.commit()).await {
+            match proxy_global_state.txn_status(tx.commit()).await {
                 Ok(txn_status) => {
                     if tx.minimum_block_size() > TEST_PROTOCOL_MAX_BLOCK_SIZE {
                         tracing::debug!(
@@ -4751,10 +4751,7 @@ mod test {
 
         // Test status Unknown when the txn is unknown
         let unknown_tx = TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
-        match proxy_global_state
-            .claim_tx_status(unknown_tx.commit())
-            .await
-        {
+        match proxy_global_state.txn_status(unknown_tx.commit()).await {
             Ok(txn_status) => {
                 assert_eq!(txn_status, TransactionStatus::Unknown);
             }
