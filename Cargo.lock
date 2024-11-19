@@ -1390,12 +1390,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "capnp"
+version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bce4e2d41c16cf9188f47ca4d59fdcdca1f33705af211bdb41f0afbd3442f8b5"
+dependencies = [
+ "embedded-io",
+]
+
+[[package]]
 name = "capnpc"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c75ba30e0f08582d53c2f3710cf4bb65ff562614b1ba86906d7391adffe189ec"
 dependencies = [
- "capnp",
+ "capnp 0.19.8",
+]
+
+[[package]]
+name = "capnpc"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aa3d5f01e69ed11656d2c7c47bf34327ea9bfb5c85c7de787fcd7b6c5e45b61"
+dependencies = [
+ "capnp 0.20.3",
 ]
 
 [[package]]
@@ -1505,9 +1523,9 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5#f6cc7c2fc53eaa52a4901e775d9be7ac820af72c"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7#5406fde54e61058428a7b55e1a98b699f0f606f1"
 dependencies = [
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7)",
  "clap",
  "jf-signature 0.1.0",
  "tokio",
@@ -1518,11 +1536,11 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7#5406fde54e61058428a7b55e1a98b699f0f606f1"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
 dependencies = [
- "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.7)",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
  "clap",
- "jf-signature 0.1.0",
+ "jf-signature 0.2.0",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.18",
@@ -1536,8 +1554,8 @@ dependencies = [
  "anyhow",
  "ark-serialize",
  "async-trait",
- "capnp",
- "capnpc",
+ "capnp 0.19.8",
+ "capnpc 0.19.0",
  "derivative",
  "jf-signature 0.1.0",
  "kanal",
@@ -1570,8 +1588,8 @@ dependencies = [
  "anyhow",
  "ark-serialize",
  "async-trait",
- "capnp",
- "capnpc",
+ "capnp 0.19.8",
+ "capnpc 0.19.0",
  "derivative",
  "jf-signature 0.1.0",
  "kanal",
@@ -1584,6 +1602,41 @@ dependencies = [
  "rand 0.8.5",
  "rcgen 0.13.1",
  "redis 0.26.1",
+ "rkyv",
+ "rustls 0.23.16",
+ "rustls-pki-types",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-rustls 0.26.0",
+ "tracing",
+ "url",
+ "warp",
+]
+
+[[package]]
+name = "cdn-proto"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-trait",
+ "capnp 0.20.3",
+ "capnpc 0.20.1",
+ "derivative",
+ "derive_more 1.0.0",
+ "jf-signature 0.2.0",
+ "kanal",
+ "lazy_static",
+ "mnemonic",
+ "num_enum",
+ "pem 3.0.4",
+ "prometheus",
+ "quinn",
+ "rand 0.8.5",
+ "rcgen 0.13.1",
+ "redis 0.27.5",
  "rkyv",
  "rustls 0.23.16",
  "rustls-pki-types",
@@ -4636,7 +4689,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite 0.2.15",
- "socket2 0.5.7",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -7581,7 +7634,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.87",
@@ -7905,6 +7958,29 @@ dependencies = [
  "ryu",
  "tokio",
  "tokio-retry",
+ "tokio-util",
+ "url",
+]
+
+[[package]]
+name = "redis"
+version = "0.27.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81cccf17a692ce51b86564334614d72dcae1def0fd5ecebc9f02956da74352b5"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "bytes 1.8.0",
+ "combine",
+ "futures",
+ "futures-util",
+ "itoa",
+ "num-bigint",
+ "percent-encoding",
+ "pin-project-lite 0.2.15",
+ "ryu",
+ "tokio",
+ "tokio-retry2",
  "tokio-util",
  "url",
 ]
@@ -8661,7 +8737,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
- "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.5)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
  "clap",
  "client",
  "committable",
@@ -9136,7 +9212,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.87",
@@ -10190,6 +10266,17 @@ name = "tokio-retry"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f57eb36ecbe0fc510036adff84824dd3c24bb781e21bfa67b69d556aa85214f"
+dependencies = [
+ "pin-project",
+ "rand 0.8.5",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-retry2"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "903934dba1c4c2f2e9cb460ef10b5695e0b0ecad3bf9ee7c8675e540c5e8b2d1"
 dependencies = [
  "pin-project",
  "rand 0.8.5",
