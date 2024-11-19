@@ -464,7 +464,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
 
     /// Wait for the client to initialize the connection
     async fn wait_for_ready(&self) {
-        self.client.ensure_initialized().await;
+        let _ = self.client.ensure_initialized().await;
     }
 
     /// TODO: shut down the networks. Unneeded for testing.
@@ -473,7 +473,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
         'a: 'b,
         Self: 'b,
     {
-        boxed_sync(async move {})
+        boxed_sync(async move { self.client.close().await })
     }
 
     /// Broadcast a message to all members of the quorum.
