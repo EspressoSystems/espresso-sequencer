@@ -45,12 +45,12 @@ pub type Db = sqlx::Postgres;
 
 #[cfg(feature = "embedded-db")]
 pub mod syntax_helpers {
-    pub const MAX_FN: &str = "GREATEST";
+    pub const MAX_FN: &str = "MAX";
     pub const BINARY_TYPE: &str = "BLOB";
 }
 
 #[cfg(not(feature = "embedded-db"))]
 pub mod syntax_helpers {
-    pub const MAX_FN: &str = "MAX";
+    pub const MAX_FN: &str = "GREATEST";
     pub const BINARY_TYPE: &str = "BYTEA";
 }
