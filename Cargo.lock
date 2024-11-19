@@ -4371,7 +4371,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.62"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=release-thehounds#b626f0bf2dc47e3a6481754b0056c05846c6ded3"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=release-thehounds#019f6483e108230475563ea3d53f43d58650b094"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -7706,7 +7706,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.77",
