@@ -98,6 +98,9 @@ jobs:
     needs: build-test-artifacts
     runs-on: ubuntu-latest
     steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
       - uses: actions/checkout@v4
 
       - name: Install nextest
