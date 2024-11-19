@@ -6,12 +6,6 @@
 
 //! Testing infrastructure for `HotShot`
 
-#![cfg_attr(
-    // hotshot_example option is set manually in justfile when running examples
-    not(any(test, debug_assertions)),
-    deprecated = "suspicious usage of testing/demo implementations in non-test/non-debug build"
-)]
-
 /// Helpers for initializing system context handle and building tasks.
 pub mod helpers;
 
