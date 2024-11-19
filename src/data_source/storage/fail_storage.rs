@@ -522,9 +522,10 @@ where
         &mut self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
+        limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         self.maybe_fail_read(FailableAction::Any).await?;
-        self.inner.get_header_window(start, end).await
+        self.inner.get_header_window(start, end, limit).await
     }
 }
 

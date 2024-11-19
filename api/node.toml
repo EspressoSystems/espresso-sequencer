@@ -118,6 +118,12 @@ indicate that the response is not complete. The client can then use one of the `
 this endpoint to fetch the remaining blocks from where the first response left off, once they become
 available. If no blocks are available, not even `prev`, this endpoint will return an error.
 
+It is also possible that the number of blocks returned may be restricted by an implementation-
+defined limit (see `/limits`), even if subsequent blocks within the window are currently available.
+In this case, `next` will be `null` and the client should call again using one of the `/from/` forms
+to get the next page of results, exactly as in the case where some blocks in the window have yet to
+be produced.
+
 Returns
 
 ```json
@@ -129,4 +135,20 @@ Returns
 ```
 
 All timestamps are denominated in an integer number of seconds.
+"""
+
+[route.get_limits]
+PATH = ["limits"]
+DOC = """
+Get implementation-defined limits restricting certain requests.
+
+* `window_limit`: the maximum number of headers which can be loaded in a single `header/window`
+  query.
+
+Returns
+```
+{
+    "window_limit": integer
+}
+```
 """

@@ -35,7 +35,7 @@ pub(crate) mod query_data;
 pub use data_source::*;
 pub use query_data::*;
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct Options {
     pub api_path: Option<PathBuf>,
 
@@ -44,6 +44,19 @@ pub struct Options {
     /// These optional files may contain route definitions for application-specific routes that have
     /// been added as extensions to the basic node API.
     pub extensions: Vec<toml::Value>,
+
+    /// The maximum number of headers which can be loaded in a single `header/window` query.
+    pub window_limit: usize,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            api_path: None,
+            extensions: vec![],
+            window_limit: 500,
+        }
+    }
 }
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
@@ -109,6 +122,7 @@ where
         include_str!("../api/node.toml"),
         options.extensions.clone(),
     )?;
+    let window_limit = options.window_limit;
     api.with_version("0.0.1".parse().unwrap())
         .get("block_height", |_req, state| {
             async move { state.block_height().await.context(QuerySnafu) }.boxed()
@@ -159,7 +173,7 @@ where
         .get("sync_status", |_req, state| {
             async move { state.sync_status().await.context(QuerySnafu) }.boxed()
         })?
-        .get("get_header_window", |req, state| {
+        .get("get_header_window", move |req, state| {
             async move {
                 let start = if let Some(height) = req.opt_integer_param("height")? {
                     WindowStart::Height(height)
@@ -170,7 +184,7 @@ where
                 };
                 let end = req.integer_param("end")?;
                 state
-                    .get_header_window(start, end)
+                    .get_header_window(start, end, window_limit)
                     .await
                     .context(QueryWindowSnafu {
                         start: format!("{start:?}"),
@@ -178,6 +192,9 @@ where
                     })
             }
             .boxed()
+        })?
+        .get("get_limits", move |_req, _state| {
+            async move { Ok(Limits { window_limit }) }.boxed()
         })?;
     Ok(api)
 }
@@ -217,6 +234,8 @@ mod test {
     async fn test_api() {
         setup_test();
 
+        let window_limit = 78;
+
         // Create the consensus network.
         let mut network = MockNetwork::<MockDataSource>::init().await;
         let mut events = network.handle().event_stream();
@@ -227,7 +246,14 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "node",
-            define_api(&Default::default(), MockBase::instance()).unwrap(),
+            define_api(
+                &Options {
+                    window_limit,
+                    ..Default::default()
+                },
+                MockBase::instance(),
+            )
+            .unwrap(),
         )
         .unwrap();
         network.spawn(
@@ -240,6 +266,12 @@ mod test {
             format!("http://localhost:{}/node", port).parse().unwrap(),
         );
         assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        // Check limits endpoint.
+        assert_eq!(
+            client.get::<Limits>("limits").send().await.unwrap(),
+            Limits { window_limit }
+        );
 
         // Wait until a few blocks have been sequenced.
         let block_height = loop {

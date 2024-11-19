@@ -277,6 +277,7 @@ where
         &mut self,
         _start: impl Into<WindowStart<Types>> + Send + Sync,
         _end: u64,
+        _limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         Err(QueryError::Missing)
     }
@@ -770,10 +771,11 @@ pub mod testing {
             &mut self,
             start: impl Into<WindowStart<MockTypes>> + Send + Sync,
             end: u64,
+            limit: usize,
         ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
             match self {
-                Transaction::Sql(tx) => tx.get_header_window(start, end).await,
-                Transaction::NoStorage(tx) => tx.get_header_window(start, end).await,
+                Transaction::Sql(tx) => tx.get_header_window(start, end, limit).await,
+                Transaction::NoStorage(tx) => tx.get_header_window(start, end, limit).await,
             }
         }
     }
@@ -855,11 +857,14 @@ pub mod testing {
             &self,
             start: impl Into<WindowStart<MockTypes>> + Send + Sync,
             end: u64,
+            limit: usize,
         ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
             match self {
-                DataSource::Sql(data_source) => data_source.get_header_window(start, end).await,
+                DataSource::Sql(data_source) => {
+                    data_source.get_header_window(start, end, limit).await
+                }
                 DataSource::NoStorage(data_source) => {
-                    data_source.get_header_window(start, end).await
+                    data_source.get_header_window(start, end, limit).await
                 }
             }
         }

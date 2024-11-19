@@ -382,8 +382,9 @@
 //!         &self,
 //!         start: impl Into<WindowStart<AppTypes>> + Send + Sync,
 //!         end: u64,
+//!         limit: usize,
 //!     ) -> QueryResult<TimeWindowQueryData<Header<AppTypes>>> {
-//!         self.hotshot_qs.get_header_window(start, end).await
+//!         self.hotshot_qs.get_header_window(start, end, limit).await
 //!     }
 //! }
 //!
@@ -777,8 +778,9 @@ mod test {
             &self,
             start: impl Into<WindowStart<MockTypes>> + Send + Sync,
             end: u64,
+            limit: usize,
         ) -> QueryResult<TimeWindowQueryData<Header<MockTypes>>> {
-            self.hotshot_qs.get_header_window(start, end).await
+            self.hotshot_qs.get_header_window(start, end, limit).await
         }
     }
 

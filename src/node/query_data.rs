@@ -61,3 +61,8 @@ impl<T: HeightIndexed> TimeWindowQueryData<T> {
             .map(|t| t.height())
     }
 }
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Limits {
+    pub window_limit: usize,
+}
