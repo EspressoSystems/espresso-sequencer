@@ -4603,7 +4603,7 @@ mod test {
     }
 
     /// This test checks builder does save the status of transactions correctly
-    #[async_std::test]
+    #[tokio::test]
     async fn test_get_txn_status() {
         let (proxy_global_state, _, da_proposal_sender, quorum_proposal_sender, _) =
             setup_builder_for_test();

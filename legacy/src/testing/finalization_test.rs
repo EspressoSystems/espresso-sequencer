@@ -8,7 +8,6 @@ use crate::{
 use async_broadcast::{broadcast, Sender};
 use async_lock::RwLock;
 use committable::Commitment;
-use committable::Committable;
 use hotshot::{
     traits::BlockPayload,
     types::{BLSPubKey, SignatureKey},
@@ -527,7 +526,6 @@ async fn test_eager_block_rate() {
         )
         .await;
     }
-    let tx = TestTransaction::new(vec![1]);
 
     // rounds 2 + ALLOW_EMPTY_BLOCK_PERIOD through 9 should not propose empty
     for round in (2 + ALLOW_EMPTY_BLOCK_PERIOD)..10 {
