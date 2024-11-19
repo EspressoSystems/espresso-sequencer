@@ -1,0 +1,8 @@
+[route.stake_table_current]
+PATH = ["stake-table/current"]
+DOC = "Get the stake table for the current epoch"
+
+[route.stake_table]
+PATH = ["stake-table/:epoch_number"]
+":epoch_number" = "Integer"
+DOC = "Get the stake table for the given epoch"
