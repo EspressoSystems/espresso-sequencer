@@ -41,6 +41,7 @@ lru.workspace = true
 portpicker = "0.1"
 rand = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
+sha2 = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
