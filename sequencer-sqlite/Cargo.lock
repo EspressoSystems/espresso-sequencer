@@ -4109,6 +4109,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.62"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=ab/sqlite-support#9860c41f7fc015534e96f634ce8c07f313be682a"
 dependencies = [
  "anyhow",
  "ark-serialize",
