@@ -26,21 +26,14 @@ jobs:
   slow-tests-sqlite:
     runs-on: ubuntu-latest
     steps:
-      - name: Fix submodule permissions check
-        run: |
-          git config --global --add safe.directory '*'
-
+      # These tests need the `anvil` binary provided by foundry
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
 
       - uses: taiki-e/install-action@nextest
 
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Configure Environment
         run: PATH="$PWD/target/release:$PATH"
