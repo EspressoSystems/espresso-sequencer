@@ -273,7 +273,8 @@ impl TryFrom<Options> for Config {
             cfg = cfg.pool(pool);
         }
 
-        cfg = cfg.max_connections(opt.max_connections);
+        // This results in a weird panic so it has been commented out for now.
+        // cfg = cfg.max_connections(opt.max_connections);
         cfg = cfg.idle_connection_timeout(opt.idle_connection_timeout);
         cfg = cfg.min_connections(opt.min_connections);
         cfg = cfg.connection_timeout(opt.connection_timeout);
@@ -570,8 +571,10 @@ impl SequencerPersistence for Persistence {
     async fn load_anchor_leaf(
         &self,
     ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
-        let mut tx = self.db.read().await?;
-        let Some(row) = tx
+        let Some(row) = self
+            .db
+            .read()
+            .await?
             .fetch_optional("SELECT leaf, qc FROM anchor_leaf ORDER BY view DESC LIMIT 1")
             .await?
         else {
@@ -598,9 +601,10 @@ impl SequencerPersistence for Persistence {
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
-        let mut tx = self.db.read().await?;
-
-        let Some(row) = tx
+        let Some(row) = self
+            .db
+            .read()
+            .await?
             .fetch_optional("SELECT leaves, state FROM undecided_state WHERE id = 0")
             .await?
         else {
@@ -620,9 +624,10 @@ impl SequencerPersistence for Persistence {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
-        let mut tx = self.db.read().await?;
-
-        let result = tx
+        let result = self
+            .db
+            .read()
+            .await?
             .fetch_optional(
                 query("SELECT data FROM da_proposal where view = $1").bind(view.u64() as i64),
             )
@@ -640,8 +645,10 @@ impl SequencerPersistence for Persistence {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
-        let mut tx = self.db.read().await?;
-        let result = tx
+        let result = self
+            .db
+            .read()
+            .await?
             .fetch_optional(
                 query("SELECT data FROM vid_share where view = $1").bind(view.u64() as i64),
             )
@@ -658,9 +665,12 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposals(
         &self,
     ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
-        let mut tx = self.db.read().await?;
-
-        let rows = tx.fetch_all("SELECT * FROM quorum_proposals").await?;
+        let rows = self
+            .db
+            .read()
+            .await?
+            .fetch_all("SELECT * FROM quorum_proposals")
+            .await?;
 
         Ok(BTreeMap::from_iter(
             rows.into_iter()
