@@ -117,7 +117,7 @@ where
     Ok(())
 }
 
-async fn init_with_storage<S, V>(
+pub(crate) async fn init_with_storage<S, V>(
     genesis: Genesis,
     modules: Modules,
     opt: Options,

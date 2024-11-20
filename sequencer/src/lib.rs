@@ -7,6 +7,8 @@ mod external_event_handler;
 pub mod options;
 pub mod state_signature;
 
+mod restart_tests;
+
 mod message_compat_tests;
 
 use anyhow::Context;
