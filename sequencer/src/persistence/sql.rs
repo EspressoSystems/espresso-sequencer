@@ -152,7 +152,7 @@ pub struct Options {
     ///
     /// Any connection which has been open and unused longer than this duration will be
     /// automatically closed to reduce load on the server.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_IDLE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "10m")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_IDLE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "10m")]
     pub(crate) idle_connection_timeout: Duration,
 
     /// The maximum lifetime of a database connection.
@@ -161,7 +161,7 @@ pub struct Options {
     /// (and, if needed, replaced), even if it is otherwise healthy. It is good practice to refresh
     /// even healthy connections once in a while (e.g. daily) in case of resource leaks in the
     /// server implementation.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "30m")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "30m")]
     pub(crate) connection_timeout: Duration,
 
     /// The minimum number of database connections to maintain at any time.
@@ -171,7 +171,7 @@ pub struct Options {
     /// connections when at least this many simultaneous connections are frequently needed.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_POSTGRES_MIN_CONNECTIONS",
+        env = "ESPRESSO_SEQUENCER_DATABASE_MIN_CONNECTIONS",
         default_value = "0"
     )]
     pub(crate) min_connections: u32,
@@ -182,7 +182,7 @@ pub struct Options {
     /// (or begin a transaction) will block until one of the existing connections is released.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_POSTGRES_MAX_CONNECTIONS",
+        env = "ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS",
         default_value = "25"
     )]
     pub(crate) max_connections: u32,
@@ -272,6 +272,11 @@ impl TryFrom<Options> for Config {
         if let Some(pool) = opt.pool {
             cfg = cfg.pool(pool);
         }
+
+        cfg = cfg.max_connections(opt.max_connections);
+        cfg = cfg.idle_connection_timeout(opt.idle_connection_timeout);
+        cfg = cfg.min_connections(opt.min_connections);
+        cfg = cfg.connection_timeout(opt.connection_timeout);
 
         #[cfg(not(feature = "embedded-db"))]
         {
@@ -396,6 +401,7 @@ impl From<PruningOptions> for PrunerCfg {
         if let Some(interval) = opt.interval {
             cfg = cfg.with_interval(interval);
         }
+
         cfg
     }
 }
@@ -564,10 +570,8 @@ impl SequencerPersistence for Persistence {
     async fn load_anchor_leaf(
         &self,
     ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
-        let Some(row) = self
-            .db
-            .read()
-            .await?
+        let mut tx = self.db.read().await?;
+        let Some(row) = tx
             .fetch_optional("SELECT leaf, qc FROM anchor_leaf ORDER BY view DESC LIMIT 1")
             .await?
         else {
@@ -594,10 +598,9 @@ impl SequencerPersistence for Persistence {
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
-        let Some(row) = self
-            .db
-            .read()
-            .await?
+        let mut tx = self.db.read().await?;
+
+        let Some(row) = tx
             .fetch_optional("SELECT leaves, state FROM undecided_state WHERE id = 0")
             .await?
         else {
@@ -617,10 +620,9 @@ impl SequencerPersistence for Persistence {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
-        let result = self
-            .db
-            .read()
-            .await?
+        let mut tx = self.db.read().await?;
+
+        let result = tx
             .fetch_optional(
                 query("SELECT data FROM da_proposal where view = $1").bind(view.u64() as i64),
             )
@@ -638,10 +640,8 @@ impl SequencerPersistence for Persistence {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
-        let result = self
-            .db
-            .read()
-            .await?
+        let mut tx = self.db.read().await?;
+        let result = tx
             .fetch_optional(
                 query("SELECT data FROM vid_share where view = $1").bind(view.u64() as i64),
             )
@@ -658,12 +658,9 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposals(
         &self,
     ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
-        let rows = self
-            .db
-            .read()
-            .await?
-            .fetch_all("SELECT * FROM quorum_proposals")
-            .await?;
+        let mut tx = self.db.read().await?;
+
+        let rows = tx.fetch_all("SELECT * FROM quorum_proposals").await?;
 
         Ok(BTreeMap::from_iter(
             rows.into_iter()
