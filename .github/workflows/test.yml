@@ -168,7 +168,7 @@ jobs:
       - name: Download archive
         uses: actions/download-artifact@v4
         with:
-          name: nextest-archive
+          name: nextest-archive-sqlite
 
       - name: Test
         run: |
