@@ -23,7 +23,7 @@ env:
 
 jobs:
   build-test-artifacts-postgres:
-    name: Build test artifacts
+    name: Build test artifacts (postgres)
     runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - uses: rui314/setup-mold@v1
@@ -49,7 +49,7 @@ jobs:
           path: nextest-archive-postgres.tar.zst
   
   build-test-artifacts-sqlite:
-    name: Build test artifacts
+    name: Build test artifacts (sqlite)
     runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - uses: rui314/setup-mold@v1
