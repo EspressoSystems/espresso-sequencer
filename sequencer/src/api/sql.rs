@@ -65,9 +65,6 @@ impl SequencerDataSource for DataSource {
             builder = builder.with_rate_limit(limit);
         }
 
-        // TODO: REMOVE
-        builder = builder.disable_aggregator();
-
         if let Some(delay) = active_fetch_delay {
             builder = builder.with_active_fetch_delay(delay);
         }
