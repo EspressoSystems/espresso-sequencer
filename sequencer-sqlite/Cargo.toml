@@ -1,0 +1,14 @@
+[package]
+name = "sequencer-sqlite"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sequencer = { path = "../sequencer" , features = ["embedded-db"] }
+tokio = { version = "1", default-features = false, features = [
+	"rt-multi-thread",
+	"macros",
+	"parking_lot",
+	"sync",
+] }
+anyhow = "^1.0"

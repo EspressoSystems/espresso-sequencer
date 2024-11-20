@@ -10,14 +10,12 @@ pub mod state_signature;
 mod message_compat_tests;
 
 use anyhow::Context;
-use async_lock::RwLock;
 use catchup::StatePeers;
 use context::{ProposalFetcherConfig, SequencerContext};
 use espresso_types::{
-    traits::EventConsumer, BackoffParams, L1Client, L1ClientOptions, NodeState, PubKey, SeqTypes,
+    traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
-use ethers::types::U256;
 use futures::FutureExt;
 use genesis::L1Finalized;
 use hotshot::traits::election::static_committee::StaticCommittee;
@@ -51,13 +49,11 @@ use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
-    network::NetworkConfig,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
         node_implementation::{NodeImplementation, NodeType, Versions},
-        signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
     utils::BuilderCommitment,
     ValidatorConfig,
@@ -65,9 +61,12 @@ use hotshot_types::{
 pub use options::Options;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
+use std::{fmt::Debug, marker::PhantomData};
 use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
+
+mod run;
+pub use run::main;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
 #[derive(Derivative, Serialize, Deserialize)]
@@ -550,16 +549,21 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::{collections::HashMap, time::Duration};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        time::Duration,
+    };
 
+    use async_lock::RwLock;
     use catchup::NullStateCatchup;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
-        Event, FeeAccount, Leaf, MarketplaceVersion, Payload, PubKey, SeqTypes, Transaction,
-        Upgrade,
+        Event, FeeAccount, L1Client, Leaf, MarketplaceVersion, NetworkConfig, Payload, PubKey,
+        SeqTypes, Transaction, Upgrade,
     };
+    use ethers::types::U256;
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -575,6 +579,7 @@ pub mod testing {
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
+    use hotshot_types::traits::signature_key::StakeTableEntryType;
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
@@ -582,6 +587,7 @@ pub mod testing {
             block_contents::{vid_commitment, BlockHeader, EncodeBytes},
             metrics::NoMetrics,
             node_implementation::ConsensusTime,
+            signature_key::BuilderSignatureKey,
             stake_table::StakeTableScheme,
         },
         HotShotConfig, PeerConfig,

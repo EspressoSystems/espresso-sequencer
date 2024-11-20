@@ -9,14 +9,12 @@ demo *args:
 
 demo-native:
     cargo build --profile test
+    cargo build --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
     scripts/demo-native
-
-demo-native-sqlite:
-    cargo build --profile test --features embedded-db
-    scripts/demo-native -f process-compose-sqlite.yaml
 
 demo-native-mp:
     cargo build --release
+    cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml
 
 demo-native-benchmark:
@@ -45,21 +43,18 @@ test *args:
     @echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
     @echo 'features: "all"'
     cargo nextest run --locked --workspace --all-features --verbose {{args}}
-    @echo 'features: "testing"'
-    cargo nextest run --locked --workspace --features testing --verbose {{args}}
+    cargo nextest run --locked --workspace --verbose {{args}}
 
 test-slow:
     @echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
     @echo 'features: "all"'
     cargo nextest run --locked --release --workspace --all-features --verbose --profile slow
-    @echo 'features: "testing"'
-    cargo nextest run --locked --release --workspace --features testing --verbose --profile slow
+    cargo nextest run --locked --release --workspace --verbose --profile slow
 
 test-all:
     @echo 'features: "all"'
     cargo nextest run --locked --release --workspace --all-features --verbose --profile all
-    @echo 'features: "testing"'
-    cargo nextest run --locked --release --workspace --features testing --verbose --profile all
+    cargo nextest run --locked --release --workspace --verbose --profile all
 
 test-integration:
 	@echo 'NOTE that demo-native must be running for this test to succeed.'
@@ -68,8 +63,7 @@ test-integration:
 clippy:
     @echo 'features: "all"'
     cargo clippy --workspace --all-features --all-targets -- -D warnings
-    @echo 'features: "testing"'
-    cargo clippy --workspace --all-features --features testing -- -D warnings
+    cargo clippy --workspace -- -D warnings
 
 check-features *args:
     cargo hack check --each-feature {{args}}

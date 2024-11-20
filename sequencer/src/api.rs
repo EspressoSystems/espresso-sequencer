@@ -9,8 +9,8 @@ use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
-    PubKey, Transaction, ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
+    ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -20,7 +20,6 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -36,7 +35,7 @@ use self::data_source::{
     HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
 };
 use crate::{
-    catchup::CatchupStorage, context::Consensus, network, state_signature::StateSigner, SeqTypes,
+    catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
     SequencerApiVersion, SequencerContext,
 };
 
@@ -463,11 +462,13 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> StateSig
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use std::time::Duration;
-
     use committable::Committable;
+    use hotshot_state_prover::service::light_client_genesis_from_stake_table;
+    use std::time::Duration;
     use tokio::{spawn, time::sleep};
 
+    use crate::network;
+    use espresso_types::MockSequencerVersions;
     use espresso_types::{
         v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
@@ -1027,6 +1028,7 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
 
+    use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
         Header, Leaf, NamespaceId,
@@ -1053,6 +1055,7 @@ mod api_tests {
     use vbs::version::StaticVersion;
 
     use super::{update::ApiEventConsumer, *};
+    use crate::network;
     use crate::{
         persistence::no_storage::NoStorage,
         testing::{wait_for_decide_on_handle, TestConfigBuilder},

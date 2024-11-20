@@ -24,6 +24,10 @@ members = [
   "utils",
 ]
 
+exclude = [
+  "sequencer-sqlite"
+]
+
 [workspace.dependencies]
 anyhow = "^1.0"
 ark-std = "0.4"

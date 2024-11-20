@@ -68,7 +68,8 @@ jobs:
       - name: Compile all executables
         # timeout-minutes: 120
         run: |
-          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c cargo build --locked --release
+          nix develop $DEVSHELL --accept-flake-config --option sandbox relaxed -c cargo build --locked --release 
+          -c cargo build --locked --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir 'echo $CARGO_TARGET_DIR'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -95,6 +96,7 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/marketplace-builder
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/node-metrics
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/dev-rollup 
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/sequencer-sqlite
   static-dockers:
     runs-on: ubuntu-latest
     needs: static-build
@@ -229,6 +231,13 @@ jobs:
         id: dev-rollup
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/dev-rollup
+          flavor: suffix=musl
+
+      - name: Generate sequencer-sqlite metadata
+        uses: docker/metadata-action@v5
+        id: sequencer-sqlite
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/sequencer-sqlite
           flavor: suffix=musl
 
       - name: Build and push sequencer docker
@@ -380,3 +389,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.dev-rollup.outputs.tags }}
           labels: ${{ steps.dev-rollup.outputs.labels }}
+
+      - name: Build and push sequencer-sqlite docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/sequencer-sqlite.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.sequencer-sqlite.outputs.tags }}
+          labels: ${{ steps.sequencer-sqlite.outputs.labels }}

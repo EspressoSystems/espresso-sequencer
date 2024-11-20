@@ -10,7 +10,7 @@ use espresso_types::{
     BackoffParams, Leaf, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
-use hotshot_query_service::data_source::storage::sql::Db;
+use hotshot_query_service::data_source::storage::sql::{syntax_helpers::MAX_FN, Db};
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
@@ -736,14 +736,9 @@ impl SequencerPersistence for Persistence {
             return Ok(());
         }
 
-        #[cfg(feature = "embedded-db")]
-        let max_fn = "MAX";
-        #[cfg(not(feature = "embedded-db"))]
-        let max_fn = "GREATEST";
-
         let stmt = format!(
             "INSERT INTO highest_voted_view (id, view) VALUES (0, $1) 
-            ON CONFLICT (id) DO UPDATE SET view = {max_fn}(highest_voted_view.view, excluded.view)"
+            ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(highest_voted_view.view, excluded.view)"
         );
 
         let mut tx = self.db.write().await?;

@@ -100,7 +100,7 @@ portpicker = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
-sequencer-utils = { path = "../utils", features = ["testing"] }
+sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"                                                      # TODO temporary, used only for VID, should be set in hotshot

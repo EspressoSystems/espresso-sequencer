@@ -91,11 +91,11 @@ jobs:
       - name: Build
         run: |
           cargo build --locked --bin diff-test --release
-          cargo nextest run --locked --release --workspace --features testing --no-run
+          cargo nextest run --locked --release --workspace --no-run
         timeout-minutes: 90
 
       - name: Slow Test
         env:
           NEXTEST_PROFILE: slow
-        run: cargo nextest run --locked --release --workspace --features testing --verbose --no-fail-fast --nocapture
+        run: cargo nextest run --locked --release --workspace --verbose --no-fail-fast --nocapture
         timeout-minutes: 40

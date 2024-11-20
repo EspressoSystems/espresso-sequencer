@@ -55,6 +55,9 @@ jobs:
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
           cargo build --locked --release --workspace
+      
+      - name: Build sequencer-sqlite 
+        run: cargo build --locked --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
@@ -88,6 +91,7 @@ jobs:
             target/release/marketplace-builder
             target/release/node-metrics
             target/release/dev-rollup
+            target/release/sequencer-sqlite
 
   build-arm:
     if: github.event_name != 'pull_request'
@@ -117,6 +121,9 @@ jobs:
       - name: Build
         run: |
           cargo build --locked --release --workspace
+
+      - name: Build sequencer-sqlite 
+        run: cargo build --locked --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
@@ -150,6 +157,7 @@ jobs:
             target/release/marketplace-builder
             target/release/node-metrics
             target/release/dev-rollup
+            target/release/sequencer-sqlite
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -174,6 +182,7 @@ jobs:
       marketplace-builder-tag: ${{ steps.marketplace-builder.outputs.tags }}
       node-validator-tag: ${{ steps.node-validator.outputs.tags }}
       dev-rollup-tag: ${{ steps.dev-rollup.outputs.tags }}
+      sequencer-sqlite-tag: ${{ steps.sequencer-sqlite.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -305,6 +314,12 @@ jobs:
         id: dev-rollup
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/dev-rollup
+
+      - name: Generate sequencer-sqlite metadata
+        uses: docker/metadata-action@v5
+        id: sequencer-sqlite
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/sequencer-sqlite
 
 
       - name: Build and push sequencer docker
@@ -476,6 +491,16 @@ jobs:
           tags: ${{ steps.dev-rollup.outputs.tags }}
           labels: ${{ steps.dev-rollup.outputs.labels }}
 
+      - name: Build and push sequencer-sqlite docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/sequencer-sqlite.Dockerfile
+          platforms: ${{ env.DOCKER_PLATFORMS }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.sequencer-sqlite.outputs.tags }}
+          labels: ${{ steps.sequencer-sqlite.outputs.labels }}
+
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
@@ -507,6 +532,7 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.marketplace-builder-tag }}
           docker pull ${{ needs.build-dockers.outputs.node-validator-tag }}
           docker pull ${{ needs.build-dockers.outputs.dev-rollup-tag }}
+          docker pull ${{ needs.build-dockers.outputs.sequencer-sqlite-tag }}
           
       - name: Tag new docker images
         run: |
@@ -526,6 +552,7 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.marketplace-builder-tag }} ghcr.io/espressosystems/espresso-sequencer/marketplace-builder:main
           docker tag ${{ needs.build-dockers.outputs.node-validator-tag }} ghcr.io/espressosystems/espresso-sequencer/node-validator:main
           docker tag ${{ needs.build-dockers.outputs.dev-rollup-tag }} ghcr.io/espressosystems/espresso-sequencer/dev-rollup:main
+          docker tag ${{ needs.build-dockers.outputs.sequencer-sqlite-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer-sqlite:main
 
       - name: Test docker demo
         run: |

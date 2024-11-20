@@ -120,7 +120,7 @@ impl MockSolver {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "embedded-db")))]
 mod test {
 
     use committable::Committable;
