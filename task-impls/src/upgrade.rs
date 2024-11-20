@@ -22,7 +22,7 @@ use hotshot_types::{
     simple_vote::{UpgradeProposalData, UpgradeVote},
     traits::{
         election::Membership,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vote::HasViewNumber,
@@ -38,7 +38,7 @@ use crate::{
 };
 
 /// Tracks state of an upgrade task
-pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
+pub struct UpgradeTaskState<TYPES: NodeType, V: Versions> {
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
@@ -50,9 +50,6 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ve
 
     /// Membership for Quorum Certs/votes
     pub quorum_membership: Arc<TYPES::Membership>,
-
-    /// The underlying network
-    pub network: Arc<I::Network>,
 
     /// A map of `UpgradeVote` collector tasks
     pub vote_collectors: VoteCollectorsMap<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>, V>,
@@ -94,7 +91,7 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ve
     pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskState<TYPES, I, V> {
+impl<TYPES: NodeType, V: Versions> UpgradeTaskState<TYPES, V> {
     /// Check if we have decided on an upgrade certificate
     async fn upgraded(&self) -> bool {
         self.upgrade_lock
@@ -324,9 +321,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskStat
 
 #[async_trait]
 /// task state implementation for the upgrade task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
-    for UpgradeTaskState<TYPES, I, V>
-{
+impl<TYPES: NodeType, V: Versions> TaskState for UpgradeTaskState<TYPES, V> {
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(

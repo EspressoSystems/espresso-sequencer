@@ -144,8 +144,7 @@ async fn test_upgrade_task_with_proposal() {
 
     let proposal_state =
         QuorumProposalTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
-    let upgrade_state =
-        UpgradeTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
+    let upgrade_state = UpgradeTaskState::<TestTypes, TestVersions>::create_from(&handle).await;
 
     let upgrade_vote_recvs: Vec<_> = upgrade_votes.into_iter().map(UpgradeVoteRecv).collect();
 

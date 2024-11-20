@@ -87,7 +87,7 @@ pub(crate) async fn handle_timeout_vote_recv<
     // Are we the leader for this view?
     ensure!(
         task_state
-            .timeout_membership
+            .quorum_membership
             .leader(vote.view_number() + 1, task_state.cur_epoch)?
             == task_state.public_key,
         info!(
@@ -276,7 +276,7 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
 
     ensure!(
         task_state
-            .timeout_membership
+            .quorum_membership
             .has_stake(&task_state.public_key, task_state.cur_epoch),
         debug!("We were not chosen for the consensus committee for view {view_number:?}")
     );

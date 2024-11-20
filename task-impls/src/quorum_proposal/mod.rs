@@ -17,7 +17,6 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::OuterConsensus,
-    event::Event,
     message::UpgradeLock,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
@@ -45,17 +44,8 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     /// Table for the in-progress proposal dependency tasks.
     pub proposal_dependencies: BTreeMap<TYPES::View, JoinHandle<()>>,
 
-    /// The underlying network
-    pub network: Arc<I::Network>,
-
-    /// Output events to application
-    pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
-
     /// Immutable instance state
     pub instance_state: Arc<TYPES::InstanceState>,
-
-    /// Membership for Timeout votes/certs
-    pub timeout_membership: Arc<TYPES::Membership>,
 
     /// Membership for Quorum Certs/votes
     pub quorum_membership: Arc<TYPES::Membership>,

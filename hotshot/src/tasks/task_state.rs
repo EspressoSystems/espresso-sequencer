@@ -63,7 +63,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState<TYPES, I, V>
-    for UpgradeTaskState<TYPES, I, V>
+    for UpgradeTaskState<TYPES, V>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
         #[cfg(not(feature = "example-upgrade"))]
@@ -72,7 +72,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             cur_view: handle.cur_view().await,
             cur_epoch: handle.cur_epoch().await,
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
-            network: Arc::clone(&handle.hotshot.network),
             vote_collectors: BTreeMap::default(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
@@ -121,7 +120,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             consensus: OuterConsensus::new(handle.hotshot.consensus()),
             cur_view: handle.cur_view().await,
             cur_epoch: handle.cur_epoch().await,
-            vote_collector: None,
             network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
@@ -156,7 +154,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState<TYPES, I, V>
-    for ViewSyncTaskState<TYPES, I, V>
+    for ViewSyncTaskState<TYPES, V>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I, V>) -> Self {
         let cur_view = handle.cur_view().await;
@@ -165,7 +163,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             cur_view,
             next_view: cur_view,
             cur_epoch: handle.cur_epoch().await,
-            network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
@@ -193,7 +190,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             consensus: OuterConsensus::new(handle.hotshot.consensus()),
             cur_view: handle.cur_view().await,
             cur_epoch: handle.cur_epoch().await,
-            network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
@@ -256,11 +252,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
         Self {
             latest_proposed_view: handle.cur_view().await,
             proposal_dependencies: BTreeMap::new(),
-            network: Arc::clone(&handle.hotshot.network),
-            output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             consensus: OuterConsensus::new(consensus),
             instance_state: handle.hotshot.instance_state(),
-            timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
@@ -312,12 +305,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> CreateTaskState
             private_key: handle.private_key().clone(),
             instance_state: handle.hotshot.instance_state(),
             network: Arc::clone(&handle.hotshot.network),
-            timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
-            committee_membership: handle.hotshot.memberships.da_membership.clone().into(),
             vote_collectors: BTreeMap::default(),
             timeout_vote_collectors: BTreeMap::default(),
-            storage: Arc::clone(&handle.storage),
             cur_view: handle.cur_view().await,
             cur_view_time: Utc::now().timestamp(),
             cur_epoch: handle.cur_epoch().await,

@@ -56,7 +56,6 @@ async fn test_view_sync_task() {
     ));
     output.push(HotShotEvent::ViewSyncPreCommitVoteSend(vote.clone()));
 
-    let view_sync_state =
-        ViewSyncTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
+    let view_sync_state = ViewSyncTaskState::<TestTypes, TestVersions>::create_from(&handle).await;
     run_harness(input, output, view_sync_state, false).await;
 }

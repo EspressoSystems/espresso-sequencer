@@ -50,9 +50,6 @@ pub struct VidTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Our Private Key
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
 
-    /// The view and ID of the current vote collection task, if there is one.
-    pub vote_collector: Option<(TYPES::View, usize, usize)>,
-
     /// This state's ID
     pub id: u64,
 }
