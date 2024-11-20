@@ -2069,7 +2069,7 @@ mod test {
                     .state(Default::default())
                     .status(Default::default()),
             )
-            .persistences(persistence)
+            .persistences(persistence.clone())
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
         let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
@@ -2126,12 +2126,7 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let persistence: [_; NUM_NODES] = storage
-            .iter()
-            .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+
         let config = TestNetworkConfigBuilder::default()
             .api_config(
                 SqlDataSource::options(&storage[0], Options::with_port(port))
