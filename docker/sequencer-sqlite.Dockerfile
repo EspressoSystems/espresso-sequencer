@@ -11,7 +11,7 @@ ENTRYPOINT ["tini", "--"]
 ENV AZTEC_SRS_PATH=/kzg10-aztec20-srs-1048584.bin
 RUN curl -LO https://github.com/EspressoSystems/ark-srs/releases/download/v0.2.0/$AZTEC_SRS_PATH
 
-COPY target/$TARGETARCH/release/sequencer-sqlite /bin/sequencer-sqlite-sqlite
+COPY target/$TARGETARCH/release/sequencer-sqlite /bin/sequencer-sqlite
 RUN chmod +x /bin/sequencer-sqlite
 
 # We run the additional `status` and `catchup` modules by default. These are modules that require
