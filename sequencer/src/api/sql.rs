@@ -468,6 +468,7 @@ mod impl_testable_data_source {
 
             Options {
                 postgres_options: opt,
+                max_connections: 10,
                 ..Default::default()
             }
         }
@@ -480,6 +481,7 @@ mod impl_testable_data_source {
 
             Options {
                 sqlite_options: opt,
+                max_connections: 3,
                 ..Default::default()
             }
         }

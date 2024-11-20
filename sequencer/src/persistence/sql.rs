@@ -183,7 +183,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS",
-        default_value = "25"
+       default_value = "25"
     )]
     pub(crate) max_connections: u32,
 
@@ -273,8 +273,7 @@ impl TryFrom<Options> for Config {
             cfg = cfg.pool(pool);
         }
 
-        // This results in a weird panic so it has been commented out for now.
-        // cfg = cfg.max_connections(opt.max_connections);
+        cfg = cfg.max_connections(opt.max_connections);
         cfg = cfg.idle_connection_timeout(opt.idle_connection_timeout);
         cfg = cfg.min_connections(opt.min_connections);
         cfg = cfg.connection_timeout(opt.connection_timeout);
