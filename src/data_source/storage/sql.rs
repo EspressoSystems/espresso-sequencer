@@ -587,6 +587,8 @@ impl SqlStorage {
                 .await?;
         }
 
+        conn.close().await?;
+
         Ok(Self {
             pool,
             pool_metrics,
