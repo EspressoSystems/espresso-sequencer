@@ -673,7 +673,7 @@ impl<Types: NodeType> BuilderState<Types> {
                 .set_tx_status(
                     *tx,
                     TransactionStatus::Sequenced {
-                        leaf: self.parent_block_references.view_number.u64(),
+                        leaf: leaf.height(),
                     },
                 )
                 .await

@@ -1138,8 +1138,11 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        // self.global_state.read_arc().await.txn_status(txn_hash)
-        self.read(|state| state.txn_status(txn_hash)).await
+        self.global_state
+            .read_arc()
+            .await
+            .txn_status(txn_hash)
+            .await
     }
 }
 #[async_trait]
