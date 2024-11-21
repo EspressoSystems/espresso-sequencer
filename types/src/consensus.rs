@@ -954,7 +954,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         let mut is_leaf_extended = true;
         if let Err(e) = self.visit_leaf_ancestors(
             leaf_view,
-            Terminator::Inclusive(leaf_view - 1),
+            Terminator::Inclusive(leaf_view - 2),
             true,
             |leaf, _, _| {
                 tracing::trace!(
