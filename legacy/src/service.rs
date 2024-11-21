@@ -1104,16 +1104,17 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             .submit_client_txns(txns.clone())
             .await;
 
-        let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0..txns.len())
-            .map(|i| (txns[i].clone(), response[i].clone()))
+        let pairs: Vec<(Commitment<<Types as NodeType>::Transaction>, Result<_, _>)> = (0..txns
+            .len())
+            .map(|i| (txns[i].commit(), response[i].clone()))
             .collect();
-        for (txn, res) in pairs {
+        for (txn_commit, res) in pairs {
             if let Err(some) = res {
                 self.global_state
                     .write_arc()
                     .await
                     .set_tx_status(
-                        txn.commit(),
+                        txn_commit,
                         TransactionStatus::Rejected {
                             reason: some.to_string(),
                         },
@@ -1208,24 +1209,24 @@ pub async fn run_non_permissioned_standalone_builder_service<
                         .max_block_size
                 };
 
-                let results = handle_received_txns(
+                let response = handle_received_txns(
                     &tx_sender,
                     transactions.clone(),
                     TransactionSource::HotShot,
                     max_block_size,
                 )
                 .await;
-                let pairs: Vec<(<Types as NodeType>::Transaction, Result<_, _>)> = (0
+                let pairs: Vec<(Commitment<<Types as NodeType>::Transaction>, Result<_, _>)> = (0
                     ..transactions.len())
-                    .map(|i| (transactions[i].clone(), results[i].clone()))
+                    .map(|i| (transactions[i].commit(), response[i].clone()))
                     .collect();
-                for (txn, res) in pairs {
+                for (txn_commit, res) in pairs {
                     if let Err(some) = res {
                         global_state
                             .write_arc()
                             .await
                             .set_tx_status(
-                                txn.commit(),
+                                txn_commit,
                                 TransactionStatus::Rejected {
                                     reason: some.to_string(),
                                 },
