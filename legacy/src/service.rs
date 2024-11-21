@@ -410,7 +410,7 @@ impl<Types: NodeType> GlobalState<Types> {
         }
     }
 
-    pub async fn set_tx_status(
+    pub async fn set_txn_status(
         &mut self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
         txn_status: TransactionStatus,
@@ -420,10 +420,14 @@ impl<Types: NodeType> GlobalState<Types> {
             let old_status = write_guard.get(&txn_hash);
             match old_status {
                 Some(TransactionStatus::Rejected { reason }) => {
-                    tracing::error!("Changing the status of a rejected transaction to status {:?} is not allowed! The reason it is rejected is {:?}", txn_status, reason);
+                    let e = format!("Changing the status of a rejected transaction to status {:?} is not allowed! The reason it is rejected is {:?}", txn_status, reason);
+                    tracing::error!(e);
+                    return Err(BuildError::Error(e));
                 }
                 Some(TransactionStatus::Sequenced { leaf }) => {
-                    tracing::error!("Changing the status of a sequenced transaction to status {:?} is not allowed! The transaction is sequenced in leaf {:?}", txn_status, leaf);
+                    let e = format!("Changing the status of a sequenced transaction to status {:?} is not allowed! The transaction is sequenced in leaf {:?}", txn_status, leaf);
+                    tracing::error!(e);
+                    return Err(BuildError::Error(e));
                 }
                 _ => {
                     tracing::debug!(
@@ -1108,7 +1112,7 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             self.global_state
                 .write_arc()
                 .await
-                .set_tx_status(txn.commit(), TransactionStatus::Pending)
+                .set_txn_status(txn.commit(), TransactionStatus::Pending)
                 .await
                 .unwrap();
         }
@@ -1128,7 +1132,7 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
                 self.global_state
                     .write_arc()
                     .await
-                    .set_tx_status(
+                    .set_txn_status(
                         txn_commit,
                         TransactionStatus::Rejected {
                             reason: some.to_string(),
@@ -1240,7 +1244,7 @@ pub async fn run_non_permissioned_standalone_builder_service<
                         global_state
                             .write_arc()
                             .await
-                            .set_tx_status(
+                            .set_txn_status(
                                 txn_commit,
                                 TransactionStatus::Rejected {
                                     reason: some.to_string(),
@@ -4774,7 +4778,7 @@ mod test {
                 + 1
         ])];
         let _ = proxy_global_state.submit_txns(big_txns.clone()).await;
-        for tx in big_txns {
+        for tx in big_txns.clone() {
             match proxy_global_state.txn_status(tx.commit()).await {
                 Ok(txn_status) => {
                     if tx.minimum_block_size() > TEST_PROTOCOL_MAX_BLOCK_SIZE {
@@ -4795,6 +4799,24 @@ mod test {
                         "transaction status should be a valid status instead of {:?}",
                         e
                     );
+                }
+            }
+        }
+
+        // Test a rejected txn cannot be marked as other status again
+        for tx in big_txns {
+            match proxy_global_state
+                .global_state
+                .write_arc()
+                .await
+                .set_txn_status(tx.commit(), TransactionStatus::Pending)
+                .await
+            {
+                Err(_err) => {
+                    // This is expected
+                }
+                _ => {
+                    panic!("Expected an error, but got a result");
                 }
             }
         }
