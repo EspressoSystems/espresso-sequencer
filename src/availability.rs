@@ -43,6 +43,7 @@ pub use data_source::*;
 pub use fetch::Fetch;
 pub use query_data::*;
 
+#[derive(Debug)]
 pub struct Options {
     pub api_path: Option<PathBuf>,
 
@@ -58,6 +59,24 @@ pub struct Options {
     /// These optional files may contain route definitions for application-specific routes that have
     /// been added as extensions to the basic availability API.
     pub extensions: Vec<toml::Value>,
+
+    /// The maximum number of small objects which can be loaded in a single range query.
+    ///
+    /// Currently small objects include leaves only. In the future this limit will also apply to
+    /// headers, block summaries, and VID common, however
+    /// * loading of headers and block summaries is currently implemented by loading the entire
+    ///   block
+    /// * imperfect VID parameter tuning means that VID common can be much larger than it should
+    pub small_object_range_limit: usize,
+
+    /// The maximum number of large objects which can be loaded in a single range query.
+    ///
+    /// Large objects include anything that _might_ contain a full payload or an object proportional
+    /// in size to a payload. Note that this limit applies to the entire class of objects: we do not
+    /// check the size of objects while loading to determine which limit to apply. If an object
+    /// belongs to a class which might contain a large payload, the large object limit always
+    /// applies.
+    pub large_object_range_limit: usize,
 }
 
 impl Default for Options {
@@ -66,6 +85,8 @@ impl Default for Options {
             api_path: None,
             fetch_timeout: Duration::from_millis(500),
             extensions: vec![],
+            large_object_range_limit: 100,
+            small_object_range_limit: 500,
         }
     }
 }
@@ -97,6 +118,13 @@ pub enum Error {
         height: u64,
         index: u64,
     },
+    #[snafu(display("request for range {from}..{until} exceeds limit {limit}"))]
+    #[from(ignore)]
+    RangeLimit {
+        from: usize,
+        until: usize,
+        limit: usize,
+    },
     Custom {
         message: String,
         status: StatusCode,
@@ -113,7 +141,7 @@ impl Error {
 
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } => StatusCode::BAD_REQUEST,
+            Self::Request { .. } | Self::RangeLimit { .. } => StatusCode::BAD_REQUEST,
             Self::FetchLeaf { .. } | Self::FetchBlock { .. } | Self::FetchTransaction { .. } => {
                 StatusCode::NOT_FOUND
             }
@@ -138,6 +166,8 @@ where
         options.extensions.clone(),
     )?;
     let timeout = options.fetch_timeout;
+    let small_object_range_limit = options.small_object_range_limit;
+    let large_object_range_limit = options.large_object_range_limit;
 
     api.with_version("0.0.1".parse().unwrap())
         .at("get_leaf", move |req, state| {
@@ -157,6 +187,7 @@ where
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param("until")?;
+                enforce_range_limit(from, until, small_object_range_limit)?;
 
                 let leaves = state
                     .read(|state| state.get_leaf_range(from..until).boxed())
@@ -210,6 +241,7 @@ where
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param::<_, usize>("until")?;
+                enforce_range_limit(from, until, large_object_range_limit)?;
 
                 let headers = state
                     .read(|state| state.get_block_range(from..until).boxed())
@@ -265,6 +297,7 @@ where
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param("until")?;
+                enforce_range_limit(from, until, large_object_range_limit)?;
 
                 let blocks = state
                     .read(|state| state.get_block_range(from..until).boxed())
@@ -313,6 +346,7 @@ where
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param("until")?;
+                enforce_range_limit(from, until, large_object_range_limit)?;
 
                 let payloads = state
                     .read(|state| state.get_payload_range(from..until).boxed())
@@ -422,6 +456,7 @@ where
             async move {
                 let from: usize = req.integer_param("from")?;
                 let until: usize = req.integer_param("until")?;
+                enforce_range_limit(from, until, large_object_range_limit)?;
 
                 let blocks = state
                     .read(|state| state.get_block_range(from..until).boxed())
@@ -440,8 +475,24 @@ where
                 Ok(result)
             }
             .boxed()
+        })?
+        .at("get_limits", move |_req, _state| {
+            async move {
+                Ok(Limits {
+                    small_object_range_limit,
+                    large_object_range_limit,
+                })
+            }
+            .boxed()
         })?;
     Ok(api)
+}
+
+fn enforce_range_limit(from: usize, until: usize, limit: usize) -> Result<(), Error> {
+    if until.saturating_sub(from) > limit {
+        return Err(Error::RangeLimit { from, until, limit });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -464,8 +515,9 @@ mod test {
     use futures::future::FutureExt;
     use hotshot_types::{data::Leaf, simple_certificate::QuorumCertificate};
     use portpicker::pick_unused_port;
-    use std::time::Duration;
-    use surf_disco::Client;
+    use serde::de::DeserializeOwned;
+    use std::{fmt::Debug, time::Duration};
+    use surf_disco::{Client, Error as _};
     use tempfile::TempDir;
     use tide_disco::App;
     use toml::toml;
@@ -946,5 +998,99 @@ mod test {
                 .block_number,
             0
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_range_limit() {
+        setup_test();
+
+        let large_object_range_limit = 2;
+        let small_object_range_limit = 3;
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+        network.start().await;
+
+        // Start the web server.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
+        app.register_module(
+            "availability",
+            define_api(
+                &Options {
+                    large_object_range_limit,
+                    small_object_range_limit,
+                    ..Default::default()
+                },
+                MockBase::instance(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
+        );
+
+        // Start a client.
+        let client = Client::<Error, MockBase>::new(
+            format!("http://localhost:{}/availability", port)
+                .parse()
+                .unwrap(),
+        );
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+
+        // Check reported limits.
+        assert_eq!(
+            client.get::<Limits>("limits").send().await.unwrap(),
+            Limits {
+                small_object_range_limit,
+                large_object_range_limit
+            }
+        );
+
+        // Wait for enough blocks to be produced.
+        client
+            .socket("stream/blocks/0")
+            .subscribe::<BlockQueryData<MockTypes>>()
+            .await
+            .unwrap()
+            .take(small_object_range_limit + 1)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        async fn check_limit<T: DeserializeOwned + Debug>(
+            client: &Client<Error, MockBase>,
+            req: &str,
+            limit: usize,
+        ) {
+            let range: Vec<T> = client
+                .get(&format!("{req}/0/{limit}"))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(range.len(), limit);
+            let err = client
+                .get::<Vec<T>>(&format!("{req}/0/{}", limit + 1))
+                .send()
+                .await
+                .unwrap_err();
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        }
+
+        check_limit::<LeafQueryData<MockTypes>>(&client, "leaf", small_object_range_limit).await;
+        check_limit::<Header<MockTypes>>(&client, "header", large_object_range_limit).await;
+        check_limit::<BlockQueryData<MockTypes>>(&client, "block", large_object_range_limit).await;
+        check_limit::<PayloadQueryData<MockTypes>>(&client, "payload", large_object_range_limit)
+            .await;
+        check_limit::<BlockSummaryQueryData<MockTypes>>(
+            &client,
+            "block/summaries",
+            large_object_range_limit,
+        )
+        .await;
+
+        network.shut_down().await;
     }
 }

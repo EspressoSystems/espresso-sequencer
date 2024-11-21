@@ -72,6 +72,9 @@ PATH = ["leaf/:from/:until"]
 DOC = """
 Get the leaves based on their position in the ledger,
 the leaves are taken starting from the given :from up until the given :until.
+
+The allowable length of the requested range may be restricted by an implementation-defined limit
+(see `/limits`). Requests for ranges exceeding these limits will fail with a 400 status code.
 """
 
 [route.stream_leaves]
@@ -102,6 +105,9 @@ PATH = ["header/:from/:until"]
 DOC = """
 Get the headers based on their position in the ledger,
 the headers are taken starting from the given :from up until the given :until.
+
+The allowable length of the requested range may be restricted by an implementation-defined limit
+(see `/limits`). Requests for ranges exceeding these limits will fail with a 400 status code.
 """
 
 [route.stream_headers]
@@ -147,6 +153,9 @@ PATH = ["block/:from/:until"]
 DOC = """
 Get the blocks based on their position in the ledger,
 the blocks are taken starting from the given :from up until the given :until.
+
+The allowable length of the requested range may be restricted by an implementation-defined limit
+(see `/limits`). Requests for ranges exceeding these limits will fail with a 400 status code.
 """
 
 [route.stream_blocks]
@@ -175,6 +184,9 @@ PATH = ["payload/:from/:until"]
 DOC = """
 Get the payloads of blocks based on their position in the ledger,
 the payloads are taken starting from the given :from up until the given :until.
+
+The allowable length of the requested range may be restricted by an implementation-defined limit
+(see `/limits`). Requests for ranges exceeding these limits will fail with a 400 status code.
 """
 
 [route.stream_payloads]
@@ -276,4 +288,37 @@ PATH = ["block/summaries/:from/:until"]
 DOC = """
 Get the Block Summary entries for blocks based on their position in the ledger,
 the blocks are taken starting from the given :from up until the given :until.
+
+The allowable length of the requested range may be restricted by an implementation-defined limit
+(see `/limits`). Requests for ranges exceeding these limits will fail with a 400 status code.
+"""
+
+[route.get_limits]
+PATH = ["limits"]
+DOC = """
+Get implementation-defined limits restricting certain requests.
+
+* `small_object_range_limit`: the maximum number of small objects which can be loaded in a single
+  range query.
+
+  Currently small objects include leaves only. In the future this limit will also apply to headers,
+  block summaries, and VID common, however
+  - loading of headers and block summaries is currently implemented by loading the entire block
+  - imperfect VID parameter tuning means that VID common can be much larger than it should
+
+* `large_object_range_limit`: the maximum number of large objects which can be loaded in a single
+  range query.
+
+  Large objects include anything that _might_ contain a full payload or an object proportional in
+  size to a payload. Note that this limit applies to the entire class of objects: we do not check
+  the size of objects while loading to determine which limit to apply. If an object belongs to a
+  class which might contain a large payload, the large object limit always applies.
+
+Returns
+```
+{
+    "large_object_range_limit": integer,
+    "small_object_range_limit": integer
+}
+```
 """

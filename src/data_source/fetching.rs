@@ -1666,11 +1666,12 @@ where
         &self,
         start: impl Into<WindowStart<Types>> + Send + Sync,
         end: u64,
+        limit: usize,
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         let mut tx = self.read().await.map_err(|err| QueryError::Error {
             message: err.to_string(),
         })?;
-        tx.get_header_window(start, end).await
+        tx.get_header_window(start, end, limit).await
     }
 }
 

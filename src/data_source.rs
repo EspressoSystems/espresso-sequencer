@@ -1113,10 +1113,7 @@ pub mod node_tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    pub async fn test_timestamp_window<D: TestableDataSource>()
-    where
-        for<'a> D::ReadOnly<'a>: NodeStorage<MockTypes>,
-    {
+    pub async fn test_timestamp_window<D: TestableDataSource>() {
         setup_test();
 
         let mut network = MockNetwork::<D>::init().await;
@@ -1179,7 +1176,7 @@ pub mod node_tests {
             let ds = ds.clone();
             async move {
                 let window = ds
-                    .get_header_window(WindowStart::Time(start), end)
+                    .get_header_window(WindowStart::Time(start), end, i64::MAX as usize)
                     .await
                     .unwrap();
                 tracing::info!("window for timestamp range {start}-{end}: {window:#?}");
@@ -1217,14 +1214,10 @@ pub mod node_tests {
         // previously (ie fetch a slightly overlapping window) to ensure there is at least one block
         // in the new window.
         let from = test_blocks.iter().flatten().count() - 1;
-        let more = {
-            ds.read()
-                .await
-                .unwrap()
-                .get_header_window(WindowStart::Height(from as u64), end)
-                .await
-                .unwrap()
-        };
+        let more = ds
+            .get_header_window(WindowStart::Height(from as u64), end, i64::MAX as usize)
+            .await
+            .unwrap();
         check_invariants(&more, start, end, false);
         assert_eq!(
             more.prev.as_ref().unwrap(),
@@ -1236,14 +1229,14 @@ pub mod node_tests {
         );
         assert_eq!(res.next, None);
         // We should get the same result whether we query by block height or hash.
-        let more2 = {
-            ds.read()
-                .await
-                .unwrap()
-                .get_header_window(test_blocks[2].last().unwrap().commit(), end)
-                .await
-                .unwrap()
-        };
+        let more2 = ds
+            .get_header_window(
+                test_blocks[2].last().unwrap().commit(),
+                end,
+                i64::MAX as usize,
+            )
+            .await
+            .unwrap();
         check_invariants(&more2, start, end, false);
         assert_eq!(more2.from().unwrap(), more.from().unwrap());
         assert_eq!(more2.prev, more.prev);
@@ -1258,15 +1251,48 @@ pub mod node_tests {
         assert_eq!(res.next.unwrap(), test_blocks[1][0]);
         assert_eq!(res.window, vec![]);
 
-        // Case 5: no relevant blocks are available yet.
-        {
-            ds.read()
-                .await
-                .unwrap()
-                .get_header_window(WindowStart::Time((i64::MAX - 1) as u64), i64::MAX as u64)
-                .await
-                .unwrap_err();
-        }
+        // Case 4: no relevant blocks are available yet.
+        ds.get_header_window(
+            WindowStart::Time((i64::MAX - 1) as u64),
+            i64::MAX as u64,
+            i64::MAX as usize,
+        )
+        .await
+        .unwrap_err();
+
+        // Case 5: limits.
+        let blocks = [test_blocks[0].clone(), test_blocks[1].clone()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        // Make a query that would return everything, but gets limited.
+        let start = blocks[0].timestamp();
+        let end = test_blocks[2][0].timestamp();
+        let res = ds
+            .get_header_window(WindowStart::Time(start), end, 1)
+            .await
+            .unwrap();
+        assert_eq!(res.prev, None);
+        assert_eq!(res.window, [blocks[0].clone()]);
+        assert_eq!(res.next, None);
+        // Query the next page of results, get limited again.
+        let res = ds
+            .get_header_window(WindowStart::Height(blocks[0].height() + 1), end, 1)
+            .await
+            .unwrap();
+        assert_eq!(res.window, [blocks[1].clone()]);
+        assert_eq!(res.next, None);
+        // Get the rest of the results.
+        let res = ds
+            .get_header_window(
+                WindowStart::Height(blocks[1].height() + 1),
+                end,
+                blocks.len() - 1,
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.window, blocks[2..].to_vec());
+        assert_eq!(res.next, Some(test_blocks[2][0].clone()));
     }
 }
 
