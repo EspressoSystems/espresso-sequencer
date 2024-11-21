@@ -7,15 +7,20 @@ doc *args:
 demo *args:
     docker compose up {{args}}
 
-demo-native:
-    cargo build --profile test
-    cargo build --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
-    scripts/demo-native
 
-demo-native-mp:
-    cargo build --release
-    cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
-    scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml
+build:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    # Use the same target dir for both `build` invocations
+    export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-target}
+    cargo build --profile test
+    cargo build --profile test --manifest-path ./sequencer-sqlite/Cargo.toml
+
+demo-native *args: build
+    scripts/demo-native {{args}}
+
+demo-native-mp *args: build
+    scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
 
 demo-native-benchmark:
     cargo build --release --features benchmarking
