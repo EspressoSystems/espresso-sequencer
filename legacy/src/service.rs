@@ -4725,7 +4725,7 @@ mod test {
             }
         }
 
-        // round 2: test status Sequenced
+        // round 2: test status Pending again
         let mut txns_2 = Vec::with_capacity(num_transactions);
         for index in 0..num_transactions {
             txns_2.push(TestTransaction::new(vec![(num_transactions + index) as u8]));
@@ -4753,17 +4753,6 @@ mod test {
                 &quorum_proposal_sender,
             )
             .await;
-        }
-        // tx submitted in round 1 should be sequenced
-        for tx in txns.clone() {
-            match proxy_global_state.txn_status(tx.commit()).await {
-                Ok(txn_status) => {
-                    matches!(txn_status, TransactionStatus::Sequenced { .. });
-                }
-                e => {
-                    panic!("transaction status should be Sequenced instead of {:?}", e);
-                }
-            }
         }
         // tx submitted in round 2 should be pending
         for tx in txns_2.clone() {

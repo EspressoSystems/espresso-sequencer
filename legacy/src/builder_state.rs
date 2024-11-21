@@ -1,4 +1,3 @@
-use hotshot_builder_api::v0_2::builder::TransactionStatus;
 use hotshot_types::{
     data::{DaProposal, Leaf, QuorumProposal},
     message::Proposal,
@@ -666,18 +665,6 @@ impl<Types: NodeType> BuilderState<Types> {
 
         for tx in txn_commitments.iter() {
             self.txns_in_queue.remove(tx);
-            // set the status of tx as sequenced, this doesn't mean tx is already decided, but it means tx is included in a builder state, it will either be sequenced or skipped
-            self.global_state
-                .write_arc()
-                .await
-                .set_tx_status(
-                    *tx,
-                    TransactionStatus::Sequenced {
-                        leaf: leaf.height(),
-                    },
-                )
-                .await
-                .unwrap();
         }
 
         self.included_txns.extend(txn_commitments.iter());
