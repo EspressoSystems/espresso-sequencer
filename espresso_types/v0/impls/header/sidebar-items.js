@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"macro":["field","field_mut"],"struct":["InvalidBlockHeader"]};
