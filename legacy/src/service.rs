@@ -4820,9 +4820,35 @@ mod test {
                 }
             }
         }
+        // Test a sequenced txn cannot be marked as other status again
+        let tx_test_assigned_twice = TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
+        proxy_global_state
+            .global_state
+            .write_arc()
+            .await
+            .set_txn_status(
+                tx_test_assigned_twice.commit(),
+                TransactionStatus::Sequenced { leaf: 0 },
+            )
+            .await
+            .unwrap();
+        match proxy_global_state
+            .global_state
+            .write_arc()
+            .await
+            .set_txn_status(tx_test_assigned_twice.commit(), TransactionStatus::Pending)
+            .await
+        {
+            Err(_err) => {
+                // This is expected
+            }
+            _ => {
+                panic!("Expected an error, but got a result");
+            }
+        }
 
         // Test status Unknown when the txn is unknown
-        let unknown_tx = TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
+        let unknown_tx = TestTransaction::new(vec![(num_transactions * 4 + 1) as u8]);
         match proxy_global_state.txn_status(unknown_tx.commit()).await {
             Ok(txn_status) => {
                 assert_eq!(txn_status, TransactionStatus::Unknown);
