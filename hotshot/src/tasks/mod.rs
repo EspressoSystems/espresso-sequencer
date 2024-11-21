@@ -94,7 +94,7 @@ pub fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
     ));
 }
 
-/// Add a task which updates our queue lenght metric at a set interval
+/// Add a task which updates our queue length metric at a set interval
 pub fn add_queue_len_task<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>(
     handle: &mut SystemContextHandle<TYPES, I, V>,
 ) {
