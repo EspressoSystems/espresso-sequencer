@@ -356,7 +356,7 @@ processes:
 
 
   sequencer5:
-    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
+    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status -- submit -- config
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER5_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_5

@@ -584,12 +584,11 @@ mod tests {
         let dev_node_port = pick_unused_port().unwrap();
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
-
         let db = TmpDb::init().await;
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
-            .features("testing")
+            .features("testing embedded-db")
             .current_target()
             .run()
             .unwrap()
@@ -600,6 +599,7 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
+            .env("ESPRESSO_SEQUENCER_SQLITE_PATH", db.path().as_os_str())
             .spawn()
             .unwrap();
 
@@ -888,7 +888,7 @@ mod tests {
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
-            .features("testing")
+            .features("testing embedded-db")
             .current_target()
             .run()
             .unwrap()
@@ -903,6 +903,7 @@ mod tests {
                 "ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS",
                 alt_chains_env_value,
             )
+            .env("ESPRESSO_SEQUENCER_SQLITE_PATH", db.path().as_os_str())
             .spawn()
             .unwrap();
 
