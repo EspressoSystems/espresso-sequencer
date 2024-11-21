@@ -416,13 +416,28 @@ impl<Types: NodeType> GlobalState<Types> {
         txn_status: TransactionStatus,
     ) -> Result<(), BuildError> {
         if self.tx_status.write_arc().await.contains(&txn_hash) {
+            let mut write_guard = self.tx_status.write_arc().await;
+            let old_status = write_guard.get(&txn_hash);
+            match old_status {
+                Some(TransactionStatus::Rejected { reason }) => {
+                    tracing::error!("Changing the status of a rejected transaction to status {:?} is not allowed! The reason it is rejected is {:?}", txn_status, reason);
+                }
+                Some(TransactionStatus::Sequenced { leaf }) => {
+                    tracing::error!("Changing the status of a sequenced transaction to status {:?} is not allowed! The transaction is sequenced in leaf {:?}", txn_status, leaf);
+                }
+                _ => {
+                    tracing::debug!(
+                        "change status of transaction {txn_hash} from {:?} to {:?}",
+                        old_status,
+                        txn_status
+                    );
+                }
+            }
+        } else {
             tracing::debug!(
-                "change status of transaction {txn_hash} from {:?} to {:?}",
-                self.tx_status.write_arc().await.get(&txn_hash),
+                "insert status of a first-seen transaction {txn_hash} : {:?}",
                 txn_status
             );
-        } else {
-            tracing::debug!("insert status of transaction {txn_hash} : {:?}", txn_status);
         }
         self.tx_status.write_arc().await.put(txn_hash, txn_status);
         Ok(())
