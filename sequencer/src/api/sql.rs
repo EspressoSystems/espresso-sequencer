@@ -466,24 +466,13 @@ mod impl_testable_data_source {
                 ..Default::default()
             };
 
-            Options {
-                postgres_options: opt,
-                max_connections: 10,
-                ..Default::default()
-            }
+            opt.into()
         }
 
         #[cfg(feature = "embedded-db")]
         {
-            let path = db.path();
-            tracing::error!("path {:?}", path);
             let opt = crate::persistence::sql::SqliteOptions { path: db.path() };
-
-            Options {
-                sqlite_options: opt,
-                max_connections: 3,
-                ..Default::default()
-            }
+            opt.into()
         }
     }
 

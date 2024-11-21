@@ -183,7 +183,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS",
-       default_value = "25"
+        default_value = "25"
     )]
     pub(crate) max_connections: u32,
 
@@ -227,6 +227,10 @@ impl From<PostgresOptions> for Config {
             cfg = cfg.tls();
         }
 
+        cfg = cfg.max_connections(20);
+        cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
+        cfg = cfg.connection_timeout(Duration::from_secs(10240));
+
         cfg
     }
 }
@@ -237,6 +241,9 @@ impl From<SqliteOptions> for Config {
         let mut cfg = Config::default();
 
         cfg = cfg.db_path(opt.path);
+        cfg = cfg.max_connections(20);
+        cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
+        cfg = cfg.connection_timeout(Duration::from_secs(10240));
         cfg
     }
 }
@@ -246,6 +253,9 @@ impl From<PostgresOptions> for Options {
     fn from(opt: PostgresOptions) -> Self {
         Options {
             postgres_options: opt,
+            max_connections: 20,
+            idle_connection_timeout: Duration::from_secs(120),
+            connection_timeout: Duration::from_secs(10240),
             ..Default::default()
         }
     }
@@ -256,6 +266,9 @@ impl From<SqliteOptions> for Options {
     fn from(opt: SqliteOptions) -> Self {
         Options {
             sqlite_options: opt,
+            max_connections: 3,
+            idle_connection_timeout: Duration::from_secs(120),
+            connection_timeout: Duration::from_secs(10240),
             ..Default::default()
         }
     }
