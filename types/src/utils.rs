@@ -6,7 +6,11 @@
 
 //! Utility functions, type aliases, helper structs and enum definitions.
 
-use std::{ops::Deref, sync::Arc};
+use std::{
+    hash::{Hash, Hasher},
+    ops::Deref,
+    sync::Arc,
+};
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::{
@@ -221,4 +225,12 @@ pub fn epoch_from_block_number(block_number: u64, epoch_height: u64) -> u64 {
     } else {
         block_number / epoch_height + 1
     }
+}
+
+/// A function for generating a cute little user mnemonic from a hash
+#[must_use]
+pub fn mnemonic<H: Hash>(bytes: H) -> String {
+    let mut state = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut state);
+    mnemonic::to_string(state.finish().to_le_bytes())
 }

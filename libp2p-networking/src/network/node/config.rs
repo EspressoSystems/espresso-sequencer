@@ -16,7 +16,7 @@ use super::MAX_GOSSIP_MSG_SIZE;
 pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(10);
 
 /// describe the configuration of the network
-#[derive(Clone, Default, derive_builder::Builder, custom_debug::Debug)]
+#[derive(Clone, Default, derive_builder::Builder, derive_more::Debug)]
 pub struct NetworkNodeConfig<T: NodeType> {
     /// The keypair for the node
     #[builder(setter(into, strip_option), default)]

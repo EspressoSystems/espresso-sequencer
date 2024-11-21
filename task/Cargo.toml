@@ -3,21 +3,20 @@ authors = { workspace = true }
 name = "hotshot-task"
 version = { workspace = true }
 edition = { workspace = true }
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures = { workspace = true }
 async-broadcast = { workspace = true }
-tracing = { workspace = true }
 async-trait = { workspace = true }
-utils = { path = "../utils" }
+futures = { workspace = true }
 tokio = { workspace = true, features = [
     "time",
     "rt-multi-thread",
     "macros",
     "sync",
 ] }
+tracing = { workspace = true }
+utils = { path = "../utils" }
 
 [lints]
 workspace = true

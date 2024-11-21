@@ -18,48 +18,46 @@ async-trait = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
 blake3 = { workspace = true }
+clap = { workspace = true }
 committable = { workspace = true }
-custom_debug = { workspace = true }
+derive_more = { workspace = true, features = ["debug"] }
 digest = { workspace = true, features = ["rand_core"] }
+displaydoc = { version = "0.2.5", default-features = false }
+dyn-clone = "1.0.17"
 either = { workspace = true }
-ethereum-types = { workspace = true }
-futures = { workspace = true }
-cdn-proto = { workspace = true }
-lazy_static = { workspace = true }
-memoize = { workspace = true }
-rand = { workspace = true }
-sha2 = { workspace = true }
-thiserror = { workspace = true }
-time = { workspace = true }
-tracing = { workspace = true }
-typenum = { workspace = true }
-derivative = "2"
-jf-vid = { workspace = true }
+futures = { workspace = true, features = ["alloc"] }
 jf-pcs = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true }
+jf-vid = { workspace = true }
+lazy_static = { workspace = true }
+libp2p-identity = { workspace = true }
+memoize = { workspace = true }
+mnemonic = "1"
+multiaddr = { workspace = true }
+primitive-types = { workspace = true }
+rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
 serde-inline-default = { workspace = true }
 serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
 tagged-base64 = { workspace = true }
-vbs = { workspace = true }
-displaydoc = { version = "0.2.5", default-features = false }
-dyn-clone = "1.0.17"
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+typenum = { workspace = true }
 url = { workspace = true }
 utils = { path = "../utils" }
+vbs = { workspace = true }
 vec1 = { workspace = true }
-libp2p = { workspace = true }
-serde_json = { workspace = true }
-surf-disco = { workspace = true }
-toml = { workspace = true }
-clap = { workspace = true }
-tokio = { workspace = true }
 
 [features]
 gpu-vid = ["jf-vid/gpu-vid"]
 test-srs = ["jf-vid/test-srs"]
-
 
 [lints]
 workspace = true

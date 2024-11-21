@@ -5,11 +5,11 @@ edition = { workspace = true }
 description = "Macros for hotshot tests"
 
 [dependencies]
+derive_builder = "0.20"
+proc-macro2 = "1"
 # proc macro stuff
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits"] }
-proc-macro2 = "1"
-derive_builder = "0.20"
 
 [lib]
 proc-macro = true

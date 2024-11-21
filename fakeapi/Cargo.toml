@@ -1,25 +1,25 @@
 [package]
 name = "hotshot-fakeapi"
-version.workspace = true
-authors.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-homepage.workspace = true
-documentation.workspace = true
-repository.workspace = true
+documentation = { workspace = true }
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
-toml = { workspace = true }
-tide-disco = { workspace = true }
-tokio = { workspace = true }
 anyhow = { workspace = true }
-hotshot-types = { path = "../types" }
-vbs = { workspace = true }
-rand = { workspace = true }
-hotshot-example-types = { path = "../example-types" }
+async-lock = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
-async-lock = { workspace = true }
+hotshot-example-types = { path = "../example-types" }
+hotshot-types = { path = "../types" }
+rand = { workspace = true }
+tide-disco = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+vbs = { workspace = true }
 
 [lints]
 workspace = true

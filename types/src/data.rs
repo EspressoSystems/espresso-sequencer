@@ -20,7 +20,6 @@ use std::{
 use async_lock::RwLock;
 use bincode::Options;
 use committable::{Commitment, CommitmentBoundsArkless, Committable, RawCommitmentBuilder};
-use derivative::Derivative;
 use jf_vid::{precomputable::Precomputable, VidDisperse as JfVidDisperse, VidScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -136,7 +135,7 @@ impl Committable for EpochNumber {
 impl_u64_wrapper!(EpochNumber);
 
 /// A proposal to start providing data availability for a block.
-#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(derive_more::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound = "TYPES: NodeType")]
 pub struct DaProposal<TYPES: NodeType> {
     /// Encoded transactions in the block to be applied.
@@ -148,7 +147,7 @@ pub struct DaProposal<TYPES: NodeType> {
 }
 
 /// A proposal to upgrade the network
-#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(derive_more::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound = "TYPES: NodeType")]
 pub struct UpgradeProposal<TYPES>
 where
@@ -233,7 +232,7 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
 
 /// Helper type to encapsulate the various ways that proposal certificates can be captured and
 /// stored.
-#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(derive_more::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub enum ViewChangeEvidence<TYPES: NodeType> {
     /// Holds a timeout certificate.
@@ -351,7 +350,7 @@ impl<TYPES: NodeType> VidDisperseShare<TYPES> {
 }
 
 /// Proposal to append a block.
-#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(derive_more::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub struct QuorumProposal<TYPES: NodeType> {
     /// The block header to append
@@ -374,7 +373,7 @@ pub struct QuorumProposal<TYPES: NodeType> {
 }
 
 /// Proposal to append a block.
-#[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(derive_more::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 #[serde(bound(deserialize = ""))]
 pub struct QuorumProposal2<TYPES: NodeType> {
     /// The block header to append
@@ -509,7 +508,7 @@ pub trait TestableLeaf {
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
 /// as well as the hash of its parent `Leaf`.
 /// NOTE: `State` is constrained to implementing `BlockContents`, is `TypeMap::BlockPayload`
-#[derive(Serialize, Deserialize, Clone, Debug, Derivative, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq)]
 #[serde(bound(deserialize = ""))]
 pub struct Leaf<TYPES: NodeType> {
     /// CurView from leader when proposing leaf
@@ -536,7 +535,7 @@ pub struct Leaf<TYPES: NodeType> {
 
 /// This is the consensus-internal analogous concept to a block, and it contains the block proper,
 /// as well as the hash of its parent `Leaf`.
-#[derive(Serialize, Deserialize, Clone, Debug, Derivative, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq)]
 #[serde(bound(deserialize = ""))]
 pub struct Leaf2<TYPES: NodeType> {
     /// CurView from leader when proposing leaf

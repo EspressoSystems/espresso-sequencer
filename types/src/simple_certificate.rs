@@ -15,7 +15,7 @@ use std::{
 
 use async_lock::RwLock;
 use committable::{Commitment, Committable};
-use ethereum_types::U256;
+use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 use utils::anytrace::*;
 

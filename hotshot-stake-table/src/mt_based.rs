@@ -11,8 +11,8 @@ mod internal;
 
 use ark_std::{collections::HashMap, rand::SeedableRng, sync::Arc};
 use digest::crypto_common::rand_core::CryptoRngCore;
-use ethereum_types::{U256, U512};
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
+use primitive_types::{U256, U512};
 use serde::{Deserialize, Serialize};
 
 use self::internal::{to_merkle_path, Key, MerkleCommitment, MerkleProof, PersistentMerkleNode};
@@ -230,8 +230,8 @@ impl<K: Key> StakeTable<K> {
 #[cfg(test)]
 mod tests {
     use ark_std::{rand::SeedableRng, vec::Vec};
-    use ethereum_types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
+    use primitive_types::U256;
 
     use super::StakeTable;
 

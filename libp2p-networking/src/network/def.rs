@@ -24,7 +24,7 @@ use super::{behaviours::dht::store::ValidatedStore, cbor, NetworkEventInternal};
 /// - direct messaging
 /// - p2p broadcast
 /// - connection management
-#[derive(NetworkBehaviour, custom_debug::Debug)]
+#[derive(NetworkBehaviour, derive_more::Debug)]
 #[behaviour(to_swarm = "NetworkEventInternal")]
 pub struct NetworkDef<K: SignatureKey + 'static> {
     /// purpose: broadcasting messages to many peers

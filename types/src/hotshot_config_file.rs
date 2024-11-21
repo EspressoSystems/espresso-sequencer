@@ -6,7 +6,7 @@
 
 use std::{num::NonZeroUsize, time::Duration};
 
-use surf_disco::Url;
+use url::Url;
 use vec1::Vec1;
 
 use crate::{

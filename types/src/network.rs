@@ -7,7 +7,8 @@
 use std::{fs, ops::Range, path::Path, time::Duration, vec};
 
 use clap::ValueEnum;
-use libp2p::{Multiaddr, PeerId};
+use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
 use serde_inline_default::serde_inline_default;
 use thiserror::Error;
 use tracing::error;

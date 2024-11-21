@@ -17,8 +17,8 @@ use ark_std::{
 };
 use bitvec::prelude::*;
 use digest::generic_array::GenericArray;
-use ethereum_types::U256;
 use jf_signature::{AggregateableSignatureSchemes, SignatureError};
+use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 use typenum::U32;
 

@@ -17,8 +17,8 @@ use std::{
 use ark_serialize::SerializationError;
 use bitvec::prelude::*;
 use committable::Committable;
-use ethereum_types::U256;
 use jf_vid::VidScheme;
+use primitive_types::U256;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tagged_base64::{TaggedBase64, Tb64Error};
 

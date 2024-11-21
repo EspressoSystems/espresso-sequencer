@@ -476,7 +476,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
                 let leader = self.membership.leader(view_number, self.cur_epoch)?;
                 tracing::warn!(
                     %leader,
-                    leader_mnemonic = cdn_proto::util::mnemonic(&leader),
+                    leader_mnemonic = hotshot_types::utils::mnemonic(&leader),
                     view_number = *view_number,
                     num_timeouts_tracked = self.num_timeouts_tracked,
                     "view timed out",

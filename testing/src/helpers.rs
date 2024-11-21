@@ -10,7 +10,6 @@ use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 use async_broadcast::{Receiver, Sender};
 use bitvec::bitvec;
 use committable::Committable;
-use ethereum_types::U256;
 use hotshot::{
     traits::{NodeImplementation, TestableNodeImplementation},
     types::{SignatureKey, SystemContextHandle},
@@ -43,6 +42,7 @@ use hotshot_types::{
     ValidatorConfig,
 };
 use jf_vid::VidScheme;
+use primitive_types::U256;
 use serde::Serialize;
 
 use crate::{test_builder::TestDescription, test_launcher::TestLauncher};

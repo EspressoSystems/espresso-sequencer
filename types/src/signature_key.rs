@@ -9,11 +9,11 @@
 use ark_serialize::SerializationError;
 use bitvec::{slice::BitSlice, vec::BitVec};
 use digest::generic_array::GenericArray;
-use ethereum_types::U256;
 use jf_signature::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair, SignKey, VerKey},
     SignatureError, SignatureScheme,
 };
+use primitive_types::U256;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use tracing::instrument;

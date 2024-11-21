@@ -26,13 +26,11 @@ use hotshot_types::{
     traits::signature_key::{SignatureKey, StakeTableEntryType},
     PeerConfig,
 };
-use libp2p::{
-    identity::{
-        ed25519::{Keypair as EdKeypair, SecretKey},
-        Keypair,
-    },
-    Multiaddr, PeerId,
+use libp2p_identity::{
+    ed25519::{Keypair as EdKeypair, SecretKey},
+    Keypair, PeerId,
 };
+use multiaddr::Multiaddr;
 use surf_disco::Url;
 use tide_disco::{
     api::ApiError,

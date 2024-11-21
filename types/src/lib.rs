@@ -159,7 +159,7 @@ impl<KEY: SignatureKey> Default for PeerConfig<KEY> {
 }
 
 /// Holds configuration for a `HotShot`
-#[derive(Clone, custom_debug::Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, derive_more::Debug, serde::Serialize, serde::Deserialize)]
 #[serde(bound(deserialize = ""))]
 pub struct HotShotConfig<KEY: SignatureKey> {
     /// The proportion of nodes required before the orchestrator issues the ready signal,

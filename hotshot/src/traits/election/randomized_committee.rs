@@ -6,7 +6,6 @@
 
 use std::{cmp::max, collections::BTreeMap, num::NonZeroU64};
 
-use ethereum_types::U256;
 use hotshot_types::{
     traits::{
         election::Membership,
@@ -16,6 +15,7 @@ use hotshot_types::{
     },
     PeerConfig,
 };
+use primitive_types::U256;
 use rand::{rngs::StdRng, Rng};
 use utils::anytrace::Result;
 

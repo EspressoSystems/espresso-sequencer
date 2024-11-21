@@ -271,7 +271,7 @@ impl<T: ConsensusTime> HotShotActionViews<T> {
 /// A reference to the consensus algorithm
 ///
 /// This will contain the state of all rounds.
-#[derive(custom_debug::Debug, Clone)]
+#[derive(derive_more::Debug, Clone)]
 pub struct Consensus<TYPES: NodeType> {
     /// The validated states that are currently loaded in memory.
     validated_state_map: BTreeMap<TYPES::View, View<TYPES>>,

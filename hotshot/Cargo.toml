@@ -25,37 +25,37 @@ async-lock = { workspace = true }
 async-trait = { workspace = true }
 bimap = "0.6"
 bincode = { workspace = true }
+blake3 = { workspace = true }
+cdn-broker = { workspace = true, features = ["global-permits"] }
+cdn-client = { workspace = true }
+cdn-marshal = { workspace = true }
 chrono = { workspace = true }
 committable = { workspace = true }
-custom_debug = { workspace = true }
 dashmap = "6"
+derive_more = { workspace = true }
 either = { workspace = true }
-ethereum-types = { workspace = true }
 futures = { workspace = true }
 hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.36", default-features = false }
 hotshot-types = { path = "../types" }
 libp2p-identity = { workspace = true }
 libp2p-networking = { workspace = true }
-lru.workspace = true
+lru = { workspace = true }
+num_enum = "0.7"
+parking_lot = "0.12"
 portpicker = "0.1"
+primitive-types = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
 sha2 = { workspace = true }
 time = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-vbs = { workspace = true }
-blake3.workspace = true
-url = { workspace = true }
-num_enum = "0.7"
-parking_lot = "0.12"
-utils = { path = "../utils" }
 
 tokio = { workspace = true }
-cdn-client = { workspace = true }
-cdn-broker = { workspace = true, features = ["global-permits"] }
-cdn-marshal = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+utils = { path = "../utils" }
+vbs = { workspace = true }
 
 [dev-dependencies]
 blake3 = { workspace = true }

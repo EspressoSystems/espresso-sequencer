@@ -6,7 +6,6 @@ edition = { workspace = true }
 authors = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-
 [features]
 default = ["webui"]
 webui = []
@@ -17,23 +16,23 @@ hotshot-example-types = { path = "../example-types" }
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-blake3 = { workspace = true }
 bincode = { workspace = true }
-custom_debug = { workspace = true }
+blake3 = { workspace = true }
+cbor4ii = "0.3"
 delegate = "0.13"
 derive_builder = "0.20"
+derive_more = { workspace = true }
 futures = { workspace = true }
 hotshot-types = { path = "../types" }
-libp2p-swarm-derive = { workspace = true }
+lazy_static = { workspace = true }
+libp2p = { workspace = true, features = ["tokio"] }
 libp2p-identity = { workspace = true }
+libp2p-swarm-derive = { workspace = true }
+pin-project = "1"
 rand = { workspace = true }
 serde = { workspace = true }
-tracing = { workspace = true }
-lazy_static = { workspace = true }
-pin-project = "1"
-cbor4ii = "0.3"
-libp2p = { workspace = true, features = ["tokio"] }
 tokio = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

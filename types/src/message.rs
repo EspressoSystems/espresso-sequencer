@@ -16,9 +16,7 @@ use std::{
 };
 
 use async_lock::RwLock;
-use cdn_proto::util::mnemonic;
 use committable::Committable;
-use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use utils::anytrace::*;
 use vbs::{
@@ -45,11 +43,12 @@ use crate::{
         node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
+    utils::mnemonic,
     vote::HasViewNumber,
 };
 
 /// Incoming message
-#[derive(Serialize, Deserialize, Clone, Derivative, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = "", serialize = ""))]
 pub struct Message<TYPES: NodeType> {
     /// The sender of this message
@@ -296,7 +295,7 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
     }
 }
 
-#[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(bound(deserialize = ""))]
 #[allow(clippy::large_enum_variant)]
 /// TODO: Put `DataResponse` content in a `Box` to make enum smaller

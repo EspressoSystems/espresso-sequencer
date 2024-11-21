@@ -15,38 +15,37 @@ test-srs = ["jf-vid/test-srs"]
 broken_3_chain_fixed = []
 
 [dependencies]
-automod = "1.0.14"
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
+automod = "1.0.14"
 bitvec = { workspace = true }
 committable = { workspace = true }
 either = { workspace = true }
-ethereum-types = { workspace = true }
 futures = { workspace = true }
 hotshot = { path = "../hotshot", features = ["hotshot-testing"] }
+hotshot-builder-api = { path = "../builder-api" }
 hotshot-example-types = { path = "../example-types" }
+hotshot-fakeapi = { path = "../fakeapi" }
 hotshot-macros = { path = "../macros" }
 hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.36", default-features = false }
-hotshot-fakeapi = { path = "../fakeapi" }
 hotshot-types = { path = "../types" }
-hotshot-builder-api = { path = "../builder-api" }
+itertools = "0.13.0"
 jf-vid = { workspace = true }
+lru = { workspace = true }
 portpicker = { workspace = true }
+primitive-types = { workspace = true }
 rand = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
+tagged-base64 = { workspace = true }
 thiserror = { workspace = true }
 tide-disco = { workspace = true }
-tracing = { workspace = true }
-vbs = { workspace = true }
-lru.workspace = true
-tagged-base64.workspace = true
-vec1 = { workspace = true }
-reqwest = { workspace = true }
-url = { workspace = true }
-itertools = "0.13.0"
 tokio = { workspace = true }
-
+tracing = { workspace = true }
+url = { workspace = true }
+vbs = { workspace = true }
+vec1 = { workspace = true }

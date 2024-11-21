@@ -13,7 +13,8 @@ use hotshot_types::{
     traits::signature_key::SignatureKey,
     PeerConfig, ValidatorConfig,
 };
-use libp2p::{Multiaddr, PeerId};
+use libp2p_identity::PeerId;
+use multiaddr::Multiaddr;
 use surf_disco::{error::ClientError, Client};
 use tide_disco::Url;
 use tokio::time::sleep;

@@ -4,21 +4,22 @@ version = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
+anyhow = { workspace = true }
 async-lock = { workspace = true }
-clap.workspace = true
-futures = { workspace = true }
-libp2p = { workspace = true }
 blake3 = { workspace = true }
-hotshot-types = { path = "../types" }
-tide-disco = { workspace = true }
-surf-disco = { workspace = true }
-tracing = { workspace = true }
-serde = { workspace = true }
-toml = { workspace = true }
+clap = { workspace = true }
 csv = "1"
-vbs = { workspace = true }
-anyhow.workspace = true
+futures = { workspace = true }
+hotshot-types = { path = "../types" }
+libp2p-identity = { workspace = true }
+multiaddr = { workspace = true }
+serde = { workspace = true }
+surf-disco = { workspace = true }
+tide-disco = { workspace = true }
 tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+vbs = { workspace = true }
 
 [lints]
 workspace = true

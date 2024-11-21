@@ -8,10 +8,10 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{hash::Hash, sync::Arc, vec, vec::Vec};
-use ethereum_types::U256;
 use hotshot_types::traits::stake_table::StakeTableError;
 use jf_crhf::CRHF;
 use jf_utils::canonical;
+use primitive_types::U256;
 use serde::{Deserialize, Serialize};
 use tagged_base64::tagged;
 
@@ -631,8 +631,8 @@ mod tests {
         vec,
         vec::Vec,
     };
-    use ethereum_types::U256;
     use jf_utils::test_rng;
+    use primitive_types::U256;
 
     use super::{super::config, to_merkle_path, PersistentMerkleNode};
 
