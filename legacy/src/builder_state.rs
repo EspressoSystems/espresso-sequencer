@@ -667,12 +667,17 @@ impl<Types: NodeType> BuilderState<Types> {
         for tx in txn_commitments.iter() {
             self.txns_in_queue.remove(tx);
             // set the status of tx as sequenced, this doesn't mean tx is already decided, but it means tx is included in a builder state, it will either be sequenced or skipped
-            let _ = self.global_state.write_arc().await.set_tx_status(
-                *tx,
-                TransactionStatus::Sequenced {
-                    leaf: self.parent_block_references.view_number.u64(),
-                },
-            );
+            self.global_state
+                .write_arc()
+                .await
+                .set_tx_status(
+                    *tx,
+                    TransactionStatus::Sequenced {
+                        leaf: self.parent_block_references.view_number.u64(),
+                    },
+                )
+                .await
+                .unwrap();
         }
 
         self.included_txns.extend(txn_commitments.iter());

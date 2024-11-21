@@ -36,7 +36,7 @@ mod tests {
     };
     use marketplace_builder_shared::block::ParentBlockReferences;
     use marketplace_builder_shared::testing::constants::{
-        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_NUM_NODES_IN_VID_COMPUTATION,
+        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_MAX_TX_NUM, TEST_NUM_NODES_IN_VID_COMPUTATION,
         TEST_PROTOCOL_MAX_BLOCK_SIZE,
     };
     use tokio::time::error::Elapsed;
@@ -126,6 +126,7 @@ mod tests {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         )));
 
         let bootstrap_builder_state = BuilderState::new(

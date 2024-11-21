@@ -38,3 +38,8 @@ pub const TEST_MAXIMIZE_TX_CAPTURE_TIMEOUT: Duration = Duration::from_millis(100
 /// Governs fee per byte used by builders.
 /// This is an arbitrary default value for testing.
 pub const TEST_BASE_FEE: u64 = 1;
+
+/// Governs the target space used by the mapping from txn to its status.
+/// This is expressed as a target number of transactions.
+/// This is an arbitrary default value for testing.
+pub const TEST_MAX_TX_NUM: usize = 1_000_000 * 10;

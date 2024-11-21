@@ -1090,11 +1090,12 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             txns.iter().map(|txn| txn.commit()).collect::<Vec<_>>()
         );
         for txn in txns.clone() {
-            let _ = self
-                .global_state
+            self.global_state
                 .write_arc()
                 .await
-                .set_tx_status(txn.commit(), TransactionStatus::Pending);
+                .set_tx_status(txn.commit(), TransactionStatus::Pending)
+                .await
+                .unwrap();
         }
         let response = self
             .global_state
@@ -1108,12 +1109,17 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             .collect();
         for (txn, res) in pairs {
             if let Err(some) = res {
-                let _ = self.global_state.write_arc().await.set_tx_status(
-                    txn.commit(),
-                    TransactionStatus::Rejected {
-                        reason: some.to_string(),
-                    },
-                );
+                self.global_state
+                    .write_arc()
+                    .await
+                    .set_tx_status(
+                        txn.commit(),
+                        TransactionStatus::Rejected {
+                            reason: some.to_string(),
+                        },
+                    )
+                    .await
+                    .unwrap();
             }
         }
 
@@ -1212,12 +1218,17 @@ pub async fn run_non_permissioned_standalone_builder_service<
                     .collect();
                 for (txn, res) in pairs {
                     if let Err(some) = res {
-                        let _ = global_state.write_arc().await.set_tx_status(
-                            txn.commit(),
-                            TransactionStatus::Rejected {
-                                reason: some.to_string(),
-                            },
-                        );
+                        global_state
+                            .write_arc()
+                            .await
+                            .set_tx_status(
+                                txn.commit(),
+                                TransactionStatus::Rejected {
+                                    reason: some.to_string(),
+                                },
+                            )
+                            .await
+                            .unwrap();
                     }
                 }
             }
@@ -1632,8 +1643,8 @@ mod test {
     use marketplace_builder_shared::{
         block::{BlockId, BuilderStateId, ParentBlockReferences},
         testing::constants::{
-            TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_NUM_NODES_IN_VID_COMPUTATION,
-            TEST_PROTOCOL_MAX_BLOCK_SIZE,
+            TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_MAX_TX_NUM,
+            TEST_NUM_NODES_IN_VID_COMPUTATION, TEST_PROTOCOL_MAX_BLOCK_SIZE,
         },
     };
     use sha2::{Digest, Sha256};
@@ -1685,6 +1696,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         assert_eq!(state.blocks.len(), 0, "The blocks LRU should be empty");
@@ -1757,6 +1769,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         {
@@ -1846,6 +1859,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         let mut req_receiver_1 = {
@@ -1962,6 +1976,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         {
@@ -2057,6 +2072,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         let new_parent_commit = vid_commitment(&[], 9);
@@ -2258,6 +2274,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         let new_parent_commit = vid_commitment(&[], 9);
@@ -2530,6 +2547,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2624,6 +2642,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2703,6 +2722,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2802,6 +2822,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2915,6 +2936,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key),
             Duration::from_millis(100),
@@ -2975,6 +2997,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_millis(100),
@@ -3035,6 +3058,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key),
             Duration::from_millis(100),
@@ -3096,6 +3120,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3166,6 +3191,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3303,6 +3329,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3447,6 +3474,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3502,6 +3530,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3550,6 +3579,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3652,6 +3682,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3708,6 +3739,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3766,6 +3798,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3866,6 +3899,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3960,6 +3994,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),

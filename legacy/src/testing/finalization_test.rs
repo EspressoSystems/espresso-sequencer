@@ -32,7 +32,8 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use marketplace_builder_shared::testing::constants::{
-    TEST_CHANNEL_BUFFER_SIZE, TEST_NUM_CONSENSUS_RETRIES, TEST_NUM_NODES_IN_VID_COMPUTATION,
+    TEST_CHANNEL_BUFFER_SIZE, TEST_MAX_TX_NUM, TEST_NUM_CONSENSUS_RETRIES,
+    TEST_NUM_NODES_IN_VID_COMPUTATION,
 };
 use marketplace_builder_shared::{
     block::BuilderStateId, testing::constants::TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
@@ -72,6 +73,7 @@ pub fn setup_builder_for_test() -> TestSetup {
         TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
         TEST_PROTOCOL_MAX_BLOCK_SIZE,
         TEST_NUM_NODES_IN_VID_COMPUTATION,
+        TEST_MAX_TX_NUM,
     )));
 
     let max_api_duration = Duration::from_millis(100);
