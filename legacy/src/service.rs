@@ -184,7 +184,7 @@ pub struct GlobalState<Types: NodeType> {
     pub block_size_limits: BlockSizeLimits,
 
     // A mapping from transaction hash to its status
-    pub tx_status: HashMap<Commitment<Types::Transaction>, TransactionStatus>,
+    pub tx_status: Arc<RwLock<lru::LruCache<Commitment<Types::Transaction>, TransactionStatus>>>,
 
     /// Number of nodes.
     ///
@@ -232,6 +232,7 @@ impl<Types: NodeType> GlobalState<Types> {
         max_block_size_increment_period: Duration,
         protocol_max_block_size: u64,
         num_nodes: usize,
+        max_txn_num: usize,
     ) -> Self {
         let mut spawned_builder_states = HashMap::new();
         let bootstrap_id = BuilderStateId {
@@ -250,7 +251,7 @@ impl<Types: NodeType> GlobalState<Types> {
                 protocol_max_block_size,
                 max_block_size_increment_period,
             ),
-            tx_status: HashMap::new(),
+            tx_status: Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(max_txn_num).unwrap()))),
             num_nodes,
         }
     }
@@ -396,32 +397,32 @@ impl<Types: NodeType> GlobalState<Types> {
 
     // get transaction status
     // return one of "pending", "sequenced", "rejected" or "unknown"
-    pub fn txn_status(
+    pub async fn txn_status(
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        if let Some(status) = self.tx_status.get(&txn_hash) {
+        if let Some(status) = self.tx_status.write_arc().await.get(&txn_hash) {
             Ok(status.clone())
         } else {
             Ok(TransactionStatus::Unknown)
         }
     }
 
-    pub fn set_tx_status(
+    pub async fn set_tx_status(
         &mut self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
         txn_status: TransactionStatus,
     ) -> Result<(), BuildError> {
-        if self.tx_status.contains_key(&txn_hash) {
+        if self.tx_status.write_arc().await.contains(&txn_hash) {
             tracing::debug!(
                 "change status of transaction {txn_hash} from {:?} to {:?}",
-                self.tx_status.get(&txn_hash),
+                self.tx_status.write_arc().await.get(&txn_hash),
                 txn_status
             );
         } else {
             tracing::debug!("insert status of transaction {txn_hash} : {:?}", txn_status);
         }
-        self.tx_status.insert(txn_hash, txn_status);
+        self.tx_status.write_arc().await.put(txn_hash, txn_status);
         Ok(())
     }
 
@@ -468,7 +469,10 @@ impl<Types: NodeType> GlobalState<Types> {
     }
 }
 
+#[derive(derive_more::Deref, derive_more::DerefMut)]
 pub struct ProxyGlobalState<Types: NodeType> {
+    #[deref(forward)]
+    #[deref_mut(forward)]
     // global state
     global_state: Arc<RwLock<GlobalState<Types>>>,
 
@@ -1126,7 +1130,8 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        self.global_state.read_arc().await.txn_status(txn_hash)
+        // self.global_state.read_arc().await.txn_status(txn_hash)
+        self.read(|state| state.txn_status(txn_hash)).await
     }
 }
 #[async_trait]
