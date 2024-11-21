@@ -251,7 +251,9 @@ impl<Types: NodeType> GlobalState<Types> {
                 protocol_max_block_size,
                 max_block_size_increment_period,
             ),
-            tx_status: Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(max_txn_num).unwrap()))),
+            tx_status: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(max_txn_num).unwrap(),
+            ))),
             num_nodes,
         }
     }
