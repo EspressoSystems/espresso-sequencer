@@ -4,7 +4,7 @@ use espresso_types::{FeeVersion, MarketplaceVersion};
 use futures::StreamExt;
 use vbs::version::StaticVersionType;
 
-const SEQUENCER_BLOCKS_TIMEOUT: u64 = 240;
+const SEQUENCER_BLOCKS_TIMEOUT: u64 = 120;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_upgrade() -> Result<()> {
@@ -47,13 +47,8 @@ async fn test_upgrade() -> Result<()> {
             }
 
             // Track how many nodes have been upgraded
-            if header.version() == versions.1 {
-                upgraded_nodes += 1;
-            }
-
-            if upgraded_nodes == subscriptions_size {
-                println!("Upgrade succeeded @ height {}!", header.height());
-                break;
+            if header.version() != versions.1 {
+                continue;
             }
 
             if header.height() > SEQUENCER_BLOCKS_TIMEOUT {

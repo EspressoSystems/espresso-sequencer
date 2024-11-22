@@ -224,7 +224,7 @@ jobs:
         run: |
           cargo nextest run --archive-file nextest-archive-postgres.tar.zst --verbose --no-fail-fast \
           --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
-        timeout-minutes: 25
+        timeout-minutes: 10
 
       - name: Dump process compose services logs
         if: always()
