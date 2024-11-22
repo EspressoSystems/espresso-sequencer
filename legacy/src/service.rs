@@ -1130,15 +1130,13 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
                             reason: some.to_string(),
                         },
                     )
-                    .await
-                    .unwrap();
+                    .await?;
             } else {
                 self.global_state
                     .write_arc()
                     .await
                     .set_txn_status(txn_commit, TransactionStatus::Pending)
-                    .await
-                    .unwrap();
+                    .await?;
             }
         }
 
@@ -1249,15 +1247,13 @@ pub async fn run_non_permissioned_standalone_builder_service<
                                     reason: some.to_string(),
                                 },
                             )
-                            .await
-                            .unwrap();
+                            .await?;
                     } else {
                         global_state
                             .write_arc()
                             .await
                             .set_txn_status(txn_commit, TransactionStatus::Pending)
-                            .await
-                            .unwrap();
+                            .await?;
                     }
                 }
             }
