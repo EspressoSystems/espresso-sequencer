@@ -381,9 +381,9 @@ where
 
     async fn txn_status(
         &self,
-        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+        _txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        self.read(|state| state.txn_status(txn_hash)).await
+        todo!("Implement this function");
     }
 }
 
