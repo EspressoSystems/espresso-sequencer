@@ -81,7 +81,6 @@ use async_trait::async_trait;
 use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
-use sqlx::prelude::FromRow;
 use std::ops::RangeBounds;
 use tagged_base64::TaggedBase64;
 
@@ -225,7 +224,7 @@ pub trait NodeStorage<Types: NodeType> {
     async fn sync_status(&mut self) -> QueryResult<SyncStatus>;
 }
 
-#[derive(Clone, Debug, Default, FromRow)]
+#[derive(Clone, Debug, Default)]
 pub struct Aggregate {
     pub height: i64,
     pub num_transactions: i64,

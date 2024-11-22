@@ -288,12 +288,18 @@ impl<Mode: TransactionMode> AggregatesStorage for Transaction<Mode> {
     }
 
     async fn aggregate(&mut self, height: i64) -> anyhow::Result<Aggregate> {
-        let aggregate = query_as("SELECT * FROM aggregate WHERE height = $1")
-            .bind(height)
-            .fetch_one(self.as_mut())
-            .await?;
+        let (height, num_transactions, payload_size) = query_as(
+            "SELECT height, num_transactions, payload_size FROM aggregate WHERE height = $1",
+        )
+        .bind(height)
+        .fetch_one(self.as_mut())
+        .await?;
 
-        Ok(aggregate)
+        Ok(Aggregate {
+            height,
+            num_transactions,
+            payload_size,
+        })
     }
 }
 
