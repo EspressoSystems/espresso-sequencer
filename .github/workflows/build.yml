@@ -47,10 +47,11 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
-      - name: Build Espresso Dev Node
-        # Espresso Dev Node currently requires testing feature, so it is built separately.
+      - name: Build Dev Tools
+        # Some dev tools require additional features that we don't want included in the production
+        # build, so they are built separately.
         run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+          cargo build --locked --release --features nasty-client,testing --bin nasty-client --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -100,10 +101,11 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
-      - name: Build Espresso Dev Node
-        # Espresso Dev Node currently requires testing feature, so it is built separately.
+      - name: Build Dev Tools
+        # Some dev tools require additional features that we don't want included in the production
+        # build, so they are built separately.
         run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+          cargo build --locked --release --features nasty-client,testing --bin nasty-client --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
