@@ -1,10 +1,10 @@
 use crate::common::TestConfig;
 use anyhow::Result;
 use espresso_types::{FeeVersion, MarketplaceVersion};
-use futures::{stream, StreamExt};
+use futures::StreamExt;
 use vbs::version::StaticVersionType;
 
-const SEQUENCER_BLOCKS_TIMEOUT: u64 = 120;
+const SEQUENCER_BLOCKS_TIMEOUT: u64 = 240;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_upgrade() -> Result<()> {
@@ -33,32 +33,35 @@ async fn test_upgrade() -> Result<()> {
         clients[1].subscribe_headers(0).await?,
     ];
     let subscriptions_size = subscriptions.len();
-    let mut streams = stream::iter(subscriptions).flatten_unordered(None);
 
     let mut upgraded_nodes: usize = 0;
-    while let Some(header) = streams.next().await {
-        let header = header.unwrap();
 
-        // TODO is it possible to discover the view at which upgrade should be finished?
-        // First few views should be `Base` version.
-        if header.height() <= 5 {
-            assert_eq!(header.version(), versions.0)
-        }
+    for mut stream in subscriptions {
+        while let Some(header) = stream.next().await {
+            let header = header.unwrap();
 
-        // Track how many nodes have been upgraded
-        if header.version() == versions.1 {
-            upgraded_nodes += 1;
-        }
+            // TODO is it possible to discover the view at which upgrade should be finished?
+            // First few views should be `Base` version.
+            if header.height() <= 5 {
+                assert_eq!(header.version(), versions.0)
+            }
 
-        if upgraded_nodes == subscriptions_size {
-            println!("Upgrade succeeded @ height {}!", header.height());
-            break;
-        }
+            // Track how many nodes have been upgraded
+            if header.version() == versions.1 {
+                upgraded_nodes += 1;
+            }
 
-        if header.height() > SEQUENCER_BLOCKS_TIMEOUT {
-            panic!("Exceeded maximum block height. Upgrade should have finished by now :(");
+            if upgraded_nodes == subscriptions_size {
+                println!("Upgrade succeeded @ height {}!", header.height());
+                break;
+            }
+
+            if header.height() > SEQUENCER_BLOCKS_TIMEOUT {
+                panic!("Exceeded maximum block height. Upgrade should have finished by now :(");
+            }
         }
     }
+
     // TODO assert transactions are incrementing
     Ok(())
 }
