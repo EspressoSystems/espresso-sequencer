@@ -1108,14 +1108,6 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             txns.len(),
             txns.iter().map(|txn| txn.commit()).collect::<Vec<_>>()
         );
-        for txn in txns.clone() {
-            self.global_state
-                .write_arc()
-                .await
-                .set_txn_status(txn.commit(), TransactionStatus::Pending)
-                .await
-                .unwrap();
-        }
         let response = self
             .global_state
             .read_arc()
@@ -1138,6 +1130,13 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
                             reason: some.to_string(),
                         },
                     )
+                    .await
+                    .unwrap();
+            } else {
+                self.global_state
+                    .write_arc()
+                    .await
+                    .set_txn_status(txn_commit, TransactionStatus::Pending)
                     .await
                     .unwrap();
             }
@@ -1250,6 +1249,13 @@ pub async fn run_non_permissioned_standalone_builder_service<
                                     reason: some.to_string(),
                                 },
                             )
+                            .await
+                            .unwrap();
+                    } else {
+                        global_state
+                            .write_arc()
+                            .await
+                            .set_txn_status(txn_commit, TransactionStatus::Pending)
                             .await
                             .unwrap();
                     }
