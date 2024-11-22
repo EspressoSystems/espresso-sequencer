@@ -10,24 +10,25 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-/// The concrete database backing a SQL data source.
+/// The underlying database type for a SQL data source.
 ///
-/// Currently only Postgres is supported. In the future we can support SQLite as well by making this
-/// an enum with variants for each (we'll then need to create enums and trait implementations for
-/// all the associated types as well; it will be messy).
+/// Currently, only PostgreSQL and SQLite are supported, with selection based on the "embedded-db" feature flag.
+/// - When the "embedded-db" feature is enabled, SQLite is used.
+/// - When it’s disabled, PostgreSQL is used.
 ///
-/// The reason for taking this approach over sqlx's `Any` database is that we can support SQL types
+/// ### Design Choice
+/// The reason for taking this approach over sqlx's Any database is that we can support SQL types
 /// which are implemented for the two backends we care about (Postgres and SQLite) but not for _any_
 /// SQL database, such as MySQL. Crucially, JSON types fall in this category.
 ///
 /// The reason for taking this approach rather than writing all of our code to be generic over the
-/// `Database` implementation is that `sqlx` does not have the necessary trait bounds on all of the
-/// associated types (e.g. `Database::Connection` does not implement `Executor` for all possible
-/// databases, the `Executor` impl lives on each concrete connection type) and Rust does not provide
+/// Database implementation is that sqlx does not have the necessary trait bounds on all of the
+/// associated types (e.g. Database::Connection does not implement Executor for all possible
+/// databases, the Executor impl lives on each concrete connection type) and Rust does not provide
 /// a good way of encapsulating a collection of trait bounds on associated types. Thus, our function
 /// signatures become untenably messy with bounds like
 ///
-/// ```
+/// ```rust
 /// # use sqlx::{Database, Encode, Executor, IntoArguments, Type};
 /// fn foo<DB: Database>()
 /// where
@@ -36,5 +37,20 @@
 ///     for<'a> i64: Type<DB> + Encode<'a, DB>,
 /// {}
 /// ```
-/// etc.
+
+#[cfg(feature = "embedded-db")]
+pub type Db = sqlx::Sqlite;
+#[cfg(not(feature = "embedded-db"))]
 pub type Db = sqlx::Postgres;
+
+#[cfg(feature = "embedded-db")]
+pub mod syntax_helpers {
+    pub const MAX_FN: &str = "MAX";
+    pub const BINARY_TYPE: &str = "BLOB";
+}
+
+#[cfg(not(feature = "embedded-db"))]
+pub mod syntax_helpers {
+    pub const MAX_FN: &str = "GREATEST";
+    pub const BINARY_TYPE: &str = "BYTEA";
+}

@@ -95,6 +95,7 @@ impl<'q> QueryBuilder<'q> {
         self.arguments.add(arg).map_err(|err| QueryError::Error {
             message: format!("{err:#}"),
         })?;
+
         Ok(format!("${}", self.arguments.len()))
     }
 
@@ -352,7 +353,7 @@ impl<Mode> Transaction<Mode> {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;

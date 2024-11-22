@@ -118,7 +118,7 @@ where
             "SELECT v.share AS share FROM vid AS v
                JOIN header AS h ON v.height = h.height
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let (share_data,) = query
@@ -159,7 +159,7 @@ where
                 (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL) AS p,
                 (SELECT count(*) AS total_vid FROM vid) AS v,
                 (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,
-                coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
+                (SELECT(SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1) as pruned_height)
             ";
         let row = query(sql)
             .fetch_optional(self.as_mut())

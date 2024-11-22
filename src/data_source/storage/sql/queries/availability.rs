@@ -67,7 +67,7 @@ where
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
@@ -89,7 +89,7 @@ where
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
@@ -135,7 +135,7 @@ where
               FROM header AS h
               JOIN vid AS v ON h.height = v.height
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
@@ -173,7 +173,7 @@ where
     {
         let mut query = QueryBuilder::default();
         let where_clause = query.bounds_to_where_clause(range, "height")?;
-        let sql = format!("SELECT {LEAF_COLUMNS} FROM leaf {where_clause} ORDER BY height ASC");
+        let sql = format!("SELECT {LEAF_COLUMNS} FROM leaf {where_clause} ORDER BY height");
         Ok(query
             .query(&sql)
             .fetch(self.as_mut())
@@ -197,7 +197,7 @@ where
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
               {where_clause}
-              ORDER BY h.height ASC"
+              ORDER BY h.height"
         );
         Ok(query
             .query(&sql)
@@ -222,7 +222,7 @@ where
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
               {where_clause}
-              ORDER BY h.height ASC"
+              ORDER BY h.height"
         );
         Ok(query
             .query(&sql)
@@ -272,7 +272,7 @@ where
               FROM header AS h
               JOIN vid AS v ON h.height = v.height
               {where_clause}
-              ORDER BY h.height ASC"
+              ORDER BY h.height"
         );
         Ok(query
             .query(&sql)
@@ -318,12 +318,12 @@ where
         // ORDER BY ASC ensures that if there are duplicate transactions, we return the first
         // one.
         let sql = format!(
-            "SELECT {BLOCK_COLUMNS}, t.index AS tx_index
+            "SELECT {BLOCK_COLUMNS}, t.idx AS tx_index
                 FROM header AS h
                 JOIN payload AS p ON h.height = p.height
-                JOIN transaction AS t ON t.block_height = h.height
+                JOIN transactions AS t ON t.block_height = h.height
                 WHERE t.hash = {hash_param}
-                ORDER BY t.block_height, t.index
+                ORDER BY t.block_height, t.idx
                 LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;
