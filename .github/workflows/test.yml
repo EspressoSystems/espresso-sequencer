@@ -49,7 +49,7 @@ jobs:
         with:
           name: nextest-archive-postgres
           path: nextest-archive-postgres.tar.zst
-  
+
   build-test-artifacts-sqlite:
     name: Build test artifacts (sqlite)
     runs-on: buildjet-8vcpu-ubuntu-2204
@@ -147,7 +147,7 @@ jobs:
           cargo nextest run --archive-file nextest-archive-postgres.tar.zst  --verbose --no-fail-fast \
           --workspace-remap $PWD
         timeout-minutes: 20
-  
+
   test-sqlite:
     needs: build-test-artifacts-sqlite
     runs-on: ubuntu-latest
@@ -179,14 +179,14 @@ jobs:
         timeout-minutes: 20
 
   test-integration:
-    needs: [build-test-bins]
+    needs: [build-test-bins, build-test-artifacts-postgres]
     strategy:
       matrix:
-        version: [02,03]
+        version: [02, 03]
         include:
           - version: 02
             compose: "-f process-compose.yaml"
-            
+
           - version: 03
             compose: "-f process-compose.yaml -f process-compose-mp.yml"
     runs-on: ubuntu-latest
