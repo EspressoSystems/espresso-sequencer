@@ -415,8 +415,8 @@ impl<Types: NodeType> GlobalState<Types> {
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
         txn_status: TransactionStatus,
     ) -> Result<(), BuildError> {
-        if self.tx_status.write_arc().await.contains(&txn_hash) {
-            let mut write_guard = self.tx_status.write_arc().await;
+        let mut write_guard = self.tx_status.write_arc().await;
+        if write_guard.contains(&txn_hash) {
             let old_status = write_guard.get(&txn_hash);
             match old_status {
                 Some(TransactionStatus::Rejected { reason }) => {
@@ -443,7 +443,7 @@ impl<Types: NodeType> GlobalState<Types> {
                 txn_status
             );
         }
-        self.tx_status.write_arc().await.put(txn_hash, txn_status);
+        write_guard.put(txn_hash, txn_status);
         Ok(())
     }
 
