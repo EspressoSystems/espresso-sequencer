@@ -77,8 +77,9 @@ use super::{
     notifier::Notifier,
     storage::{
         pruning::{PruneStorage, PrunedHeightStorage},
-        AggregatesStorage, AvailabilityStorage, ExplorerStorage, MerklizedStateHeightStorage,
-        MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage, UpdateAvailabilityStorage,
+        Aggregate, AggregatesStorage, AvailabilityStorage, ExplorerStorage,
+        MerklizedStateHeightStorage, MerklizedStateStorage, NodeStorage, UpdateAggregatesStorage,
+        UpdateAvailabilityStorage,
     },
     Transaction, VersionedDataSource,
 };
@@ -1401,8 +1402,16 @@ where
                 );
                 loop {
                     let res = async {
+                        let start = chunk[0].height;
+                        let aggregate = if start == 0 {
+                            Aggregate::default()
+                        } else {
+                            let mut tx = self.read().await.context("opening transaction")?;
+                            tx.aggregate((start - 1).try_into()?).await?
+                        };
+
                         let mut tx = self.write().await.context("opening transaction")?;
-                        tx.update_aggregates(&chunk).await?;
+                        tx.update_aggregates(aggregate, &chunk).await?;
                         tx.commit().await.context("committing transaction")
                     }
                     .await;

@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{
     data_source::storage::{
-        AggregatesStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
+        Aggregate, AggregatesStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
     },
     node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
@@ -286,28 +286,28 @@ impl<Mode: TransactionMode> AggregatesStorage for Transaction<Mode> {
             .await?;
         Ok(height as usize)
     }
+
+    async fn aggregate(&mut self, height: i64) -> anyhow::Result<Aggregate> {
+        let aggregate = query_as("SELECT * FROM aggregate WHERE height = $1")
+            .bind(height)
+            .fetch_one(self.as_mut())
+            .await?;
+
+        Ok(aggregate)
+    }
 }
 
 impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
-    async fn update_aggregates(&mut self, blocks: &[PayloadMetadata<Types>]) -> anyhow::Result<()> {
-        // Get the cumulative statistics up to the block before this chunk.
+    async fn update_aggregates(
+        &mut self,
+        aggregate: Aggregate,
+        blocks: &[PayloadMetadata<Types>],
+    ) -> anyhow::Result<()> {
         let height = blocks[0].height();
-        let (prev_tx_count, prev_size) = if height == 0 {
-            (0, 0)
-        } else {
-            let (tx_count, size): (i64, i64) =
-                query_as("SELECT num_transactions, payload_size FROM aggregate WHERE height = $1")
-                    .bind((height - 1) as i64)
-                    .fetch_one(self.as_mut())
-                    .await
-                    .map_err(|err| {
-                        anyhow::Error::new(err).context(format!(
-                    "cannot update aggregates for block {height} because previous block is missing"
-                ))
-                    })?;
-            (tx_count as u64, size as u64)
-        };
-
+        let (prev_tx_count, prev_size) = (
+            aggregate.num_transactions as u64,
+            aggregate.payload_size as u64,
+        );
         // Cumulatively sum up new statistics for each block in this chunk.
         let rows = blocks
             .iter()
