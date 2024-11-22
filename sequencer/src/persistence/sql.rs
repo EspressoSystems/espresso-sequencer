@@ -1028,7 +1028,7 @@ mod testing {
         type Storage = Arc<TmpDb>;
 
         async fn tmp_storage() -> Self::Storage {
-            Arc::new(TmpDb::persistent().await)
+            Arc::new(TmpDb::init().await)
         }
 
         async fn connect(db: &Self::Storage) -> Self {

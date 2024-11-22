@@ -222,6 +222,7 @@ services:
     # Run the full API server with all modules, Postgres storage
     command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
     environment:
+      - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -278,6 +279,7 @@ services:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
     environment:
+      - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -334,6 +336,7 @@ services:
       - "$ESPRESSO_SEQUENCER2_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- http -- catchup -- status
     environment:
+      - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -384,6 +387,7 @@ services:
       - "$ESPRESSO_SEQUENCER3_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- http -- catchup -- status
     environment:
+      - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -433,6 +437,7 @@ services:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
     command: sequencer -- http -- catchup -- status
     environment:
+      - ESPRESSO_SEQUENCER_EMBEDDED_DB=false
       - ESPRESSO_SEQUENCER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -476,13 +481,14 @@ services:
         condition: service_completed_successfully
 
   sequencer5:
-    image: ghcr.io/espressosystems/espresso-sequencer/sequencer-sqlite:main
+    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER5_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
 
     # Run the full API server with all modules, Sqlite storage
-    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status -- submit -- config
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- config
     environment:
+      - ESPRESSO_SEQUENCER_EMBEDDED_DB=true
       - ESPRESSO_SEQUENCER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -528,11 +534,12 @@ services:
         condition: service_completed_successfully
 
   sequencer6:
-    image: ghcr.io/espressosystems/espresso-sequencer/sequencer-sqlite:main
+    image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER6_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
     environment:
+      - ESPRESSO_SEQUENCER_EMBEDDED_DB=true
       - ESPRESSO_SEQUENCER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT

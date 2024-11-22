@@ -103,9 +103,9 @@ done
 mkdir -p ${WORKDIR}/docker/scripts
 cp -v docker/scripts/sequencer-awssecretsmanager.sh ${WORKDIR}/docker/scripts
 
-# Copy the dev-node launch script
+# Copy the dev-node and sequencer-entrypoint script
 mkdir -p ${WORKDIR}/scripts
-cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}/scripts
+cp -v scripts/{launch-dev-node-with-postgres,sequencer-entrypoint} ${WORKDIR}/scripts
 
 export DOCKER_BUILDKIT=1
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
@@ -125,4 +125,3 @@ docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/marketplace-builder:main -f docker/marketplace-builder.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/node-validator:main -f docker/node-validator.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/dev-rollup:main -f docker/dev-rollup.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer-sqlite:main -f docker/sequencer-sqlite.Dockerfile ${WORKDIR}

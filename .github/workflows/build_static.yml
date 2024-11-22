@@ -231,13 +231,6 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/dev-rollup
           flavor: suffix=musl
 
-      - name: Generate sequencer-sqlite metadata
-        uses: docker/metadata-action@v5
-        id: sequencer-sqlite
-        with:
-          images: ghcr.io/espressosystems/espresso-sequencer/sequencer-sqlite
-          flavor: suffix=musl
-
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v6
         with:
@@ -387,13 +380,3 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.dev-rollup.outputs.tags }}
           labels: ${{ steps.dev-rollup.outputs.labels }}
-
-      - name: Build and push sequencer-sqlite docker
-        uses: docker/build-push-action@v6
-        with:
-          context: ./
-          file: ./docker/sequencer-sqlite.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.sequencer-sqlite.outputs.tags }}
-          labels: ${{ steps.sequencer-sqlite.outputs.labels }}
