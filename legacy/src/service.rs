@@ -1119,11 +1119,10 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             .len())
             .map(|i| (txns[i].commit(), response[i].clone()))
             .collect();
+        let mut write_guard = self.global_state.write_arc().await;
         for (txn_commit, res) in pairs {
             if let Err(some) = res {
-                self.global_state
-                    .write_arc()
-                    .await
+                write_guard
                     .set_txn_status(
                         txn_commit,
                         TransactionStatus::Rejected {
@@ -1132,9 +1131,7 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
                     )
                     .await?;
             } else {
-                self.global_state
-                    .write_arc()
-                    .await
+                write_guard
                     .set_txn_status(txn_commit, TransactionStatus::Pending)
                     .await?;
             }
@@ -1236,11 +1233,10 @@ pub async fn run_non_permissioned_standalone_builder_service<
                     ..transactions.len())
                     .map(|i| (transactions[i].commit(), response[i].clone()))
                     .collect();
+                let mut write_guard = global_state.write_arc().await;
                 for (txn_commit, res) in pairs {
                     if let Err(some) = res {
-                        global_state
-                            .write_arc()
-                            .await
+                        write_guard
                             .set_txn_status(
                                 txn_commit,
                                 TransactionStatus::Rejected {
@@ -1249,9 +1245,7 @@ pub async fn run_non_permissioned_standalone_builder_service<
                             )
                             .await?;
                     } else {
-                        global_state
-                            .write_arc()
-                            .await
+                        write_guard
                             .set_txn_status(txn_commit, TransactionStatus::Pending)
                             .await?;
                     }
@@ -4805,13 +4799,38 @@ mod test {
             }
         }
 
-        // Test a rejected txn cannot be marked as other status again
-        for tx in big_txns {
-            match proxy_global_state
-                .global_state
-                .write_arc()
+        {
+            // Test a rejected txn cannot be marked as other status again
+            let mut write_guard = proxy_global_state.global_state.write_arc().await;
+            for tx in big_txns {
+                match write_guard
+                    .set_txn_status(tx.commit(), TransactionStatus::Pending)
+                    .await
+                {
+                    Err(_err) => {
+                        // This is expected
+                    }
+                    _ => {
+                        panic!("Expected an error, but got a result");
+                    }
+                }
+            }
+        }
+
+        {
+            // Test a sequenced txn cannot be marked as other status again
+            let mut write_guard = proxy_global_state.global_state.write_arc().await;
+            let tx_test_assigned_twice =
+                TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
+            write_guard
+                .set_txn_status(
+                    tx_test_assigned_twice.commit(),
+                    TransactionStatus::Sequenced { leaf: 0 },
+                )
                 .await
-                .set_txn_status(tx.commit(), TransactionStatus::Pending)
+                .unwrap();
+            match write_guard
+                .set_txn_status(tx_test_assigned_twice.commit(), TransactionStatus::Pending)
                 .await
             {
                 Err(_err) => {
@@ -4822,41 +4841,17 @@ mod test {
                 }
             }
         }
-        // Test a sequenced txn cannot be marked as other status again
-        let tx_test_assigned_twice = TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
-        proxy_global_state
-            .global_state
-            .write_arc()
-            .await
-            .set_txn_status(
-                tx_test_assigned_twice.commit(),
-                TransactionStatus::Sequenced { leaf: 0 },
-            )
-            .await
-            .unwrap();
-        match proxy_global_state
-            .global_state
-            .write_arc()
-            .await
-            .set_txn_status(tx_test_assigned_twice.commit(), TransactionStatus::Pending)
-            .await
-        {
-            Err(_err) => {
-                // This is expected
-            }
-            _ => {
-                panic!("Expected an error, but got a result");
-            }
-        }
 
-        // Test status Unknown when the txn is unknown
-        let unknown_tx = TestTransaction::new(vec![(num_transactions * 4 + 1) as u8]);
-        match proxy_global_state.txn_status(unknown_tx.commit()).await {
-            Ok(txn_status) => {
-                assert_eq!(txn_status, TransactionStatus::Unknown);
-            }
-            e => {
-                panic!("transaction status should be Unknown instead of {:?}", e);
+        {
+            // Test status Unknown when the txn is unknown
+            let unknown_tx = TestTransaction::new(vec![(num_transactions * 4 + 1) as u8]);
+            match proxy_global_state.txn_status(unknown_tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Unknown);
+                }
+                e => {
+                    panic!("transaction status should be Unknown instead of {:?}", e);
+                }
             }
         }
     }
