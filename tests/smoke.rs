@@ -18,7 +18,7 @@ async fn test_smoke() -> Result<()> {
 
     let mut i = 1;
     loop {
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(5)).await;
 
         let new = testing.test_state().await;
         println!("New State:{}", new);
