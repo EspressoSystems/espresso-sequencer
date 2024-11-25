@@ -184,7 +184,7 @@ pub struct GlobalState<Types: NodeType> {
     pub block_size_limits: BlockSizeLimits,
 
     // A mapping from transaction hash to its status
-    pub tx_status: Arc<RwLock<lru::LruCache<Commitment<Types::Transaction>, TransactionStatus>>>,
+    pub tx_status: RwLock<lru::LruCache<Commitment<Types::Transaction>, TransactionStatus>>,
 
     /// Number of nodes.
     ///
@@ -251,9 +251,7 @@ impl<Types: NodeType> GlobalState<Types> {
                 protocol_max_block_size,
                 max_block_size_increment_period,
             ),
-            tx_status: Arc::new(RwLock::new(LruCache::new(
-                NonZeroUsize::new(max_txn_num).unwrap(),
-            ))),
+            tx_status: RwLock::new(LruCache::new(NonZeroUsize::new(max_txn_num).unwrap())),
             num_nodes,
         }
     }
@@ -403,7 +401,7 @@ impl<Types: NodeType> GlobalState<Types> {
         &self,
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        if let Some(status) = self.tx_status.write_arc().await.get(&txn_hash) {
+        if let Some(status) = self.tx_status.write().await.get(&txn_hash) {
             Ok(status.clone())
         } else {
             Ok(TransactionStatus::Unknown)
@@ -415,7 +413,7 @@ impl<Types: NodeType> GlobalState<Types> {
         txn_hash: Commitment<<Types as NodeType>::Transaction>,
         txn_status: TransactionStatus,
     ) -> Result<(), BuildError> {
-        let mut write_guard = self.tx_status.write_arc().await;
+        let mut write_guard = self.tx_status.write().await;
         if write_guard.contains(&txn_hash) {
             let old_status = write_guard.get(&txn_hash);
             match old_status {
