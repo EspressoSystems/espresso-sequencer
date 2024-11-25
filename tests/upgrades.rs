@@ -1,7 +1,7 @@
 use crate::common::TestConfig;
 use anyhow::Result;
 use espresso_types::{FeeVersion, MarketplaceVersion};
-use futures::StreamExt;
+use futures::{future::join_all, StreamExt};
 use vbs::version::StaticVersionType;
 
 const SEQUENCER_BLOCKS_TIMEOUT: u64 = 200;
@@ -28,15 +28,15 @@ async fn test_upgrade() -> Result<()> {
 
     // Test is limited to those sequencers with correct modules
     // enabled. It would be less fragile if we could discover them.
-    let subscriptions = vec![
-        clients[0].subscribe_headers(0).await?,
-        clients[1].subscribe_headers(0).await?,
-    ];
+    let subscriptions = join_all(clients.iter().map(|c| c.subscribe_headers(0)))
+        .await
+        .into_iter()
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
     for mut stream in subscriptions {
         while let Some(header) = stream.next().await {
             let header = header.unwrap();
-            println!("{header:?}");
+            println!("height={:?}", header.height());
 
             // TODO is it possible to discover the view at which upgrade should be finished?
             // First few views should be `Base` version.
