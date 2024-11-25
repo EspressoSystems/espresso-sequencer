@@ -101,7 +101,7 @@ impl NsTable {
     }
 
     /// Instantiate an `NsTable` from a byte slice.
-    pub fn from_bytes(bytes: &[u8]) -> NsTable {
+    pub fn from_bytes_unchecked(bytes: &[u8]) -> NsTable {
         NsTable {
             bytes: bytes.to_vec(),
         }
