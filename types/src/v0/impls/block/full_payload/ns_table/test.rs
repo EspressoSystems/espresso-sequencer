@@ -26,6 +26,13 @@ fn random_valid() {
 }
 
 #[test]
+fn ns_table_from_bytes() {
+    let bytes = Vec::from([0; NUM_NSS_BYTE_LEN]);
+    let ns_table = NsTable::from_bytes_unchecked(&bytes);
+    expect_valid(&ns_table);
+}
+
+#[test]
 fn ns_table_byte_len() {
     setup_test();
     let mut rng = jf_utils::test_rng();
