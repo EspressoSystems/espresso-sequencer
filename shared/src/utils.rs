@@ -109,6 +109,7 @@ type EventServiceReconnect<Types, ApiVer> = Pin<
 pub struct EventServiceStream<Types: NodeType, V: StaticVersionType> {
     api_url: Url,
     connection: Either<EventServiceConnection<Types, V>, EventServiceReconnect<Types, V>>,
+    last_event_time: Instant, // a field to track the time of the last received event
 }
 
 impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Types, ApiVer> {
@@ -156,39 +157,49 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
         let this = Self {
             api_url,
             connection: Left(connection),
+            last_event_time: Instant::now(), // Initialize with the current time
         };
 
         let stream = unfold(this, |mut this| async move {
             loop {
                 match &mut this.connection {
-                    Left(connection) => match connection.next().await {
-                        Some(Ok(event)) => {
-                            return Some((event, this));
+                    Left(connection) => {
+                        let result = connection.next().await;
+                        match result {
+                            Some(Ok(event)) => {
+                                // Update the last_event_time on receiving an event
+                                this.last_event_time = Instant::now();
+                                return Some((event, this));
+                            }
+                            Some(Err(err)) => {
+                                warn!(?err, "Error in event stream");
+                            }
+                            None => {
+                                warn!("Event stream ended, attempting reconnection");
+                                let fut = Self::connect_inner(this.api_url.clone());
+                                let _ =
+                                    std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                            }
                         }
-                        Some(Err(err)) => {
-                            warn!(?err, "Error in event stream");
-                            continue;
-                        }
-                        None => {
-                            warn!("Event stream ended, attempting reconnection");
-                            let fut = Self::connect_inner(this.api_url.clone());
-                            let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
-                            continue;
-                        }
-                    },
+                    }
                     Right(reconnection) => match reconnection.await {
                         Ok(connection) => {
                             let _ = std::mem::replace(&mut this.connection, Left(connection));
-                            continue;
                         }
                         Err(err) => {
                             error!(?err, "Error while reconnecting, will retry in a while");
                             sleep(Self::RETRY_PERIOD).await;
                             let fut = Self::connect_inner(this.api_url.clone());
                             let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
-                            continue;
                         }
                     },
+                }
+
+                // Disconnect and reconnect if no event has been received within 1 second
+                if Instant::now().duration_since(this.last_event_time) > Self::RETRY_PERIOD {
+                    warn!("No events received for quite a long time, reconnecting");
+                    let fut = Self::connect_inner(this.api_url.clone());
+                    let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
                 }
             }
         });
