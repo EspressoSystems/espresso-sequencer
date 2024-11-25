@@ -336,22 +336,23 @@ impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
                 },
             )
             .collect::<anyhow::Result<Vec<_>>>()?;
+        let last_aggregate = rows.last().cloned();
 
         self.upsert(
             "aggregate",
             ["height", "num_transactions", "payload_size"],
             ["height"],
-            rows.clone(),
+            rows,
         )
         .await?;
 
         let (height, num_transactions, payload_size) =
-            rows.last().ok_or_else(|| anyhow!("no row"))?;
+            last_aggregate.ok_or_else(|| anyhow!("no row"))?;
 
         Ok(Aggregate {
-            height: *height,
-            num_transactions: *num_transactions,
-            payload_size: *payload_size,
+            height,
+            num_transactions,
+            payload_size,
         })
     }
 }
