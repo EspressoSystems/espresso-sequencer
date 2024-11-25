@@ -353,7 +353,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Test: The stream should work when the server is running
+        // The stream should work when the server is running
         timeout(TIMEOUT, stream.next())
             .await
             .expect("When mock event server is spawned, stream should work")
@@ -363,7 +363,7 @@ mod tests {
         app_handle.abort();
         tokio::time::sleep(IDLE_TIMEOUT + Duration::from_millis(500)).await; // Wait longer than idle timeout
 
-        // Test: Stream should reconnect after idle timeout
+        // Stream should reconnect after idle timeout
         let new_app_handle = run_app("hotshot-events", url.clone());
 
         timeout(TIMEOUT, stream.next())
