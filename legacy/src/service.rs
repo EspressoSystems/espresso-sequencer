@@ -4796,18 +4796,30 @@ mod test {
         }
 
         {
-            // Test a rejected txn cannot be marked as other status again
+            // Test a rejected txn marked as other status again
             let mut write_guard = proxy_global_state.global_state.write_arc().await;
             for tx in big_txns {
                 match write_guard
                     .set_txn_status(tx.commit(), TransactionStatus::Pending)
                     .await
                 {
-                    Err(_err) => {
-                        // This is expected
+                    Err(err) => {
+                        panic!("Expected a result, but got a error {:?}", err);
                     }
                     _ => {
-                        panic!("Expected an error, but got a result");
+                        // This is expected
+                    }
+                }
+
+                match proxy_global_state.txn_status(tx.commit()).await {
+                    Ok(txn_status) => {
+                        assert_eq!(txn_status, TransactionStatus::Pending);
+                    }
+                    e => {
+                        panic!(
+                            "transaction status should be a valid status instead of {:?}",
+                            e
+                        );
                     }
                 }
             }
