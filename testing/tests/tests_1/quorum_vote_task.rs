@@ -44,10 +44,10 @@ async fn test_quorum_vote_task_success() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await
         .0;
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+    let membership = (*handle.hotshot.memberships).clone();
+
+    let mut generator = TestViewGenerator::generate(membership.clone());
 
     let mut proposals = Vec::new();
     let mut leaves = Vec::new();
@@ -111,10 +111,10 @@ async fn test_quorum_vote_task_miss_dependency() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await
         .0;
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+    let membership = (*handle.hotshot.memberships).clone();
+
+    let mut generator = TestViewGenerator::generate(membership.clone());
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -195,10 +195,10 @@ async fn test_quorum_vote_task_incorrect_dependency() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await
         .0;
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+    let membership = (*handle.hotshot.memberships).clone();
+
+    let mut generator = TestViewGenerator::generate(membership);
 
     let mut proposals = Vec::new();
     let mut leaves = Vec::new();

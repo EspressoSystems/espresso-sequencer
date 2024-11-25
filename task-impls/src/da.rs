@@ -52,13 +52,10 @@ pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Version
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: OuterConsensus<TYPES>,
 
-    /// Membership for the DA committee
-    pub da_membership: Arc<TYPES::Membership>,
-
-    /// Membership for the quorum committee
-    /// We need this only for calculating the proper VID scheme
+    /// Membership for the DA committee and quorum committee.
+    /// We need the latter only for calculating the proper VID scheme
     /// from the number of nodes in the quorum.
-    pub quorum_membership: Arc<TYPES::Membership>,
+    pub membership: Arc<TYPES::Membership>,
 
     /// The underlying network
     pub network: Arc<I::Network>,
@@ -124,7 +121,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
 
                 let encoded_transactions_hash = Sha256::digest(&proposal.data.encoded_transactions);
 
-                let view_leader_key = self.da_membership.leader(view, self.cur_epoch)?;
+                let view_leader_key = self.membership.leader(view, self.cur_epoch)?;
                 ensure!(
                     view_leader_key == sender,
                     warn!(
@@ -170,8 +167,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 .await;
 
                 ensure!(
-                    self.da_membership
-                        .has_stake(&self.public_key, self.cur_epoch),
+                    self.membership
+                        .has_da_stake(&self.public_key, self.cur_epoch),
                     debug!(
                         "We were not chosen for consensus committee on {:?}",
                         self.cur_view
@@ -179,7 +176,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 );
 
                 let txns = Arc::clone(&proposal.data.encoded_transactions);
-                let num_nodes = self.quorum_membership.total_nodes(self.cur_epoch);
+                let num_nodes = self.membership.total_nodes(self.cur_epoch);
                 let payload_commitment =
                     spawn_blocking(move || vid_commitment(&txns, num_nodes)).await;
                 let payload_commitment = payload_commitment.unwrap();
@@ -225,7 +222,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 if self.network.is_primary_down() {
                     let consensus =
                         OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
-                    let membership = Arc::clone(&self.quorum_membership);
+                    let membership = Arc::clone(&self.membership);
                     let pk = self.private_key.clone();
                     let public_key = self.public_key.clone();
                     let chan = event_stream.clone();
@@ -264,11 +261,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 let view = vote.view_number();
 
                 ensure!(
-                    self.da_membership.leader(view, self.cur_epoch)? == self.public_key,
+                    self.membership.leader(view, self.cur_epoch)? == self.public_key,
                     debug!(
                       "We are not the DA committee leader for view {} are we leader for next view? {}",
                       *view,
-                      self.da_membership.leader(view + 1, self.cur_epoch)? == self.public_key
+                      self.membership.leader(view + 1, self.cur_epoch)? == self.public_key
                     )
                 );
 
@@ -276,7 +273,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     &mut self.vote_collectors,
                     vote,
                     self.public_key.clone(),
-                    &self.da_membership,
+                    &self.membership,
                     self.cur_epoch,
                     self.id,
                     &event,

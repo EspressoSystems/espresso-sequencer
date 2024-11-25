@@ -54,8 +54,7 @@ pub struct TestView {
     pub leaf: Leaf2<TestTypes>,
     pub view_number: ViewNumber,
     pub epoch_number: EpochNumber,
-    pub quorum_membership: <TestTypes as NodeType>::Membership,
-    pub da_membership: <TestTypes as NodeType>::Membership,
+    pub membership: <TestTypes as NodeType>::Membership,
     pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
     pub vid_proposal: (
         Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>>,
@@ -72,10 +71,7 @@ pub struct TestView {
 }
 
 impl TestView {
-    pub async fn genesis(
-        quorum_membership: &<TestTypes as NodeType>::Membership,
-        da_membership: &<TestTypes as NodeType>::Membership,
-    ) -> Self {
+    pub async fn genesis(membership: &<TestTypes as NodeType>::Membership) -> Self {
         let genesis_view = ViewNumber::new(1);
         let genesis_epoch = EpochNumber::new(1);
         let upgrade_lock = UpgradeLock::new();
@@ -100,14 +96,11 @@ impl TestView {
 
         let leader_public_key = public_key;
 
-        let payload_commitment = da_payload_commitment::<TestTypes>(
-            quorum_membership,
-            transactions.clone(),
-            genesis_epoch,
-        );
+        let payload_commitment =
+            da_payload_commitment::<TestTypes>(membership, transactions.clone(), genesis_epoch);
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
-            quorum_membership,
+            membership,
             genesis_view,
             genesis_epoch,
             transactions.clone(),
@@ -115,8 +108,7 @@ impl TestView {
         );
 
         let da_certificate = build_da_certificate(
-            quorum_membership,
-            da_membership,
+            membership,
             genesis_view,
             genesis_epoch,
             transactions.clone(),
@@ -190,8 +182,7 @@ impl TestView {
             leaf,
             view_number: genesis_view,
             epoch_number: genesis_epoch,
-            quorum_membership: quorum_membership.clone(),
-            da_membership: da_membership.clone(),
+            membership: membership.clone(),
             vid_disperse,
             vid_proposal: (vid_proposal, public_key),
             da_certificate,
@@ -219,8 +210,7 @@ impl TestView {
         // test view here.
         let next_view = max(old_view, self.view_number) + 1;
 
-        let quorum_membership = &self.quorum_membership;
-        let da_membership = &self.da_membership;
+        let membership = &self.membership;
 
         let transactions = &self.transactions;
 
@@ -247,14 +237,11 @@ impl TestView {
             &metadata,
         );
 
-        let payload_commitment = da_payload_commitment::<TestTypes>(
-            quorum_membership,
-            transactions.clone(),
-            self.epoch_number,
-        );
+        let payload_commitment =
+            da_payload_commitment::<TestTypes>(membership, transactions.clone(), self.epoch_number);
 
         let (vid_disperse, vid_proposal) = build_vid_proposal(
-            quorum_membership,
+            membership,
             next_view,
             self.epoch_number,
             transactions.clone(),
@@ -262,8 +249,7 @@ impl TestView {
         );
 
         let da_certificate = build_da_certificate::<TestTypes, TestVersions>(
-            quorum_membership,
-            da_membership,
+            membership,
             next_view,
             self.epoch_number,
             transactions.clone(),
@@ -281,7 +267,7 @@ impl TestView {
             QuorumCertificate2<TestTypes>,
         >(
             quorum_data,
-            quorum_membership,
+            membership,
             old_view,
             self.epoch_number,
             &old_public_key,
@@ -299,7 +285,7 @@ impl TestView {
                 UpgradeCertificate<TestTypes>,
             >(
                 data.clone(),
-                quorum_membership,
+                membership,
                 next_view,
                 self.epoch_number,
                 &public_key,
@@ -322,7 +308,7 @@ impl TestView {
                 ViewSyncFinalizeCertificate2<TestTypes>,
             >(
                 data.clone(),
-                quorum_membership,
+                membership,
                 next_view,
                 self.epoch_number,
                 &public_key,
@@ -345,7 +331,7 @@ impl TestView {
                 TimeoutCertificate<TestTypes>,
             >(
                 data.clone(),
-                quorum_membership,
+                membership,
                 next_view,
                 self.epoch_number,
                 &public_key,
@@ -425,8 +411,7 @@ impl TestView {
             leaf,
             view_number: next_view,
             epoch_number: self.epoch_number,
-            quorum_membership: quorum_membership.clone(),
-            da_membership: self.da_membership.clone(),
+            membership: self.membership.clone(),
             vid_disperse,
             vid_proposal: (vid_proposal, public_key),
             da_certificate,
@@ -501,19 +486,14 @@ impl TestView {
 
 pub struct TestViewGenerator {
     pub current_view: Option<TestView>,
-    pub quorum_membership: <TestTypes as NodeType>::Membership,
-    pub da_membership: <TestTypes as NodeType>::Membership,
+    pub membership: <TestTypes as NodeType>::Membership,
 }
 
 impl TestViewGenerator {
-    pub fn generate(
-        quorum_membership: <TestTypes as NodeType>::Membership,
-        da_membership: <TestTypes as NodeType>::Membership,
-    ) -> Self {
+    pub fn generate(membership: <TestTypes as NodeType>::Membership) -> Self {
         TestViewGenerator {
             current_view: None,
-            quorum_membership,
-            da_membership,
+            membership,
         }
     }
 
@@ -590,14 +570,13 @@ impl Stream for TestViewGenerator {
     type Item = TestView;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let qm = &self.quorum_membership.clone();
-        let da = &self.da_membership.clone();
+        let mem = &self.membership.clone();
         let curr_view = &self.current_view.clone();
 
         let mut fut = if let Some(ref view) = curr_view {
             async move { TestView::next_view(view).await }.boxed()
         } else {
-            async move { TestView::genesis(qm, da).await }.boxed()
+            async move { TestView::genesis(mem).await }.boxed()
         };
 
         match fut.as_mut().poll(cx) {

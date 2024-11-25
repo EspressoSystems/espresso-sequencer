@@ -59,8 +59,8 @@ pub struct NetworkRequestState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub view: TYPES::View,
     /// Delay before requesting peers
     pub delay: Duration,
-    /// DA Membership
-    pub da_membership: TYPES::Membership,
+    /// Membership (Here containing only DA)
+    pub membership: TYPES::Membership,
     /// This nodes public key
     pub public_key: TYPES::SignatureKey,
     /// This nodes private/signing key, used to sign requests.
@@ -180,15 +180,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         let public_key = self.public_key.clone();
 
         // Get the committee members for the view and the leader, if applicable
-        let mut da_committee_for_view = self.da_membership.committee_members(view, epoch);
-        if let Ok(leader) = self.da_membership.leader(view, epoch) {
+        let mut da_committee_for_view = self.membership.da_committee_members(view, epoch);
+        if let Ok(leader) = self.membership.leader(view, epoch) {
             da_committee_for_view.insert(leader);
         }
 
         // Get committee members for view
         let mut recipients: Vec<TYPES::SignatureKey> = self
-            .da_membership
-            .committee_members(view, epoch)
+            .membership
+            .da_committee_members(view, epoch)
             .into_iter()
             .collect();
         // Randomize the recipients so all replicas don't overload the same 1 recipients

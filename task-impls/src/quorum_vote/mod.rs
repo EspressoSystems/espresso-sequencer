@@ -269,11 +269,8 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     /// The underlying network
     pub network: Arc<I::Network>,
 
-    /// Membership for Quorum certs/votes.
-    pub quorum_membership: Arc<TYPES::Membership>,
-
-    /// Membership for DA committee certs/votes.
-    pub da_membership: Arc<TYPES::Membership>,
+    /// Membership for Quorum certs/votes and DA committee certs/votes.
+    pub membership: Arc<TYPES::Membership>,
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
@@ -377,7 +374,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 private_key: self.private_key.clone(),
                 consensus: OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                 instance_state: Arc::clone(&self.instance_state),
-                quorum_membership: Arc::clone(&self.quorum_membership),
+                quorum_membership: Arc::clone(&self.membership),
                 storage: Arc::clone(&self.storage),
                 view_number,
                 sender: event_sender.clone(),
@@ -479,8 +476,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
                 let cur_epoch = self.consensus.read().await.cur_epoch();
                 // Validate the DAC.
                 ensure!(
-                    cert.is_valid_cert(self.da_membership.as_ref(), cur_epoch, &self.upgrade_lock)
-                        .await,
+                    cert.is_valid_cert(
+                        self.membership.da_stake_table(cur_epoch),
+                        self.membership.da_success_threshold(),
+                        &self.upgrade_lock
+                    )
+                    .await,
                     warn!("Invalid DAC")
                 );
 
@@ -518,16 +519,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
 
                 // ensure that the VID share was sent by a DA member OR the view leader
                 ensure!(
-                    self.da_membership
-                        .committee_members(view, cur_epoch)
+                    self.membership
+                        .da_committee_members(view, cur_epoch)
                         .contains(sender)
-                        || *sender == self.quorum_membership.leader(view, cur_epoch)?,
+                        || *sender == self.membership.leader(view, cur_epoch)?,
                     "VID share was not sent by a DA member or the view leader."
                 );
 
                 // NOTE: `verify_share` returns a nested `Result`, so we must check both the inner
                 // and outer results
-                match vid_scheme(self.quorum_membership.total_nodes(cur_epoch)).verify_share(
+                match vid_scheme(self.membership.total_nodes(cur_epoch)).verify_share(
                     &disperse.data.share,
                     &disperse.data.common,
                     payload_commitment,
@@ -641,7 +642,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             event_sender.clone(),
             event_receiver.clone().deactivate(),
-            Arc::clone(&self.quorum_membership),
+            Arc::clone(&self.membership),
             self.public_key.clone(),
             self.private_key.clone(),
             self.upgrade_lock.clone(),
@@ -684,7 +685,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskS
             .is_leaf_extended(proposed_leaf.commit());
         if let Err(e) = submit_vote::<TYPES, I, V>(
             event_sender.clone(),
-            Arc::clone(&self.quorum_membership),
+            Arc::clone(&self.membership),
             self.public_key.clone(),
             self.private_key.clone(),
             self.upgrade_lock.clone(),

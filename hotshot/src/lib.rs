@@ -92,15 +92,6 @@ pub struct MarketplaceConfig<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub fallback_builder_url: Url,
 }
 
-/// Bundle of all the memberships a consensus instance uses
-#[derive(Clone)]
-pub struct Memberships<TYPES: NodeType> {
-    /// The entire quorum
-    pub quorum_membership: TYPES::Membership,
-    /// The DA nodes
-    pub da_membership: TYPES::Membership,
-}
-
 /// Holds the state needed to participate in `HotShot` consensus
 pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// The public key of this node
@@ -116,7 +107,7 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versi
     pub network: Arc<I::Network>,
 
     /// Memberships used by consensus
-    pub memberships: Arc<Memberships<TYPES>>,
+    pub memberships: Arc<TYPES::Membership>,
 
     /// the metrics that the implementor is using.
     metrics: Arc<ConsensusMetricsValue>,
@@ -207,7 +198,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Memberships<TYPES>,
+        memberships: TYPES::Membership,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -260,7 +251,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Memberships<TYPES>,
+        memberships: TYPES::Membership,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -507,7 +498,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         })?;
 
         spawn(async move {
-            let da_membership = &api.memberships.da_membership.clone();
             join! {
                 // TODO We should have a function that can return a network error if there is one
                 // but first we'd need to ensure our network implementations can support that
@@ -519,7 +509,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
                 api
                     .network.da_broadcast_message(
                         serialized_message,
-                        da_membership.committee_members(view_number, TYPES::Epoch::new(1)).iter().cloned().collect(),
+                        api.memberships.da_committee_members(view_number, TYPES::Epoch::new(1)).iter().cloned().collect(),
                         BroadcastDelay::None,
                     ),
                 api
@@ -604,7 +594,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         node_id: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Memberships<TYPES>,
+        memberships: TYPES::Membership,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
@@ -767,7 +757,7 @@ where
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
-        memberships: Memberships<TYPES>,
+        memberships: TYPES::Membership,
         network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,

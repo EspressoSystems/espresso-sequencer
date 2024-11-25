@@ -24,6 +24,9 @@ use crate::{
     vote::{HasViewNumber, Vote},
 };
 
+/// Marker that data should use the quorum cert type
+pub(crate) trait QuorumMaker {}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a yes vote.
 #[serde(bound(deserialize = ""))]
@@ -50,12 +53,7 @@ pub struct TimeoutData<TYPES: NodeType> {
     /// View the timeout is for
     pub view: TYPES::View,
 }
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
-/// Data used for a VID vote.
-pub struct VidData {
-    /// Commitment to the block payload the VID vote is on.
-    pub payload_commit: VidCommitment,
-}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Pre Commit vote.
 pub struct ViewSyncPreCommitData<TYPES: NodeType> {
@@ -118,6 +116,14 @@ mod sealed {
     // TODO: Does the implement for things outside this file that are committable?
     impl<C: Committable> Sealed for C {}
 }
+
+impl<T: NodeType> QuorumMaker for QuorumData<T> {}
+impl<T: NodeType> QuorumMaker for QuorumData2<T> {}
+impl<T: NodeType> QuorumMaker for TimeoutData<T> {}
+impl<T: NodeType> QuorumMaker for ViewSyncPreCommitData<T> {}
+impl<T: NodeType> QuorumMaker for ViewSyncCommitData<T> {}
+impl<T: NodeType> QuorumMaker for ViewSyncFinalizeData<T> {}
+impl<T: NodeType + DeserializeOwned> QuorumMaker for UpgradeProposalData<T> {}
 
 /// A simple yes vote over some votable type.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
@@ -283,14 +289,6 @@ impl<TYPES: NodeType> Committable for TimeoutData<TYPES> {
 impl Committable for DaData {
     fn commit(&self) -> Commitment<Self> {
         committable::RawCommitmentBuilder::new("DA data")
-            .var_size_bytes(self.payload_commit.as_ref())
-            .finalize()
-    }
-}
-
-impl Committable for VidData {
-    fn commit(&self) -> Commitment<Self> {
-        committable::RawCommitmentBuilder::new("VID data")
             .var_size_bytes(self.payload_commit.as_ref())
             .finalize()
     }

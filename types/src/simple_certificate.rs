@@ -10,6 +10,7 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
     hash::Hash,
     marker::PhantomData,
+    num::NonZeroU64,
     sync::Arc,
 };
 
@@ -23,8 +24,9 @@ use crate::{
     data::serialize_signature2,
     message::UpgradeLock,
     simple_vote::{
-        DaData, QuorumData, QuorumData2, TimeoutData, UpgradeProposalData, VersionedVoteData,
-        ViewSyncCommitData, ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
+        DaData, QuorumData, QuorumData2, QuorumMaker, TimeoutData, UpgradeProposalData,
+        VersionedVoteData, ViewSyncCommitData, ViewSyncFinalizeData, ViewSyncPreCommitData,
+        Voteable,
     },
     traits::{
         election::Membership,
@@ -123,8 +125,93 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + Committable, THRESHOLD: Threshold<TYP
     }
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>> Certificate<TYPES>
-    for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
+impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
+    for SimpleCertificate<TYPES, DaData, THRESHOLD>
+{
+    type Voteable = DaData;
+    type Threshold = THRESHOLD;
+
+    fn create_signed_certificate<V: Versions>(
+        vote_commitment: Commitment<VersionedVoteData<TYPES, DaData, V>>,
+        data: Self::Voteable,
+        sig: <TYPES::SignatureKey as SignatureKey>::QcType,
+        view: TYPES::View,
+    ) -> Self {
+        let vote_commitment_bytes: [u8; 32] = vote_commitment.into();
+
+        SimpleCertificate {
+            data,
+            vote_commitment: Commitment::from_raw(vote_commitment_bytes),
+            view_number: view,
+            signatures: Some(sig),
+            _pd: PhantomData,
+        }
+    }
+    async fn is_valid_cert<V: Versions>(
+        &self,
+        stake_table: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+        threshold: NonZeroU64,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> bool {
+        if self.view_number == TYPES::View::genesis() {
+            return true;
+        }
+        let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::public_parameter(
+            stake_table,
+            U256::from(u64::from(threshold)),
+        );
+        let Ok(commit) = self.data_commitment(upgrade_lock).await else {
+            return false;
+        };
+        <TYPES::SignatureKey as SignatureKey>::check(
+            &real_qc_pp,
+            commit.as_ref(),
+            self.signatures.as_ref().unwrap(),
+        )
+    }
+    /// Proxy's to `Membership.stake`
+    fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        pub_key: &TYPES::SignatureKey,
+        epoch: TYPES::Epoch,
+    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+        membership.da_stake(pub_key, epoch)
+    }
+
+    /// Proxy's to `Membership.da_stake_table`
+    fn stake_table<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
+    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+        membership.da_stake_table(epoch)
+    }
+    /// Proxy's to `Membership.da_total_nodes`
+    fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
+    ) -> usize {
+        membership.da_total_nodes(epoch)
+    }
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
+        membership.da_success_threshold().into()
+    }
+    fn data(&self) -> &Self::Voteable {
+        &self.data
+    }
+    async fn data_commitment<V: Versions>(
+        &self,
+        upgrade_lock: &UpgradeLock<TYPES, V>,
+    ) -> Result<Commitment<VersionedVoteData<TYPES, DaData, V>>> {
+        Ok(
+            VersionedVoteData::new(self.data.clone(), self.view_number, upgrade_lock)
+                .await?
+                .commit(),
+        )
+    }
+}
+
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static + QuorumMaker, THRESHOLD: Threshold<TYPES>>
+    Certificate<TYPES, VOTEABLE> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     type Voteable = VOTEABLE;
     type Threshold = THRESHOLD;
@@ -145,18 +232,18 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
             _pd: PhantomData,
         }
     }
-    async fn is_valid_cert<MEMBERSHIP: Membership<TYPES>, V: Versions>(
+    async fn is_valid_cert<V: Versions>(
         &self,
-        membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        stake_table: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+        threshold: NonZeroU64,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> bool {
         if self.view_number == TYPES::View::genesis() {
             return true;
         }
         let real_qc_pp = <TYPES::SignatureKey as SignatureKey>::public_parameter(
-            membership.stake_table(epoch),
-            U256::from(Self::threshold(membership)),
+            stake_table,
+            U256::from(u64::from(threshold)),
         );
         let Ok(commit) = self.data_commitment(upgrade_lock).await else {
             return false;
@@ -170,6 +257,30 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
     fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
         THRESHOLD::threshold(membership)
     }
+
+    fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        pub_key: &TYPES::SignatureKey,
+        epoch: TYPES::Epoch,
+    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+        membership.stake(pub_key, epoch)
+    }
+
+    fn stake_table<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
+    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
+        membership.stake_table(epoch)
+    }
+
+    /// Proxy's to `Membership.total_nodes`
+    fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
+    ) -> usize {
+        membership.total_nodes(epoch)
+    }
+
     fn data(&self) -> &Self::Voteable {
         &self.data
     }
@@ -232,8 +343,12 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
     ) -> Result<()> {
         if let Some(ref cert) = upgrade_certificate {
             ensure!(
-                cert.is_valid_cert(quorum_membership, epoch, upgrade_lock)
-                    .await,
+                cert.is_valid_cert(
+                    quorum_membership.stake_table(epoch),
+                    quorum_membership.upgrade_threshold(),
+                    upgrade_lock
+                )
+                .await,
                 "Invalid upgrade certificate."
             );
             Ok(())

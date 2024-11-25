@@ -43,7 +43,7 @@ pub type VoteCollectorsMap<TYPES, VOTE, CERT, V> =
 pub struct VoteCollectionTaskState<
     TYPES: NodeType,
     VOTE: Vote<TYPES>,
-    CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Debug,
+    CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment> + Debug,
     V: Versions,
 > {
     /// Public key for this node.
@@ -72,7 +72,7 @@ pub struct VoteCollectionTaskState<
 pub trait AggregatableVote<
     TYPES: NodeType,
     VOTE: Vote<TYPES>,
-    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
+    CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment>,
 >
 {
     /// return the leader for this votes
@@ -92,7 +92,7 @@ pub trait AggregatableVote<
 impl<
         TYPES: NodeType,
         VOTE: Vote<TYPES> + AggregatableVote<TYPES, VOTE, CERT>,
-        CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Clone + Debug,
+        CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment> + Clone + Debug,
         V: Versions,
     > VoteCollectionTaskState<TYPES, VOTE, CERT, V>
 {
@@ -153,7 +153,7 @@ pub trait HandleVoteEvent<TYPES, VOTE, CERT>
 where
     TYPES: NodeType,
     VOTE: Vote<TYPES> + AggregatableVote<TYPES, VOTE, CERT>,
-    CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Debug,
+    CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment> + Debug,
 {
     /// Handle a vote event
     ///
@@ -204,7 +204,7 @@ where
         + std::marker::Send
         + std::marker::Sync
         + 'static,
-    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>
+    CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment>
         + Debug
         + std::marker::Send
         + std::marker::Sync
@@ -242,7 +242,11 @@ where
 pub async fn handle_vote<
     TYPES: NodeType,
     VOTE: Vote<TYPES> + AggregatableVote<TYPES, VOTE, CERT> + Send + Sync + 'static,
-    CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Debug + Send + Sync + 'static,
+    CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment>
+        + Debug
+        + Send
+        + Sync
+        + 'static,
     V: Versions,
 >(
     collectors: &mut VoteCollectorsMap<TYPES, VOTE, CERT, V>,

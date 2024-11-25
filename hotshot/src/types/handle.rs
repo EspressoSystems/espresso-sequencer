@@ -35,7 +35,7 @@ use hotshot_types::{
 };
 use tracing::instrument;
 
-use crate::{traits::NodeImplementation, types::Event, Memberships, SystemContext, Versions};
+use crate::{traits::NodeImplementation, types::Event, SystemContext, Versions};
 
 /// Event streaming handle for a [`SystemContext`] instance running in the background
 ///
@@ -69,7 +69,7 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
     pub network: Arc<I::Network>,
 
     /// Memberships used by consensus
-    pub memberships: Arc<Memberships<TYPES>>,
+    pub memberships: Arc<TYPES::Membership>,
 
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
@@ -157,7 +157,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
             signed_proposal_request.commit().as_ref(),
         )?;
 
-        let mem = self.memberships.quorum_membership.clone();
+        let mem = (*self.memberships).clone();
         let receiver = self.internal_event_stream.1.activate_cloned();
         let sender = self.internal_event_stream.0.clone();
         Ok(async move {
@@ -327,7 +327,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
     ) -> Result<TYPES::SignatureKey> {
         self.hotshot
             .memberships
-            .quorum_membership
             .leader(view_number, epoch_number)
             .context("Failed to lookup leader")
     }

@@ -30,7 +30,7 @@ use hotshot::{
         BlockPayload, NodeImplementation,
     },
     types::SystemContextHandle,
-    MarketplaceConfig, Memberships, SystemContext,
+    MarketplaceConfig, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -55,7 +55,7 @@ use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, TestableBlock},
         election::Membership,
-        network::{ConnectedNetwork, Topic},
+        network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeType, Versions},
         states::TestableState,
     },
@@ -381,22 +381,9 @@ pub trait RunDa<
 
         let da_nodes = config.config.known_da_nodes.clone();
 
-        // Create the quorum membership from all nodes
-        let quorum_membership = <TYPES as NodeType>::Membership::new(
-            all_nodes.clone(),
-            all_nodes.clone(),
-            Topic::Global,
-        );
-
         // Create the quorum membership from all nodes, specifying the committee
         // as the known da nodes
-        let da_membership =
-            <TYPES as NodeType>::Membership::new(all_nodes.clone(), da_nodes, Topic::Da);
-
-        let memberships = Memberships {
-            quorum_membership: quorum_membership.clone(),
-            da_membership,
-        };
+        let memberships = <TYPES as NodeType>::Membership::new(all_nodes, da_nodes);
 
         let marketplace_config = MarketplaceConfig {
             auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
@@ -544,7 +531,6 @@ pub trait RunDa<
         let num_eligible_leaders = context
             .hotshot
             .memberships
-            .quorum_membership
             .committee_leaders(TYPES::View::genesis(), TYPES::Epoch::genesis())
             .len();
         let total_num_views = usize::try_from(consensus.locked_view().u64()).unwrap();
@@ -752,7 +738,8 @@ where
 
         // Create the qurorum membership from the list of known nodes
         let all_nodes = config.config.known_nodes_with_stake.clone();
-        let quorum_membership = TYPES::Membership::new(all_nodes.clone(), all_nodes, Topic::Global);
+        let da_nodes = config.config.known_da_nodes.clone();
+        let quorum_membership = TYPES::Membership::new(all_nodes, da_nodes);
 
         // Derive the bind address
         let bind_address =

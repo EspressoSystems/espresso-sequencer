@@ -48,8 +48,6 @@ async fn test_upgrade_task_with_vote() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await
         .0;
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let da_membership = handle.hotshot.memberships.da_membership.clone();
 
     let old_version = Version { major: 0, minor: 1 };
     let new_version = Version { major: 0, minor: 2 };
@@ -72,7 +70,9 @@ async fn test_upgrade_task_with_vote() {
     let consensus = handle.hotshot.consensus().clone();
     let mut consensus_writer = consensus.write().await;
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+    let membership = (*handle.hotshot.memberships).clone();
+    let mut generator = TestViewGenerator::generate(membership);
+
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle).await);

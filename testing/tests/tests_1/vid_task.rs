@@ -45,11 +45,10 @@ async fn test_vid_task() {
         .0;
     let pub_key = handle.public_key();
 
-    // quorum membership for VID share distribution
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let membership = (*handle.hotshot.memberships).clone();
 
     let mut vid = vid_scheme_from_view_number::<TestTypes>(
-        &quorum_membership,
+        &membership,
         ViewNumber::new(0),
         EpochNumber::new(0),
     );
@@ -90,7 +89,7 @@ async fn test_vid_task() {
     let vid_disperse = VidDisperse::from_membership(
         message.data.view_number,
         vid_disperse,
-        &quorum_membership,
+        &membership,
         EpochNumber::new(0),
     );
 
@@ -110,7 +109,7 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    quorum_membership.total_nodes(EpochNumber::new(0)),
+                    membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -132,7 +131,7 @@ async fn test_vid_task() {
                 },
                 ViewNumber::new(2),
                 vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    quorum_membership.total_nodes(EpochNumber::new(0)),
+                    membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )

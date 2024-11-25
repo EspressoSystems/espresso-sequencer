@@ -9,6 +9,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
+    num::NonZeroU64,
 };
 
 use bitvec::{bitvec, vec::BitVec};
@@ -56,7 +57,7 @@ The certificate formed from the collection of signatures a committee.
 The committee is defined by the `Membership` associated type.
 The votes all must be over the `Commitment` associated type.
 */
-pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
+pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     /// The data commitment this certificate certifies.
     type Voteable: Voteable;
 
@@ -72,17 +73,38 @@ pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
     ) -> Self;
 
     /// Checks if the cert is valid in the given epoch
-    fn is_valid_cert<MEMBERSHIP: Membership<TYPES>, V: Versions>(
+    fn is_valid_cert<V: Versions>(
         &self,
-        membership: &MEMBERSHIP,
-        epoch: TYPES::Epoch,
+        stake_table: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>,
+        threshold: NonZeroU64,
         upgrade_lock: &UpgradeLock<TYPES, V>,
     ) -> impl std::future::Future<Output = bool>;
     /// Returns the amount of stake needed to create this certificate
     // TODO: Make this a static ratio of the total stake of `Membership`
     fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64;
+
+    /// Get  Stake Table from Membership implementation.
+    fn stake_table<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
+    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
+
+    /// Get Total Nodes from Membership implementation.
+    fn total_nodes<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: TYPES::Epoch,
+    ) -> usize;
+
+    /// Get  `StakeTableEntry` from Membership implementation.
+    fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        pub_key: &TYPES::SignatureKey,
+        epoch: TYPES::Epoch,
+    ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
+
     /// Get the commitment which was voted on
     fn data(&self) -> &Self::Voteable;
+
     /// Get the vote commitment which the votes commit to
     fn data_commitment<V: Versions>(
         &self,
@@ -103,7 +125,7 @@ type SignersMap<COMMITMENT, KEY> = HashMap<
 pub struct VoteAccumulator<
     TYPES: NodeType,
     VOTE: Vote<TYPES>,
-    CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
+    CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment>,
     V: Versions,
 > {
     /// Map of all signatures accumulated so far
@@ -127,7 +149,7 @@ pub struct VoteAccumulator<
 impl<
         TYPES: NodeType,
         VOTE: Vote<TYPES>,
-        CERT: Certificate<TYPES, Voteable = VOTE::Commitment>,
+        CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment>,
         V: Versions,
     > VoteAccumulator<TYPES, VOTE, CERT, V>
 {
@@ -161,10 +183,10 @@ impl<
             return Either::Left(());
         }
 
-        let Some(stake_table_entry) = membership.stake(&key, epoch) else {
+        let Some(stake_table_entry) = CERT::stake_table_entry(membership, &key, epoch) else {
             return Either::Left(());
         };
-        let stake_table = membership.stake_table(epoch);
+        let stake_table = CERT::stake_table(membership, epoch);
         let Some(vote_node_id) = stake_table
             .iter()
             .position(|x| *x == stake_table_entry.clone())
@@ -187,7 +209,7 @@ impl<
         let (signers, sig_list) = self
             .signers
             .entry(vote_commitment)
-            .or_insert((bitvec![0; membership.total_nodes(epoch)], Vec::new()));
+            .or_insert((bitvec![0; CERT::total_nodes(membership, epoch)], Vec::new()));
         if signers.get(vote_node_id).as_deref() == Some(&true) {
             error!("Node id is already in signers list");
             return Either::Left(());
@@ -195,7 +217,6 @@ impl<
         signers.set(vote_node_id, true);
         sig_list.push(original_signature);
 
-        // TODO: Get the stake from the stake table entry.
         *total_stake_casted += stake_table_entry.stake();
         total_vote_map.insert(key, (vote.signature(), vote_commitment));
 

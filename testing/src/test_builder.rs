@@ -11,7 +11,7 @@ use hotshot::{
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
     types::SystemContextHandle,
-    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext, TwinsHandlerState,
+    HotShotInitializer, MarketplaceConfig, SystemContext, TwinsHandlerState,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
@@ -175,7 +175,7 @@ pub async fn create_test_handle<
     metadata: TestDescription<TYPES, I, V>,
     node_id: u64,
     network: Network<TYPES, I>,
-    memberships: Memberships<TYPES>,
+    memberships: TYPES::Membership,
     config: HotShotConfig<TYPES::SignatureKey>,
     storage: I::Storage,
     marketplace_config: MarketplaceConfig<TYPES, I>,

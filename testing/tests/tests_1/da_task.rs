@@ -39,8 +39,8 @@ async fn test_da_task() {
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
         .await
         .0;
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
+    let membership = (*handle.hotshot.memberships).clone();
 
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
@@ -48,14 +48,10 @@ async fn test_da_task() {
     let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let (payload_commit, precompute) = precompute_vid_commitment(
         &encoded_transactions,
-        handle
-            .hotshot
-            .memberships
-            .quorum_membership
-            .total_nodes(EpochNumber::new(0)),
+        handle.hotshot.memberships.total_nodes(EpochNumber::new(0)),
     );
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+    let mut generator = TestViewGenerator::generate(membership.clone());
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -98,7 +94,7 @@ async fn test_da_task() {
                 },
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    quorum_membership.total_nodes(EpochNumber::new(0)),
+                    membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
@@ -139,8 +135,7 @@ async fn test_da_task_storage_failure() {
 
     // Set the error flag here for the system handle. This causes it to emit an error on append.
     handle.storage().write().await.should_return_err = true;
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let da_membership = handle.hotshot.memberships.da_membership.clone();
+    let membership = (*handle.hotshot.memberships).clone();
 
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
@@ -148,14 +143,10 @@ async fn test_da_task_storage_failure() {
     let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let (payload_commit, precompute) = precompute_vid_commitment(
         &encoded_transactions,
-        handle
-            .hotshot
-            .memberships
-            .quorum_membership
-            .total_nodes(EpochNumber::new(0)),
+        handle.hotshot.memberships.total_nodes(EpochNumber::new(0)),
     );
 
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+    let mut generator = TestViewGenerator::generate(membership.clone());
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
@@ -198,7 +189,7 @@ async fn test_da_task_storage_failure() {
                 },
                 ViewNumber::new(2),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
-                    quorum_membership.total_nodes(EpochNumber::new(0)),
+                    membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,
                     *ViewNumber::new(2),
                 )
