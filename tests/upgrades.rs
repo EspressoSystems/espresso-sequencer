@@ -36,6 +36,7 @@ async fn test_upgrade() -> Result<()> {
     for mut stream in subscriptions {
         while let Some(header) = stream.next().await {
             let header = header.unwrap();
+            println!("{header:?}");
 
             // TODO is it possible to discover the view at which upgrade should be finished?
             // First few views should be `Base` version.
