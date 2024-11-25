@@ -418,9 +418,7 @@ impl<Types: NodeType> GlobalState<Types> {
             let old_status = write_guard.get(&txn_hash);
             match old_status {
                 Some(TransactionStatus::Rejected { reason }) => {
-                    let e = format!("Changing the status of a rejected transaction to status {:?} is not allowed! The reason it is rejected is {:?}", txn_status, reason);
-                    tracing::error!(e);
-                    return Err(BuildError::Error(e));
+                    tracing::debug!("Changing the status of a rejected transaction to status {:?}! The reason it is previously rejected is {:?}", txn_status, reason);
                 }
                 Some(TransactionStatus::Sequenced { leaf }) => {
                     let e = format!("Changing the status of a sequenced transaction to status {:?} is not allowed! The transaction is sequenced in leaf {:?}", txn_status, leaf);
