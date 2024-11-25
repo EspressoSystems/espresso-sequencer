@@ -22,7 +22,7 @@ contract SimpleStakeTable is Ownable {
     }
 
     // State mapping from staker IDs to their staking status
-    mapping(bytes32 => bool) private stakers;
+    mapping(bytes32 nodeID => bool isStaker) private stakers;
 
     constructor(address initialOwner) Ownable(initialOwner) { }
 
