@@ -334,6 +334,46 @@ mod tests {
             .await
             .expect_err("API is reachable, but is on wrong path");
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn event_stream_wrapper_with_idle_timeout() {
+        const TIMEOUT: Duration = Duration::from_secs(3);
+        const IDLE_TIMEOUT: Duration = Duration::from_secs(1);
+
+        let url: Url = format!(
+            "http://localhost:{}",
+            portpicker::pick_unused_port().unwrap()
+        )
+        .parse()
+        .unwrap();
+
+        let app_handle = run_app("hotshot-events", url.clone());
+
+        let mut stream = EventServiceStream::<TestTypes, MockVersion>::connect(url.clone())
+            .await
+            .unwrap();
+
+        // Test: The stream should work when the server is running
+        timeout(TIMEOUT, stream.next())
+            .await
+            .expect("When mock event server is spawned, stream should work")
+            .unwrap();
+
+        // Simulate idle timeout by stopping the server and waiting
+        app_handle.abort();
+        tokio::time::sleep(IDLE_TIMEOUT + Duration::from_millis(500)).await; // Wait longer than idle timeout
+
+        // Test: Stream should reconnect after idle timeout
+        let new_app_handle = run_app("hotshot-events", url.clone());
+
+        timeout(TIMEOUT, stream.next())
+            .await
+            .expect("After idle timeout, stream should reconnect when the server restarts")
+            .unwrap();
+
+        // Cleanup
+        new_app_handle.abort();
+    }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
