@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["run_standalone_service"],"mod":["api","service"],"struct":["MainState","Options"]};
