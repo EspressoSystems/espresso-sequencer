@@ -4811,7 +4811,7 @@ mod test {
                     }
                 }
 
-                match proxy_global_state.txn_status(tx.commit()).await {
+                match write_guard.txn_status(tx.commit()).await {
                     Ok(txn_status) => {
                         assert_eq!(txn_status, TransactionStatus::Pending);
                     }
