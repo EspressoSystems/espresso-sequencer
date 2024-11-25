@@ -15,8 +15,8 @@
 use super::{
     ledger_log::{Iter, LedgerLog},
     pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-    AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
-    UpdateAvailabilityStorage, VidCommonMetadata,
+    Aggregate, AggregatesStorage, AvailabilityStorage, NodeStorage, PayloadMetadata,
+    UpdateAggregatesStorage, UpdateAvailabilityStorage, VidCommonMetadata,
 };
 
 use crate::{
@@ -786,6 +786,10 @@ impl<T: Revert + Send> AggregatesStorage for Transaction<T> {
     async fn aggregates_height(&mut self) -> anyhow::Result<usize> {
         Ok(0)
     }
+
+    async fn load_prev_aggregate(&mut self) -> anyhow::Result<Option<Aggregate>> {
+        Ok(None)
+    }
 }
 
 impl<Types, T: Revert + Send> UpdateAggregatesStorage<Types> for Transaction<T>
@@ -794,9 +798,10 @@ where
 {
     async fn update_aggregates(
         &mut self,
+        _prev: Aggregate,
         _blocks: &[PayloadMetadata<Types>],
-    ) -> anyhow::Result<()> {
-        Ok(())
+    ) -> anyhow::Result<Aggregate> {
+        Ok(Aggregate::default())
     }
 }
 

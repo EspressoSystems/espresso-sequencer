@@ -224,9 +224,21 @@ pub trait NodeStorage<Types: NodeType> {
     async fn sync_status(&mut self) -> QueryResult<SyncStatus>;
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct Aggregate {
+    pub height: i64,
+    pub num_transactions: i64,
+    pub payload_size: i64,
+}
+
 pub trait AggregatesStorage {
     /// The block height for which aggregate statistics are currently available.
     fn aggregates_height(&mut self) -> impl Future<Output = anyhow::Result<usize>> + Send;
+
+    /// the last aggregate
+    fn load_prev_aggregate(
+        &mut self,
+    ) -> impl Future<Output = anyhow::Result<Option<Aggregate>>> + Send;
 }
 
 pub trait UpdateAggregatesStorage<Types>
@@ -236,8 +248,9 @@ where
     /// Update aggregate statistics based on a new block.
     fn update_aggregates(
         &mut self,
+        aggregate: Aggregate,
         blocks: &[PayloadMetadata<Types>],
-    ) -> impl Future<Output = anyhow::Result<()>> + Send;
+    ) -> impl Future<Output = anyhow::Result<Aggregate>> + Send;
 }
 
 /// An interface for querying Data and Statistics from the HotShot Blockchain.

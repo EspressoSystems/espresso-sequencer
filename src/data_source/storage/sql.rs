@@ -917,14 +917,7 @@ pub mod testing {
 
         pub fn config(&self) -> Config {
             #[cfg(feature = "embedded-db")]
-            let mut cfg: Config = {
-                let db_path = self.db_path.to_string_lossy();
-                let path = format!("sqlite:{db_path}");
-                sqlx::sqlite::SqliteConnectOptions::from_str(&path)
-                    .expect("invalid db path")
-                    .create_if_missing(true)
-                    .into()
-            };
+            let mut cfg = Config::default().db_path(self.db_path.clone());
 
             #[cfg(not(feature = "embedded-db"))]
             let mut cfg = Config::default()

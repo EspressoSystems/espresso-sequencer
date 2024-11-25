@@ -1124,6 +1124,12 @@ mod test {
         assert_eq!(leaves[0], data_source.get_leaf(1).await.await);
         data_source.as_ref().pass().await;
 
+        // It is possible that the fetch above completes, notifies the subscriber,
+        // and the fetch below quickly subscribes and gets notified by the same loop.
+        // We add a delay here to avoid this situation.
+        // This is not a bug, as being notified after subscribing is fine.
+        sleep(Duration::from_secs(1)).await;
+
         // We can get the same leaf again, this will again trigger an active fetch since storage
         // failed the first time.
         tracing::info!("fetch with write success");
@@ -1131,12 +1137,12 @@ mod test {
         assert!(fetch.is_pending());
         assert_eq!(leaves[0], fetch.await);
 
+        sleep(Duration::from_secs(1)).await;
+
         // Finally, we should have the leaf locally and not need to fetch it.
         tracing::info!("retrieve from storage");
         let fetch = data_source.get_leaf(1).await;
         assert_eq!(leaves[0], fetch.try_resolve().ok().unwrap());
-
-        drop(db);
     }
 
     #[tokio::test(flavor = "multi_thread")]

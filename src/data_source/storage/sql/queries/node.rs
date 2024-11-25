@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{
     data_source::storage::{
-        AggregatesStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
+        Aggregate, AggregatesStorage, NodeStorage, PayloadMetadata, UpdateAggregatesStorage,
     },
     node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
@@ -286,28 +286,35 @@ impl<Mode: TransactionMode> AggregatesStorage for Transaction<Mode> {
             .await?;
         Ok(height as usize)
     }
+
+    async fn load_prev_aggregate(&mut self) -> anyhow::Result<Option<Aggregate>> {
+        let res  : Option<(i64, i64,i64)> = query_as(
+            "SELECT height, num_transactions, payload_size FROM aggregate ORDER BY height DESC limit 1",
+        )
+        .fetch_optional(self.as_mut())
+        .await?;
+
+        Ok(
+            res.map(|(height, num_transactions, payload_size)| Aggregate {
+                height,
+                num_transactions,
+                payload_size,
+            }),
+        )
+    }
 }
 
 impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
-    async fn update_aggregates(&mut self, blocks: &[PayloadMetadata<Types>]) -> anyhow::Result<()> {
-        // Get the cumulative statistics up to the block before this chunk.
+    async fn update_aggregates(
+        &mut self,
+        prev: Aggregate,
+        blocks: &[PayloadMetadata<Types>],
+    ) -> anyhow::Result<Aggregate> {
         let height = blocks[0].height();
-        let (prev_tx_count, prev_size) = if height == 0 {
-            (0, 0)
-        } else {
-            let (tx_count, size): (i64, i64) =
-                query_as("SELECT num_transactions, payload_size FROM aggregate WHERE height = $1")
-                    .bind((height - 1) as i64)
-                    .fetch_one(self.as_mut())
-                    .await
-                    .map_err(|err| {
-                        anyhow::Error::new(err).context(format!(
-                    "cannot update aggregates for block {height} because previous block is missing"
-                ))
-                    })?;
-            (tx_count as u64, size as u64)
-        };
-
+        let (prev_tx_count, prev_size) = (
+            u64::try_from(prev.num_transactions)?,
+            u64::try_from(prev.payload_size)?,
+        );
         // Cumulatively sum up new statistics for each block in this chunk.
         let rows = blocks
             .iter()
@@ -329,6 +336,7 @@ impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
                 },
             )
             .collect::<anyhow::Result<Vec<_>>>()?;
+        let last_aggregate = rows.last().cloned();
 
         self.upsert(
             "aggregate",
@@ -336,7 +344,16 @@ impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
             ["height"],
             rows,
         )
-        .await
+        .await?;
+
+        let (height, num_transactions, payload_size) =
+            last_aggregate.ok_or_else(|| anyhow!("no row"))?;
+
+        Ok(Aggregate {
+            height,
+            num_transactions,
+            payload_size,
+        })
     }
 }
 
