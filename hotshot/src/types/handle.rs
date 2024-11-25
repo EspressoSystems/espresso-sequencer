@@ -94,7 +94,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
         self.output_event_stream.1.activate_cloned()
     }
 
-    /// Message other participents with a serialized message from the application
+    /// Message other participants with a serialized message from the application
     /// Receivers of this message will get an `Event::ExternalMessageReceived` via
     /// the event stream.
     ///
@@ -197,7 +197,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                     if commit == leaf_commitment {
                         return Ok(quorum_proposal.clone());
                     }
-                    tracing::warn!("Proposal receied from request has different commitment than expected.\nExpected = {:?}\nReceived{:?}", leaf_commitment, commit);
+                    tracing::warn!("Proposal received from request has different commitment than expected.\nExpected = {:?}\nReceived{:?}", leaf_commitment, commit);
                 }
             }
         })

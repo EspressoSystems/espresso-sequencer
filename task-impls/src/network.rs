@@ -332,7 +332,7 @@ impl<
                 return Err(());
             }
             // If the action was view sync record it as a vote, but we don't
-            // want to limit to 1 View sycn vote above so change the action here.
+            // want to limit to 1 View sync vote above so change the action here.
             if matches!(action, HotShotAction::ViewSyncVote) {
                 action = HotShotAction::Vote;
             }

@@ -43,7 +43,7 @@ use crate::{
     test_task::{TestResult, TestTaskState},
 };
 
-/// convience type for state and block
+/// convenience type for state and block
 pub type StateAndBlock<S, B> = (Vec<S>, Vec<B>);
 
 /// Spinning task state
@@ -225,7 +225,7 @@ where
                                     context: LateNodeContext::Restart,
                                 }) = self.late_start.get(&node_id)
                                 else {
-                                    panic!("Restarted Nodes must have an unitialized context");
+                                    panic!("Restarted Nodes must have an uninitialized context");
                                 };
 
                                 let storage = node.handle.storage().clone();
@@ -391,7 +391,7 @@ pub enum NodeAction {
     /// Take a node down to be restarted after a number of views
     RestartDown(u64),
     /// Start a node up again after it's been shutdown for restart.  This
-    /// should only be created following a `ResartDown`
+    /// should only be created following a `RestartDown`
     RestartUp,
 }
 

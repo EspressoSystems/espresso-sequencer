@@ -262,7 +262,7 @@ pub struct TestBlockHeader {
     pub payload_commitment: VidCommitment,
     /// Fast commitment for builder verification
     pub builder_commitment: BuilderCommitment,
-    /// block metdata
+    /// block metadata
     pub metadata: TestMetadata,
     /// Timestamp when this header was created.
     pub timestamp: u64,

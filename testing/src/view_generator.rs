@@ -577,7 +577,7 @@ impl TestViewGenerator {
         }
     }
 
-    pub async fn next_from_anscestor_view(&mut self, ancestor: TestView) {
+    pub async fn next_from_ancestor_view(&mut self, ancestor: TestView) {
         if let Some(ref view) = self.current_view {
             self.current_view = Some(view.next_view_from_ancestor(ancestor).await)
         } else {

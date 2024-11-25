@@ -30,7 +30,7 @@ async fn test_vote_dependency_handle() {
 
     hotshot::helpers::initialize_logging();
 
-    // We use a node ID of 2 here abitrarily. We just need it to build the system handle.
+    // We use a node ID of 2 here arbitrarily. We just need it to build the system handle.
     let node_id = 2;
     // Construct the system handle for the node ID to build all of the state objects.
     let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)

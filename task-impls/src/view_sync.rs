@@ -742,7 +742,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
             HotShotEvent::ViewSyncTrigger(view_number) => {
                 let view_number = *view_number;
                 if self.next_view != TYPES::View::new(*view_number) {
-                    tracing::error!("Unexpected view number to triger view sync");
+                    tracing::error!("Unexpected view number to trigger view sync");
                     return None;
                 }
 

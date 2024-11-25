@@ -242,7 +242,7 @@ where
 {
     /// Create new [`RandomBuilderSource`]
     #[must_use]
-    #[allow(clippy::missing_panics_doc)] // ony panics if 256 == 0
+    #[allow(clippy::missing_panics_doc)] // only panics if 256 == 0
     pub fn new(pub_key: TYPES::BuilderSignatureKey, num_nodes: Arc<RwLock<usize>>) -> Self {
         Self {
             blocks: Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(256).unwrap()))),

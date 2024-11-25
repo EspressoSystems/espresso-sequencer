@@ -45,7 +45,7 @@ use crate::{
 /// essentially ensures that the results returned by the [`AuctionResultsProvider`] trait includes a
 /// list of urls for the builders that HotShot must request from.
 pub trait HasUrls {
-    /// Returns the builer url associated with the datatype
+    /// Returns the builder url associated with the datatype
     fn urls(&self) -> Vec<Url>;
 }
 

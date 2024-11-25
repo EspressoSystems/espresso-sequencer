@@ -226,7 +226,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     }
     async fn update_undecided_state(
         &self,
-        _leafs: CommitmentMap<Leaf<TYPES>>,
+        _leaves: CommitmentMap<Leaf<TYPES>>,
         _state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Result<()> {
         if self.should_return_err {
@@ -237,7 +237,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
     }
     async fn update_undecided_state2(
         &self,
-        _leafs: CommitmentMap<Leaf2<TYPES>>,
+        _leaves: CommitmentMap<Leaf2<TYPES>>,
         _state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Result<()> {
         if self.should_return_err {

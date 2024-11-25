@@ -646,7 +646,7 @@ impl<TYPES: NodeType> Leaf2<TYPES> {
 
     /// Validate that a leaf has the right upgrade certificate to be the immediate child of another leaf
     ///
-    /// This may not be a complete function. Please double-check that it performs the checks you expect before subtituting validation logic with it.
+    /// This may not be a complete function. Please double-check that it performs the checks you expect before substituting validation logic with it.
     ///
     /// # Errors
     /// Returns an error if the certificates are not identical, or that when we no longer see a
@@ -946,7 +946,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
 
     /// Validate that a leaf has the right upgrade certificate to be the immediate child of another leaf
     ///
-    /// This may not be a complete function. Please double-check that it performs the checks you expect before subtituting validation logic with it.
+    /// This may not be a complete function. Please double-check that it performs the checks you expect before substituting validation logic with it.
     ///
     /// # Errors
     /// Returns an error if the certificates are not identical, or that when we no longer see a

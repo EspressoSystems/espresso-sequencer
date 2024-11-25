@@ -186,7 +186,7 @@ pub struct AccumulatorInfo<TYPES: NodeType> {
 /// Generic function for spawning a vote task.  Returns the event stream id of the spawned task if created
 ///
 /// # Errors
-/// If we faile to create the accumulator
+/// If we failed to create the accumulator
 ///
 /// # Panics
 /// Calls unwrap but should never panic.

@@ -556,7 +556,7 @@ pub trait RunDa<
         let total_time_elapsed = start.elapsed(); // in seconds
         println!("[{node_index}]: {rounds} rounds completed in {total_time_elapsed:?} - Total transactions sent: {total_transactions_sent} - Total transactions committed: {total_transactions_committed} - Total commitments: {num_successful_commits}");
         if total_transactions_committed != 0 {
-            // prevent devision by 0
+            // prevent division by 0
             let total_time_elapsed_sec = std::cmp::max(total_time_elapsed.as_secs(), 1u64);
             // extra 8 bytes for timestamp
             let throughput_bytes_per_sec = total_transactions_committed

@@ -58,7 +58,7 @@ pub trait Metrics: Send + Sync + DynClone + Debug {
 /// A family of related metrics, partitioned by their label values.
 ///
 /// All metrics in a family have the same name. They are distinguished by a vector of strings
-/// called labels. Each label has a name and a value, and each distinct vector of lable values
+/// called labels. Each label has a name and a value, and each distinct vector of label values
 /// within a family acts like a distinct metric.
 ///
 /// The family object is used to instantiate individual metrics within the family via the
@@ -217,7 +217,7 @@ pub trait Gauge: Send + Sync + Debug + DynClone {
     /// Set the gauge value
     fn set(&self, amount: usize);
 
-    /// Update the guage value
+    /// Update the gauge value
     fn update(&self, delts: i64);
 }
 

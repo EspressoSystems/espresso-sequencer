@@ -20,7 +20,7 @@ pub trait HandleDepOutput: Send + Sized + Sync + 'static {
 
 /// A task that runs until it's dependency completes and it handles the result
 pub struct DependencyTask<D: Dependency<H::Output> + Send, H: HandleDepOutput + Send> {
-    /// Dependency this taks waits for
+    /// Dependency this tasks waits for
     pub(crate) dep: D,
     /// Handles the results returned from `self.dep.completed().await`
     pub(crate) handle: H,

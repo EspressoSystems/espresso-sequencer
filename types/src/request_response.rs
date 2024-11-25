@@ -18,7 +18,7 @@ pub struct ProposalRequestPayload<TYPES: NodeType> {
     /// The view number that we're requesting a proposal for.
     pub view_number: TYPES::View,
 
-    /// Our public key. The ensures that the receipient can reply to
+    /// Our public key. The ensures that the recipient can reply to
     /// us directly.
     pub key: TYPES::SignatureKey,
 }

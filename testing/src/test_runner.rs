@@ -660,7 +660,7 @@ pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versio
     pub handle: SystemContextHandle<TYPES, I, V>,
 }
 
-/// This type combines all of the paramters needed to build the context for a node that started
+/// This type combines all of the parameters needed to build the context for a node that started
 /// late during a unit test or integration test.
 pub struct LateNodeContextParameters<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// The storage trait for Sequencer persistence.
@@ -669,7 +669,7 @@ pub struct LateNodeContextParameters<TYPES: NodeType, I: TestableNodeImplementat
     /// The memberships of this particular node.
     pub memberships: Memberships<TYPES>,
 
-    /// The config associted with this node.
+    /// The config associated with this node.
     pub config: HotShotConfig<TYPES::SignatureKey>,
 
     /// The marketplace config for this node.

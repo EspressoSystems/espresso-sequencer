@@ -394,7 +394,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
         }
     }
 
-    /// Send that the bootsrap suceeded
+    /// Send that the bootstrap succeeded
     fn finish_bootstrap(&mut self) {
         if let Some(mut tx) = self.bootstrap_tx.clone() {
             spawn(async move { tx.send(bootstrap::InputEvent::BootstrapFinished).await });

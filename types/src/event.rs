@@ -110,7 +110,7 @@ pub enum EventType<TYPES: NodeType> {
     },
     /// A new decision event was issued
     Decide {
-        /// The chain of Leafs that were committed by this decision
+        /// The chain of Leaves that were committed by this decision
         ///
         /// This list is sorted in reverse view number order, with the newest (highest view number)
         /// block first in the list.

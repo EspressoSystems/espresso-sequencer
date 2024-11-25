@@ -127,7 +127,7 @@ pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TY
     let version = task_state.upgrade_lock.version(new_view_number).await?;
     ensure!(
         version >= V::Epochs::VERSION,
-        debug!("HotStuff 2 updgrade not yet in effect")
+        debug!("HotStuff 2 upgrade not yet in effect")
     );
     let high_qc = task_state.consensus.read().await.high_qc().clone();
     let leader = task_state

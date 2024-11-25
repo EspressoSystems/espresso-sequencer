@@ -47,7 +47,7 @@ pub struct NetworkDef<K: SignatureKey + 'static> {
     #[debug(skip)]
     pub direct_message: cbor::Behaviour<Vec<u8>, Vec<u8>>,
 
-    /// Auto NAT behaviour to determine if we are publically reachable and
+    /// Auto NAT behaviour to determine if we are publicly reachable and
     /// by which address
     #[debug(skip)]
     pub autonat: libp2p::autonat::Behaviour,

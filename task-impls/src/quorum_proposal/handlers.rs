@@ -55,7 +55,7 @@ pub(crate) enum ProposalDependency {
     /// For the `Qc2Formed` event timeout branch.
     TimeoutCert,
 
-    /// For the `QuroumProposalRecv` event.
+    /// For the `QuorumProposalRecv` event.
     Proposal,
 
     /// For the `VidShareValidated` event.
@@ -110,7 +110,7 @@ pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
     /// The time this view started
     pub view_start_time: Instant,
 
-    /// The higest_qc we've seen at the start of this task
+    /// The highest_qc we've seen at the start of this task
     pub highest_qc: QuorumCertificate2<TYPES>,
 }
 
@@ -137,7 +137,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         None
     }
     /// Waits for the ocnfigured timeout for nodes to send HighQc messages to us.  We'll
-    /// then propose with the higest QC from among these proposals.
+    /// then propose with the highest QC from among these proposals.
     async fn wait_for_highest_qc(&mut self) {
         tracing::error!("waiting for QC");
         // If we haven't upgraded to Hotstuff 2 just return the high qc right away

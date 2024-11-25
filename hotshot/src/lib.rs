@@ -228,7 +228,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             }
         }
 
-        let interal_chan = broadcast(EVENT_CHANNEL_SIZE);
+        let internal_chan = broadcast(EVENT_CHANNEL_SIZE);
         let external_chan = broadcast(EXTERNAL_EVENT_CHANNEL_SIZE);
 
         Self::new_from_channels(
@@ -242,7 +242,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
             metrics,
             storage,
             marketplace_config,
-            interal_chan,
+            internal_chan,
             external_chan,
         )
     }
@@ -252,7 +252,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
     /// To do a full initialization, use `fn init` instead, which will set up background tasks as
     /// well.
     ///
-    /// Use this function if you want to use some prexisting channels and to spin up the tasks
+    /// Use this function if you want to use some preexisting channels and to spin up the tasks
     /// and start consensus manually.  Mostly useful for tests
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn new_from_channels(
@@ -320,7 +320,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<T
         let mut saved_payloads = BTreeMap::new();
         saved_leaves.insert(anchored_leaf.commit(), anchored_leaf.clone());
 
-        for leaf in initializer.undecided_leafs {
+        for leaf in initializer.undecided_leaves {
             saved_leaves.insert(leaf.commit(), leaf.clone());
         }
         if let Some(payload) = anchored_leaf.block_payload() {
@@ -990,9 +990,9 @@ pub struct HotShotInitializer<TYPES: NodeType> {
     /// If it's given, we'll use it to construct the `SystemContext`.
     state_delta: Option<Arc<<TYPES::ValidatedState as ValidatedState<TYPES>>::Delta>>,
 
-    /// Starting view number that should be equivelant to the view the node shut down with last.
+    /// Starting view number that should be equivalent to the view the node shut down with last.
     start_view: TYPES::View,
-    /// Starting epoch number that should be equivelant to the epoch the node shut down with last.
+    /// Starting epoch number that should be equivalent to the epoch the node shut down with last.
     start_epoch: TYPES::Epoch,
     /// The view we last performed an action in.  An action is Proposing or voting for
     /// Either the quorum or DA.
@@ -1003,9 +1003,9 @@ pub struct HotShotInitializer<TYPES: NodeType> {
     high_qc: QuorumCertificate2<TYPES>,
     /// Previously decided upgrade certificate; this is necessary if an upgrade has happened and we are not restarting with the new version
     decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
-    /// Undecided leafs that were seen, but not yet decided on.  These allow a restarting node
+    /// Undecided leaves that were seen, but not yet decided on.  These allow a restarting node
     /// to vote and propose right away if they didn't miss anything while down.
-    undecided_leafs: Vec<Leaf2<TYPES>>,
+    undecided_leaves: Vec<Leaf2<TYPES>>,
     /// Not yet decided state
     undecided_state: BTreeMap<TYPES::View, View<TYPES>>,
     /// Proposals we have sent out to provide to others for catchup
@@ -1036,7 +1036,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             saved_proposals: BTreeMap::new(),
             high_qc,
             decided_upgrade_certificate: None,
-            undecided_leafs: Vec::new(),
+            undecided_leaves: Vec::new(),
             undecided_state: BTreeMap::new(),
             instance_state,
         })
@@ -1060,7 +1060,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
         saved_proposals: BTreeMap<TYPES::View, Proposal<TYPES, QuorumProposal2<TYPES>>>,
         high_qc: QuorumCertificate2<TYPES>,
         decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
-        undecided_leafs: Vec<Leaf2<TYPES>>,
+        undecided_leaves: Vec<Leaf2<TYPES>>,
         undecided_state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Self {
         Self {
@@ -1074,7 +1074,7 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
             saved_proposals,
             high_qc,
             decided_upgrade_certificate,
-            undecided_leafs,
+            undecided_leaves,
             undecided_state,
         }
     }

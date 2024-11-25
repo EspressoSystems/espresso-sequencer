@@ -56,14 +56,14 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     /// and the undecided state.
     async fn update_undecided_state(
         &self,
-        leafs: CommitmentMap<Leaf<TYPES>>,
+        leaves: CommitmentMap<Leaf<TYPES>>,
         state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Result<()>;
     /// Update the currently undecided state of consensus.  This includes the undecided leaf chain,
     /// and the undecided state.
     async fn update_undecided_state2(
         &self,
-        leafs: CommitmentMap<Leaf2<TYPES>>,
+        leaves: CommitmentMap<Leaf2<TYPES>>,
         state: BTreeMap<TYPES::View, View<TYPES>>,
     ) -> Result<()>;
     /// Upgrade the current decided upgrade certificate in storage.

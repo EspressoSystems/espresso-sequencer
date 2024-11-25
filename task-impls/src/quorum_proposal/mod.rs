@@ -82,7 +82,7 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     /// Number of blocks in an epoch, zero means there are no epochs
     pub epoch_height: u64,
 
-    /// The higest_qc we've seen at the start of this task
+    /// The highest_qc we've seen at the start of this task
     pub highest_qc: QuorumCertificate2<TYPES>,
 }
 

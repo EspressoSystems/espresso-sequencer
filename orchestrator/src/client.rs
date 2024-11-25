@@ -103,7 +103,7 @@ pub struct BenchResultsDownloadConfig {
     // Results starting here
     /// Whether the results are partially collected
     /// "One" when the results are collected for one node
-    /// "Half" when the results are collecte for half running nodes if not all nodes terminate successfully
+    /// "Half" when the results are collective for half running nodes if not all nodes terminate successfully
     /// "Full" if the results are successfully collected from all nodes
     pub partial_results: String,
     /// The average latency of the transactions

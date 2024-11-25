@@ -355,7 +355,7 @@ impl<T: NodeType> NetworkNode<T> {
     }
 
     /// event handler for client events
-    /// currectly supported actions include
+    /// currently supported actions include
     /// - shutting down the swarm
     /// - gossipping a message to known peers on the `global` topic
     /// - returning the id of the current peer
