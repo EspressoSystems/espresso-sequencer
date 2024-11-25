@@ -383,7 +383,7 @@ where
         &self,
         _txn_hash: Commitment<<Types as NodeType>::Transaction>,
     ) -> Result<TransactionStatus, BuildError> {
-        todo!("Implement this function");
+        Err(BuildError::Error("txn_status feature Not Implemented for marketplace builder yet.".to_string()));
     }
 }
 
