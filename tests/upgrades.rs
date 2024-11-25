@@ -4,7 +4,7 @@ use espresso_types::{FeeVersion, MarketplaceVersion};
 use futures::StreamExt;
 use vbs::version::StaticVersionType;
 
-const SEQUENCER_BLOCKS_TIMEOUT: u64 = 300;
+const SEQUENCER_BLOCKS_TIMEOUT: u64 = 200;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_upgrade() -> Result<()> {
@@ -44,6 +44,7 @@ async fn test_upgrade() -> Result<()> {
             }
 
             if header.version() == versions.1 {
+                println!("header version matched!");
                 break;
             }
 

@@ -222,7 +222,7 @@ jobs:
           NEXTEST_PROFILE: integration
           INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
         run: |
-          cargo nextest run --archive-file nextest-archive-postgres.tar.zst --verbose --no-fail-fast \
+          cargo nextest run --archive-file nextest-archive-postgres.tar.zst --verbose --no-fail-fast --nocapture \
           --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
         timeout-minutes: 20
 
