@@ -2,10 +2,20 @@ version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
+    # Group all updates together
+    groups:
+      all:
+        patterns:
+        - "*"
     schedule:
       interval: "daily"
 
   - package-ecosystem: "cargo"
     directory: "/"
+    # Group all updates together
+    groups:
+      all:
+        patterns:
+        - "*"
     schedule:
       interval: "daily"
