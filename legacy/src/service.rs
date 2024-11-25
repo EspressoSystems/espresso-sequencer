@@ -232,7 +232,7 @@ impl<Types: NodeType> GlobalState<Types> {
         max_block_size_increment_period: Duration,
         protocol_max_block_size: u64,
         num_nodes: usize,
-        max_txn_num: NonZeroUsize,
+        max_txn_num: usize,
     ) -> Self {
         let mut spawned_builder_states = HashMap::new();
         let bootstrap_id = BuilderStateId {
@@ -251,7 +251,9 @@ impl<Types: NodeType> GlobalState<Types> {
                 protocol_max_block_size,
                 max_block_size_increment_period,
             ),
-            tx_status: RwLock::new(LruCache::new(max_txn_num)),
+            tx_status: RwLock::new(LruCache::new(
+                NonZeroUsize::new(max_txn_num).expect("max_txn_num must be greater than zero "),
+            )),
             num_nodes,
         }
     }
