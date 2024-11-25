@@ -538,9 +538,9 @@ where
         self.inner.aggregates_height().await
     }
 
-    async fn aggregate(&mut self, height: i64) -> anyhow::Result<Aggregate> {
+    async fn load_prev_aggregate(&mut self) -> anyhow::Result<Option<Aggregate>> {
         self.maybe_fail_read(FailableAction::Any).await?;
-        self.inner.aggregate(height).await
+        self.inner.load_prev_aggregate().await
     }
 }
 
@@ -551,10 +551,10 @@ where
 {
     async fn update_aggregates(
         &mut self,
-        aggregate: Aggregate,
+        prev: Aggregate,
         blocks: &[PayloadMetadata<Types>],
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Aggregate> {
         self.maybe_fail_write(FailableAction::Any).await?;
-        self.inner.update_aggregates(aggregate, blocks).await
+        self.inner.update_aggregates(prev, blocks).await
     }
 }

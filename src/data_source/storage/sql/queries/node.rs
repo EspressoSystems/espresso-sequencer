@@ -287,32 +287,33 @@ impl<Mode: TransactionMode> AggregatesStorage for Transaction<Mode> {
         Ok(height as usize)
     }
 
-    async fn aggregate(&mut self, height: i64) -> anyhow::Result<Aggregate> {
-        let (height, num_transactions, payload_size) = query_as(
-            "SELECT height, num_transactions, payload_size FROM aggregate WHERE height = $1",
+    async fn load_prev_aggregate(&mut self) -> anyhow::Result<Option<Aggregate>> {
+        let res  : Option<(i64, i64,i64)> = query_as(
+            "SELECT height, num_transactions, payload_size FROM aggregate ORDER BY height DESC limit 1",
         )
-        .bind(height)
-        .fetch_one(self.as_mut())
+        .fetch_optional(self.as_mut())
         .await?;
 
-        Ok(Aggregate {
-            height,
-            num_transactions,
-            payload_size,
-        })
+        Ok(
+            res.map(|(height, num_transactions, payload_size)| Aggregate {
+                height,
+                num_transactions,
+                payload_size,
+            }),
+        )
     }
 }
 
 impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
     async fn update_aggregates(
         &mut self,
-        aggregate: Aggregate,
+        prev: Aggregate,
         blocks: &[PayloadMetadata<Types>],
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Aggregate> {
         let height = blocks[0].height();
         let (prev_tx_count, prev_size) = (
-            aggregate.num_transactions as u64,
-            aggregate.payload_size as u64,
+            u64::try_from(prev.num_transactions)?,
+            u64::try_from(prev.payload_size)?,
         );
         // Cumulatively sum up new statistics for each block in this chunk.
         let rows = blocks
@@ -340,9 +341,18 @@ impl<Types: NodeType> UpdateAggregatesStorage<Types> for Transaction<Write> {
             "aggregate",
             ["height", "num_transactions", "payload_size"],
             ["height"],
-            rows,
+            rows.clone(),
         )
-        .await
+        .await?;
+
+        let (height, num_transactions, payload_size) =
+            rows.last().ok_or_else(|| anyhow!("no row"))?;
+
+        Ok(Aggregate {
+            height: *height,
+            num_transactions: *num_transactions,
+            payload_size: *payload_size,
+        })
     }
 }
 

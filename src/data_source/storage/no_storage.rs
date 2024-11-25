@@ -288,7 +288,7 @@ impl<'a> AggregatesStorage for Transaction<'a> {
         bail!("no_storage mock read error")
     }
 
-    async fn aggregate(&mut self, _height: i64) -> anyhow::Result<Aggregate> {
+    async fn load_prev_aggregate(&mut self) -> anyhow::Result<Option<Aggregate>> {
         bail!("no_storage mock read error")
     }
 }
@@ -299,10 +299,10 @@ where
 {
     async fn update_aggregates(
         &mut self,
-        _aggregate: Aggregate,
+        _prev: Aggregate,
         _blocks: &[PayloadMetadata<Types>],
-    ) -> anyhow::Result<()> {
-        Ok(())
+    ) -> anyhow::Result<Aggregate> {
+        Ok(Aggregate::default())
     }
 }
 

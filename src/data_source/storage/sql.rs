@@ -922,7 +922,6 @@ pub mod testing {
                 let path = format!("sqlite:{db_path}");
                 sqlx::sqlite::SqliteConnectOptions::from_str(&path)
                     .expect("invalid db path")
-                    .locking_mode(sqlx::sqlite::SqliteLockingMode::Exclusive)
                     .create_if_missing(true)
                     .into()
             };

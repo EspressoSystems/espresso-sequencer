@@ -1360,24 +1360,30 @@ where
     #[tracing::instrument(skip_all)]
     async fn aggregate(self: Arc<Self>, chunk_size: usize, metrics: AggregatorMetrics) {
         loop {
-            let start = loop {
+            let prev_aggregate = loop {
                 let mut tx = match self.read().await {
                     Ok(tx) => tx,
                     Err(err) => {
-                        tracing::error!("unable to start aggregator: {err:#}");
+                        tracing::error!("unable to open read tx: {err:#}");
                         sleep(Duration::from_secs(5)).await;
                         continue;
                     }
                 };
-                match tx.aggregates_height().await {
-                    Ok(height) => break height,
+                match tx.load_prev_aggregate().await {
+                    Ok(agg) => break agg,
                     Err(err) => {
-                        tracing::error!("unable to load aggregator height: {err:#}");
+                        tracing::error!("unable to load previous aggregate: {err:#}");
                         sleep(Duration::from_secs(5)).await;
                         continue;
                     }
-                };
+                }
             };
+
+            let (start, mut prev_aggregate) = match prev_aggregate {
+                Some(aggregate) => (aggregate.height as usize + 1, aggregate),
+                None => (0, Aggregate::default()),
+            };
+
             tracing::info!(start, "starting aggregator");
             metrics.height.set(start);
 
@@ -1402,21 +1408,18 @@ where
                 );
                 loop {
                     let res = async {
-                        let start = chunk[0].height;
-                        let aggregate = if start == 0 {
-                            Aggregate::default()
-                        } else {
-                            let mut tx = self.read().await.context("opening transaction")?;
-                            tx.aggregate((start - 1).try_into()?).await?
-                        };
-
                         let mut tx = self.write().await.context("opening transaction")?;
-                        tx.update_aggregates(aggregate, &chunk).await?;
-                        tx.commit().await.context("committing transaction")
+                        let aggregate =
+                            tx.update_aggregates(prev_aggregate.clone(), &chunk).await?;
+                        tx.commit().await.context("committing transaction")?;
+                        prev_aggregate = aggregate;
+                        anyhow::Result::<_>::Ok(())
                     }
                     .await;
                     match res {
-                        Ok(()) => break,
+                        Ok(()) => {
+                            break;
+                        }
                         Err(err) => {
                             tracing::warn!(
                                 num_blocks,

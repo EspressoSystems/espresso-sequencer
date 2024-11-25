@@ -235,8 +235,10 @@ pub trait AggregatesStorage {
     /// The block height for which aggregate statistics are currently available.
     fn aggregates_height(&mut self) -> impl Future<Output = anyhow::Result<usize>> + Send;
 
-    /// The aggregate table row at a specific block height
-    fn aggregate(&mut self, height: i64) -> impl Future<Output = anyhow::Result<Aggregate>> + Send;
+    /// the last aggregate
+    fn load_prev_aggregate(
+        &mut self,
+    ) -> impl Future<Output = anyhow::Result<Option<Aggregate>>> + Send;
 }
 
 pub trait UpdateAggregatesStorage<Types>
@@ -248,7 +250,7 @@ where
         &mut self,
         aggregate: Aggregate,
         blocks: &[PayloadMetadata<Types>],
-    ) -> impl Future<Output = anyhow::Result<()>> + Send;
+    ) -> impl Future<Output = anyhow::Result<Aggregate>> + Send;
 }
 
 /// An interface for querying Data and Statistics from the HotShot Blockchain.
