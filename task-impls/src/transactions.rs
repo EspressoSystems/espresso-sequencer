@@ -39,7 +39,7 @@ use vec1::Vec1;
 
 use crate::{
     builder::{
-        v0_1::BuilderClient as BuilderClientBase, v0_3::BuilderClient as BuilderClientMarketplace,
+        v0_1::BuilderClient as BuilderClientBase, v0_99::BuilderClient as BuilderClientMarketplace,
     },
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,

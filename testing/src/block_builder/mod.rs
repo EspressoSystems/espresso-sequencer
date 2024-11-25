@@ -17,7 +17,7 @@ use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::{Error, Options},
     },
-    v0_3,
+    v0_99,
 };
 use hotshot_types::{
     constants::{LEGACY_BUILDER_MODULE, MARKETPLACE_BUILDER_MODULE},
@@ -84,7 +84,7 @@ pub fn run_builder_source<TYPES, Source>(
     <Source as ReadState>::State: Sync
         + Send
         + v0_1::data_source::BuilderDataSource<TYPES>
-        + v0_3::data_source::BuilderDataSource<TYPES>,
+        + v0_99::data_source::BuilderDataSource<TYPES>,
 {
     spawn(async move {
         let start_builder = |url: Url, source: Source| -> _ {
@@ -92,7 +92,7 @@ pub fn run_builder_source<TYPES, Source>(
                 &Options::default(),
             )
             .expect("Failed to construct the builder API");
-            let builder_api_0_3 = hotshot_builder_api::v0_3::builder::define_api::<Source, TYPES>(
+            let builder_api_0_3 = hotshot_builder_api::v0_99::builder::define_api::<Source, TYPES>(
                 &Options::default(),
             )
             .expect("Failed to construct the builder API");

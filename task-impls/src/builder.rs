@@ -224,8 +224,8 @@ pub mod v0_2 {
 }
 
 /// Version 0.3: marketplace. Bundles.
-pub mod v0_3 {
-    pub use hotshot_builder_api::v0_3::Version;
+pub mod v0_99 {
+    pub use hotshot_builder_api::v0_99::Version;
     use hotshot_types::{
         bundle::Bundle, constants::MARKETPLACE_BUILDER_MODULE,
         traits::node_implementation::NodeType, vid::VidCommitment,
@@ -235,7 +235,7 @@ pub mod v0_3 {
     pub use super::BuilderClientError;
 
     /// Client for builder API
-    pub type BuilderClient<TYPES> = super::BuilderClient<TYPES, StaticVersion<0, 3>>;
+    pub type BuilderClient<TYPES> = super::BuilderClient<TYPES, StaticVersion<0, 99>>;
 
     impl<TYPES: NodeType> BuilderClient<TYPES> {
         /// Claim block
