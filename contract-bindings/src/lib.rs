@@ -13,3 +13,4 @@ pub mod light_client_state_update_vk_mock;
 pub mod plonk_verifier;
 pub mod plonk_verifier_2;
 pub mod shared_types;
+pub mod simple_stake_table;
