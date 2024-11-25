@@ -195,7 +195,7 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
                     },
                 }
 
-                // Disconnect and reconnect if no event has been received within 1 second
+                // Disconnect and reconnect if no event has been received within quite a long time (set to 1s by default)
                 if Instant::now().duration_since(this.last_event_time) > Self::RETRY_PERIOD {
                     warn!("No events received for quite a long time, reconnecting");
                     let fut = Self::connect_inner(this.api_url.clone());
