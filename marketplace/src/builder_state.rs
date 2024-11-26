@@ -1,3 +1,4 @@
+use hotshot_builder_api::v0_2::builder::TransactionStatus;
 use hotshot_types::{
     data::{Leaf, QuorumProposal},
     message::Proposal,

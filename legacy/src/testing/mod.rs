@@ -34,13 +34,15 @@ use async_lock::RwLock;
 use committable::{Commitment, CommitmentBoundsArkless, Committable};
 use marketplace_builder_shared::{
     block::{BuilderStateId, ParentBlockReferences},
-    testing::constants::{TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_PROTOCOL_MAX_BLOCK_SIZE},
+    testing::constants::{
+        TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_MAX_TX_NUM, TEST_PROTOCOL_MAX_BLOCK_SIZE,
+    },
 };
 use std::sync::Arc;
 use std::time::Duration;
 
 mod basic_test;
-mod finalization_test;
+pub mod finalization_test;
 
 pub async fn create_builder_state(
     channel_capacity: usize,
@@ -74,6 +76,7 @@ pub async fn create_builder_state(
         TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
         TEST_PROTOCOL_MAX_BLOCK_SIZE,
         num_storage_nodes,
+        TEST_MAX_TX_NUM,
     )));
 
     // instantiate the bootstrap builder state

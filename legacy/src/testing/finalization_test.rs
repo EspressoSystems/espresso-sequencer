@@ -1,5 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
+use super::basic_test::{BuilderState, MessageType};
 use crate::{
     builder_state::{DaProposalMessage, QuorumProposalMessage, ALLOW_EMPTY_BLOCK_PERIOD},
     service::{GlobalState, ProxyGlobalState, ReceivedTransaction},
@@ -31,7 +32,8 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use marketplace_builder_shared::testing::constants::{
-    TEST_CHANNEL_BUFFER_SIZE, TEST_NUM_CONSENSUS_RETRIES, TEST_NUM_NODES_IN_VID_COMPUTATION,
+    TEST_CHANNEL_BUFFER_SIZE, TEST_MAX_TX_NUM, TEST_NUM_CONSENSUS_RETRIES,
+    TEST_NUM_NODES_IN_VID_COMPUTATION,
 };
 use marketplace_builder_shared::{
     block::BuilderStateId, testing::constants::TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
@@ -40,8 +42,6 @@ use marketplace_builder_shared::{
     block::ParentBlockReferences, testing::constants::TEST_PROTOCOL_MAX_BLOCK_SIZE,
 };
 use sha2::{Digest, Sha256};
-
-use super::basic_test::{BuilderState, MessageType};
 
 type TestSetup = (
     ProxyGlobalState<TestTypes>,
@@ -54,7 +54,7 @@ type TestSetup = (
 /// [`setup_builder_for_test`] sets up a test environment for the builder state.
 /// It returns a tuple containing the proxy global state, the sender for decide
 /// messages, the sender for data availability proposals,
-fn setup_builder_for_test() -> TestSetup {
+pub fn setup_builder_for_test() -> TestSetup {
     let (req_sender, req_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
     let (tx_sender, tx_receiver) = broadcast(TEST_CHANNEL_BUFFER_SIZE);
 
@@ -73,6 +73,7 @@ fn setup_builder_for_test() -> TestSetup {
         TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
         TEST_PROTOCOL_MAX_BLOCK_SIZE,
         TEST_NUM_NODES_IN_VID_COMPUTATION,
+        TEST_MAX_TX_NUM,
     )));
 
     let max_api_duration = Duration::from_millis(100);
@@ -124,7 +125,7 @@ fn setup_builder_for_test() -> TestSetup {
 ///
 /// By default Consensus will retry 3-4 times to get available blocks from the
 /// Builder.
-async fn process_available_blocks_round(
+pub async fn process_available_blocks_round(
     proxy_global_state: &ProxyGlobalState<TestTypes>,
     builder_state_id: BuilderStateId<TestTypes>,
     round: u64,
@@ -173,7 +174,7 @@ async fn process_available_blocks_round(
 ///
 /// This is the workflow that happens if the builder has a block to propose,
 /// and the block is included by consensus.
-async fn progress_round_with_available_block_info(
+pub async fn progress_round_with_available_block_info(
     proxy_global_state: &ProxyGlobalState<TestTypes>,
     available_block_info: AvailableBlockInfo<TestTypes>,
     builder_state_id: BuilderStateId<TestTypes>,
@@ -223,7 +224,7 @@ async fn progress_round_with_available_block_info(
 /// This is the workflow that happens if the builder does not have a block to
 /// propose, and consensus must continue to progress without a block built by
 /// any builder.
-async fn progress_round_without_available_block_info(
+pub async fn progress_round_without_available_block_info(
     builder_state_id: BuilderStateId<TestTypes>,
     round: u64,
     da_proposal_sender: &Sender<MessageType<TestTypes>>,

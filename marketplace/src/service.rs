@@ -15,9 +15,12 @@ use futures::{
     TryStreamExt,
 };
 use hotshot::types::Event;
-use hotshot_builder_api::v0_3::{
-    builder::{define_api, submit_api, BuildError, Error as BuilderApiError},
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+use hotshot_builder_api::{
+    v0_2::builder::TransactionStatus,
+    v0_3::{
+        builder::{define_api, submit_api, BuildError, Error as BuilderApiError},
+        data_source::{AcceptsTxnSubmits, BuilderDataSource},
+    },
 };
 use hotshot_types::bundle::Bundle;
 use hotshot_types::traits::block_contents::{BuilderFee, Transaction};
@@ -374,6 +377,15 @@ where
             .collect::<FuturesOrdered<_>>()
             .try_collect()
             .await
+    }
+
+    async fn txn_status(
+        &self,
+        _txn_hash: Commitment<<Types as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError> {
+        Err(BuildError::Error(
+            "txn_status feature Not Implemented for marketplace builder yet.".to_string(),
+        ))
     }
 }
 

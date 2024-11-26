@@ -1,8 +1,11 @@
 use hotshot::types::Event;
-use hotshot_builder_api::v0_1::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::BuildError,
-    data_source::{AcceptsTxnSubmits, BuilderDataSource},
+use hotshot_builder_api::{
+    v0_1::{
+        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+        builder::BuildError,
+        data_source::{AcceptsTxnSubmits, BuilderDataSource},
+    },
+    v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
     data::{DaProposal, Leaf, QuorumProposal},
@@ -180,6 +183,9 @@ pub struct GlobalState<Types: NodeType> {
 
     pub block_size_limits: BlockSizeLimits,
 
+    // A mapping from transaction hash to its status
+    pub tx_status: RwLock<lru::LruCache<Commitment<Types::Transaction>, TransactionStatus>>,
+
     /// Number of nodes.
     ///
     /// Initial value may be updated by the `claim_block_with_num_nodes` endpoint.
@@ -226,6 +232,7 @@ impl<Types: NodeType> GlobalState<Types> {
         max_block_size_increment_period: Duration,
         protocol_max_block_size: u64,
         num_nodes: usize,
+        max_txn_num: usize,
     ) -> Self {
         let mut spawned_builder_states = HashMap::new();
         let bootstrap_id = BuilderStateId {
@@ -244,6 +251,9 @@ impl<Types: NodeType> GlobalState<Types> {
                 protocol_max_block_size,
                 max_block_size_increment_period,
             ),
+            tx_status: RwLock::new(LruCache::new(
+                NonZeroUsize::new(max_txn_num).expect("max_txn_num must be greater than zero "),
+            )),
             num_nodes,
         }
     }
@@ -387,6 +397,54 @@ impl<Types: NodeType> GlobalState<Types> {
         .await
     }
 
+    // get transaction status
+    // return one of "pending", "sequenced", "rejected" or "unknown"
+    pub async fn txn_status(
+        &self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError> {
+        if let Some(status) = self.tx_status.write().await.get(&txn_hash) {
+            Ok(status.clone())
+        } else {
+            Ok(TransactionStatus::Unknown)
+        }
+    }
+
+    pub async fn set_txn_status(
+        &mut self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+        txn_status: TransactionStatus,
+    ) -> Result<(), BuildError> {
+        let mut write_guard = self.tx_status.write().await;
+        if write_guard.contains(&txn_hash) {
+            let old_status = write_guard.get(&txn_hash);
+            match old_status {
+                Some(TransactionStatus::Rejected { reason }) => {
+                    tracing::debug!("Changing the status of a rejected transaction to status {:?}! The reason it is previously rejected is {:?}", txn_status, reason);
+                }
+                Some(TransactionStatus::Sequenced { leaf }) => {
+                    let e = format!("Changing the status of a sequenced transaction to status {:?} is not allowed! The transaction is sequenced in leaf {:?}", txn_status, leaf);
+                    tracing::error!(e);
+                    return Err(BuildError::Error(e));
+                }
+                _ => {
+                    tracing::debug!(
+                        "change status of transaction {txn_hash} from {:?} to {:?}",
+                        old_status,
+                        txn_status
+                    );
+                }
+            }
+        } else {
+            tracing::debug!(
+                "insert status of a first-seen transaction {txn_hash} : {:?}",
+                txn_status
+            );
+        }
+        write_guard.put(txn_hash, txn_status);
+        Ok(())
+    }
+
     /// Helper function that attempts to retrieve the broadcast sender for the given
     /// [`BuilderStateId`]. If the sender does not exist, it will return the
     /// broadcast sender for the for the hightest view number [`BuilderStateId`]
@@ -430,7 +488,10 @@ impl<Types: NodeType> GlobalState<Types> {
     }
 }
 
+#[derive(derive_more::Deref, derive_more::DerefMut)]
 pub struct ProxyGlobalState<Types: NodeType> {
+    #[deref(forward)]
+    #[deref_mut(forward)]
     // global state
     global_state: Arc<RwLock<GlobalState<Types>>>,
 
@@ -1049,8 +1110,30 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
             .global_state
             .read_arc()
             .await
-            .submit_client_txns(txns)
+            .submit_client_txns(txns.clone())
             .await;
+
+        let pairs: Vec<(Commitment<<Types as NodeType>::Transaction>, Result<_, _>)> = (0..txns
+            .len())
+            .map(|i| (txns[i].commit(), response[i].clone()))
+            .collect();
+        let mut write_guard = self.global_state.write_arc().await;
+        for (txn_commit, res) in pairs {
+            if let Err(some) = res {
+                write_guard
+                    .set_txn_status(
+                        txn_commit,
+                        TransactionStatus::Rejected {
+                            reason: some.to_string(),
+                        },
+                    )
+                    .await?;
+            } else {
+                write_guard
+                    .set_txn_status(txn_commit, TransactionStatus::Pending)
+                    .await?;
+            }
+        }
 
         tracing::debug!(
             "Transaction submitted to the builder states, sending response: {:?}",
@@ -1061,6 +1144,17 @@ impl<Types: NodeType> AcceptsTxnSubmits<Types> for ProxyGlobalState<Types> {
         // instead of Result<Vec> not to loose any information,
         //  but this requires changes to builder API
         response.into_iter().collect()
+    }
+
+    async fn txn_status(
+        &self,
+        txn_hash: Commitment<<Types as NodeType>::Transaction>,
+    ) -> Result<TransactionStatus, BuildError> {
+        self.global_state
+            .read_arc()
+            .await
+            .txn_status(txn_hash)
+            .await
     }
 }
 #[async_trait]
@@ -1126,13 +1220,34 @@ pub async fn run_non_permissioned_standalone_builder_service<
                         .max_block_size
                 };
 
-                handle_received_txns(
+                let response = handle_received_txns(
                     &tx_sender,
-                    transactions,
+                    transactions.clone(),
                     TransactionSource::HotShot,
                     max_block_size,
                 )
                 .await;
+                let pairs: Vec<(Commitment<<Types as NodeType>::Transaction>, Result<_, _>)> = (0
+                    ..transactions.len())
+                    .map(|i| (transactions[i].commit(), response[i].clone()))
+                    .collect();
+                let mut write_guard = global_state.write_arc().await;
+                for (txn_commit, res) in pairs {
+                    if let Err(some) = res {
+                        write_guard
+                            .set_txn_status(
+                                txn_commit,
+                                TransactionStatus::Rejected {
+                                    reason: some.to_string(),
+                                },
+                            )
+                            .await?;
+                    } else {
+                        write_guard
+                            .set_txn_status(txn_commit, TransactionStatus::Pending)
+                            .await?;
+                    }
+                }
             }
             // decide event
             EventType::Decide {
@@ -1516,17 +1631,21 @@ mod test {
 
     use async_lock::RwLock;
     use committable::Commitment;
+    use committable::Committable;
     use futures::StreamExt;
     use hotshot::{
         traits::BlockPayload,
         types::{BLSPubKey, SignatureKey},
     };
+    use hotshot_builder_api::v0_1::data_source::AcceptsTxnSubmits;
     use hotshot_builder_api::v0_2::block_info::AvailableBlockInfo;
+    use hotshot_builder_api::v0_2::builder::TransactionStatus;
     use hotshot_example_types::{
         block_types::{TestBlockPayload, TestMetadata, TestTransaction},
         node_types::{TestTypes, TestVersions},
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::{
         data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
         message::Proposal,
@@ -1541,8 +1660,8 @@ mod test {
     use marketplace_builder_shared::{
         block::{BlockId, BuilderStateId, ParentBlockReferences},
         testing::constants::{
-            TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_NUM_NODES_IN_VID_COMPUTATION,
-            TEST_PROTOCOL_MAX_BLOCK_SIZE,
+            TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD, TEST_MAX_TX_NUM,
+            TEST_NUM_NODES_IN_VID_COMPUTATION, TEST_PROTOCOL_MAX_BLOCK_SIZE,
         },
     };
     use sha2::{Digest, Sha256};
@@ -1557,6 +1676,10 @@ mod test {
             TriggerStatus,
         },
         service::{BlockSizeLimits, HandleReceivedTxnsError},
+        testing::finalization_test::{
+            process_available_blocks_round, progress_round_with_available_block_info,
+            progress_round_without_available_block_info, setup_builder_for_test,
+        },
         LegacyCommit,
     };
 
@@ -1590,6 +1713,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         assert_eq!(state.blocks.len(), 0, "The blocks LRU should be empty");
@@ -1662,6 +1786,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         {
@@ -1751,6 +1876,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         let mut req_receiver_1 = {
@@ -1867,6 +1993,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         {
@@ -1962,6 +2089,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         let new_parent_commit = vid_commitment(&[], 9);
@@ -2163,6 +2291,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         let new_parent_commit = vid_commitment(&[], 9);
@@ -2435,6 +2564,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2529,6 +2659,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2608,6 +2739,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2707,6 +2839,7 @@ mod test {
             TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
             TEST_PROTOCOL_MAX_BLOCK_SIZE,
             TEST_NUM_NODES_IN_VID_COMPUTATION,
+            TEST_MAX_TX_NUM,
         );
 
         // We register a few builder states.
@@ -2820,6 +2953,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key),
             Duration::from_millis(100),
@@ -2880,6 +3014,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_millis(100),
@@ -2940,6 +3075,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key),
             Duration::from_millis(100),
@@ -3001,6 +3137,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3071,6 +3208,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3208,6 +3346,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3352,6 +3491,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3407,6 +3547,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3455,6 +3596,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3557,6 +3699,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3613,6 +3756,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3671,6 +3815,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3771,6 +3916,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -3865,6 +4011,7 @@ mod test {
                 TEST_MAX_BLOCK_SIZE_INCREMENT_PERIOD,
                 TEST_PROTOCOL_MAX_BLOCK_SIZE,
                 TEST_NUM_NODES_IN_VID_COMPUTATION,
+                TEST_MAX_TX_NUM,
             ))),
             (builder_public_key, builder_private_key.clone()),
             Duration::from_secs(1),
@@ -4509,6 +4656,211 @@ mod test {
                 }
                 _ => {
                     panic!("Expected a TransactionMessage, but got something else");
+                }
+            }
+        }
+    }
+
+    /// This test checks builder does save the status of transactions correctly
+    #[tokio::test]
+    async fn test_get_txn_status() {
+        let (proxy_global_state, _, da_proposal_sender, quorum_proposal_sender, _) =
+            setup_builder_for_test();
+        tracing::debug!("start tests on correctly setting transaction status.");
+
+        let mut round = 0;
+        let mut current_builder_state_id = BuilderStateId::<TestTypes> {
+            parent_commitment: vid_commitment(&[], 8),
+            parent_view: ViewNumber::genesis(),
+        };
+        current_builder_state_id = progress_round_without_available_block_info(
+            current_builder_state_id,
+            round,
+            &da_proposal_sender,
+            &quorum_proposal_sender,
+        )
+        .await;
+
+        // round 1: test status Pending
+        let num_transactions = 10;
+        let mut txns = Vec::with_capacity(num_transactions);
+        for index in 0..num_transactions {
+            txns.push(TestTransaction::new(vec![index as u8]));
+        }
+        let txns = txns;
+        proxy_global_state
+            .submit_txns(txns.clone())
+            .await
+            .expect("should submit transaction without issue");
+        // advance the round
+        {
+            round = 1;
+            let (_attempts, available_available_blocks_result) = process_available_blocks_round(
+                &proxy_global_state,
+                current_builder_state_id.clone(),
+                round,
+            )
+            .await;
+            current_builder_state_id = progress_round_with_available_block_info(
+                &proxy_global_state,
+                available_available_blocks_result.unwrap()[0].clone(),
+                current_builder_state_id,
+                round,
+                &da_proposal_sender,
+                &quorum_proposal_sender,
+            )
+            .await;
+        }
+        // tx submitted in round 1 should be pending
+        for tx in txns.clone() {
+            match proxy_global_state.txn_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Pending);
+                }
+                e => {
+                    panic!("transaction status should be Pending instead of {:?}", e);
+                }
+            }
+        }
+
+        // round 2: test status Pending again
+        let mut txns_2 = Vec::with_capacity(num_transactions);
+        for index in 0..num_transactions {
+            txns_2.push(TestTransaction::new(vec![(num_transactions + index) as u8]));
+        }
+        let txns_2 = txns_2;
+        proxy_global_state
+            .submit_txns(txns_2.clone())
+            .await
+            .expect("should submit transaction without issue");
+        // advance the round
+        {
+            round = 2;
+            let (_attempts, available_available_blocks_result) = process_available_blocks_round(
+                &proxy_global_state,
+                current_builder_state_id.clone(),
+                round,
+            )
+            .await;
+            progress_round_with_available_block_info(
+                &proxy_global_state,
+                available_available_blocks_result.unwrap()[0].clone(),
+                current_builder_state_id,
+                round,
+                &da_proposal_sender,
+                &quorum_proposal_sender,
+            )
+            .await;
+        }
+        // tx submitted in round 2 should be pending
+        for tx in txns_2.clone() {
+            match proxy_global_state.txn_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Pending);
+                }
+                e => {
+                    panic!("transaction status should be Pending instead of {:?}", e);
+                }
+            }
+        }
+
+        // round 3: test status Rejected with correct error message
+        let big_txns = vec![TestTransaction::new(vec![
+            0;
+            TEST_PROTOCOL_MAX_BLOCK_SIZE
+                as usize
+                + 1
+        ])];
+        let _ = proxy_global_state.submit_txns(big_txns.clone()).await;
+        for tx in big_txns.clone() {
+            match proxy_global_state.txn_status(tx.commit()).await {
+                Ok(txn_status) => {
+                    if tx.minimum_block_size() > TEST_PROTOCOL_MAX_BLOCK_SIZE {
+                        tracing::debug!(
+                            "In test_get_txn_status(), txn_status of large tx = {:?}",
+                            txn_status
+                        );
+                        matches!(txn_status, TransactionStatus::Rejected { .. });
+                        if let TransactionStatus::Rejected { reason } = txn_status {
+                            assert!(reason.contains("Transaction too big"));
+                        }
+                    } else {
+                        assert_eq!(txn_status, TransactionStatus::Pending);
+                    }
+                }
+                e => {
+                    panic!(
+                        "transaction status should be a valid status instead of {:?}",
+                        e
+                    );
+                }
+            }
+        }
+
+        {
+            // Test a rejected txn marked as other status again
+            let mut write_guard = proxy_global_state.global_state.write_arc().await;
+            for tx in big_txns {
+                match write_guard
+                    .set_txn_status(tx.commit(), TransactionStatus::Pending)
+                    .await
+                {
+                    Err(err) => {
+                        panic!("Expected a result, but got a error {:?}", err);
+                    }
+                    _ => {
+                        // This is expected
+                    }
+                }
+
+                match write_guard.txn_status(tx.commit()).await {
+                    Ok(txn_status) => {
+                        assert_eq!(txn_status, TransactionStatus::Pending);
+                    }
+                    e => {
+                        panic!(
+                            "transaction status should be a valid status instead of {:?}",
+                            e
+                        );
+                    }
+                }
+            }
+        }
+
+        {
+            // Test a sequenced txn cannot be marked as other status again
+            let mut write_guard = proxy_global_state.global_state.write_arc().await;
+            let tx_test_assigned_twice =
+                TestTransaction::new(vec![(num_transactions * 3 + 1) as u8]);
+            write_guard
+                .set_txn_status(
+                    tx_test_assigned_twice.commit(),
+                    TransactionStatus::Sequenced { leaf: 0 },
+                )
+                .await
+                .unwrap();
+            match write_guard
+                .set_txn_status(tx_test_assigned_twice.commit(), TransactionStatus::Pending)
+                .await
+            {
+                Err(_err) => {
+                    // This is expected
+                }
+                _ => {
+                    panic!("Expected an error, but got a result");
+                }
+            }
+        }
+
+        {
+            // Test status Unknown when the txn is unknown
+            let unknown_tx = TestTransaction::new(vec![(num_transactions * 4 + 1) as u8]);
+            match proxy_global_state.txn_status(unknown_tx.commit()).await {
+                Ok(txn_status) => {
+                    assert_eq!(txn_status, TransactionStatus::Unknown);
+                }
+                e => {
+                    panic!("transaction status should be Unknown instead of {:?}", e);
                 }
             }
         }

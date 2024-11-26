@@ -25,6 +25,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 vbs = { workspace = true }
 tracing-subscriber = { workspace = true }
+derive_more = { workspace = true, features = ["deref", "deref_mut"] }
 
 [dev-dependencies]
 hotshot-example-types = { workspace = true }
