@@ -7,6 +7,9 @@ doc *args:
 demo *args:
     docker compose up {{args}}
 
+demo-native *args:
+    cargo build --profile test
+    scripts/demo-native {{args}}
 
 build:
     #!/usr/bin/env bash

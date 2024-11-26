@@ -225,12 +225,14 @@
           ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
           ;
           shellHook = ''
-            # Add node binaries to PATH
+            # Add node binaries to PATH for development
             export PATH="$PWD/node_modules/.bin:$PATH"
+
             # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
             # with rustup installations.
             export CARGO_HOME=$HOME/.cargo-nix
 
+            # Add rust binaries to PATH for native demo
             export PATH="$PWD/$CARGO_TARGET_DIR/debug:$PATH"
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
