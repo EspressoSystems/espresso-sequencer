@@ -168,17 +168,14 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
                             Ok(Some(Ok(event))) => {
                                 // Update the last_event_time on receiving an event
                                 this.last_event_time = Instant::now();
-                                tracing::error!("enter Ok(Some(Ok(event)))");
                                 return Some((event, this));
                             }
                             Ok(Some(Err(err))) => {
                                 warn!(?err, "Error in event stream");
-                                tracing::error!("enter Ok(Some(Err(err)))");
                                 continue;
                             }
                             Ok(None) => {
                                 warn!("Event stream ended, attempting reconnection");
-                                tracing::error!("enter Ok(None)");
                                 let fut = Self::connect_inner(this.api_url.clone());
                                 let _ =
                                     std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
@@ -187,9 +184,9 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
                             Err(_) => {
                                 // Timeout occurred, reconnect
                                 warn!("Timeout waiting for next event; reconnecting");
-                                tracing::error!("enter Err(_)");
                                 let fut = Self::connect_inner(this.api_url.clone());
-                                let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                                let _ =
+                                    std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
                                 continue;
                             }
                         }
@@ -301,7 +298,6 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn event_stream_wrapper() {
-
         let _ = tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env())
             .try_init();
