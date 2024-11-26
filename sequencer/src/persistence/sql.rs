@@ -164,6 +164,9 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "30m")]
     pub(crate) connection_timeout: Duration,
 
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_SLOW_STATEMENT_THRESHOLD", value_parser = parse_duration, default_value = "1m")]
+    pub(crate) slow_statement_threshold: Duration,
+
     /// The minimum number of database connections to maintain at any time.
     ///
     /// The database client will, to the best of its ability, maintain at least `min` open
@@ -290,6 +293,7 @@ impl TryFrom<Options> for Config {
         cfg = cfg.idle_connection_timeout(opt.idle_connection_timeout);
         cfg = cfg.min_connections(opt.min_connections);
         cfg = cfg.connection_timeout(opt.connection_timeout);
+        cfg = cfg.slow_statement_threshold(opt.slow_statement_threshold);
 
         #[cfg(not(feature = "embedded-db"))]
         {

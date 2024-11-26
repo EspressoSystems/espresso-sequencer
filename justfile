@@ -9,6 +9,7 @@ demo *args:
 
 demo-native *args:
     cargo build --profile test
+    cargo build --profile test --manifest-path ./sequencer-sqlite/Cargo.toml
     scripts/demo-native {{args}}
 
 build:
@@ -18,9 +19,6 @@ build:
     export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-target}
     cargo build --profile test
     cargo build --profile test --manifest-path ./sequencer-sqlite/Cargo.toml
-
-demo-native *args: build
-    scripts/demo-native {{args}}
 
 demo-native-mp *args: build
     scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
