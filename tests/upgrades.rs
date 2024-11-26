@@ -37,6 +37,11 @@ async fn test_upgrade() -> Result<()> {
 
     while let Some(header) = stream.next().await {
         let header = header.unwrap();
+        println!(
+            "block: height={}, version={}",
+            header.height(),
+            header.version()
+        );
 
         // TODO is it possible to discover the view at which upgrade should be finished?
         // First few views should be `Base` version.
