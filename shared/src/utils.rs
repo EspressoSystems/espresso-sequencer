@@ -163,43 +163,65 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
         let stream = unfold(this, |mut this| async move {
             loop {
                 match &mut this.connection {
-                    Left(connection) => {
-                        let result = connection.next().await;
-                        match result {
-                            Some(Ok(event)) => {
-                                // Update the last_event_time on receiving an event
-                                this.last_event_time = Instant::now();
-                                return Some((event, this));
-                            }
-                            Some(Err(err)) => {
-                                warn!(?err, "Error in event stream");
-                            }
-                            None => {
-                                warn!("Event stream ended, attempting reconnection");
-                                let fut = Self::connect_inner(this.api_url.clone());
-                                let _ =
-                                    std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
-                            }
+                    Left(connection) => match connection.next().await {
+                        Some(Ok(event)) => {
+                            return Some((event, this));
                         }
-                    }
+                        Some(Err(err)) => {
+                            warn!(?err, "Error in event stream");
+                            continue;
+                        }
+                        None => {
+                            warn!("Event stream ended, attempting reconnection");
+                            let fut = Self::connect_inner(this.api_url.clone());
+                            let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                            continue;
+                        }
+                    },
+                    // Left(connection) => {
+                    //     match tokio::time::timeout(Self::RETRY_PERIOD, connection.next()).await {
+                    //         Ok(Some(Ok(event))) => {
+                    //             // Update the last_event_time on receiving an event
+                    //             this.last_event_time = Instant::now();
+                    //             tracing::error!("enter Ok(Some(Ok(event)))");
+                    //             return Some((event, this));
+                    //         }
+                    //         Ok(Some(Err(err))) => {
+                    //             warn!(?err, "Error in event stream");
+                    //             tracing::error!("enter Ok(Some(Err(err)))");
+                    //             continue;
+                    //         }
+                    //         Ok(None) => {
+                    //             warn!("Event stream ended, attempting reconnection");
+                    //             tracing::error!("enter Ok(None)");
+                    //             let fut = Self::connect_inner(this.api_url.clone());
+                    //             let _ =
+                    //                 std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                    //             continue;
+                    //         }
+                    //         Err(_) => {
+                    //             // Timeout occurred, reconnect
+                    //             warn!("Timeout waiting for next event; reconnecting");
+                    //             tracing::error!("enter Err(_)");
+                    //             let fut = Self::connect_inner(this.api_url.clone());
+                    //             let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                    //             continue;
+                    //         }
+                    //     }
+                    // }
                     Right(reconnection) => match reconnection.await {
                         Ok(connection) => {
                             let _ = std::mem::replace(&mut this.connection, Left(connection));
+                            continue;
                         }
                         Err(err) => {
                             error!(?err, "Error while reconnecting, will retry in a while");
                             sleep(Self::RETRY_PERIOD).await;
                             let fut = Self::connect_inner(this.api_url.clone());
                             let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                            continue;
                         }
                     },
-                }
-
-                // Disconnect and reconnect if no event has been received within quite a long time (set to 1s by default)
-                if Instant::now().duration_since(this.last_event_time) > Self::RETRY_PERIOD {
-                    warn!("No events received for quite a long time, reconnecting");
-                    let fut = Self::connect_inner(this.api_url.clone());
-                    let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
                 }
             }
         });
@@ -229,6 +251,7 @@ mod tests {
     use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
     use tide_disco::{method::ReadState, App};
     use tokio::{spawn, task::JoinHandle, time::timeout};
+    use tracing_subscriber::EnvFilter;
     use url::Url;
     use vbs::version::StaticVersion;
 
@@ -293,6 +316,11 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn event_stream_wrapper() {
+
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .try_init();
+
         const TIMEOUT: Duration = Duration::from_secs(3);
 
         let url: Url = format!(
@@ -335,45 +363,45 @@ mod tests {
             .expect_err("API is reachable, but is on wrong path");
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn event_stream_wrapper_with_idle_timeout() {
-        const TIMEOUT: Duration = Duration::from_secs(3);
-        const IDLE_TIMEOUT: Duration = Duration::from_secs(1);
+    // #[tokio::test(flavor = "multi_thread")]
+    // async fn event_stream_wrapper_with_idle_timeout() {
+    //     const TIMEOUT: Duration = Duration::from_secs(3);
+    //     const IDLE_TIMEOUT: Duration = Duration::from_secs(1);
 
-        let url: Url = format!(
-            "http://localhost:{}",
-            portpicker::pick_unused_port().unwrap()
-        )
-        .parse()
-        .unwrap();
+    //     let url: Url = format!(
+    //         "http://localhost:{}",
+    //         portpicker::pick_unused_port().unwrap()
+    //     )
+    //     .parse()
+    //     .unwrap();
 
-        let app_handle = run_app("hotshot-events", url.clone());
+    //     let app_handle = run_app("hotshot-events", url.clone());
 
-        let mut stream = EventServiceStream::<TestTypes, MockVersion>::connect(url.clone())
-            .await
-            .unwrap();
+    //     let mut stream = EventServiceStream::<TestTypes, MockVersion>::connect(url.clone())
+    //         .await
+    //         .unwrap();
 
-        // The stream should work when the server is running
-        timeout(TIMEOUT, stream.next())
-            .await
-            .expect("When mock event server is spawned, stream should work")
-            .unwrap();
+    //     // The stream should work when the server is running
+    //     timeout(TIMEOUT, stream.next())
+    //         .await
+    //         .expect("When mock event server is spawned, stream should work")
+    //         .unwrap();
 
-        // Simulate idle timeout by stopping the server and waiting
-        app_handle.abort();
-        tokio::time::sleep(IDLE_TIMEOUT + Duration::from_millis(500)).await; // Wait longer than idle timeout
+    //     // Simulate idle timeout by stopping the server and waiting
+    //     app_handle.abort();
+    //     tokio::time::sleep(IDLE_TIMEOUT + Duration::from_millis(500)).await; // Wait longer than idle timeout
 
-        // Stream should reconnect after idle timeout
-        let new_app_handle = run_app("hotshot-events", url.clone());
+    //     // Stream should reconnect after idle timeout
+    //     let new_app_handle = run_app("hotshot-events", url.clone());
 
-        timeout(TIMEOUT, stream.next())
-            .await
-            .expect("After idle timeout, stream should reconnect when the server restarts")
-            .unwrap();
+    //     timeout(TIMEOUT, stream.next())
+    //         .await
+    //         .expect("After idle timeout, stream should reconnect when the server restarts")
+    //         .unwrap();
 
-        // Cleanup
-        new_app_handle.abort();
-    }
+    //     // Cleanup
+    //     new_app_handle.abort();
+    // }
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
