@@ -513,7 +513,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
-        tracing::info!("saving config to Postgres");
+        tracing::info!("saving config to database");
         let json = serde_json::to_value(cfg)?;
 
         let mut tx = self.db.write().await?;
