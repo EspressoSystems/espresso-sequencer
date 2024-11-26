@@ -7,9 +7,9 @@ doc *args:
 demo *args:
     docker compose up {{args}}
 
-demo-native:
+demo-native *args:
     cargo build --profile test
-    scripts/demo-native
+    scripts/demo-native {{args}}
 
 demo-native-mp:
     cargo build --release
