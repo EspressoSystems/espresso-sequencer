@@ -33,25 +33,24 @@ async fn test_upgrade() -> Result<()> {
         .into_iter()
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    for mut stream in subscriptions {
-        while let Some(header) = stream.next().await {
-            let header = header.unwrap();
-            println!("height={:?}", header.height());
+    let mut stream = futures::stream::iter(subscriptions).flatten_unordered(None);
 
-            // TODO is it possible to discover the view at which upgrade should be finished?
-            // First few views should be `Base` version.
-            if header.height() <= 5 {
-                assert_eq!(header.version(), versions.0)
-            }
+    while let Some(header) = stream.next().await {
+        let header = header.unwrap();
 
-            if header.version() == versions.1 {
-                println!("header version matched!");
-                break;
-            }
+        // TODO is it possible to discover the view at which upgrade should be finished?
+        // First few views should be `Base` version.
+        if header.height() <= 20 {
+            assert_eq!(header.version(), versions.0)
+        }
 
-            if header.height() > SEQUENCER_BLOCKS_TIMEOUT {
-                panic!("Exceeded maximum block height. Upgrade should have finished by now :(");
-            }
+        if header.version() == versions.1 {
+            println!("header version matched! height={:?}", header.height());
+            break;
+        }
+
+        if header.height() > SEQUENCER_BLOCKS_TIMEOUT {
+            panic!("Exceeded maximum block height. Upgrade should have finished by now :(");
         }
     }
 
