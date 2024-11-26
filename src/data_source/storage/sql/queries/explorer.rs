@@ -409,7 +409,7 @@ where
         &mut self,
     ) -> Result<ExplorerSummary<Types>, GetExplorerSummaryError> {
         let histograms = {
-            let historgram_query_result = query(
+            let histogram_query_result = query(
                 "SELECT
                     h.height AS height,
                     h.timestamp AS timestamp,
@@ -426,7 +426,7 @@ where
             )
             .fetch(self.as_mut());
 
-            let histograms: Result<ExplorerHistograms, sqlx::Error> = historgram_query_result
+            let histograms: Result<ExplorerHistograms, sqlx::Error> = histogram_query_result
                 .map(|row_stream| {
                     row_stream.map(|row| {
                         let height: i64 = row.try_get("height")?;
