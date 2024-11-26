@@ -163,52 +163,37 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
         let stream = unfold(this, |mut this| async move {
             loop {
                 match &mut this.connection {
-                    Left(connection) => match connection.next().await {
-                        Some(Ok(event)) => {
-                            return Some((event, this));
+                    Left(connection) => {
+                        match tokio::time::timeout(Self::RETRY_PERIOD, connection.next()).await {
+                            Ok(Some(Ok(event))) => {
+                                // Update the last_event_time on receiving an event
+                                this.last_event_time = Instant::now();
+                                tracing::error!("enter Ok(Some(Ok(event)))");
+                                return Some((event, this));
+                            }
+                            Ok(Some(Err(err))) => {
+                                warn!(?err, "Error in event stream");
+                                tracing::error!("enter Ok(Some(Err(err)))");
+                                continue;
+                            }
+                            Ok(None) => {
+                                warn!("Event stream ended, attempting reconnection");
+                                tracing::error!("enter Ok(None)");
+                                let fut = Self::connect_inner(this.api_url.clone());
+                                let _ =
+                                    std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                                continue;
+                            }
+                            Err(_) => {
+                                // Timeout occurred, reconnect
+                                warn!("Timeout waiting for next event; reconnecting");
+                                tracing::error!("enter Err(_)");
+                                let fut = Self::connect_inner(this.api_url.clone());
+                                let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
+                                continue;
+                            }
                         }
-                        Some(Err(err)) => {
-                            warn!(?err, "Error in event stream");
-                            continue;
-                        }
-                        None => {
-                            warn!("Event stream ended, attempting reconnection");
-                            let fut = Self::connect_inner(this.api_url.clone());
-                            let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
-                            continue;
-                        }
-                    },
-                    // Left(connection) => {
-                    //     match tokio::time::timeout(Self::RETRY_PERIOD, connection.next()).await {
-                    //         Ok(Some(Ok(event))) => {
-                    //             // Update the last_event_time on receiving an event
-                    //             this.last_event_time = Instant::now();
-                    //             tracing::error!("enter Ok(Some(Ok(event)))");
-                    //             return Some((event, this));
-                    //         }
-                    //         Ok(Some(Err(err))) => {
-                    //             warn!(?err, "Error in event stream");
-                    //             tracing::error!("enter Ok(Some(Err(err)))");
-                    //             continue;
-                    //         }
-                    //         Ok(None) => {
-                    //             warn!("Event stream ended, attempting reconnection");
-                    //             tracing::error!("enter Ok(None)");
-                    //             let fut = Self::connect_inner(this.api_url.clone());
-                    //             let _ =
-                    //                 std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
-                    //             continue;
-                    //         }
-                    //         Err(_) => {
-                    //             // Timeout occurred, reconnect
-                    //             warn!("Timeout waiting for next event; reconnecting");
-                    //             tracing::error!("enter Err(_)");
-                    //             let fut = Self::connect_inner(this.api_url.clone());
-                    //             let _ = std::mem::replace(&mut this.connection, Right(Box::pin(fut)));
-                    //             continue;
-                    //         }
-                    //     }
-                    // }
+                    }
                     Right(reconnection) => match reconnection.await {
                         Ok(connection) => {
                             let _ = std::mem::replace(&mut this.connection, Left(connection));
