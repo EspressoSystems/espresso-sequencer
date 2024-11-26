@@ -377,6 +377,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=40.7128
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=-74.0060
       - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER5_API_PORT/
+      - ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS=3
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -426,6 +427,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=21.8243
       - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER6_API_PORT/
       - ESPRESSO_SEQUENCER_L1_PROVIDER=ws://localhost:$ESPRESSO_SEQUENCER_L1_WS_PORT
+      - ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS=3
     depends_on:
       orchestrator:
         condition: process_healthy
