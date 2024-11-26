@@ -14,7 +14,7 @@
 
 use super::{
     super::transaction::{query, Transaction, TransactionMode},
-    Database, Db, DecodeError, QueryBuilder, BLOCK_COLUMNS,
+    Database, Db, DecodeError, BLOCK_COLUMNS,
 };
 use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionIndex},
@@ -105,6 +105,152 @@ where
     }
 }
 
+lazy_static::lazy_static! {
+    static ref GET_BLOCK_SUMMARIES_QUERY_FOR_LATEST: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                ORDER BY h.height DESC
+                LIMIT $1"
+            )
+    };
+
+    static ref GET_BLOCK_SUMMARIES_QUERY_FOR_HEIGHT: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.height <= $1
+                ORDER BY h.height DESC
+                LIMIT $2"
+        )
+    };
+
+    // We want to match the blocks starting with the given hash, and working backwards
+    // until we have returned up to the number of requested blocks.  The hash for a
+    // block should be unique, so we should just need to start with identifying the
+    // block height with the given hash, and return all blocks with a height less than
+    // or equal to that height, up to the number of requested blocks.
+    static ref GET_BLOCK_SUMMARIES_QUERY_FOR_HASH: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.height <= (SELECT h1.height FROM header AS h1 WHERE h1.hash = $1)
+                ORDER BY h.height DESC
+                LIMIT $2",
+        )
+    };
+
+    static ref GET_BLOCK_DETAIL_QUERY_FOR_LATEST: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                ORDER BY h.height DESC
+                LIMIT 1"
+        )
+    };
+
+    static ref GET_BLOCK_DETAIL_QUERY_FOR_HEIGHT: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.height = $1
+                ORDER BY h.height DESC
+                LIMIT 1"
+        )
+    };
+
+    static ref GET_BLOCK_DETAIL_QUERY_FOR_HASH: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.hash = $1
+                ORDER BY h.height DESC
+                LIMIT 1"
+        )
+    };
+
+
+    static ref GET_TRANSACTION_SUMMARIES_QUERY_FOR_NO_FILTER: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.height IN (
+                    SELECT t.block_height
+                        FROM transactions AS t
+                        WHERE
+                            (t.block_height = $1 AND t.idx <= $2)
+                            OR t.block_height < $1
+                        ORDER BY t.block_height DESC, t.idx DESC
+                        LIMIT $3
+                )
+                ORDER BY h.height DESC"
+        )
+    };
+
+    static ref GET_TRANSACTION_SUMMARIES_QUERY_FOR_BLOCK: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE  h.height = $1
+                ORDER BY h.height DESC"
+        )
+    };
+
+    static ref GET_TRANSACTION_DETAIL_QUERY_FOR_LATEST: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.height = (
+                    SELECT MAX(t1.block_height)
+                        FROM transactions AS t1
+                )
+                ORDER BY h.height DESC"
+        )
+    };
+
+    static ref GET_TRANSACTION_DETAIL_QUERY_FOR_HEIGHT_AND_OFFSET: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.height = (
+                    SELECT t1.block_height
+                        FROM transactions AS t1
+                        WHERE t1.block_height = $1
+                        ORDER BY t1.block_height, t1.idx
+                        OFFSET $2
+                        LIMIT 1
+                )
+                ORDER BY h.height DESC",
+        )
+    };
+
+    static ref GET_TRANSACTION_DETAIL_QUERY_FOR_HASH: String = {
+        format!(
+            "SELECT {BLOCK_COLUMNS}
+                FROM header AS h
+                JOIN payload AS p ON h.height = p.height
+                WHERE h.height = (
+                    SELECT t1.block_height
+                        FROM transactions AS t1
+                        WHERE t1.hash = $1
+                        ORDER BY t1.block_height DESC, t1.idx DESC
+                        LIMIT 1
+                )
+                ORDER BY h.height DESC"
+        )
+    };
+}
+
 #[async_trait]
 impl<Mode, Types> ExplorerStorage<Types> for Transaction<Mode>
 where
@@ -121,46 +267,19 @@ where
     ) -> Result<Vec<BlockSummary<Types>>, GetBlockSummariesError> {
         let request = &request.0;
 
-        let mut query = QueryBuilder::default();
-        let sql = match request.target {
-            BlockIdentifier::Latest => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    ORDER BY h.height DESC 
-                    LIMIT {}",
-                query.bind(request.num_blocks.get() as i64)?,
-            ),
-            BlockIdentifier::Height(height) => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    WHERE h.height <= {}
-                    ORDER BY h.height DESC 
-                    LIMIT {}",
-                query.bind(height as i64)?,
-                query.bind(request.num_blocks.get() as i64)?,
-            ),
-            BlockIdentifier::Hash(hash) => {
-                // We want to match the blocks starting with the given hash, and working backwards
-                // until we have returned up to the number of requested blocks.  The hash for a
-                // block should be unique, so we should just need to start with identifying the
-                // block height with the given hash, and return all blocks with a height less than
-                // or equal to that height, up to the number of requested blocks.
-                format!(
-                    "SELECT {BLOCK_COLUMNS}
-                        FROM header AS h
-                        JOIN payload AS p ON h.height = p.height
-                        WHERE h.height <= (SELECT h1.height FROM header AS h1 WHERE h1.hash = {})
-                        ORDER BY h.height DESC 
-                        LIMIT {}",
-                    query.bind(hash.to_string())?,
-                    query.bind(request.num_blocks.get() as i64)?,
-                )
+        let query_stmt = match request.target {
+            BlockIdentifier::Latest => {
+                query(&GET_BLOCK_SUMMARIES_QUERY_FOR_LATEST).bind(request.num_blocks.get() as i64)
             }
+            BlockIdentifier::Height(height) => query(&GET_BLOCK_SUMMARIES_QUERY_FOR_HEIGHT)
+                .bind(height as i64)
+                .bind(request.num_blocks.get() as i64),
+            BlockIdentifier::Hash(hash) => query(&GET_BLOCK_SUMMARIES_QUERY_FOR_HASH)
+                .bind(hash.to_string())
+                .bind(request.num_blocks.get() as i64),
         };
 
-        let row_stream = query.query(&sql).fetch(self.as_mut());
+        let row_stream = query_stmt.fetch(self.as_mut());
         let result = row_stream.map(|row| BlockSummary::from_row(&row?));
 
         Ok(result.try_collect().await?)
@@ -170,36 +289,17 @@ where
         &mut self,
         request: BlockIdentifier<Types>,
     ) -> Result<BlockDetail<Types>, GetBlockDetailError> {
-        let mut query = QueryBuilder::default();
-        let sql = match request {
-            BlockIdentifier::Latest => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    ORDER BY h.height DESC 
-                    LIMIT 1"
-            ),
-            BlockIdentifier::Height(height) => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    WHERE h.height = {}
-                    ORDER BY h.height DESC 
-                    LIMIT 1",
-                query.bind(height as i64)?,
-            ),
-            BlockIdentifier::Hash(hash) => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    WHERE h.hash = {}
-                    ORDER BY h.height DESC 
-                    LIMIT 1",
-                query.bind(hash.to_string())?,
-            ),
+        let query_stmt = match request {
+            BlockIdentifier::Latest => query(&GET_BLOCK_DETAIL_QUERY_FOR_LATEST),
+            BlockIdentifier::Height(height) => {
+                query(&GET_BLOCK_DETAIL_QUERY_FOR_HEIGHT).bind(height as i64)
+            }
+            BlockIdentifier::Hash(hash) => {
+                query(&GET_BLOCK_DETAIL_QUERY_FOR_HASH).bind(hash.to_string())
+            }
         };
 
-        let query_result = query.query(&sql).fetch_one(self.as_mut()).await?;
+        let query_result = query_stmt.fetch_one(self.as_mut()).await?;
         let block = BlockDetail::from_row(&query_result)?;
 
         Ok(block)
@@ -253,38 +353,20 @@ where
         // transactions from that point.  We then grab only the blocks for those
         // identified transactions, as only those blocks are needed to pull all
         // of the relevant transactions.
-        let mut query = QueryBuilder::default();
-        let sql = match filter {
+        let query_stmt = match filter {
             TransactionSummaryFilter::RollUp(_) => return Ok(vec![]),
 
-            TransactionSummaryFilter::None => format!(
-                "SELECT {BLOCK_COLUMNS}
-                        FROM header AS h
-                        JOIN payload AS p ON h.height = p.height
-                        WHERE h.height IN (
-                            SELECT t.block_height
-                                FROM transactions AS t
-                                WHERE (t.block_height, t.idx) <= ({}, {})
-                                ORDER BY t.block_height DESC, t.idx DESC
-                                LIMIT {}
-                        )
-                        ORDER BY h.height DESC",
-                query.bind(block_height as i64)?,
-                query.bind(transaction_index)?,
-                query.bind((range.num_transactions.get() + offset) as i64)?,
-            ),
+            TransactionSummaryFilter::None => query(&GET_TRANSACTION_SUMMARIES_QUERY_FOR_NO_FILTER)
+                .bind(block_height as i64)
+                .bind(transaction_index)
+                .bind((range.num_transactions.get() + offset) as i64),
 
-            TransactionSummaryFilter::Block(block) => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    WHERE  h.height = {}
-                    ORDER BY h.height DESC",
-                query.bind(*block as i64)?,
-            ),
+            TransactionSummaryFilter::Block(block) => {
+                query(&GET_TRANSACTION_SUMMARIES_QUERY_FOR_BLOCK).bind(*block as i64)
+            }
         };
-        let block_stream = query
-            .query(&sql)
+
+        let block_stream = query_stmt
             .fetch(self.as_mut())
             .map(|row| BlockQueryData::from_row(&row?));
 
@@ -322,6 +404,7 @@ where
                     false
                 }
             })
+            .take(range.num_transactions.get())
             .collect::<Vec<TransactionSummary<Types>>>())
     }
 
@@ -331,51 +414,19 @@ where
     ) -> Result<TransactionDetailResponse<Types>, GetTransactionDetailError> {
         let target = request;
 
-        let mut query = QueryBuilder::default();
-        let sql = match target {
-            TransactionIdentifier::Latest => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    WHERE h.height = (
-                        SELECT MAX(t1.block_height)
-                            FROM transactions AS t1
-                    )
-                    ORDER BY h.height DESC"
-            ),
-            TransactionIdentifier::HeightAndOffset(height, offset) => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    WHERE h.height = (
-                        SELECT t1.block_height
-                            FROM transactions AS t1
-                            WHERE t1.block_height = {}
-                            ORDER BY t1.block_height, t1.idx
-                            OFFSET {}
-                            LIMIT 1
-                    )
-                    ORDER BY h.height DESC",
-                query.bind(height as i64)?,
-                query.bind(offset as i64)?,
-            ),
-            TransactionIdentifier::Hash(hash) => format!(
-                "SELECT {BLOCK_COLUMNS}
-                    FROM header AS h
-                    JOIN payload AS p ON h.height = p.height
-                    WHERE h.height = (
-                        SELECT t1.block_height
-                            FROM transactions AS t1
-                            WHERE t1.hash = {}
-                            ORDER BY t1.block_height DESC, t1.idx DESC
-                            LIMIT 1
-                    )
-                    ORDER BY h.height DESC",
-                query.bind(hash.to_string())?,
-            ),
+        let query_stmt = match target {
+            TransactionIdentifier::Latest => query(&GET_TRANSACTION_DETAIL_QUERY_FOR_LATEST),
+            TransactionIdentifier::HeightAndOffset(height, offset) => {
+                query(&GET_TRANSACTION_DETAIL_QUERY_FOR_HEIGHT_AND_OFFSET)
+                    .bind(height as i64)
+                    .bind(offset as i64)
+            }
+            TransactionIdentifier::Hash(hash) => {
+                query(&GET_TRANSACTION_DETAIL_QUERY_FOR_HASH).bind(hash.to_string())
+            }
         };
 
-        let query_row = query.query(&sql).fetch_one(self.as_mut()).await?;
+        let query_row = query_stmt.fetch_one(self.as_mut()).await?;
         let block = BlockQueryData::<Types>::from_row(&query_row)?;
 
         let txns = block.enumerate().map(|(_, txn)| txn).collect::<Vec<_>>();
@@ -421,7 +472,7 @@ where
                     p.height = h.height
                 WHERE
                     h.height IN (SELECT height FROM header ORDER BY height DESC LIMIT 50)
-                ORDER BY h.height 
+                ORDER BY h.height
                 ",
             )
             .fetch(self.as_mut());
