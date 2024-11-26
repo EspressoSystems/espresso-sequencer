@@ -230,10 +230,12 @@ jobs:
           cargo nextest run --verbose --no-fail-fast --nocapture $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
         timeout-minutes: 60
 
-      - name: Dump process compose services logs
+      - name: Upload process compose logs
         if: always()
-        run: |
-          cat ${{ env.PC_LOGS }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: process-compose-logs-integration-v${{ matrix.version  }}
+          path: ${{ env.PC_LOGS }}
 
   demo-native:
     needs: build-test-bins
