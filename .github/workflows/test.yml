@@ -219,12 +219,13 @@ jobs:
 
       - name: Test Integration
         env:
+          RUST_LOG: debug
           NEXTEST_PROFILE: integration
           INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
         run: |
           cargo nextest run --archive-file nextest-archive-postgres.tar.zst --verbose --no-fail-fast --nocapture \
           --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
-        timeout-minutes: 20
+        timeout-minutes: 10
 
       - name: Upload process compose logs
         if: always()
