@@ -39,7 +39,7 @@ use futures::stream::{self, StreamExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use itertools::Itertools;
 use sqlx::{types::Json, FromRow, Row};
-use std::num::NonZeroUsize;
+use std::{collections::VecDeque, num::NonZeroUsize};
 use tagged_base64::{Tagged, TaggedBase64};
 
 impl From<sqlx::Error> for GetExplorerSummaryError {
@@ -250,6 +250,18 @@ lazy_static::lazy_static! {
         )
     };
 }
+
+/// [EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES] is the number of entries we want
+/// to return in our histogram summary.
+const EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES: usize = 50;
+
+/// [EXPLORER_SUMMARY_NUM_BLOCKS] is the number of blocks we want to return in
+/// our explorer summary.
+const EXPLORER_SUMMARY_NUM_BLOCKS: usize = 10;
+
+/// [EXPLORER_SUMMARY_NUM_TRANSACTIONS] is the number of transactions we want
+/// to return in our explorer summary.
+const EXPLORER_SUMMARY_NUM_TRANSACTIONS: usize = 10;
 
 #[async_trait]
 impl<Mode, Types> ExplorerStorage<Types> for Transaction<Mode>
@@ -471,13 +483,14 @@ where
                 JOIN payload AS p ON
                     p.height = h.height
                 WHERE
-                    h.height IN (SELECT height FROM header ORDER BY height DESC LIMIT 50)
+                    h.height IN (SELECT height FROM header ORDER BY height DESC LIMIT $1)
                 ORDER BY h.height
                 ",
             )
+            .bind((EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES + 1) as i64)
             .fetch(self.as_mut());
 
-            let histograms: Result<ExplorerHistograms, sqlx::Error> = histogram_query_result
+            let mut histograms: ExplorerHistograms = histogram_query_result
                 .map(|row_stream| {
                     row_stream.map(|row| {
                         let height: i64 = row.try_get("height")?;
@@ -491,24 +504,32 @@ where
                 })
                 .try_fold(
                     ExplorerHistograms {
-                        block_time: Vec::with_capacity(50),
-                        block_size: Vec::with_capacity(50),
-                        block_transactions: Vec::with_capacity(50),
-                        block_heights: Vec::with_capacity(50),
+                        block_time: VecDeque::with_capacity(EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES),
+                        block_size: VecDeque::with_capacity(EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES),
+                        block_transactions: VecDeque::with_capacity(EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES),
+                        block_heights: VecDeque::with_capacity(EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES),
                     },
                     |mut histograms: ExplorerHistograms,
                      row: sqlx::Result<(i64, i64, Option<i64>, Option<i32>, i32)>| async {
                         let (height, _timestamp, time, size, num_transactions) = row?;
-                        histograms.block_time.push(time.map(|i| i as u64));
-                        histograms.block_size.push(size.map(|i| i as u64));
-                        histograms.block_transactions.push(num_transactions as u64);
-                        histograms.block_heights.push(height as u64);
+
+                        histograms.block_time.push_back(time.map(|i| i as u64));
+                        histograms.block_size.push_back(size.map(|i| i as u64));
+                        histograms.block_transactions.push_back(num_transactions as u64);
+                        histograms.block_heights.push_back(height as u64);
                         Ok(histograms)
                     },
                 )
-                .await;
+                .await?;
 
-            histograms?
+            while histograms.block_time.len() > EXPLORER_SUMMARY_HISTOGRAM_NUM_ENTRIES {
+                histograms.block_time.pop_front();
+                histograms.block_size.pop_front();
+                histograms.block_transactions.pop_front();
+                histograms.block_heights.pop_front();
+            }
+
+            histograms
         };
 
         let genesis_overview = {
@@ -528,7 +549,7 @@ where
         let latest_blocks: Vec<BlockSummary<Types>> = self
             .get_block_summaries(GetBlockSummariesRequest(BlockRange {
                 target: BlockIdentifier::Latest,
-                num_blocks: NonZeroUsize::new(10).unwrap(),
+                num_blocks: NonZeroUsize::new(EXPLORER_SUMMARY_NUM_BLOCKS).unwrap(),
             }))
             .await?;
 
@@ -536,7 +557,7 @@ where
             .get_transaction_summaries(GetTransactionSummariesRequest {
                 range: TransactionRange {
                     target: TransactionIdentifier::Latest,
-                    num_transactions: NonZeroUsize::new(10).unwrap(),
+                    num_transactions: NonZeroUsize::new(EXPLORER_SUMMARY_NUM_TRANSACTIONS).unwrap(),
                 },
                 filter: TransactionSummaryFilter::None,
             })
