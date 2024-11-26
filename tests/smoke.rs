@@ -3,9 +3,9 @@ use anyhow::Result;
 use futures::StreamExt;
 use std::time::Instant;
 
-/// We allow for no change in state across this many iterations.
+/// We allow for no change in state across this many consecutive iterations.
 const MAX_STATE_NOT_INCREMENTING: u8 = 1;
-/// We allow for no new transactions across this many iterations.
+/// We allow for no new transactions across this many consecutive iterations.
 const MAX_TXNS_NOT_INCREMENTING: u8 = 3;
 
 #[tokio::test(flavor = "multi_thread")]
