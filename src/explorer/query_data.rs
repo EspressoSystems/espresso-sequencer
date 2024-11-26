@@ -380,6 +380,7 @@ where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
+    <Types as NodeType>::Transaction: ExplorerTransaction,
 {
     type Error = TimestampConversionError;
 
@@ -399,7 +400,7 @@ where
                 block_confirmed: true,
                 offset: offset as u64,
                 num_transactions: block.num_transactions,
-                size: block.size,
+                size: transaction.payload_size(),
                 time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
                 sequencing_fees: vec![],
                 fee_details: vec![],

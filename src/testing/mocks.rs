@@ -89,6 +89,10 @@ impl ExplorerTransaction for MockTransaction {
     fn namespace_id(&self) -> Self::NamespaceId {
         0
     }
+
+    fn payload_size(&self) -> u64 {
+        self.bytes().len() as u64
+    }
 }
 
 impl HeightIndexed for MockHeader {
