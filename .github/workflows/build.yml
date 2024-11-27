@@ -62,7 +62,7 @@ jobs:
           echo EOF >> $GITHUB_OUTPUT
 
       - name: Debug
-        run: echo ${{steps.list_binaries.outputs.binaries}}
+        run: ${{steps.list_binaries.outputs.binaries}}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
