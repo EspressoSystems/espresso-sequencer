@@ -71,18 +71,17 @@ where
     api.get("getfeebalance", move |req, state| {
         async move {
             let address = req.string_param("address")?;
-            let height = req.string_param("height")?.parse::<u64>().map_err(|_| {
+            let height = req.string_param("height")?.parse::<u64>().map_err(|e| {
                 merklized_state::Error::Custom {
-                    message: "failed to parse block height".to_string(),
+                    message: format!("failed to parse block height: {e}"),
                     status: StatusCode::BAD_REQUEST,
                 }
             })?;
-            // let height = state.get_last_state_height().await?;
             let snapshot = Snapshot::Index(height);
             let key = address
                 .parse()
-                .map_err(|_| merklized_state::Error::Custom {
-                    message: "failed to parse address".to_string(),
+                .map_err(|e| merklized_state::Error::Custom {
+                    message: format!("failed to parse address: {e}"),
                     status: StatusCode::BAD_REQUEST,
                 })?;
             let path = state.get_path(snapshot, key).await?;

@@ -75,10 +75,21 @@ impl SequencerClient {
         block: Option<u64>,
     ) -> anyhow::Result<FeeAmount> {
         // Get the block height to query at, defaulting to the latest block.
-        let block = match block {
+        let mut block = match block {
             Some(block) => block,
             None => self.get_height().await?,
         };
+
+        // As of block zero the state is empty, and the balance will be zero.
+        if block == 0 {
+            return Ok(0.into());
+        }
+
+        // Block is non-zero, we can safely decrement to query the state as of the previous block.
+        block -= 1;
+
+        tracing::debug!(%address, block, "fetching Espresso balance");
+        dbg!(&address, &block);
 
         let balance = self
             .0
