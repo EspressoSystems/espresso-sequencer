@@ -27,22 +27,32 @@ contract PermissionedStakeTableTest is Test {
             cmds[2] = vm.toString(i + 1);
             bytes memory result = vm.ffi(cmds);
             BN254.G2Point memory bls = abi.decode(result, (BN254.G2Point));
-            ps[i] = PermissionedStakeTable.NodeInfo(bls, EdOnBN254.EdOnBN254Point(0, 0));
+            ps[i] = PermissionedStakeTable.NodeInfo(bls, EdOnBN254.EdOnBN254Point(0, 0), true);
         }
         return ps;
     }
 
-    function testInsertAndIsStaker() public {
+    function testInsert() public {
         vm.prank(owner);
         PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
+
+        vm.expectEmit();
+        emit PermissionedStakeTable.Added(stakers);
+
         stakeTable.insert(stakers);
+
         assertTrue(stakeTable.isStaker(stakers[0].blsVK));
     }
 
-    function testInsertAndIsStakerMany() public {
+    function testInsertMany() public {
         vm.prank(owner);
         PermissionedStakeTable.NodeInfo[] memory stakers = nodes(10);
+
+        vm.expectEmit();
+        emit PermissionedStakeTable.Added(stakers);
+
         stakeTable.insert(stakers);
+
         assertTrue(stakeTable.isStaker(stakers[0].blsVK));
     }
 
@@ -61,12 +71,16 @@ contract PermissionedStakeTableTest is Test {
         stakeTable.insert(stakers);
     }
 
-    function testRemoveAndIsNotStaker() public {
+    function testRemove() public {
         PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
         vm.prank(owner);
         stakeTable.insert(stakers);
 
         vm.prank(owner);
+
+        vm.expectEmit();
+        emit PermissionedStakeTable.Removed(stakers);
+
         stakeTable.remove(stakers);
 
         assertFalse(stakeTable.isStaker(stakers[0].blsVK));

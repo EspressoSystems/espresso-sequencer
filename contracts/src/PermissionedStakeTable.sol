@@ -17,8 +17,12 @@ contract PermissionedStakeTable is Ownable {
     error StakerNotFound(BN254.G2Point);
 
     struct NodeInfo {
+        /// The consensus signing key
         BN254.G2Point blsVK;
+        /// The consensus signing key. Only used for storage in this contract.
         EdOnBN254.EdOnBN254Point schnorrVK;
+        /// Is the Node DA Node? Only used for storage in this contract.
+        bool isDA;
     }
 
     // State mapping from staker IDs to their staking status
