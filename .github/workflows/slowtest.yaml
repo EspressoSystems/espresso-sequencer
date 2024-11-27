@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        partition: [1, 2]
+        partition: [1, 2, 3, 4]
     steps:
       # These tests need the `anvil` binary provided by foundry
       - name: Install Foundry
@@ -107,5 +107,5 @@ jobs:
           NEXTEST_PROFILE: slow
         run: |
           cargo nextest run --archive-file nextest-archive.tar.zst --verbose --no-fail-fast --nocapture \
-            --workspace-remap $PWD --partition count:${{ matrix.partition }}/2
+            --workspace-remap $PWD --partition count:${{ matrix.partition }}/4
         timeout-minutes: 40
