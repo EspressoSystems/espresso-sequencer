@@ -1,10 +1,16 @@
 use crate::PubKey;
-use ark_ec::{bn, short_weierstrass, twisted_edwards};
+use ark_ec::{
+    bn,
+    short_weierstrass::{self, Projective},
+    twisted_edwards, AffineRepr,
+};
 use ark_ed_on_bn254::EdwardsConfig;
+use ark_serialize::{CanonicalDeserialize as _, CanonicalSerialize};
 use contract_bindings::permissioned_stake_table::{EdOnBN254Point, NodeInfo};
 use derive_more::derive::From;
 use hotshot_contract_adapter::stake_table::ParsedG1Point;
 use hotshot_types::{light_client::StateVerKey, network::PeerConfigKeys};
+use jf_utils::to_bytes;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, From)]
@@ -29,13 +35,9 @@ impl From<NodeInfo> for PermissionedPeerConfig {
                 y1: bls_vk.y_1,
             };
             let g2_affine = short_weierstrass::Affine::<ark_bn254::g2::Config>::from(g2);
-            // TODO: maybe this works until I find a better way
-            let g2_proj = bn::G2Projective::<ark_bn254::Config>::from(g2_affine);
-            unsafe {
-                std::mem::transmute::<short_weierstrass::Projective<ark_bn254::g2::Config>, PubKey>(
-                    g2_proj,
-                )
-            }
+            // TODO: remove unwrap
+            let b = to_bytes!(&g2_affine.into_group()).unwrap();
+            PubKey::deserialize_compressed(&b[..]).unwrap()
         };
         let state_ver_key = {
             let EdOnBN254Point { x, y } = schnorr_vk;
