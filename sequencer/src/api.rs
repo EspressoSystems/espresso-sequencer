@@ -5,7 +5,7 @@ use async_lock::RwLock;
 use async_once_cell::Lazy;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use data_source::{CatchupDataSource, SubmitDataSource};
+use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
@@ -26,9 +26,14 @@ use hotshot_types::{
     event::Event,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
-    traits::{network::ConnectedNetwork, node_implementation::Versions, ValidatedState as _},
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{NodeType, Versions},
+        ValidatedState as _,
+    },
     utils::{View, ViewInner},
 };
+use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
 use std::sync::Arc;
 
@@ -154,6 +159,43 @@ impl<N: ConnectedNetwork<PubKey>, D: Send + Sync, V: Versions, P: SequencerPersi
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         self.as_ref().submit(tx).await
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
+    StakeTableDataSource<SeqTypes> for StorageState<N, P, D, V>
+{
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    async fn get_stake_table(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_stake_table(epoch).await
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
+    StakeTableDataSource<SeqTypes> for ApiState<N, P, V>
+{
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    async fn get_stake_table(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        // Get the epoch from the argument or the current epoch if not provided
+        let epoch = if let Some(epoch) = epoch {
+            epoch
+        } else {
+            self.consensus().await.read().await.cur_epoch().await
+        };
+
+        self.consensus()
+            .await
+            .read()
+            .await
+            .memberships
+            .quorum_membership
+            .stake_table(epoch)
     }
 }
 
