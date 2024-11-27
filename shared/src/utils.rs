@@ -109,7 +109,6 @@ type EventServiceReconnect<Types, ApiVer> = Pin<
 pub struct EventServiceStream<Types: NodeType, V: StaticVersionType> {
     api_url: Url,
     connection: Either<EventServiceConnection<Types, V>, EventServiceReconnect<Types, V>>,
-    last_event_time: Instant, // a field to track the time of the last received event
 }
 
 impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Types, ApiVer> {
@@ -157,7 +156,6 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
         let this = Self {
             api_url,
             connection: Left(connection),
-            last_event_time: Instant::now(), // Initialize with the current time
         };
 
         let stream = unfold(this, |mut this| async move {
@@ -166,8 +164,6 @@ impl<Types: NodeType, ApiVer: StaticVersionType + 'static> EventServiceStream<Ty
                     Left(connection) => {
                         match tokio::time::timeout(Self::RETRY_PERIOD, connection.next()).await {
                             Ok(Some(Ok(event))) => {
-                                // Update the last_event_time on receiving an event
-                                this.last_event_time = Instant::now();
                                 return Some((event, this));
                             }
                             Ok(Some(Err(err))) => {
