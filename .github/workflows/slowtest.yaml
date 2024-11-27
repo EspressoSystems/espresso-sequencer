@@ -72,8 +72,8 @@ jobs:
       - name: Upload archive to workflow
         uses: actions/upload-artifact@v4
         with:
-          name: nextest-archive
-          path: nextest-archive.tar.zst
+          name: diff-test
+          path: target/release/diff-test
 
   slow-tests:
     needs: [build-diff-test, build-test-artifacts]
@@ -91,8 +91,16 @@ jobs:
 
       - name: Download archive
         uses: actions/download-artifact@v4
-        with:
-          name: nextest-archive
+
+      - name: Move files
+        run: |
+          mv nextest-archive/* .
+          mkdir -p target/release
+          mv diff-test/* target/release
+          chmod -c +x target/release/*
+
+      - name: Configure Environment
+        run: PATH="$PWD/target/release:$PATH"
 
       - name: Slow Test
         env:
