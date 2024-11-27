@@ -233,7 +233,6 @@ mod tests {
     use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
     use tide_disco::{method::ReadState, App};
     use tokio::{spawn, task::JoinHandle, time::timeout};
-    use tracing_subscriber::EnvFilter;
     use url::Url;
     use vbs::version::StaticVersion;
 
@@ -298,10 +297,6 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn event_stream_wrapper() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .try_init();
-
         const TIMEOUT: Duration = Duration::from_secs(3);
 
         let url: Url = format!(
@@ -347,7 +342,6 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn event_stream_wrapper_with_idle_timeout() {
         const TIMEOUT: Duration = Duration::from_secs(3);
-        const IDLE_TIMEOUT: Duration = Duration::from_secs(1);
 
         let url: Url = format!(
             "http://localhost:{}",
@@ -370,7 +364,10 @@ mod tests {
 
         // Simulate idle timeout by stopping the server and waiting
         app_handle.abort();
-        tokio::time::sleep(IDLE_TIMEOUT + Duration::from_millis(500)).await; // Wait longer than idle timeout
+        tokio::time::sleep(
+            EventServiceStream::<TestTypes, MockVersion>::RETRY_PERIOD + Duration::from_millis(500),
+        )
+        .await; // Wait longer than idle timeout
 
         // Stream should reconnect after idle timeout
         let new_app_handle = run_app("hotshot-events", url.clone());
