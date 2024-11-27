@@ -9,7 +9,7 @@ import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
  * @title SimpleStakeTable
  * @dev An stake table mapping with owner-only access control.
  */
-contract SimpleStakeTable is Ownable {
+contract PermissionedStakeTable is Ownable {
     event Added(NodeInfo[]);
     event Removed(NodeInfo[]);
 
