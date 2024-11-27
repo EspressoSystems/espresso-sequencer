@@ -397,7 +397,7 @@ impl L1Client {
                 loop {
                     // Wait for a block, timing out if we don't get one within 60 seconds
                     let block_timeout = tokio::time::timeout(Duration::from_secs(60), block_stream.next()).await;
-                    
+
                     match block_timeout {
                         // We got a block
                         Ok(Some(head)) => {
