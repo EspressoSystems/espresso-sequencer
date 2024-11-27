@@ -50,7 +50,7 @@ jobs:
           path: nextest-archive.tar.zst
 
   build-diff-test:
-    name: Build test artifacts
+    name: Build Diff Test
     runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - uses: rui314/setup-mold@v1
