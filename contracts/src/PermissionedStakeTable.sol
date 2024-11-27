@@ -28,7 +28,9 @@ contract PermissionedStakeTable is Ownable {
     // State mapping from staker IDs to their staking status
     mapping(bytes32 nodeID => bool isStaker) private stakers;
 
-    constructor(address initialOwner) Ownable(initialOwner) { }
+    constructor(address initialOwner, NodeInfo[] memory initialStakers) Ownable(initialOwner) {
+        insert(initialStakers);
+    }
 
     function insert(NodeInfo[] memory newStakers) public onlyOwner {
         // TODO: revert if array empty

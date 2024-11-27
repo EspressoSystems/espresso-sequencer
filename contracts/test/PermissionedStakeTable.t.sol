@@ -9,32 +9,38 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract PermissionedStakeTableTest is Test {
     PermissionedStakeTable stakeTable;
-    address owner = address(1); // mock owner address
+    address owner = address(1);
 
     function setUp() public {
-        vm.prank(owner); // impersonate the owner
-        stakeTable = new PermissionedStakeTable(owner);
+        vm.prank(owner);
+        PermissionedStakeTable.NodeInfo[] memory initialStakers = nodes(0, 1);
+        stakeTable = new PermissionedStakeTable(owner, initialStakers);
     }
 
-    function nodes(uint64 num) private returns (PermissionedStakeTable.NodeInfo[] memory) {
+    // Create `numNodes` node IDs from `start` for testing.
+    function nodes(uint64 start, uint64 numNodes)
+        private
+        returns (PermissionedStakeTable.NodeInfo[] memory)
+    {
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "gen-random-g2-point";
 
-        PermissionedStakeTable.NodeInfo[] memory ps = new PermissionedStakeTable.NodeInfo[](num);
+        PermissionedStakeTable.NodeInfo[] memory ps =
+            new PermissionedStakeTable.NodeInfo[](numNodes);
 
-        for (uint64 i = 0; i < num; i++) {
-            cmds[2] = vm.toString(i + 1);
+        for (uint64 i = 0; i < numNodes; i++) {
+            cmds[2] = vm.toString(start + 1 + i);
             bytes memory result = vm.ffi(cmds);
             BN254.G2Point memory bls = abi.decode(result, (BN254.G2Point));
-            ps[i] = PermissionedStakeTable.NodeInfo(bls, EdOnBN254.EdOnBN254Point(0, 0), true);
+            ps[i] = PermissionedStakeTable.NodeInfo(bls, EdOnBN254.EdOnBN254Point(0, 1), true);
         }
         return ps;
     }
 
     function testInsert() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
 
         vm.expectEmit();
         emit PermissionedStakeTable.Added(stakers);
@@ -46,7 +52,7 @@ contract PermissionedStakeTableTest is Test {
 
     function testInsertMany() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(10);
+        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 10);
 
         vm.expectEmit();
         emit PermissionedStakeTable.Added(stakers);
@@ -58,7 +64,7 @@ contract PermissionedStakeTableTest is Test {
 
     function testInsertRevertsIfStakerExists() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
         stakeTable.insert(stakers);
 
         // Try adding the same staker again
@@ -72,7 +78,7 @@ contract PermissionedStakeTableTest is Test {
     }
 
     function testRemove() public {
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
         vm.prank(owner);
         stakeTable.insert(stakers);
 
@@ -88,7 +94,7 @@ contract PermissionedStakeTableTest is Test {
 
     function testRemoveRevertsIfStakerNotFound() public {
         vm.prank(owner);
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
         vm.expectRevert(
             abi.encodeWithSelector(PermissionedStakeTable.StakerNotFound.selector, stakers[0].blsVK)
         );
@@ -101,7 +107,7 @@ contract PermissionedStakeTableTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(2))
         );
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
         stakeTable.insert(stakers);
     }
 
@@ -110,7 +116,7 @@ contract PermissionedStakeTableTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(2))
         );
-        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1);
+        PermissionedStakeTable.NodeInfo[] memory stakers = nodes(1, 1);
         stakeTable.remove(stakers);
     }
 }
