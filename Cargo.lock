@@ -2888,6 +2888,7 @@ dependencies = [
  "tide-disco",
  "time 0.3.36",
  "tokio",
+ "toml",
  "tracing",
  "url",
  "vbs",
@@ -8752,6 +8753,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
+ "hotshot-types",
  "log-panics",
  "portpicker",
  "reqwest 0.11.27",
@@ -8760,6 +8762,7 @@ dependencies = [
  "surf",
  "tempfile",
  "tokio",
+ "toml",
  "tracing",
  "url",
 ]

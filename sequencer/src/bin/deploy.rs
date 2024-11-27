@@ -1,6 +1,7 @@
 use std::{fs::File, io::stdout, path::PathBuf};
 
 use clap::Parser;
+use espresso_types::PubKey;
 use ethers::types::Address;
 use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -8,6 +9,7 @@ use hotshot_state_prover::service::light_client_genesis;
 use sequencer_utils::{
     deployer::{deploy, ContractGroup, Contracts, DeployedContracts},
     logging,
+    stake_table::PermissionedStakeTableConfig,
 };
 use url::Url;
 
@@ -111,6 +113,20 @@ struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_PERMISSIONED_PROVER")]
     permissioned_prover: Option<Address>,
 
+    /// A toml file with the initial stake table.
+    ///
+    /// Schema:
+    ///
+    /// public_keys = [
+    ///   {
+    ///     stake_table_key = "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U",
+    ///     state_ver_key = "SCHNORR_VER_KEY~lJqDaVZyM0hWP2Br52IX5FeE-dCAIC-dPX7bL5-qUx-vjbunwe-ENOeZxj6FuOyvDCFzoGeP7yZ0fM995qF-CRE",
+    ///     da = true,
+    ///   },
+    /// ]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_INITIAL_PERMISSIONED_STAKE_TABLE_PATH")]
+    initial_stake_table_path: Option<PathBuf>,
+
     #[clap(flatten)]
     logging: logging::Config,
 }
@@ -126,6 +142,14 @@ async fn main() -> anyhow::Result<()> {
 
     let genesis = light_client_genesis(&sequencer_url, opt.stake_table_capacity).boxed();
 
+    let initial_stake_table = if let Some(path) = opt.initial_stake_table_path {
+        Some(PermissionedStakeTableConfig::<PubKey>::from_toml_file(
+            &path,
+        )?)
+    } else {
+        None
+    };
+
     let contracts = deploy(
         opt.rpc_url,
         opt.mnemonic,
@@ -136,6 +160,7 @@ async fn main() -> anyhow::Result<()> {
         genesis,
         opt.permissioned_prover,
         contracts,
+        initial_stake_table,
     )
     .await?;
 

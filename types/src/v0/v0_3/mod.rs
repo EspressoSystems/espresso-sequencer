@@ -28,3 +28,4 @@ pub use chain_config::*;
 pub use fee_info::IterableFeeInfo;
 pub use header::Header;
 pub use solver::*;
+pub use stake_table::CombinedStakeTable;
