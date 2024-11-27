@@ -46,13 +46,11 @@ jobs:
 
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
-        run: |
-          cargo build --locked --release --workspace
+        run: cargo build --locked --release --workspace
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
-        run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+        run: cargo build --locked --release --features testing --bin espresso-dev-node
 
       - name: List Binaries
         id: list_binaries
@@ -60,9 +58,6 @@ jobs:
           echo 'binaries<<EOF' >> $GITHUB_OUTPUT
           find target/release/ -maxdepth 1 -perm -111 -type f >> $GITHUB_OUTPUT
           echo EOF >> $GITHUB_OUTPUT
-
-      - name: Debug
-        run: ${{steps.list_binaries.outputs.binaries}}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
