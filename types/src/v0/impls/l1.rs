@@ -541,7 +541,7 @@ impl L1Client {
                     continue;
                 };
                 if finalized.number >= number {
-                    tracing::info!(number, ?finalized, "got finalized L! block");
+                    tracing::info!(number, ?finalized, "got finalized L1 block");
                     return self
                         .get_finalized_block(self.state.lock().await, number)
                         .await
