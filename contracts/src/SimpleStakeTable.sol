@@ -26,7 +26,7 @@ contract SimpleStakeTable is Ownable {
 
     constructor(address initialOwner) Ownable(initialOwner) { }
 
-    function insert(NodeInfo[] memory newStakers) external onlyOwner {
+    function insert(NodeInfo[] memory newStakers) public onlyOwner {
         // TODO: revert if array empty
         for (uint256 i = 0; i < newStakers.length; i++) {
             bytes32 stakerID = _hashBlsKey(newStakers[i].blsVK);

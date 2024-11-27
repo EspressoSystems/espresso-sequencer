@@ -21,6 +21,7 @@ mod chain_config;
 mod fee_info;
 mod header;
 mod solver;
+mod stake_table;
 
 pub use auction::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults};
 pub use chain_config::*;
