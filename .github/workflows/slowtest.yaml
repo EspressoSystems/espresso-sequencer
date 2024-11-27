@@ -23,34 +23,81 @@ env:
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  slow-tests:
-    runs-on: ubuntu-latest
+  build-test-artifacts:
+    name: Build test artifacts
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
-      # These tests need the `anvil` binary provided by foundry
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+      - uses: rui314/setup-mold@v1
 
-      - uses: taiki-e/install-action@nextest
+      - uses: actions/checkout@v4
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Configure Environment
-        run: PATH="$PWD/target/release:$PATH"
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
+          cache-provider: buildjet
 
-      - name: Build
-        run: |
-          cargo build --locked --bin diff-test --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
-        timeout-minutes: 90
+      - name: Build and archive tests
+        run: cargo nextest archive --locked --workspace --all-features --archive-file nextest-archive.tar.zst
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+
+  build-diff-test:
+    name: Build test artifacts
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - uses: rui314/setup-mold@v1
+
+      - uses: actions/checkout@v4
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          cache-provider: buildjet
+
+      - name: Build and archive tests
+        run: cargo nextest archive --locked --workspace --all-features --archive-file nextest-archive.tar.zst
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+
+  slow-tests:
+    needs: [build-diff-test, build-test-artifacts]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        partition: [1, 2]
+    steps:
+      # These tests need the `anvil` binary provided by foundry
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download archive
+        uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive
 
       - name: Slow Test
         env:
           NEXTEST_PROFILE: slow
-        run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast --nocapture
+        run: |
+          cargo nextest run --archive-file nextest-archive.tar.zst --verbose --no-fail-fast --nocapture \
+            --workspace-remap $PWD --partition count:${{ matrix.partition }}/2
         timeout-minutes: 40
