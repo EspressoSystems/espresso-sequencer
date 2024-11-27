@@ -123,7 +123,7 @@ jobs:
     needs: [build, build-arm]
     strategy:
       matrix:
-        package: jq -c -n '$ARGS.positional' --args "${needs.build.outputs.binaries[@]}"
+        package: $(jq -c -n '$ARGS.positional' --args "${needs.build.outputs.binaries[@]}")
     # if build_arm is skipped, run this job anyway
     if: ${{ !(failure() || cancelled()) }}
     outputs:
