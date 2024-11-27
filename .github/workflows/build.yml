@@ -56,7 +56,10 @@ jobs:
 
       - name: List Binaries
         id: list_binaries
-        run: echo "binaries=$(find target/release/ -maxdepth 1 -perm -111 -type f)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo 'binaries<<EOF' >> $GITHUB_OUTPUT
+          find target/release/ -maxdepth 1 -perm -111 -type f >> $GITHUB_OUTPUT
+          echo EOF >> $GITHUB_OUTPUT
 
       - name: Debug
         run: echo ${{steps.list_binaries.outputs.binaries}}
