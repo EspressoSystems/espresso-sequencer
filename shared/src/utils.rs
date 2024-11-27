@@ -296,7 +296,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn event_stream_wrapper() {
+    async fn test_event_stream_wrapper() {
         const TIMEOUT: Duration = Duration::from_secs(3);
 
         let url: Url = format!(
@@ -340,7 +340,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn event_stream_wrapper_with_idle_timeout() {
+    async fn test_event_stream_wrapper_with_idle_timeout() {
         const TIMEOUT: Duration = Duration::from_secs(3);
 
         let url: Url = format!(
