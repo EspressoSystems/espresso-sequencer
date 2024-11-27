@@ -25,6 +25,8 @@ env:
 jobs:
   build:
     runs-on: buildjet-8vcpu-ubuntu-2204
+    outputs:
+      binaries: ${{ steps.list_binaries.outputs.binaries }}
     steps:
       - uses: rui314/setup-mold@v1
 
@@ -52,33 +54,18 @@ jobs:
         run: |
           cargo build --locked --release --features testing --bin espresso-dev-node
 
+      - name: List Binaries
+        id: list_binaries
+        run: echo "binaries=$(find target/release/ -maxdepth 1 -perm -111 -type f)" >> "$GITHUB_OUTPUT"
+
+      - name: Debug
+        run: echo ${{steps.list_binaries.outputs.binaries}}
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: x86_64-unknown-linux-gnu-services
-          path: |
-            target/release/orchestrator
-            target/release/cdn-broker
-            target/release/cdn-marshal
-            target/release/cdn-whitelist
-            target/release/state-relay-server
-            target/release/state-prover
-            target/release/sequencer
-            target/release/cli
-            target/release/submit-transactions
-            target/release/reset-storage
-            target/release/utils
-            target/release/deploy
-            target/release/keygen
-            target/release/permissionless-builder
-            target/release/nasty-client
-            target/release/espresso-dev-node
-            target/release/pub-key
-            target/release/espresso-bridge
-            target/release/marketplace-solver
-            target/release/marketplace-builder
-            target/release/node-metrics
-            target/release/dev-rollup
+          path: ${{ steps.list_binaries.outputs.binaries }}
 
   build-arm:
     if: github.event_name != 'pull_request'
