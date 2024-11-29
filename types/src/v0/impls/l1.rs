@@ -23,6 +23,7 @@ use futures::{
 };
 use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
+use std::time::Duration;
 use tracing::Instrument;
 use url::Url;
 
@@ -279,7 +280,7 @@ impl L1Client {
                 tracing::info!("established L1 block stream");
                 loop {
                     // Wait for a block, timing out if we don't get one within 60 seconds
-                    let block_timeout = tokio::time::timeout(Duration::from_secs(60), block_stream.next()).await;
+                    let block_timeout = async_compatibility_layer::art::async_timeout(Duration::from_secs(60), block_stream.next()).await;
 
                     match block_timeout {
                         // We got a block
