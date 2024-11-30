@@ -102,7 +102,7 @@ pub enum ProposalValidationError {
         proposal_timestamp: u64,
         parent_timestamp: u64,
     },
-    #[error("Timestamp drift too high: proposed:={proposal}, system={proposal}, diff={diff}")]
+    #[error("Timestamp drift too high: proposed:={proposal}, system={system}, diff={diff}")]
     InvalidTimestampDrift {
         proposal: u64,
         system: u64,

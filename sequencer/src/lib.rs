@@ -298,6 +298,9 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     )
     .with_context(|| "Failed to derive Libp2p peer ID")?;
 
+    // Print the libp2p public key
+    info!("Starting Libp2p with PeerID: {}", libp2p_public_key);
+
     let (mut network_config, wait_for_orchestrator) = match (
         persistence.load_config().await?,
         network_params.config_peers,

@@ -7,7 +7,11 @@ use jf_merkle_tree::{
     MerkleTreeScheme,
 };
 use std::time::Duration;
-use surf_disco::{error::ClientError, Url};
+use surf_disco::{
+    error::ClientError,
+    socket::{Connection, Unsupported},
+    Url,
+};
 use tokio::time::sleep;
 use vbs::version::StaticVersion;
 
@@ -52,6 +56,18 @@ impl SequencerClient {
             .await
             .context("subscribing to Espresso headers")
             .map(|s| s.boxed())
+    }
+
+    /// Subscribe to a stream of Block Headers
+    pub async fn subscribe_blocks(
+        &self,
+        height: u64,
+    ) -> anyhow::Result<Connection<Header, Unsupported, ClientError, SequencerApiVersion>> {
+        self.0
+            .socket(&format!("availability/stream/blocks/{height}"))
+            .subscribe()
+            .await
+            .context("subscribing to Espresso Blocks")
     }
 
     /// Get the balance for a given account at a given block height, defaulting to current balance.

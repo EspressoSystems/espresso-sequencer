@@ -84,7 +84,7 @@ processes:
       success_threshold: 1
       failure_threshold: 100
     availability:
-      restart: "exit_on_failure"
+      restart: exit_on_failure
 
   state-relay-server:
     command: state-relay-server
@@ -155,6 +155,7 @@ processes:
         condition: process_completed
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
     readiness_probe:
       http_get:
@@ -216,7 +217,7 @@ processes:
         path: /healthcheck
       failure_threshold: 100
     availability:
-      exit_on_skipped: true
+      restart: exit_on_failure
 
   sequencer2:
     command: sequencer -- http -- catchup -- status
@@ -263,6 +264,7 @@ processes:
       failure_threshold: 100
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
   sequencer3:
     command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status
@@ -312,6 +314,7 @@ processes:
       failure_threshold: 100
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
   sequencer4:
     command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status
@@ -357,6 +360,7 @@ processes:
       failure_threshold: 100
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
 
   # sequencer5:
