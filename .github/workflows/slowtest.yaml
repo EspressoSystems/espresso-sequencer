@@ -46,13 +46,13 @@ jobs:
       - name: Build
         run: |
           cargo build --locked --bin diff-test --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
+          cargo nextest run --locked --release --workspace --features embedded-db --no-run
         timeout-minutes: 90
 
       - name: Slow Test
         env:
           NEXTEST_PROFILE: slow
-        run: cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast --nocapture
+        run: cargo nextest run --locked --release --workspace --features embedded-db --verbose --no-fail-fast --nocapture
         timeout-minutes: 40
   slow-tests-postgres:
     runs-on: ubuntu-latest

@@ -47,19 +47,19 @@ anvil *args:
 
 test *args:
     @echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-    @echo 'features: "all"'
-    cargo nextest run --locked --workspace --all-features --verbose {{args}}
+    @echo 'features: "embedded-db"'
+    cargo nextest run --locked --workspace --features embedded-db --verbose {{args}}
     cargo nextest run --locked --workspace --verbose {{args}}
 
 test-slow:
     @echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
-    @echo 'features: "all"'
-    cargo nextest run --locked --release --workspace --all-features --verbose --profile slow
+    @echo 'features: "embedded-db"'
+    cargo nextest run --locked --release --workspace --features embedded-db --verbose --profile slow
     cargo nextest run --locked --release --workspace --verbose --profile slow
 
 test-all:
-    @echo 'features: "all"'
-    cargo nextest run --locked --release --workspace --all-features --verbose --profile all
+    @echo 'features: "embedded-db"'
+    cargo nextest run --locked --release --workspace --features embedded-db --verbose --profile all
     cargo nextest run --locked --release --workspace --verbose --profile all
 
 test-integration:
@@ -67,8 +67,8 @@ test-integration:
 	cargo nextest run --all-features --nocapture --profile integration
 
 clippy:
-    @echo 'features: "all"'
-    cargo clippy --workspace --all-features --all-targets -- -D warnings
+    @echo 'features: "embedded-db"'
+    cargo clippy --workspace --features embedded-db --all-targets -- -D warnings
     cargo clippy --workspace -- -D warnings
 
 check-features *args:
