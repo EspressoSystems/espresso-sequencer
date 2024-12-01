@@ -113,8 +113,6 @@ impl TestConfig {
         let sequencer_clients = [
             dotenvy::var("ESPRESSO_SEQUENCER_API_PORT")?,
             dotenvy::var("ESPRESSO_SEQUENCER1_API_PORT")?,
-            dotenvy::var("ESPRESSO_SEQUENCER3_API_PORT")?,
-            dotenvy::var("ESPRESSO_SEQUENCER4_API_PORT")?,
         ]
         .iter()
         .map(|port| url_from_port(port.clone()).unwrap())
