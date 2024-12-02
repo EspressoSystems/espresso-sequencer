@@ -342,7 +342,7 @@ services:
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_MAX_CONNECTIONS
-      - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer4:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer3:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE
@@ -435,7 +435,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER4_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status
+    command: sequencer -- http -- query -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_EMBEDDED_DB=true
       - ESPRESSO_SEQUENCER_GENESIS_FILE

@@ -7,9 +7,7 @@ doc *args:
 demo *args:
     docker compose up {{args}}
 
-demo-native *args:
-    cargo build --profile test
-    cargo build --profile test --manifest-path ./sequencer-sqlite/Cargo.toml
+demo-native *args: build
     scripts/demo-native {{args}}
 
 build:
