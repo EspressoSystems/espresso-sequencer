@@ -1,3 +1,4 @@
+#![allow(clippy::needless_lifetimes)]
 use core::fmt::Display;
 use jf_signature::{bls_over_bn254, schnorr};
 use sequencer_utils::logging;

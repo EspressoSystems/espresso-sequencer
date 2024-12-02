@@ -1,6 +1,6 @@
 use super::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
-    ResolvableChainConfig, SolverAuctionResults,
+    ResolvableChainConfig, SolverAuctionResults
 };
 use crate::NsTable;
 use ark_serialize::CanonicalSerialize;

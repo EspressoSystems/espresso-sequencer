@@ -1,5 +1,6 @@
+#![cfg(feature = "hotshot-impls")]
 use committable::{Commitment, Committable};
-use hotshot::types::SignatureKey;
+use hotshot_types::traits::signature_key::SignatureKey;
 
 use super::{
     v0_3::{RollupRegistrationBody, RollupUpdatebody},

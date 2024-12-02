@@ -1,3 +1,4 @@
+#![cfg(feature = "hotshot-impls")]
 use hotshot::traits::BlockPayload;
 use rand::{Rng, RngCore};
 use sequencer_utils::test_utils::setup_test;
@@ -67,6 +68,7 @@ fn ns_table_byte_len() {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[tokio::test(flavor = "multi_thread")]
 async fn payload_byte_len() {
     setup_test();

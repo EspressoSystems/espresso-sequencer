@@ -1,3 +1,4 @@
+#![cfg(feature = "hotshot-impls")]
 use futures::future;
 use hotshot::helpers::initialize_logging;
 use hotshot::traits::BlockPayload;

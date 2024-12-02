@@ -6,6 +6,8 @@ edition = "2021"
 
 [features]
 testing = []
+default = ["hotshot-impls"]
+hotshot-impls = ["hotshot", "hotshot-orchestrator", "dyn-clone"]
 
 [dependencies]
 
@@ -22,12 +24,12 @@ cld = { workspace = true }
 committable = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 derive_more = { workspace = true }
-dyn-clone = { workspace = true }
+dyn-clone = { workspace = true, optional = true }
 ethers = { workspace = true }
 fluent-asserter = "0.1.9"
 futures = { workspace = true }
-hotshot = { workspace = true }
-hotshot-orchestrator = { workspace = true }
+hotshot = { workspace = true, optional = true }
+hotshot-orchestrator = { workspace = true, optional = true }
 hotshot-query-service = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }

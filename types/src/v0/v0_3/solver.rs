@@ -1,6 +1,6 @@
-use crate::{FeeAmount, NamespaceId, SeqTypes, Update};
-use hotshot::types::SignatureKey;
-use hotshot_types::traits::node_implementation::NodeType;
+
+use crate::{FeeAmount, NamespaceId, PubKey, Update};
+use hotshot_types::traits::signature_key::SignatureKey;
 use serde::{Deserialize, Serialize};
 use tide_disco::Url;
 
@@ -9,7 +9,7 @@ pub struct RollupRegistration {
     pub body: RollupRegistrationBody,
     // signature over the above data (must be from a key in the 'signature_keys` list)
     pub signature:
-        <<SeqTypes as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    <PubKey as SignatureKey>::PureAssembledSignatureType,
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
@@ -22,9 +22,9 @@ pub struct RollupRegistrationBody {
     // whether this registration is active in the marketplace
     pub active: bool,
     // a list of keys authorized to update the registration information
-    pub signature_keys: Vec<<SeqTypes as NodeType>::SignatureKey>,
+    pub signature_keys: Vec<PubKey>,
     // The signature key used to sign this registration body
-    pub signature_key: <SeqTypes as NodeType>::SignatureKey,
+    pub signature_key: PubKey,
     // Optional field for human readable information
     pub text: String,
 }
@@ -34,7 +34,7 @@ pub struct RollupUpdate {
     pub body: RollupUpdatebody,
     // signature over the above data (must be from a key in the 'signature_keys` list)
     pub signature:
-        <<SeqTypes as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+        <PubKey as SignatureKey>::PureAssembledSignatureType,
 }
 
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
@@ -50,9 +50,9 @@ pub struct RollupUpdatebody {
     pub active: Update<bool>,
     // a list of keys authorized to update the registration information
     #[serde(default)]
-    pub signature_keys: Update<Vec<<SeqTypes as NodeType>::SignatureKey>>,
+    pub signature_keys: Update<Vec<PubKey>>,
     // The signature key used to sign this update body
-    pub signature_key: <SeqTypes as NodeType>::SignatureKey,
+    pub signature_key: PubKey,
     // Optional field for human readable information
     pub text: Update<String>,
 }
