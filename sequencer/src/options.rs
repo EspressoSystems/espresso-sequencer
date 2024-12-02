@@ -1,4 +1,5 @@
 #![allow(clippy::needless_lifetimes)]
+
 use core::fmt::Display;
 use jf_signature::{bls_over_bn254, schnorr};
 use sequencer_utils::logging;
@@ -41,7 +42,6 @@ use crate::{api, context::ProposalFetcherConfig, persistence};
 // BEST NOT TO ADD REQUIRED ARGUMENTS TO THIS TYPE, since the required arguments will be required
 // even if the user is only asking for help on a module. Try to give every argument on this type a
 // default value, even if it is a bit arbitrary.
-
 #[derive(Parser, Clone, Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Options {
