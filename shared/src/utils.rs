@@ -229,6 +229,7 @@ mod tests {
     use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
     use tide_disco::{method::ReadState, App};
     use tokio::{spawn, task::JoinHandle, time::timeout};
+    use tracing::debug;
     use url::Url;
     use vbs::version::StaticVersion;
 
@@ -371,9 +372,9 @@ mod tests {
         )
         .await
         {
-            Ok(Some(_)) => println!("Expected error after idle timeout but got an event"),
+            Ok(Some(_)) => panic!("Expected error after idle timeout but got an event"),
             Ok(None) => panic!("Expected error but got None"),
-            Err(err) => panic!("Stream returned an error after idle timeout: {:?}", err),
+            Err(err) => debug!("Stream returned an error after idle timeout: {:?}", err),
         }
 
         // Stream should reconnect after idle timeout
