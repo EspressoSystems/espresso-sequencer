@@ -32,7 +32,7 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
@@ -70,16 +70,18 @@ pub struct PostgresOptions {
 #[derive(Parser, Clone, Derivative, Default, From, Into)]
 #[derivative(Debug)]
 pub struct SqliteOptions {
-    /// File path for the SQLite database.
-    ///
-    /// By default, it is set to `./sqlite.db` in the current directory.
-    ///  SQLite will create the database file if it does not exist.
+    /// Base directory for the SQLite database.
+    /// The SQLite file will be created in the `sqlite` subdirectory with filename as `database`.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_SQLITE_PATH",
-        default_value = "./sqlite.db"
+        env = "ESPRESSO_SEQUENCER_STORAGE_PATH",
+        value_parser = build_sqlite_path
     )]
     pub(crate) path: PathBuf,
+}
+
+pub fn build_sqlite_path(path: &str) -> anyhow::Result<PathBuf> {
+    Ok(PathBuf::from_str(path)?.join("sqlite").join("database"))
 }
 
 /// Options for database-backed persistence, supporting both Postgres and SQLite.
