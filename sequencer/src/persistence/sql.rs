@@ -81,7 +81,15 @@ pub struct SqliteOptions {
 }
 
 pub fn build_sqlite_path(path: &str) -> anyhow::Result<PathBuf> {
-    Ok(PathBuf::from_str(path)?.join("sqlite").join("database"))
+    let sub_dir = PathBuf::from_str(path)?.join("sqlite");
+
+    // if `sqlite` sub dir does not exist then create it
+    if !sub_dir.exists() {
+        std::fs::create_dir(&sub_dir)
+            .with_context(|| format!("failed to create directory: {:?}", sub_dir))?;
+    }
+
+    Ok(sub_dir.join("database"))
 }
 
 /// Options for database-backed persistence, supporting both Postgres and SQLite.
