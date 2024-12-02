@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["G1Point","LightClientState","PlonkProof","StakeTableState","VerifyingKey"]};
