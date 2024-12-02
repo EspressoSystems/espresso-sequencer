@@ -242,7 +242,11 @@ pub enum HotShotEvent<TYPES: NodeType> {
     HighQcRecv(QuorumCertificate2<TYPES>, TYPES::SignatureKey),
 
     /// Send our HighQc to the next leader, should go to the same leader as our vote
-    HighQcSend(QuorumCertificate2<TYPES>, TYPES::SignatureKey),
+    HighQcSend(
+        QuorumCertificate2<TYPES>,
+        TYPES::SignatureKey,
+        TYPES::SignatureKey,
+    ),
 }
 
 impl<TYPES: NodeType> HotShotEvent<TYPES> {
@@ -322,7 +326,7 @@ impl<TYPES: NodeType> HotShotEvent<TYPES> {
             | HotShotEvent::VidRequestRecv(request, _) => Some(request.view),
             HotShotEvent::VidResponseSend(_, _, proposal)
             | HotShotEvent::VidResponseRecv(_, proposal) => Some(proposal.data.view_number),
-            HotShotEvent::HighQcRecv(qc, _) | HotShotEvent::HighQcSend(qc, _) => {
+            HotShotEvent::HighQcRecv(qc, _) | HotShotEvent::HighQcSend(qc, ..) => {
                 Some(qc.view_number())
             }
         }
@@ -590,7 +594,7 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             HotShotEvent::HighQcRecv(qc, _) => {
                 write!(f, "HighQcRecv(view_number={:?}", qc.view_number())
             }
-            HotShotEvent::HighQcSend(qc, _) => {
+            HotShotEvent::HighQcSend(qc, ..) => {
                 write!(f, "HighQcSend(view_number={:?}", qc.view_number())
             }
         }

@@ -114,9 +114,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                             tracing::error!("Received upgrade vote!");
                             HotShotEvent::UpgradeVoteRecv(message)
                         }
-                        GeneralConsensusMessage::HighQc(qc) => {
-                            HotShotEvent::HighQcRecv(qc.to_qc2(), sender)
-                        }
+                        GeneralConsensusMessage::HighQc(qc) => HotShotEvent::HighQcRecv(qc, sender),
                     },
                     SequencingMessage::Da(da_message) => match da_message {
                         DaConsensusMessage::DaProposal(proposal) => {
@@ -650,6 +648,13 @@ impl<
                     TransmitType::Direct(to),
                 ))
             }
+            HotShotEvent::HighQcSend(quorum_cert, leader, sender) => Some((
+                sender,
+                MessageKind::Consensus(SequencingMessage::General(
+                    GeneralConsensusMessage::HighQc(quorum_cert),
+                )),
+                TransmitType::Direct(leader),
+            )),
             _ => None,
         }
     }

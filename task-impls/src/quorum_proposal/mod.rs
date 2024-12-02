@@ -502,7 +502,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
             HotShotEvent::ViewChange(view, _) | HotShotEvent::Timeout(view) => {
                 self.cancel_tasks(*view);
             }
-            HotShotEvent::HighQcSend(qc, _sender) => {
+            HotShotEvent::HighQcSend(qc, ..) => {
                 ensure!(qc.view_number() > self.highest_qc.view_number());
                 let epoch_number = self.consensus.read().await.cur_epoch();
                 ensure!(

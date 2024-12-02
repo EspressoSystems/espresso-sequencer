@@ -133,7 +133,15 @@ pub async fn send_high_qc<TYPES: NodeType, V: Versions, I: NodeImplementation<TY
     let leader = task_state
         .membership
         .leader(new_view_number, TYPES::Epoch::new(0))?;
-    broadcast_event(Arc::new(HotShotEvent::HighQcSend(high_qc, leader)), sender).await;
+    broadcast_event(
+        Arc::new(HotShotEvent::HighQcSend(
+            high_qc,
+            leader,
+            task_state.public_key.clone(),
+        )),
+        sender,
+    )
+    .await;
     Ok(())
 }
 
