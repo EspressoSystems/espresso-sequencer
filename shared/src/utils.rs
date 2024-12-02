@@ -364,6 +364,17 @@ mod tests {
             EventServiceStream::<TestTypes, MockVersion>::RETRY_PERIOD + Duration::from_millis(500),
         )
         .await; // Wait longer than idle timeout
+                // Check whether stream returns Err(_) after idle timeout
+        match timeout(
+            EventServiceStream::<TestTypes, MockVersion>::RETRY_PERIOD,
+            stream.next(),
+        )
+        .await
+        {
+            Ok(Some(_)) => panic!("Expected error after idle timeout but got an event"),
+            Ok(None) => panic!("Expected error but got None"),
+            Err(err) => println!("Stream returned an error after idle timeout: {:?}", err),
+        }
 
         // Stream should reconnect after idle timeout
         let new_app_handle = run_app("hotshot-events", url.clone());
