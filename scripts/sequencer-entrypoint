@@ -9,7 +9,7 @@ trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
 # Decide which binary to run based on the environment variable
 if [ "$ESPRESSO_SEQUENCER_EMBEDDED_DB" = "true" ]; then
     echo "Starting sequencer with sqlite..."
-    /bin/sequencer-sqlite "$@"
+    /bin/sequencer-sqlite -- storage-sql "$@"
 else
     echo "Starting sequencer with postgres..."
     /bin/sequencer-postgres "$@"
