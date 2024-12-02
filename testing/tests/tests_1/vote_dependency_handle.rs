@@ -88,6 +88,7 @@ async fn test_vote_dependency_handle() {
                 public_key: handle.public_key(),
                 private_key: handle.private_key().clone(),
                 consensus: OuterConsensus::new(consensus.clone()),
+                consensus_metrics: Arc::clone(&consensus.read().await.metrics),
                 instance_state: handle.hotshot.instance_state(),
                 quorum_membership: (*handle.hotshot.memberships).clone().into(),
                 storage: Arc::clone(&handle.storage()),

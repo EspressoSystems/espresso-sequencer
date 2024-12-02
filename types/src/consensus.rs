@@ -331,6 +331,8 @@ pub struct ConsensusMetricsValue {
     pub last_synced_block_height: Box<dyn Gauge>,
     /// The number of last decided view
     pub last_decided_view: Box<dyn Gauge>,
+    /// The number of the last voted view
+    pub last_voted_view: Box<dyn Gauge>,
     /// Number of timestamp for the last decided time
     pub last_decided_time: Box<dyn Gauge>,
     /// The current view
@@ -365,6 +367,7 @@ impl ConsensusMetricsValue {
             last_synced_block_height: metrics
                 .create_gauge(String::from("last_synced_block_height"), None),
             last_decided_view: metrics.create_gauge(String::from("last_decided_view"), None),
+            last_voted_view: metrics.create_gauge(String::from("last_voted_view"), None),
             last_decided_time: metrics.create_gauge(String::from("last_decided_time"), None),
             current_view: metrics.create_gauge(String::from("current_view"), None),
             number_of_views_since_last_decide: metrics
