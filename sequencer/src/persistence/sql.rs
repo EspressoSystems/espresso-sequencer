@@ -243,6 +243,7 @@ impl From<PostgresOptions> for Config {
         cfg = cfg.max_connections(20);
         cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
         cfg = cfg.connection_timeout(Duration::from_secs(10240));
+        cfg = cfg.slow_statement_threshold(Duration::from_secs(1));
 
         cfg
     }
@@ -257,6 +258,7 @@ impl From<SqliteOptions> for Config {
         cfg = cfg.max_connections(20);
         cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
         cfg = cfg.connection_timeout(Duration::from_secs(10240));
+        cfg = cfg.slow_statement_threshold(Duration::from_secs(2));
         cfg
     }
 }
@@ -269,6 +271,7 @@ impl From<PostgresOptions> for Options {
             max_connections: 20,
             idle_connection_timeout: Duration::from_secs(120),
             connection_timeout: Duration::from_secs(10240),
+            slow_statement_threshold: Duration::from_secs(1),
             ..Default::default()
         }
     }
@@ -279,9 +282,10 @@ impl From<SqliteOptions> for Options {
     fn from(opt: SqliteOptions) -> Self {
         Options {
             sqlite_options: opt,
-            max_connections: 3,
+            max_connections: 10,
             idle_connection_timeout: Duration::from_secs(120),
             connection_timeout: Duration::from_secs(10240),
+            slow_statement_threshold: Duration::from_secs(1),
             ..Default::default()
         }
     }
