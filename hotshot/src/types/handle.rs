@@ -184,7 +184,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
                 .ok_or(anyhow!("Event dependency failed to get event"))?;
 
                 // Then, if it's `Some`, make sure that the data is correct
-
                 if let HotShotEvent::QuorumProposalResponseRecv(quorum_proposal) = hs_event.as_ref()
                 {
                     // Make sure that the quorum_proposal is valid

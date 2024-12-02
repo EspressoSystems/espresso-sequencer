@@ -226,22 +226,22 @@ impl<TYPES: NodeType> Membership<TYPES> for RandomizedCommittee<TYPES> {
         self.da_stake_table.len()
     }
     /// Get the voting success threshold for the committee
-    fn success_threshold(&self) -> NonZeroU64 {
+    fn success_threshold(&self, _epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
         NonZeroU64::new(((self.stake_table.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting success threshold for the committee
-    fn da_success_threshold(&self) -> NonZeroU64 {
+    fn da_success_threshold(&self, _epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
         NonZeroU64::new(((self.da_stake_table.len() as u64 * 2) / 3) + 1).unwrap()
     }
 
     /// Get the voting failure threshold for the committee
-    fn failure_threshold(&self) -> NonZeroU64 {
+    fn failure_threshold(&self, _epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
         NonZeroU64::new(((self.stake_table.len() as u64) / 3) + 1).unwrap()
     }
 
     /// Get the voting upgrade threshold for the committee
-    fn upgrade_threshold(&self) -> NonZeroU64 {
+    fn upgrade_threshold(&self, _epoch: <TYPES as NodeType>::Epoch) -> NonZeroU64 {
         NonZeroU64::new(max(
             (self.stake_table.len() as u64 * 9) / 10,
             ((self.stake_table.len() as u64 * 2) / 3) + 1,

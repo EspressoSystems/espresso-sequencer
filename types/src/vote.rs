@@ -81,7 +81,10 @@ pub trait Certificate<TYPES: NodeType, T>: HasViewNumber<TYPES> {
     ) -> impl std::future::Future<Output = bool>;
     /// Returns the amount of stake needed to create this certificate
     // TODO: Make this a static ratio of the total stake of `Membership`
-    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64;
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: <TYPES as NodeType>::Epoch,
+    ) -> u64;
 
     /// Get  Stake Table from Membership implementation.
     fn stake_table<MEMBERSHIP: Membership<TYPES>>(
@@ -220,12 +223,12 @@ impl<
         *total_stake_casted += stake_table_entry.stake();
         total_vote_map.insert(key, (vote.signature(), vote_commitment));
 
-        if *total_stake_casted >= CERT::threshold(membership).into() {
+        if *total_stake_casted >= CERT::threshold(membership, epoch).into() {
             // Assemble QC
             let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QcParams =
                 <TYPES::SignatureKey as SignatureKey>::public_parameter(
                     stake_table,
-                    U256::from(CERT::threshold(membership)),
+                    U256::from(CERT::threshold(membership, epoch)),
                 );
 
             let real_qc_sig = <TYPES::SignatureKey as SignatureKey>::assemble(

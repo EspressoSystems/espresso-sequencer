@@ -212,13 +212,14 @@ pub trait Counter: Send + Sync + Debug + DynClone {
     /// Add a value to the counter
     fn add(&self, amount: usize);
 }
+
 /// A gauge that stores the latest value.
 pub trait Gauge: Send + Sync + Debug + DynClone {
     /// Set the gauge value
     fn set(&self, amount: usize);
 
     /// Update the gauge value
-    fn update(&self, delts: i64);
+    fn update(&self, delta: i64);
 }
 
 /// A histogram which will record a series of points.

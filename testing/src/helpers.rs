@@ -140,7 +140,7 @@ pub async fn build_cert<
     CERT: Certificate<TYPES, VOTE::Commitment, Voteable = VOTE::Commitment>,
 >(
     data: DATAType,
-    membership: &TYPES::Membership,
+    da_membership: &TYPES::Membership,
     view: TYPES::View,
     epoch: TYPES::Epoch,
     public_key: &TYPES::SignatureKey,
@@ -149,7 +149,7 @@ pub async fn build_cert<
 ) -> CERT {
     let real_qc_sig = build_assembled_sig::<TYPES, V, VOTE, CERT, DATAType>(
         &data,
-        membership,
+        da_membership,
         view,
         epoch,
         upgrade_lock,
@@ -215,7 +215,7 @@ pub async fn build_assembled_sig<
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QcParams =
         <TYPES::SignatureKey as SignatureKey>::public_parameter(
             stake_table.clone(),
-            U256::from(CERT::threshold(membership)),
+            U256::from(CERT::threshold(membership, epoch)),
         );
     let total_nodes = stake_table.len();
     let signers = bitvec![1; total_nodes];

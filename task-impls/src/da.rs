@@ -120,7 +120,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 );
 
                 let encoded_transactions_hash = Sha256::digest(&proposal.data.encoded_transactions);
-
                 let view_leader_key = self.membership.leader(view, self.cur_epoch)?;
                 ensure!(
                     view_leader_key == sender,

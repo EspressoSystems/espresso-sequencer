@@ -88,7 +88,7 @@ struct MemoryNetworkInner<K: SignatureKey> {
 /// This provides an in memory simulation of a networking implementation, allowing nodes running on
 /// the same machine to mock networking while testing other functionality.
 ///
-/// Under the hood, this simply maintains mpmc channels to every other `MemoryNetwork` insane of the
+/// Under the hood, this simply maintains mpmc channels to every other `MemoryNetwork` instance of the
 /// same group.
 #[derive(Clone)]
 pub struct MemoryNetwork<K: SignatureKey> {
@@ -297,22 +297,53 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
         &self,
         message: Vec<u8>,
         recipients: Vec<K>,
-        broadcast_delay: BroadcastDelay,
+        _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
-        // Iterate over all topics, compare to recipients, and get the `Topic`
-        let topic = self
+        trace!(?message, "Broadcasting message to DA");
+        for node in self
             .inner
             .master_map
             .subscribed_map
+            .entry(Topic::Da)
+            .or_default()
             .iter()
-            .find(|v| v.value().iter().all(|(k, _)| recipients.contains(k)))
-            .map(|v| v.key().clone())
-            .ok_or(NetworkError::MessageSendError(
-                "no topic found for recipients".to_string(),
-            ))?;
-
-        self.broadcast_message(message, topic, broadcast_delay)
-            .await
+        {
+            if !recipients.contains(&node.0) {
+                tracing::error!("Skipping node because not in recipient list: {:?}", &node.0);
+                continue;
+            }
+            // TODO delay/drop etc here
+            let (key, node) = node;
+            trace!(?key, "Sending message to node");
+            if let Some(ref config) = &self.inner.reliability_config {
+                {
+                    let node2 = node.clone();
+                    let fut = config.chaos_send_msg(
+                        message.clone(),
+                        Arc::new(move |msg: Vec<u8>| {
+                            let node3 = (node2).clone();
+                            boxed_sync(async move {
+                                let _res = node3.input(msg).await;
+                                // NOTE we're dropping metrics here but this is only for testing
+                                // purposes. I think that should be okay
+                            })
+                        }),
+                    );
+                    spawn(fut);
+                }
+            } else {
+                let res = node.input(message.clone()).await;
+                match res {
+                    Ok(()) => {
+                        trace!(?key, "Delivered message to remote");
+                    }
+                    Err(e) => {
+                        warn!(?e, ?key, "Error sending broadcast message to node");
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     #[instrument(name = "MemoryNetwork::direct_message")]

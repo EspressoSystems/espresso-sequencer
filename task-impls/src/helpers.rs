@@ -127,7 +127,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType, V: Versions>(
     if !justify_qc
         .is_valid_cert(
             quorum_membership.stake_table(cur_epoch),
-            quorum_membership.success_threshold(),
+            quorum_membership.success_threshold(cur_epoch),
             upgrade_lock,
         )
         .await
@@ -686,7 +686,9 @@ pub(crate) async fn validate_proposal_view_and_certs<
                             validation_info
                                 .quorum_membership
                                 .stake_table(validation_info.cur_epoch),
-                            validation_info.quorum_membership.success_threshold(),
+                            validation_info
+                                .quorum_membership
+                                .success_threshold(validation_info.cur_epoch),
                             &validation_info.upgrade_lock
                         )
                         .await,
@@ -709,7 +711,9 @@ pub(crate) async fn validate_proposal_view_and_certs<
                             validation_info
                                 .quorum_membership
                                 .stake_table(validation_info.cur_epoch),
-                            validation_info.quorum_membership.success_threshold(),
+                            validation_info
+                                .quorum_membership
+                                .success_threshold(validation_info.cur_epoch),
                             &validation_info.upgrade_lock
                         )
                         .await,

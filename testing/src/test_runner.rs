@@ -308,7 +308,7 @@ where
         for node in &mut *nodes {
             node.handle.shut_down().await;
         }
-        tracing::info!("Nodes shtudown");
+        tracing::info!("Nodes shutdown");
 
         completion_handle.abort();
 

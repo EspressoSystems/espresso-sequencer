@@ -11,25 +11,41 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
     parse::{Parse, ParseStream, Result},
-    parse_macro_input, Expr, ExprArray, ExprPath, ExprTuple, Ident, LitBool, Token,
+    parse_macro_input,
+    punctuated::Punctuated,
+    Expr, ExprArray, ExprPath, ExprTuple, Ident, LitBool, PathArguments, Token, TypePath,
 };
+
+/// Bracketed types, e.g. [A, B, C<D>]
+/// These types can have generic parameters, whereas ExprArray items must be Expr.
+#[derive(derive_builder::Builder, Debug, Clone)]
+struct TypePathBracketedArray {
+    /// elems
+    pub elems: Punctuated<TypePath, Token![,]>,
+}
 
 /// description of a crosstest
 #[derive(derive_builder::Builder, Debug, Clone)]
 struct CrossTestData {
     /// imlementations
     impls: ExprArray,
+
     /// builder impl
     #[builder(default = "syn::parse_str(\"[SimpleBuilderImplementation]\").unwrap()")]
     builder_impls: ExprArray,
+
     /// versions
     versions: ExprArray,
+
     /// types
-    types: ExprArray,
+    types: TypePathBracketedArray,
+
     /// name of the test
     test_name: Ident,
+
     /// test description/spec
     metadata: Expr,
+
     /// whether or not to ignore
     ignore: LitBool,
 }
@@ -51,17 +67,23 @@ impl CrossTestDataBuilder {
 #[derive(derive_builder::Builder, Debug, Clone)]
 struct TestData {
     /// type
-    ty: ExprPath,
+    ty: TypePath,
+
     /// impl
     imply: ExprPath,
+
     /// builder implementation
     builder_impl: ExprPath,
+
     /// impl
     version: ExprPath,
+
     /// name of test
     test_name: Ident,
+
     /// test description
     metadata: Expr,
+
     /// whether or not to ignore the test
     ignore: LitBool,
 }
@@ -79,6 +101,58 @@ impl ToLowerSnakeStr for ExprPath {
             .iter()
             .fold(String::new(), |mut acc, s| {
                 acc.push_str(&s.ident.to_string().to_lowercase());
+                acc.push('_');
+                acc
+            })
+            .to_lowercase()
+    }
+}
+
+impl ToLowerSnakeStr for syn::GenericArgument {
+    /// allow panic because this is a compiler error
+    #[allow(clippy::panic)]
+    fn to_lower_snake_str(&self) -> String {
+        match self {
+            syn::GenericArgument::Lifetime(l) => l.ident.to_string().to_lowercase(),
+            syn::GenericArgument::Type(t) => match t {
+                syn::Type::Path(p) => p.to_lower_snake_str(),
+                _ => {
+                    panic!("Unexpected type for GenericArgument::Type: {t:?}");
+                }
+            },
+            syn::GenericArgument::Const(c) => match c {
+                syn::Expr::Lit(l) => match &l.lit {
+                    syn::Lit::Str(v) => format!("{}_", v.value().to_lowercase()),
+                    syn::Lit::Int(v) => format!("{}_", v.base10_digits()),
+                    _ => {
+                        panic!("Unexpected type for GenericArgument::Const::Lit: {l:?}");
+                    }
+                },
+                _ => {
+                    panic!("Unexpected type for GenericArgument::Const: {c:?}");
+                }
+            },
+            _ => {
+                panic!("Unexpected type for GenericArgument: {self:?}");
+            }
+        }
+    }
+}
+
+impl ToLowerSnakeStr for TypePath {
+    fn to_lower_snake_str(&self) -> String {
+        self.path
+            .segments
+            .iter()
+            .fold(String::new(), |mut acc, s| {
+                acc.push_str(&s.ident.to_string().to_lowercase());
+                if let PathArguments::AngleBracketed(a) = &s.arguments {
+                    acc.push('_');
+                    for arg in &a.args {
+                        acc.push_str(&arg.to_lower_snake_str());
+                    }
+                }
+
                 acc.push('_');
                 acc
             })
@@ -149,6 +223,28 @@ mod keywords {
     syn::custom_keyword!(Versions);
 }
 
+impl Parse for TypePathBracketedArray {
+    /// allow panic because this is a compiler error
+    #[allow(clippy::panic)]
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
+        let content;
+        syn::bracketed!(content in input);
+        let mut elems = Punctuated::new();
+
+        while !content.is_empty() {
+            let first: TypePath = content.parse()?;
+            elems.push_value(first);
+            if content.is_empty() {
+                break;
+            }
+            let punct = content.parse()?;
+            elems.push_punct(punct);
+        }
+
+        Ok(Self { elems })
+    }
+}
+
 impl Parse for CrossTestData {
     /// allow panic because this is a compiler error
     #[allow(clippy::panic)]
@@ -159,7 +255,7 @@ impl Parse for CrossTestData {
             if input.peek(keywords::Types) {
                 let _ = input.parse::<keywords::Types>()?;
                 input.parse::<Token![:]>()?;
-                let types = input.parse::<ExprArray>()?;
+                let types = input.parse::<TypePathBracketedArray>()?; //ExprArray>()?;
                 description.types(types);
             } else if input.peek(keywords::Impls) {
                 let _ = input.parse::<keywords::Impls>()?;
@@ -216,13 +312,8 @@ fn cross_tests_internal(test_spec: CrossTestData) -> TokenStream {
         };
         p
     });
-    //
-    let types = test_spec.types.elems.iter().map(|t| {
-        let Expr::Path(p) = t else {
-            panic!("Expected Path for Type! Got {t:?}");
-        };
-        p
-    });
+
+    let types = test_spec.types.elems.iter();
 
     let versions = test_spec.versions.elems.iter().map(|t| {
         let Expr::Path(p) = t else {

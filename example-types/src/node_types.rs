@@ -4,9 +4,16 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
+use std::marker::PhantomData;
+
+pub use hotshot::traits::election::helpers::{
+    RandomOverlapQuorumFilterConfig, StableQuorumFilterConfig,
+};
 use hotshot::traits::{
     election::{
-        randomized_committee::RandomizedCommittee, static_committee::StaticCommittee,
+        helpers::QuorumFilterConfig, randomized_committee::RandomizedCommittee,
+        randomized_committee_members::RandomizedCommitteeMembers,
+        static_committee::StaticCommittee,
         static_committee_leader_two_views::StaticCommitteeLeaderForTwoViews,
     },
     implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork},
@@ -102,6 +109,40 @@ impl NodeType for TestTypesRandomizedLeader {
 )]
 /// filler struct to implement node type and allow us
 /// to select our traits
+pub struct TestTypesRandomizedCommitteeMembers<CONFIG: QuorumFilterConfig> {
+    _pd: PhantomData<CONFIG>,
+}
+
+impl<CONFIG: QuorumFilterConfig> NodeType for TestTypesRandomizedCommitteeMembers<CONFIG> {
+    type AuctionResult = TestAuctionResult;
+    type View = ViewNumber;
+    type Epoch = EpochNumber;
+    type BlockHeader = TestBlockHeader;
+    type BlockPayload = TestBlockPayload;
+    type SignatureKey = BLSPubKey;
+    type Transaction = TestTransaction;
+    type ValidatedState = TestValidatedState;
+    type InstanceState = TestInstanceState;
+    type Membership =
+        RandomizedCommitteeMembers<TestTypesRandomizedCommitteeMembers<CONFIG>, CONFIG>;
+    type BuilderSignatureKey = BuilderKey;
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+/// filler struct to implement node type and allow us
+/// to select our traits
 pub struct TestConsecutiveLeaderTypes;
 impl NodeType for TestConsecutiveLeaderTypes {
     type AuctionResult = TestAuctionResult;
@@ -133,7 +174,7 @@ pub struct Libp2pImpl;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, Eq, PartialEq)]
 pub struct WebImpl;
 
-/// Combined Network implementation (libp2p + web sever)
+/// Combined Network implementation (libp2p + web server)
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, Eq, PartialEq)]
 pub struct CombinedImpl;
 
@@ -223,7 +264,7 @@ impl Versions for EpochsTestVersions {
         0, 0,
     ];
 
-    type Marketplace = StaticVersion<0, 3>;
+    type Marketplace = StaticVersion<0, 99>;
 
     type Epochs = StaticVersion<0, 4>;
 }

@@ -286,7 +286,10 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
         task_state
             .membership
             .has_stake(&task_state.public_key, task_state.cur_epoch),
-        debug!("We were not chosen for the consensus committee for view {view_number:?}")
+        debug!(
+            "We were not chosen for the consensus committee for view {:?}",
+            view_number
+        )
     );
 
     let vote = TimeoutVote::create_signed_vote(

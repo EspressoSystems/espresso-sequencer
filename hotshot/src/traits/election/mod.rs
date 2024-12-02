@@ -8,7 +8,15 @@
 
 /// leader completely randomized every view
 pub mod randomized_committee;
+
+/// quorum randomized every view, with configurable overlap
+pub mod randomized_committee_members;
+
 /// static (round robin) committee election
 pub mod static_committee;
+
 /// static (round robin leader for 2 consecutive views) committee election
 pub mod static_committee_leader_two_views;
+
+/// general helpers
+pub mod helpers;

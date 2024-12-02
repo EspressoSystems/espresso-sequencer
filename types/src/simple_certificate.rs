@@ -24,7 +24,7 @@ use crate::{
     data::serialize_signature2,
     message::UpgradeLock,
     simple_vote::{
-        DaData, QuorumData, QuorumData2, QuorumMaker, TimeoutData, UpgradeProposalData,
+        DaData, QuorumData, QuorumData2, QuorumMarker, TimeoutData, UpgradeProposalData,
         VersionedVoteData, ViewSyncCommitData, ViewSyncFinalizeData, ViewSyncPreCommitData,
         Voteable,
     },
@@ -39,7 +39,10 @@ use crate::{
 /// Trait which allows use to inject different threshold calculations into a Certificate type
 pub trait Threshold<TYPES: NodeType> {
     /// Calculate a threshold based on the membership
-    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64;
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: <TYPES as NodeType>::Epoch,
+    ) -> u64;
 }
 
 /// Defines a threshold which is 2f + 1 (Amount needed for Quorum)
@@ -47,8 +50,11 @@ pub trait Threshold<TYPES: NodeType> {
 pub struct SuccessThreshold {}
 
 impl<TYPES: NodeType> Threshold<TYPES> for SuccessThreshold {
-    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
-        membership.success_threshold().into()
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: <TYPES as NodeType>::Epoch,
+    ) -> u64 {
+        membership.success_threshold(epoch).into()
     }
 }
 
@@ -57,8 +63,11 @@ impl<TYPES: NodeType> Threshold<TYPES> for SuccessThreshold {
 pub struct OneHonestThreshold {}
 
 impl<TYPES: NodeType> Threshold<TYPES> for OneHonestThreshold {
-    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
-        membership.failure_threshold().into()
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: <TYPES as NodeType>::Epoch,
+    ) -> u64 {
+        membership.failure_threshold(epoch).into()
     }
 }
 
@@ -67,8 +76,11 @@ impl<TYPES: NodeType> Threshold<TYPES> for OneHonestThreshold {
 pub struct UpgradeThreshold {}
 
 impl<TYPES: NodeType> Threshold<TYPES> for UpgradeThreshold {
-    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
-        membership.upgrade_threshold().into()
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: <TYPES as NodeType>::Epoch,
+    ) -> u64 {
+        membership.upgrade_threshold(epoch).into()
     }
 }
 
@@ -192,8 +204,11 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
     ) -> usize {
         membership.da_total_nodes(epoch)
     }
-    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
-        membership.da_success_threshold().into()
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: <TYPES as NodeType>::Epoch,
+    ) -> u64 {
+        membership.da_success_threshold(epoch).into()
     }
     fn data(&self) -> &Self::Voteable {
         &self.data
@@ -210,7 +225,7 @@ impl<TYPES: NodeType, THRESHOLD: Threshold<TYPES>> Certificate<TYPES, DaData>
     }
 }
 
-impl<TYPES: NodeType, VOTEABLE: Voteable + 'static + QuorumMaker, THRESHOLD: Threshold<TYPES>>
+impl<TYPES: NodeType, VOTEABLE: Voteable + 'static + QuorumMarker, THRESHOLD: Threshold<TYPES>>
     Certificate<TYPES, VOTEABLE> for SimpleCertificate<TYPES, VOTEABLE, THRESHOLD>
 {
     type Voteable = VOTEABLE;
@@ -254,8 +269,11 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static + QuorumMaker, THRESHOLD: Thr
             self.signatures.as_ref().unwrap(),
         )
     }
-    fn threshold<MEMBERSHIP: Membership<TYPES>>(membership: &MEMBERSHIP) -> u64 {
-        THRESHOLD::threshold(membership)
+    fn threshold<MEMBERSHIP: Membership<TYPES>>(
+        membership: &MEMBERSHIP,
+        epoch: <TYPES as NodeType>::Epoch,
+    ) -> u64 {
+        THRESHOLD::threshold(membership, epoch)
     }
 
     fn stake_table_entry<MEMBERSHIP: Membership<TYPES>>(
@@ -345,7 +363,7 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
             ensure!(
                 cert.is_valid_cert(
                     quorum_membership.stake_table(epoch),
-                    quorum_membership.upgrade_threshold(),
+                    quorum_membership.upgrade_threshold(epoch),
                     upgrade_lock
                 )
                 .await,

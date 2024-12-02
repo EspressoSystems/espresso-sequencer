@@ -115,14 +115,14 @@ pub trait Membership<TYPES: NodeType>: Clone + Debug + Send + Sync {
     fn da_total_nodes(&self, epoch: TYPES::Epoch) -> usize;
 
     /// Returns the threshold for a specific `Membership` implementation
-    fn success_threshold(&self) -> NonZeroU64;
+    fn success_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
 
     /// Returns the DA threshold for a specific `Membership` implementation
-    fn da_success_threshold(&self) -> NonZeroU64;
+    fn da_success_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
 
     /// Returns the threshold for a specific `Membership` implementation
-    fn failure_threshold(&self) -> NonZeroU64;
+    fn failure_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
 
     /// Returns the threshold required to upgrade the network protocol
-    fn upgrade_threshold(&self) -> NonZeroU64;
+    fn upgrade_threshold(&self, epoch: TYPES::Epoch) -> NonZeroU64;
 }
