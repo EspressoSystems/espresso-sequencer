@@ -144,6 +144,7 @@ impl Default for BidTxBody {
         }
     }
 }
+
 impl Default for BidTx {
     fn default() -> Self {
         BidTxBody::default()
@@ -217,6 +218,7 @@ impl BidTx {
 
         Ok(())
     }
+
     /// Cryptographic signature verification
     fn verify(&self) -> Result<(), ExecutionError> {
         self.body
@@ -328,6 +330,7 @@ impl Default for SolverAuctionResults {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl HasUrls for SolverAuctionResults {
     /// Get the urls to fetch bids from builders.
     fn urls(&self) -> Vec<Url> {
@@ -359,6 +362,7 @@ impl Default for SolverAuctionResultsProvider {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProvider {
     /// Fetch the auction results from the solver.
@@ -378,6 +382,7 @@ impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProv
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 mod test {
     use super::*;
 

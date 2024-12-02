@@ -29,8 +29,10 @@ use thiserror::Error;
 use crate::{
     eth_signature_key::EthKeyPair, v0_3::IterableFeeInfo, AccountQueryData, FeeAccount,
     FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
-    SeqTypes,
 };
+
+#[cfg(feature = "hotshot-impls")]
+use crate::SeqTypes;
 
 /// Possible charge fee failures
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -75,6 +77,8 @@ impl FeeInfo {
     pub fn amount(&self) -> FeeAmount {
         self.amount
     }
+
+    #[cfg(feature = "hotshot-impls")]
     /// Get a `Vec<FeeInfo>` from `Vec<BuilderFee>`
     pub fn from_builder_fees(fees: Vec<BuilderFee<SeqTypes>>) -> Vec<FeeInfo> {
         fees.into_iter().map(FeeInfo::from).collect()
@@ -101,6 +105,7 @@ impl IterableFeeInfo for Vec<FeeInfo> {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl IterableFeeInfo for Vec<BuilderFee<SeqTypes>> {
     /// Get sum of amounts
     fn amount(&self) -> Option<FeeAmount> {
@@ -119,6 +124,7 @@ impl IterableFeeInfo for Vec<BuilderFee<SeqTypes>> {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl From<BuilderFee<SeqTypes>> for FeeInfo {
     fn from(fee: BuilderFee<SeqTypes>) -> Self {
         Self {

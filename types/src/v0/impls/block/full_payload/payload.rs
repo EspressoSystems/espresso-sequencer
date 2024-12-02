@@ -18,8 +18,11 @@ use crate::{
     v0::impls::{NodeState, ValidatedState},
     v0_1::ChainConfig,
     Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
-    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, TxProof,
+    NsTableBuilder, Payload, PayloadByteLen, TxProof,
 };
+
+#[cfg(feature = "hotshot-impls")]
+use crate::SeqTypes;
 
 #[derive(serde::Deserialize, serde::Serialize, Error, Debug, Eq, PartialEq)]
 pub enum BlockBuildingError {
@@ -70,6 +73,7 @@ impl Payload {
 
     // PRIVATE HELPERS START HERE
 
+    #[cfg(feature = "hotshot-impls")]
     /// Need a sync version of [`BlockPayload::from_transactions`] in order to impl [`BlockPayload::empty`].
     fn from_transactions_sync(
         transactions: impl IntoIterator<Item = <Self as BlockPayload<SeqTypes>>::Transaction> + Send,
@@ -125,6 +129,7 @@ impl Payload {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 impl BlockPayload<SeqTypes> for Payload {
     // TODO BlockPayload trait eliminate unneeded args, return vals of type
@@ -204,6 +209,7 @@ impl BlockPayload<SeqTypes> for Payload {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl QueryablePayload<SeqTypes> for Payload {
     // TODO changes to QueryablePayload trait:
     // https://github.com/EspressoSystems/hotshot-query-service/issues/639
@@ -292,6 +298,7 @@ impl PayloadByteLen {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[cfg(any(test, feature = "testing"))]
 impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes> for Payload {
     fn genesis() -> Self {

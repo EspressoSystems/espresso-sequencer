@@ -32,10 +32,13 @@ use super::{
 use crate::{
     traits::StateCatchup,
     v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
-    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
-    NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
+    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header,
+    NsTableValidationError, PayloadByteLen, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,
 };
+
+#[cfg(feature = "hotshot-impls")]
+use crate::{Leaf, SeqTypes};
 
 /// This enum is not used in code but functions as an index of
 /// possible validation errors.
@@ -222,6 +225,7 @@ impl ValidatedState {
             })?)
     }
 
+    #[cfg(feature = "hotshot-impls")]
     pub fn apply_proposal(
         &mut self,
         delta: &mut Delta,
@@ -396,6 +400,7 @@ pub(crate) struct ValidatedTransition<'a> {
     view_number: u64,
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl<'a> ValidatedTransition<'a> {
     pub(crate) fn new(
         state: ValidatedState,
@@ -507,6 +512,7 @@ impl<'a> ValidatedTransition<'a> {
         self.proposal.validate_l1_head(self.parent.l1_head())?;
         Ok(())
     }
+
     /// Validate basic numerical soundness and builder accounts by
     /// verifying signatures. Signatures are identified by index of fee `Vec`.
     fn validate_builder_fee(&self) -> Result<(), ProposalValidationError> {
@@ -642,6 +648,7 @@ impl From<MerkleTreeError> for FeeError {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 /// Validate builder accounts by verifying signatures. All fees are
 /// verified against signature by index.
 fn validate_builder_fee(
@@ -694,6 +701,7 @@ fn validate_builder_fee(
     Ok(())
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl ValidatedState {
     /// Updates state with [`Header`] proposal.
     ///   * Clones and updates [`ValidatedState`] (avoiding mutation).
@@ -848,6 +856,7 @@ impl ValidatedState {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 fn _apply_full_transactions(
     validated_state: &mut ValidatedState,
     full_network_txs: Vec<FullNetworkTx>,
@@ -857,6 +866,7 @@ fn _apply_full_transactions(
         .try_for_each(|tx| tx.execute(validated_state))
 }
 
+#[cfg(feature = "hotshot-impls")]
 pub async fn get_l1_deposits(
     instance: &NodeState,
     header: &Header,
@@ -880,6 +890,7 @@ pub async fn get_l1_deposits(
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl HotShotState<SeqTypes> for ValidatedState {
     type Error = BlockError;
     type Instance = NodeState;
@@ -982,6 +993,7 @@ impl std::fmt::Display for ValidatedState {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[cfg(any(test, feature = "testing"))]
 impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
     fn create_random_transaction(
@@ -993,6 +1005,7 @@ impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl MerklizedState<SeqTypes, { Self::ARITY }> for BlockMerkleTree {
     type Key = Self::Index;
     type Entry = Commitment<Header>;
@@ -1025,6 +1038,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for BlockMerkleTree {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
     type Key = Self::Index;
     type Entry = Self::Element;
@@ -1057,7 +1071,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "hotshot-impls"))]
 mod test {
     use ethers::types::U256;
     use hotshot::{helpers::initialize_logging, traits::BlockPayload};

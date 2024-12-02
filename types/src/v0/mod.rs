@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+#[cfg(feature = "hotshot-impls")]
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
@@ -16,8 +17,11 @@ mod impls;
 pub mod traits;
 mod utils;
 pub use header::Header;
+
+#[cfg(feature = "hotshot-impls")]
+pub use impls::get_l1_deposits;
 pub use impls::{
-    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
+    retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
     StateValidationError,
 };
 pub use utils::*;
@@ -125,11 +129,13 @@ reexport_unchanged_types!(
 );
 pub(crate) use v0_3::{L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient};
 
+#[cfg(feature = "hotshot-impls")]
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
 )]
 pub struct SeqTypes;
 
+#[cfg(feature = "hotshot-impls")]
 impl NodeType for SeqTypes {
     type View = ViewNumber;
     type Epoch = EpochNumber;
@@ -156,6 +162,7 @@ impl<Base: StaticVersionType, Upgrade: StaticVersionType> SequencerVersions<Base
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl<Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static> Versions
     for SequencerVersions<Base, Upgrade>
 {
@@ -178,12 +185,12 @@ pub type FeeVersion = StaticVersion<0, 2>;
 pub type MarketplaceVersion = StaticVersion<0, 3>;
 pub type EpochVersion = StaticVersion<0, 4>;
 
+#[cfg(feature = "hotshot-impls")]
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
-pub type Event = hotshot::types::Event<SeqTypes>;
-
+#[cfg(feature = "hotshot-impls")]
+pub type Event = hotshot_types::event::Event<SeqTypes>;
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
-
 pub type NetworkConfig = hotshot_types::network::NetworkConfig<PubKey>;
 
 pub use self::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};

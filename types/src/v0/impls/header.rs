@@ -32,8 +32,11 @@ use crate::{
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, NamespaceId, NsTable, UpgradeType,
 };
+
+#[cfg(feature = "hotshot-impls")]
+use crate::{Leaf, SeqTypes};
 
 use super::{instance_state::NodeState, state::ValidatedState};
 
@@ -342,6 +345,7 @@ macro_rules! field_mut {
     };
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl Header {
     #[allow(clippy::too_many_arguments)]
     fn from_info(
@@ -714,6 +718,7 @@ impl From<anyhow::Error> for InvalidBlockHeader {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
 
@@ -1064,12 +1069,14 @@ impl BlockHeader<SeqTypes> for Header {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl QueryableHeader<SeqTypes> for Header {
     fn timestamp(&self) -> u64 {
         self.timestamp()
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 impl ExplorerHeader<SeqTypes> for Header {
     type BalanceAmount = FeeAmount;
     type WalletAddress = Vec<FeeAccount>;
@@ -1107,7 +1114,7 @@ impl ExplorerHeader<SeqTypes> for Header {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "hotshot-impls"))]
 mod test_headers {
 
     use std::sync::Arc;
@@ -1409,6 +1416,7 @@ mod test_headers {
         }
     }
 
+    #[cfg(feature = "hotshot-impls")]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_proposal_validation_success() {
         setup_test();

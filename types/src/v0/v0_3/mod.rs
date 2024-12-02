@@ -22,7 +22,7 @@ mod fee_info;
 mod header;
 mod solver;
 
-pub use auction::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults};
+pub use auction::*;
 pub use chain_config::*;
 pub use fee_info::IterableFeeInfo;
 pub use header::Header;

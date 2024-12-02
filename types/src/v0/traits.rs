@@ -5,8 +5,10 @@ use std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 use anyhow::{bail, ensure, Context};
 use async_trait::async_trait;
 use committable::Commitment;
+#[cfg(feature = "hotshot-impls")]
 use dyn_clone::DynClone;
 use futures::{FutureExt, TryFutureExt};
+#[cfg(feature = "hotshot-impls")]
 use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
@@ -27,9 +29,12 @@ use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    v0::impls::ValidatedState, v0_3::ChainConfig, BackoffParams, BlockMerkleTree, Event,
-    FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf, NetworkConfig, SeqTypes,
+    v0::impls::ValidatedState, v0_3::ChainConfig, BackoffParams, BlockMerkleTree, FeeAccount,
+    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree,
 };
+
+#[cfg(feature = "hotshot-impls")]
+use crate::{Event, Leaf, NetworkConfig, SeqTypes};
 
 use super::impls::NodeState;
 
@@ -367,6 +372,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
@@ -382,6 +388,7 @@ pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Use this storage as a state catchup backend, if supported.
@@ -639,13 +646,16 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 pub trait EventConsumer: Debug + DynClone + Send + Sync {
     async fn handle_event(&self, event: &Event) -> anyhow::Result<()>;
 }
 
+#[cfg(feature = "hotshot-impls")]
 dyn_clone::clone_trait_object!(EventConsumer);
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 impl<T> EventConsumer for Box<T>
 where
@@ -657,9 +667,11 @@ where
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[derive(Clone, Copy, Debug)]
 pub struct NullEventConsumer;
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 impl EventConsumer for NullEventConsumer {
     async fn handle_event(&self, _event: &Event) -> anyhow::Result<()> {
@@ -667,6 +679,7 @@ impl EventConsumer for NullEventConsumer {
     }
 }
 
+#[cfg(feature = "hotshot-impls")]
 #[async_trait]
 impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_vid(

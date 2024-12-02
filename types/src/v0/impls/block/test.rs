@@ -1,4 +1,4 @@
-#![cfg(test)]
+#![cfg(all(test, feature = "hotshot-impls"))]
 use std::collections::BTreeMap;
 
 use hotshot::traits::BlockPayload;

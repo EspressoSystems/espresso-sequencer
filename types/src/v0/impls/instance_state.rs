@@ -1,6 +1,6 @@
 use crate::v0::{
     retain_accounts, traits::StateCatchup, v0_3::ChainConfig, FeeMerkleTree, GenesisHeader,
-    L1BlockInfo, L1Client, PubKey, Timestamp, Upgrade, UpgradeMode,
+    L1BlockInfo, L1Client, Timestamp, Upgrade, UpgradeMode,
 };
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
@@ -147,8 +147,9 @@ impl Default for NodeState {
 
 impl InstanceState for NodeState {}
 
+#[cfg(feature = "hotshot-impls")]
 impl Upgrade {
-    pub fn set_hotshot_config_parameters(&self, config: &mut HotShotConfig<PubKey>) {
+    pub fn set_hotshot_config_parameters(&self, config: &mut HotShotConfig<crate::PubKey>) {
         match &self.mode {
             UpgradeMode::View(v) => {
                 config.start_proposing_view = v.start_proposing_view;
