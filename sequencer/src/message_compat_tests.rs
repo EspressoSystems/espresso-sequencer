@@ -17,7 +17,7 @@
 use std::path::Path;
 
 use committable::Committable;
-use espresso_types::{Leaf2, NodeState, PubKey, ValidatedState};
+use espresso_types::{NodeState, PubKey, ValidatedState};
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{
@@ -55,11 +55,7 @@ use vbs::{
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     use espresso_types::{Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::{
-        simple_vote::{QuorumData2, QuorumVote2},
-        traits::network::Topic,
-        PeerConfig,
-    };
+    use hotshot_types::PeerConfig;
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();

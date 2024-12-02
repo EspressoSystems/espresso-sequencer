@@ -4,7 +4,7 @@ use std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
 use anyhow::{bail, ensure, Context};
 use async_trait::async_trait;
-use committable::Commitment;
+use committable::{Commitment, Committable};
 use dyn_clone::DynClone;
 use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer};
@@ -639,6 +639,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
         decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
     ) -> anyhow::Result<()>;
+    async fn migrate_consensus(
+        &self,
+        migrate_leaf: fn(Leaf) -> Leaf2,
+        migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()>;
 
     async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
         match self.load_anchor_leaf().await? {
@@ -706,7 +713,18 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        (**self).update_undecided_state(todo!(), state).await
+        (**self)
+            .update_undecided_state(
+                leaves
+                    .into_values()
+                    .map(|leaf| {
+                        let leaf2: Leaf2 = leaf.into();
+                        (leaf2.commit(), leaf2)
+                    })
+                    .collect(),
+                state,
+            )
+            .await
     }
 
     async fn append_proposal(
@@ -748,12 +766,14 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
 
     async fn migrate_consensus(
         &self,
-        _: fn(Leaf) -> Leaf2,
-        _: fn(
+        migrate_leaf: fn(Leaf) -> Leaf2,
+        migrate_proposal: fn(
             Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
         ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        todo!()
+        (**self)
+            .migrate_consensus(migrate_leaf, migrate_proposal)
+            .await
     }
 }
 

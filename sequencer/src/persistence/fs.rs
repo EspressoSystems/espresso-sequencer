@@ -4,11 +4,11 @@ use async_trait::async_trait;
 use clap::Parser;
 use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
-    Leaf2, NetworkConfig, Payload, SeqTypes,
+    Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal2, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
@@ -749,6 +749,16 @@ impl SequencerPersistence for Persistence {
                 Ok(())
             },
         )
+    }
+
+    async fn migrate_consensus(
+        &self,
+        _migrate_leaf: fn(Leaf) -> Leaf2,
+        _migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        todo!()
     }
 }
 

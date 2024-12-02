@@ -1063,9 +1063,7 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
     use hotshot_types::{
-        data::{QuorumProposal, QuorumProposal2},
-        event::LeafInfo,
-        simple_certificate::QuorumCertificate,
+        data::QuorumProposal2, event::LeafInfo, simple_certificate::QuorumCertificate,
         traits::node_implementation::ConsensusTime,
     };
 

@@ -5,11 +5,11 @@ use anyhow::bail;
 use async_trait::async_trait;
 use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
-    Leaf2, NetworkConfig,
+    Leaf, Leaf2, NetworkConfig,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal2, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
@@ -160,6 +160,16 @@ impl SequencerPersistence for NoStorage {
     async fn store_upgrade_certificate(
         &self,
         _decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn migrate_consensus(
+        &self,
+        _: fn(Leaf) -> Leaf2,
+        _: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

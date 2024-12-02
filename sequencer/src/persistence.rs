@@ -50,7 +50,7 @@ mod persistence_tests {
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber},
+        data::{DaProposal, QuorumProposal2, VidDisperseShare, ViewNumber},
         event::{EventType, HotShotAction, LeafInfo},
         message::Proposal,
         simple_certificate::{QuorumCertificate, UpgradeCertificate},
