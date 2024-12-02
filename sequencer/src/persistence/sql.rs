@@ -694,7 +694,8 @@ impl SequencerPersistence for Persistence {
             Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
         ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        todo!()
+        // TODO:
+        Ok(())
     }
 }
 

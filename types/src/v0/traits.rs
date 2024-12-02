@@ -10,7 +10,9 @@ use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber},
+    data::{
+        DaProposal, EpochNumber, QuorumProposal, QuorumProposal2, VidDisperseShare, ViewNumber,
+    },
     event::{HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
@@ -503,7 +505,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         // starting in a view in which we had already voted before the restart, and prevents
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
         let view = max(highest_voted_view, leaf.view_number());
-        let epoch = todo!();
+        // TODO:
+        let epoch = EpochNumber::genesis();
 
         let (undecided_leaves, undecided_state) = self
             .load_undecided_state()
