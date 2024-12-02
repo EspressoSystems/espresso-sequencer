@@ -2771,7 +2771,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -2814,7 +2814,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "async-trait",
  "clap",
@@ -2862,7 +2862,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -2887,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "async-broadcast",
  "async-trait",
@@ -2900,7 +2900,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -2934,7 +2934,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -3302,18 +3302,18 @@ dependencies = [
 
 [[package]]
 name = "impl-codec"
-version = "0.7.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b67aa010c1e3da95bf151bd8b4c059b2ed7e75387cdb969b4f8f2723a43f9941"
+checksum = "ba6a270039626615617f3f36d15fc827041df3b78c439da2cadfa47455a77f2f"
 dependencies = [
  "parity-scale-codec",
 ]
 
 [[package]]
 name = "impl-serde"
-version = "0.5.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a143eada6a1ec4aefa5049037a26a6d597bfd64f8c026d07b77133e02b7dd0b"
+checksum = "ebc88fc67028ae3db0c853baa36269d398d5f45b6982f95549ff5def78c935cd"
 dependencies = [
  "serde",
 ]
@@ -3951,7 +3951,7 @@ dependencies = [
  "smallvec",
  "thiserror 1.0.63",
  "tracing",
- "uint 0.9.5",
+ "uint",
  "void",
 ]
 
@@ -3997,7 +3997,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5134,14 +5134,14 @@ dependencies = [
 
 [[package]]
 name = "primitive-types"
-version = "0.13.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d15600a7d856470b7d278b3fe0e311fe28c2526348549f8ef2ff7db3299c87f5"
+checksum = "0b34d9fd68ae0b74a41b21c03c2f62847aa0ffea044eee893b4c140b37e244e2"
 dependencies = [
  "fixed-hash",
  "impl-codec",
  "impl-serde",
- "uint 0.10.0",
+ "uint",
 ]
 
 [[package]]
@@ -7566,18 +7566,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "uint"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "909988d098b2f738727b161a106cfc7cab00c539c2687a8836f8e565976fb53e"
-dependencies = [
- "byteorder",
- "crunchy",
- "hex",
- "static_assertions",
-]
-
-[[package]]
 name = "unicase"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7712,7 +7700,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.5.79"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#8485af8e3b182c84c4725060e4ad875276bc3e1d"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.82#f57a7ef15d867e03ce00fd0af3418ae46a20041f"
 dependencies = [
  "tracing",
 ]
