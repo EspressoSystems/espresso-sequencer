@@ -21,6 +21,7 @@ hotshot-types = { workspace = true }
 jf-pcs = { workspace = true }
 jf-plonk = { workspace = true }
 jf-utils = { workspace = true }
+libp2p = { workspace = true, features = ["serde"] }
 num-bigint = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 
