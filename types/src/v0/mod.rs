@@ -179,6 +179,7 @@ pub type MarketplaceVersion = StaticVersion<0, 3>;
 pub type EpochVersion = StaticVersion<0, 4>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
+pub type Leaf2 = hotshot_types::data::Leaf2<SeqTypes>;
 pub type Event = hotshot::types::Event<SeqTypes>;
 
 pub type PubKey = BLSPubKey;

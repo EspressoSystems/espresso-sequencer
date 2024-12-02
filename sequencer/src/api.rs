@@ -4,7 +4,7 @@ use anyhow::{bail, Context};
 use async_lock::RwLock;
 use async_once_cell::Lazy;
 use async_trait::async_trait;
-use committable::{Commitment, Committable};
+use committable::Commitment;
 use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
@@ -194,7 +194,6 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             .read()
             .await
             .memberships
-            .quorum_membership
             .stake_table(epoch)
     }
 }
@@ -288,9 +287,9 @@ impl<
         let handle = handle.read().await;
         let consensus = handle.consensus();
         let mut consensus = consensus.write().await;
-        let (state, delta, leaf_commit) = match consensus.validated_state_map().get(&view) {
+        let (state, delta) = match consensus.validated_state_map().get(&view) {
             Some(View {
-                view_inner: ViewInner::Leaf { state, delta, leaf },
+                view_inner: ViewInner::Leaf { state, delta, .. },
             }) => {
                 let mut state = (**state).clone();
 
@@ -309,7 +308,7 @@ impl<
                     };
                 }
 
-                (Arc::new(state), delta.clone(), *leaf)
+                (Arc::new(state), delta.clone())
             }
             _ => {
                 // If we don't already have a leaf for this view, or if we don't have the view
@@ -318,23 +317,10 @@ impl<
                 // map to ensure consistency.
                 let mut state = ValidatedState::from_header(leaf.block_header());
                 state.fee_merkle_tree = tree.clone();
-                let res = (Arc::new(state), None, Committable::commit(&leaf));
-                consensus
-                    .update_saved_leaves(leaf, &handle.hotshot.upgrade_lock)
-                    .await;
-                res
+                (Arc::new(state), None)
             }
         };
-        if let Err(err) = consensus.update_validated_state_map(
-            view,
-            View {
-                view_inner: ViewInner::Leaf {
-                    state,
-                    delta,
-                    leaf: leaf_commit,
-                },
-            },
-        ) {
+        if let Err(err) = consensus.update_leaf(leaf, Arc::clone(&state), delta) {
             tracing::warn!(?view, "cannot update fetched account state: {err:#}");
         }
         tracing::info!(?view, "updated with fetched account state");
@@ -684,8 +670,6 @@ pub mod test_helpers {
             {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.marketplace_builder_port(),
-                    NodeState::default().with_current_version(V::Base::VERSION),
-                    cfg.state[0].clone(),
                 )
                 .await;
                 builder_tasks.push(task);
@@ -1071,7 +1055,7 @@ mod api_tests {
 
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
-        Header, Leaf, NamespaceId,
+        Header, Leaf, Leaf2, NamespaceId,
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
@@ -1079,7 +1063,9 @@ mod api_tests {
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
     use hotshot_types::{
-        data::QuorumProposal, event::LeafInfo, simple_certificate::QuorumCertificate,
+        data::{QuorumProposal, QuorumProposal2},
+        event::LeafInfo,
+        simple_certificate::QuorumCertificate,
         traits::node_implementation::ConsensusTime,
     };
 
@@ -1252,7 +1238,7 @@ mod api_tests {
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
 
-        let mut quorum_proposal = QuorumProposal::<SeqTypes> {
+        let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
             block_header: Leaf::genesis(&Default::default(), &NodeState::mock())
                 .await
                 .block_header()
@@ -1262,22 +1248,26 @@ mod api_tests {
                 &ValidatedState::default(),
                 &NodeState::mock(),
             )
-            .await,
+            .await
+            .to_qc2(),
             upgrade_certificate: None,
-            proposal_certificate: None,
+            view_change_evidence: None,
+            drb_seed: [0; 96],
+            drb_result: [0; 32],
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
             &NodeState::mock(),
         )
-        .await;
+        .await
+        .to_qc2();
 
         let mut justify_qc = qc.clone();
         for i in 0..5 {
             *quorum_proposal.block_header.height_mut() = i;
             quorum_proposal.view_number = ViewNumber::new(i);
             quorum_proposal.justify_qc = justify_qc;
-            let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+            let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
             justify_qc = qc.clone();
@@ -1329,7 +1319,7 @@ mod api_tests {
         }
     }
 
-    fn leaf_info(leaf: Leaf) -> LeafInfo<SeqTypes> {
+    fn leaf_info(leaf: Leaf2) -> LeafInfo<SeqTypes> {
         LeafInfo {
             leaf,
             vid_share: None,

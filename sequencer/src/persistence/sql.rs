@@ -6,7 +6,7 @@ use derivative::Derivative;
 use espresso_types::{
     parse_duration,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, NetworkConfig, Payload,
+    BackoffParams, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
 use hotshot_query_service::data_source::storage::sql::Write;
@@ -19,10 +19,10 @@ use hotshot_query_service::data_source::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
     vid::VidSchemeType,
@@ -315,9 +315,9 @@ impl Persistence {
             if hash.is_none() {
                 let view: i64 = row.try_get("view")?;
                 let data: Vec<u8> = row.try_get("data")?;
-                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
                     bincode::deserialize(&data)?;
-                let leaf = Leaf::from_quorum_proposal(&proposal.data);
+                let leaf = Leaf2::from_quorum_proposal(&proposal.data);
                 let leaf_hash = Committable::commit(&leaf);
                 tracing::info!(view, %leaf_hash, "populating quorum proposal leaf hash");
                 updates.push((view, leaf_hash.to_string()));
@@ -363,15 +363,16 @@ impl SequencerPersistence for Persistence {
         let json = serde_json::to_value(cfg)?;
 
         let mut tx = self.db.write().await?;
-        tx.execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", (json,))
-            .await?;
+        todo!();
+        // tx.execute_one_with_retries("INSERT INTO network_config (config) VALUES ($1)", (json,))
+        //     .await?;
         tx.commit().await
     }
 
     async fn append_decided_leaves(
         &self,
         view: ViewNumber,
-        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
+        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         let values = leaf_chain
@@ -428,7 +429,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_anchor_leaf(
         &self,
-    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
         let Some(row) = self
             .db
             .read()
@@ -458,7 +459,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_undecided_state(
         &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
         let Some(row) = self
             .db
             .read()
@@ -522,7 +523,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
         let rows = self
             .db
             .read()
@@ -536,7 +537,7 @@ impl SequencerPersistence for Persistence {
                     let view: i64 = row.get("view");
                     let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
                     let bytes: Vec<u8> = row.get("data");
-                    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
                         bincode::deserialize(&bytes)?;
                     Ok((view_number, proposal))
                 })
@@ -547,7 +548,7 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
         let mut tx = self.db.read().await?;
         let (data,) =
             query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE view = $1 LIMIT 1")
@@ -605,13 +606,14 @@ impl SequencerPersistence for Persistence {
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
 
         let mut tx = self.db.write().await?;
-        tx.execute_one_with_retries(stmt, (view.u64() as i64,))
-            .await?;
+        todo!();
+        // tx.execute_one_with_retries(stmt, (view.u64() as i64,))
+        //     .await?;
         tx.commit().await
     }
     async fn update_undecided_state(
         &self,
-        leaves: CommitmentMap<Leaf>,
+        leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         if !self.store_undecided_state {
@@ -633,11 +635,11 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
-        let leaf_hash = Committable::commit(&Leaf::from_quorum_proposal(&proposal.data));
+        let leaf_hash = Committable::commit(&Leaf2::from_quorum_proposal(&proposal.data));
         let mut tx = self.db.write().await?;
         tx.upsert(
             "quorum_proposals",
@@ -743,9 +745,9 @@ async fn collect_garbage(
         .map(|row| {
             let view: i64 = row.get("view");
             let leaf_data: Vec<u8> = row.get("leaf");
-            let leaf = bincode::deserialize::<Leaf>(&leaf_data)?;
+            let leaf = bincode::deserialize::<Leaf2>(&leaf_data)?;
             let qc_data: Vec<u8> = row.get("qc");
-            let qc = bincode::deserialize::<QuorumCertificate<SeqTypes>>(&qc_data)?;
+            let qc = bincode::deserialize::<QuorumCertificate2<SeqTypes>>(&qc_data)?;
             Ok((view as u64, (leaf, qc)))
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
@@ -896,28 +898,35 @@ mod generic_tests {
 mod test {
     use super::*;
     use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
-    use espresso_types::{NodeState, ValidatedState};
+    use espresso_types::{Leaf, NodeState, ValidatedState};
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::traits::signature_key::SignatureKey;
+    use hotshot_types::{
+        simple_certificate::QuorumCertificate, traits::signature_key::SignatureKey,
+    };
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
         // Create some quorum proposals to test with.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
+            .await
+            .into();
         let privkey = BLSPubKey::generated_from_seed_indexed([0; 32], 1).1;
         let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut quorum_proposal = Proposal {
-            data: QuorumProposal::<SeqTypes> {
+            data: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
-                .await,
+                .await
+                .to_qc2(),
                 upgrade_certificate: None,
-                proposal_certificate: None,
+                view_change_evidence: None,
+                drb_seed: [0; 96],
+                drb_result: [0; 32],
             },
             signature,
             _pd: Default::default(),
@@ -965,7 +974,7 @@ mod test {
             );
             assert_eq!(
                 row.get::<String, _>("leaf_hash"),
-                Committable::commit(&Leaf::from_quorum_proposal(&qp.data)).to_string()
+                Committable::commit(&Leaf2::from_quorum_proposal(&qp.data)).to_string()
             );
         }
     }

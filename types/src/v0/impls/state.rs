@@ -32,7 +32,7 @@ use super::{
 use crate::{
     traits::StateCatchup,
     v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
-    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
+    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf2,
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,
 };
@@ -225,7 +225,7 @@ impl ValidatedState {
     pub fn apply_proposal(
         &mut self,
         delta: &mut Delta,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         l1_deposits: Vec<FeeInfo>,
     ) {
         // pushing a block into merkle tree shouldn't fail
@@ -704,7 +704,7 @@ impl ValidatedState {
         &self,
         instance: &NodeState,
         peers: &impl StateCatchup,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         proposed_header: &Header,
         version: Version,
     ) -> anyhow::Result<(Self, Delta)> {
@@ -860,7 +860,7 @@ fn _apply_full_transactions(
 pub async fn get_l1_deposits(
     instance: &NodeState,
     header: &Header,
-    parent_leaf: &Leaf,
+    parent_leaf: &Leaf2,
     fee_contract_address: Option<Address>,
 ) -> Vec<FeeInfo> {
     if let (Some(addr), Some(block_info)) = (fee_contract_address, header.l1_finalized()) {
@@ -901,7 +901,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
     async fn validate_and_apply_header(
         &self,
         instance: &Self::Instance,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         proposed_header: &Header,
         vid_common: VidCommon,
         version: Version,
@@ -1075,7 +1075,7 @@ mod test {
         eth_signature_key::{BuilderSignature, EthKeyPair},
         v0_1, v0_2,
         v0_3::{self, BidTx},
-        BlockSize, FeeAccountProof, FeeMerkleProof, Payload, Transaction,
+        BlockSize, FeeAccountProof, FeeMerkleProof, Leaf, Payload, Transaction,
     };
 
     impl Transaction {
@@ -1732,7 +1732,9 @@ mod test {
             ..validated_state.chain_config.resolve().unwrap()
         });
 
-        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let parent: Leaf2 = Leaf::genesis(&instance_state.genesis_state, &instance_state)
+            .await
+            .into();
         let header = parent.block_header().clone();
         let metadata = parent.block_header().metadata();
         let vid_commitment = parent.payload_commitment();
@@ -1787,7 +1789,9 @@ mod test {
             ..validated_state.chain_config.resolve().unwrap()
         });
 
-        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let parent: Leaf2 = Leaf::genesis(&instance_state.genesis_state, &instance_state)
+            .await
+            .into();
         let header = parent.block_header().clone();
 
         debug!("{:?}", header.version());

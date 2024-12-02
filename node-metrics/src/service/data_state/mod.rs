@@ -9,7 +9,7 @@ use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
 use hotshot_query_service::{
     availability::{QueryableHeader, QueryablePayload},
     explorer::{BlockDetail, ExplorerHeader, Timestamp},
-    Leaf, Resolvable,
+    Leaf2, Resolvable,
 };
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::{
@@ -151,7 +151,7 @@ impl DataState {
 
 /// [create_block_detail_from_leaf] is a helper function that will build a
 /// [BlockDetail] from the reference to [Leaf].
-pub fn create_block_detail_from_leaf(leaf: &Leaf<SeqTypes>) -> BlockDetail<SeqTypes> {
+pub fn create_block_detail_from_leaf(leaf: &Leaf2<SeqTypes>) -> BlockDetail<SeqTypes> {
     let block_header = leaf.block_header();
     let block_payload = &leaf.block_payload().unwrap_or(Payload::empty().0);
 
@@ -223,7 +223,7 @@ impl std::error::Error for ProcessLeafError {
 /// computed into a [BlockDetail] and sent to the [Sink] so that it can be
 /// processed for real-time considerations.
 async fn process_incoming_leaf<BDSink, BVSink>(
-    leaf: Leaf<SeqTypes>,
+    leaf: Leaf2<SeqTypes>,
     data_state: Arc<RwLock<DataState>>,
     mut block_sender: BDSink,
     mut voters_sender: BVSink,
@@ -339,7 +339,7 @@ impl ProcessLeafStreamTask {
         voters_sender: K2,
     ) -> Self
     where
-        S: Stream<Item = Leaf<SeqTypes>> + Send + Sync + Unpin + 'static,
+        S: Stream<Item = Leaf2<SeqTypes>> + Send + Sync + Unpin + 'static,
         K1: Sink<BlockDetail<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
         K2: Sink<BitVec<u16>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
@@ -363,7 +363,7 @@ impl ProcessLeafStreamTask {
         block_sender: BDSink,
         voters_senders: BVSink,
     ) where
-        S: Stream<Item = Leaf<SeqTypes>> + Unpin,
+        S: Stream<Item = Leaf2<SeqTypes>> + Unpin,
         Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
         Payload: BlockPayload<SeqTypes>,
         BDSink: Sink<BlockDetail<SeqTypes>, Error = SendError> + Clone + Unpin,
@@ -627,7 +627,9 @@ mod tests {
         };
         let instance_state = NodeState::mock();
 
-        let sample_leaf = Leaf::genesis(&validated_state, &instance_state).await;
+        let sample_leaf = Leaf::genesis(&validated_state, &instance_state)
+            .await
+            .into();
 
         let mut leaf_sender = leaf_sender;
         // We should be able to send a leaf without issue

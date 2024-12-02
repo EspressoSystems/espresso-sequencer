@@ -17,8 +17,9 @@ use ethers::{
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
     types::{Address, U256},
 };
+use futures::FutureExt;
 use hotshot::traits::BlockPayload;
-use hotshot_builder_api::v0_3::builder::{
+use hotshot_builder_api::v0_99::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_events_service::{
@@ -34,14 +35,8 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
-use marketplace_builder_core::service::EventServiceStream;
-use marketplace_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderState, MessageType, ResponseMessage},
-    service::{
-        run_builder_service, BroadcastSenders, BuilderHooks, GlobalState, ProxyGlobalState,
-        ReceivedTransaction,
-    },
-};
+use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
+use marketplace_builder_core::{hooks::BuilderHooks, service::EventServiceStream};
 use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_solver::SolverError;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
@@ -56,9 +51,11 @@ use crate::hooks::{
     self, fetch_namespaces_to_skip, BidConfig, EspressoFallbackHooks, EspressoReserveHooks,
 };
 
-#[derive(Clone, Debug)]
+type DynamicHooks = Box<dyn BuilderHooks<SeqTypes>>;
+
+#[derive(Clone)]
 pub struct BuilderConfig {
-    pub global_state: Arc<RwLock<GlobalState<SeqTypes>>>,
+    pub global_state: Arc<GlobalState<SeqTypes, DynamicHooks>>,
     pub hotshot_events_api_url: Url,
     pub hotshot_builder_apis_url: Url,
 }
@@ -84,32 +81,21 @@ pub async fn build_instance_state<V: Versions>(
 }
 
 impl BuilderConfig {
-    async fn start_service<H>(
-        global_state: Arc<RwLock<GlobalState<SeqTypes>>>,
-        senders: BroadcastSenders<SeqTypes>,
-        hooks: Arc<H>,
-        builder_key_pair: EthKeyPair,
+    async fn start_service(
+        global_state: Arc<GlobalState<SeqTypes, DynamicHooks>>,
         events_api_url: Url,
         builder_api_url: Url,
-        api_timeout: Duration,
-    ) -> anyhow::Result<()>
-    where
-        H: BuilderHooks<SeqTypes>,
-    {
+    ) -> anyhow::Result<()> {
         // create the proxy global state it will server the builder apis
-        let app = ProxyGlobalState::new(
-            global_state.clone(),
-            Arc::clone(&hooks),
-            (builder_key_pair.fee_account(), builder_key_pair.clone()),
-            api_timeout,
-        )
-        .into_app()
-        .context("Failed to construct builder API app")?;
+        let app = Arc::clone(&global_state)
+            .into_app()
+            .context("Failed to construct builder API app")?;
 
         spawn(async move {
             tracing::info!("Starting builder API app at {builder_api_url}");
             let res = app
                 .serve(builder_api_url, MarketplaceVersion::instance())
+                .boxed() // https://github.com/rust-lang/rust/issues/102211
                 .await;
             tracing::error!(?res, "Builder API app exited");
         });
@@ -124,7 +110,7 @@ impl BuilderConfig {
         .await?;
 
         spawn(async move {
-            let res = run_builder_service::<SeqTypes, _>(hooks, senders, stream).await;
+            let res = global_state.start_event_loop(stream).await;
             tracing::error!(?res, "Builder service exited");
             if res.is_err() {
                 panic!("Builder should restart.");
@@ -162,98 +148,42 @@ impl BuilderConfig {
             "initializing builder",
         );
 
-        let (mut senders, receivers) =
-            marketplace_builder_core::service::broadcast_channels(event_channel_capacity.get());
-
-        senders.transactions.set_capacity(tx_channel_capacity.get());
-
-        // builder api request channel
-        let (req_sender, req_receiver) =
-            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
-
-        let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], &validated_state, &instance_state)
-                .await
-                .expect("genesis payload construction failed");
-
-        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
-
-        let vid_commitment = {
-            let payload_bytes = genesis_payload.encode();
-            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
-        };
-
-        // create the global state
-        let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            req_sender,
-            senders.transactions.clone(),
-            vid_commitment,
-            bootstrapped_view,
-        );
-
-        let global_state = Arc::new(RwLock::new(global_state));
-
-        let builder_state = BuilderState::<SeqTypes>::new(
-            ParentBlockReferences {
-                view_number: bootstrapped_view,
-                vid_commitment,
-                leaf_commit: fake_commitment(),
-                builder_commitment,
-            },
-            &receivers,
-            req_receiver,
-            Vec::new() /* tx_queue */,
-            Arc::clone(&global_state),
-            maximize_txns_count_timeout_duration,
-            base_fee
-                .as_u64()
-                .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state),
-            Duration::from_secs(60),
-            Arc::new(validated_state),
-        );
-
-        // Start builder event loop
-        builder_state.event_loop();
-
-        if is_reserve {
+        let hooks: DynamicHooks = if is_reserve {
             let bid_config = bid_config.expect("Missing bid config for the reserve builder.");
-            let hooks = Arc::new(hooks::EspressoReserveHooks {
+            Box::new(hooks::EspressoReserveHooks {
                 namespaces: bid_config.namespaces.into_iter().collect(),
                 solver_base_url,
                 builder_api_base_url: builder_api_url.clone(),
                 bid_key_pair: builder_key_pair.clone(),
                 bid_amount: bid_config.amount,
-            });
-            Self::start_service(
-                Arc::clone(&global_state),
-                senders,
-                hooks,
-                builder_key_pair,
-                events_api_url.clone(),
-                builder_api_url.clone(),
-                api_timeout,
-            )
-            .await?;
+            })
         } else {
             // Fetch the namespaces upon initialization. It will be fetched every 20 views when
             // handling events.
             let namespaces_to_skip = fetch_namespaces_to_skip(solver_base_url.clone()).await;
-            let hooks = Arc::new(hooks::EspressoFallbackHooks {
+            Box::new(hooks::EspressoFallbackHooks {
                 solver_base_url,
                 namespaces_to_skip: RwLock::new(namespaces_to_skip).into(),
-            });
-            Self::start_service(
-                Arc::clone(&global_state),
-                senders,
-                hooks,
-                builder_key_pair,
-                events_api_url.clone(),
-                builder_api_url.clone(),
-                api_timeout,
-            )
-            .await?;
-        }
+            })
+        };
+
+        // create the global state
+        let global_state: Arc<GlobalState<SeqTypes, DynamicHooks>> = GlobalState::new(
+            (builder_key_pair.fee_account(), builder_key_pair),
+            api_timeout,
+            maximize_txns_count_timeout_duration,
+            Duration::from_secs(60),
+            tx_channel_capacity.get(),
+            base_fee.as_u64().expect("Base fee too high"),
+            hooks,
+        );
+
+        Self::start_service(
+            Arc::clone(&global_state),
+            events_api_url.clone(),
+            builder_api_url.clone(),
+        )
+        .await?;
 
         tracing::info!("Builder init finished");
 
@@ -279,8 +209,8 @@ mod test {
     use espresso_types::{
         mock::MockStateCatchup,
         v0_3::{RollupRegistration, RollupRegistrationBody},
-        Event, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, SequencerVersions,
-        Transaction,
+        Event, FeeAccount, Leaf2, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
+        SequencerVersions, Transaction,
     };
     use ethers::{core::k256::elliptic_curve::rand_core::block, utils::Anvil};
     use futures::{Stream, StreamExt};
@@ -291,7 +221,7 @@ mod test {
         EventType::{Decide, *},
     };
     use hotshot::{rand, types::EventType};
-    use hotshot_builder_api::v0_3::builder::BuildError;
+    use hotshot_builder_api::v0_99::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
@@ -307,10 +237,6 @@ mod test {
             node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
-    };
-    use marketplace_builder_core::{
-        builder_state::{self, RequestMessage, TransactionSource},
-        service::run_builder_service,
     };
     use marketplace_builder_shared::block::BuilderStateId;
     use marketplace_solver::{testing::MockSolver, SolverError};
@@ -472,7 +398,7 @@ mod test {
     async fn proposal_view_number_and_commitment(event: Event) -> Option<(u64, VidCommitment)> {
         if let EventType::QuorumProposal { proposal, .. } = event.event {
             let view_number = *proposal.data.view_number;
-            let commitment = Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+            let commitment = Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
             return Some((view_number, commitment));
         }
         None

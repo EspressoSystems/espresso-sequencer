@@ -4,7 +4,7 @@ use committable::{Commitment, Committable};
 use espresso_types::{
     get_l1_deposits,
     v0_3::{ChainConfig, IterableFeeInfo},
-    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, NodeState, ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf2, NodeState, ValidatedState,
 };
 use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
@@ -21,7 +21,7 @@ use hotshot_query_service::{
     Resolvable,
 };
 use hotshot_types::{
-    data::{QuorumProposal, ViewNumber},
+    data::{QuorumProposal2, ViewNumber},
     message::Proposal,
     traits::node_implementation::ConsensusTime,
 };
@@ -82,7 +82,7 @@ impl CatchupStorage for SqlStorage {
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
         let mut tx = self.read().await.context(format!(
             "opening transaction to fetch account {accounts:?}; height {height}"
         ))?;
@@ -162,7 +162,7 @@ impl CatchupStorage for DataSource {
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
         self.as_ref()
             .get_accounts(instance, height, view, accounts)
             .await
@@ -217,7 +217,7 @@ async fn load_accounts<Mode: TransactionMode>(
     tx: &mut Transaction<Mode>,
     height: u64,
     accounts: &[FeeAccount],
-) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
     let leaf = tx
         .get_leaf(LeafId::<SeqTypes>::from(height as usize))
         .await
@@ -277,7 +277,7 @@ async fn reconstruct_state<Mode: TransactionMode>(
     from_height: u64,
     to_view: ViewNumber,
     accounts: &[FeeAccount],
-) -> anyhow::Result<(ValidatedState, Leaf)> {
+) -> anyhow::Result<(ValidatedState, Leaf2)> {
     tracing::info!("attempting to reconstruct fee state");
     let from_leaf = tx
         .get_leaf((from_height as usize).into())
@@ -373,8 +373,8 @@ async fn reconstruct_state<Mode: TransactionMode>(
 async fn header_dependencies<Mode: TransactionMode>(
     tx: &mut Transaction<Mode>,
     instance: &NodeState,
-    mut parent: &Leaf,
-    leaves: impl IntoIterator<Item = &Leaf>,
+    mut parent: &Leaf2,
+    leaves: impl IntoIterator<Item = &Leaf2>,
 ) -> anyhow::Result<(NullStateCatchup, HashSet<FeeAccount>)> {
     let mut catchup = NullStateCatchup::default();
     let mut accounts = HashSet::default();
@@ -432,7 +432,7 @@ async fn get_leaf_from_proposal<Mode, P>(
     tx: &mut Transaction<Mode>,
     where_clause: &str,
     param: P,
-) -> anyhow::Result<Leaf>
+) -> anyhow::Result<Leaf2>
 where
     P: Type<Db> + for<'q> Encode<'q, Db>,
 {
@@ -442,8 +442,8 @@ where
     .bind(param)
     .fetch_one(tx.as_mut())
     .await?;
-    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&data)?;
-    Ok(Leaf::from_quorum_proposal(&proposal.data))
+    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> = bincode::deserialize(&data)?;
+    Ok(Leaf2::from_quorum_proposal(&proposal.data))
 }
 
 #[cfg(any(test, feature = "testing"))]

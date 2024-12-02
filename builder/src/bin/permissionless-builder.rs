@@ -87,6 +87,14 @@ struct NonPermissionedBuilderOptions {
     )]
     max_block_size_increment_period: Duration,
 
+    /// The amount of time a builder can wait before incrementing the max block size.
+    #[clap(
+        long,
+        env = "ESPRESSO_BUILDER_TX_STATUS_CACHE_SIZE",
+        default_value = "819200"
+    )]
+    tx_status_cache_size: usize,
+
     /// Path to TOML file containing genesis state.
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
@@ -163,6 +171,7 @@ async fn run<V: Versions>(
         opt.max_block_size_increment_period,
         txn_timeout_duration,
         base_fee,
+        opt.tx_status_cache_size,
     )
     .await?;
 

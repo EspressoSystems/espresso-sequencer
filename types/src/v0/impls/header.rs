@@ -32,7 +32,7 @@ use crate::{
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf2, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
@@ -348,7 +348,7 @@ impl Header {
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         ns_table: NsTable,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         mut l1: L1Snapshot,
         l1_deposits: &[FeeInfo],
         builder_fee: Vec<BuilderFee<SeqTypes>>,
@@ -751,7 +751,7 @@ impl BlockHeader<SeqTypes> for Header {
     async fn new_marketplace(
         parent_state: &<SeqTypes as NodeType>::ValidatedState,
         instance_state: &<<SeqTypes as NodeType>::ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Instance,
-        parent_leaf: &hotshot_types::data::Leaf<SeqTypes>,
+        parent_leaf: &hotshot_types::data::Leaf2<SeqTypes>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
@@ -888,7 +888,7 @@ impl BlockHeader<SeqTypes> for Header {
     async fn new_legacy(
         parent_state: &ValidatedState,
         instance_state: &NodeState,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
@@ -1119,7 +1119,7 @@ mod test_headers {
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
     use vbs::{bincode_serializer::BincodeSerializer, version::StaticVersion, BinarySerializer};
 
-    use crate::{eth_signature_key::EthKeyPair, mock::MockStateCatchup};
+    use crate::{eth_signature_key::EthKeyPair, mock::MockStateCatchup, Leaf};
 
     use super::*;
 
@@ -1387,7 +1387,7 @@ mod test_headers {
     struct GenesisForTest {
         pub instance_state: NodeState,
         pub validated_state: ValidatedState,
-        pub leaf: Leaf,
+        pub leaf: Leaf2,
         pub header: Header,
         pub ns_table: NsTable,
     }
@@ -1396,7 +1396,9 @@ mod test_headers {
         async fn default() -> Self {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
-            let leaf = Leaf::genesis(&validated_state, &instance_state).await;
+            let leaf: Leaf2 = Leaf::genesis(&validated_state, &instance_state)
+                .await
+                .into();
             let header = leaf.block_header().clone();
             let ns_table = leaf.block_payload().unwrap().ns_table().clone();
             Self {
