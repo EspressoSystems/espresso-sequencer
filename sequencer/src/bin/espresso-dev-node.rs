@@ -541,9 +541,8 @@ mod tests {
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};
     use futures::{StreamExt, TryStreamExt};
-    use hotshot_query_service::{
-        availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
-        data_source::sql::testing::TmpDb,
+    use hotshot_query_service::availability::{
+        BlockQueryData, TransactionQueryData, VidCommonQueryData,
     };
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
@@ -584,7 +583,8 @@ mod tests {
         let dev_node_port = pick_unused_port().unwrap();
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
-        let db = TmpDb::init().await;
+
+        let tmp_dir = tempfile::tempdir().unwrap();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
@@ -599,7 +599,10 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
-            .env("ESPRESSO_SEQUENCER_SQLITE_PATH", db.path().as_os_str())
+            .env(
+                "ESPRESSO_SEQUENCER_STORAGE_PATH",
+                tmp_dir.path().as_os_str(),
+            )
             .spawn()
             .unwrap();
 
@@ -842,7 +845,6 @@ mod tests {
         }
 
         drop(process);
-        drop(db);
     }
 
     async fn alt_chain_providers() -> (Vec<Anvil>, Vec<Url>) {
@@ -884,7 +886,7 @@ mod tests {
             .collect::<Vec<&str>>()
             .join(",");
 
-        let db = TmpDb::init().await;
+        let tmp_dir = tempfile::tempdir().unwrap();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
@@ -903,7 +905,10 @@ mod tests {
                 "ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS",
                 alt_chains_env_value,
             )
-            .env("ESPRESSO_SEQUENCER_SQLITE_PATH", db.path().as_os_str())
+            .env(
+                "ESPRESSO_SEQUENCER_STORAGE_PATH",
+                tmp_dir.path().as_os_str(),
+            )
             .spawn()
             .unwrap();
 
@@ -1018,6 +1023,5 @@ mod tests {
 
         drop(process);
         drop(alt_providers);
-        drop(db);
     }
 }
