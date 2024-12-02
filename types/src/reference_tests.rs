@@ -1,4 +1,4 @@
-#![cfg(test)]
+#![cfg(all(test, feature = "hotshot-impls"))]
 //! Reference data types.
 //!
 //! This module provides some reference instantiations of various data types which have an external,
