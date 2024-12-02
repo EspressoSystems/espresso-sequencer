@@ -6,8 +6,6 @@
 
 //! elections used for consensus
 
-/// Dynamic leader election with epochs.
-pub mod dynamic;
 /// leader completely randomized every view
 pub mod randomized_committee;
 /// static (round robin) committee election

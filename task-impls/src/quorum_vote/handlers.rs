@@ -13,18 +13,22 @@ use committable::Committable;
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposal2, VidDisperseShare},
+    drb::compute_drb_result,
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
     simple_vote::{QuorumData2, QuorumVote2},
     traits::{
+        block_contents::BlockHeader,
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         storage::Storage,
         ValidatedState,
     },
+    utils::epoch_from_block_number,
     vote::HasViewNumber,
 };
+use tokio::spawn;
 use tracing::instrument;
 use utils::anytrace::*;
 use vbs::version::StaticVersionType;
@@ -135,13 +139,13 @@ pub(crate) async fn handle_quorum_proposal_validated<
         // We don't need to hold this while we broadcast
         drop(consensus_writer);
 
-        // First, send an update to everyone saying that we've reached a decide
+        // Send an update to everyone saying that we've reached a decide
         broadcast_event(
             Event {
                 view_number: decided_view_number,
                 event: EventType::Decide {
-                    leaf_chain: Arc::new(leaf_views),
-                    // This is never *not* none if we've reached a new decide, so this is safe to unwrap.
+                    leaf_chain: Arc::new(leaf_views.clone()),
+                    // This is never none if we've reached a new decide, so this is safe to unwrap.
                     qc: Arc::new(new_decide_qc.unwrap()),
                     block_size: included_txns.map(|txns| txns.len().try_into().unwrap()),
                 },
@@ -150,6 +154,65 @@ pub(crate) async fn handle_quorum_proposal_validated<
         )
         .await;
         tracing::debug!("Successfully sent decide event");
+
+        // Start the DRB computation two epochs in advance, if the decided block is the last but
+        // third block in the current epoch and we are in the quorum committee of the next epoch.
+        //
+        // Special cases:
+        // * Epoch 0: No DRB computation since we'll transition to epoch 1 immediately.
+        // * Epoch 1 and 2: Use `[0u8; 32]` as the DRB result since when we first start the
+        // computation in epoch 1, the result is for epoch 3.
+        //
+        // We don't need to handle the special cases explicitly here, because the first proposal
+        // with which we'll start the DRB computation is for epoch 3.
+        if version >= V::Epochs::VERSION {
+            // This is never none if we've reached a new decide, so this is safe to unwrap.
+            let decided_block_number = leaf_views
+                .last()
+                .unwrap()
+                .leaf
+                .block_header()
+                .block_number();
+
+            // Skip if this is not the expected block.
+            if task_state.epoch_height != 0
+                && (decided_block_number + 3) % task_state.epoch_height == 0
+            {
+                // Cancel old DRB computation tasks.
+                let current_epoch_number = TYPES::Epoch::new(epoch_from_block_number(
+                    decided_block_number,
+                    task_state.epoch_height,
+                ));
+                let current_tasks = task_state.drb_computations.split_off(&current_epoch_number);
+                while let Some((_, task)) = task_state.drb_computations.pop_last() {
+                    task.abort();
+                }
+                task_state.drb_computations = current_tasks;
+
+                // Skip if we are not in the committee of the next epoch.
+                if task_state
+                    .membership
+                    .has_stake(&task_state.public_key, current_epoch_number + 1)
+                {
+                    let new_epoch_number = current_epoch_number + 2;
+                    let Ok(drb_seed_input_vec) =
+                        bincode::serialize(&proposal.justify_qc.signatures)
+                    else {
+                        bail!("Failed to serialize the QC signature.");
+                    };
+                    let Ok(drb_seed_input) = drb_seed_input_vec.try_into() else {
+                        bail!(
+                            "Failed to convert the serialized QC signature into a DRB seed input."
+                        );
+                    };
+                    let new_drb_task =
+                        spawn(async move { compute_drb_result::<TYPES>(drb_seed_input) });
+                    task_state
+                        .drb_computations
+                        .insert(new_epoch_number, new_drb_task);
+                }
+            }
+        }
     }
 
     Ok(())

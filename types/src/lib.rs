@@ -20,6 +20,8 @@ pub mod bundle;
 pub mod consensus;
 pub mod constants;
 pub mod data;
+/// Holds the types and functions for DRB computation.
+pub mod drb;
 pub mod error;
 pub mod event;
 /// Holds the configuration file specification for a HotShot node.

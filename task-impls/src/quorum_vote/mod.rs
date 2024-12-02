@@ -18,6 +18,7 @@ use hotshot_task::{
 use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf2, QuorumProposal2},
+    drb::DrbResult,
     event::Event,
     message::{Proposal, UpgradeLock},
     traits::{
@@ -271,6 +272,9 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V:
 
     /// Membership for Quorum certs/votes and DA committee certs/votes.
     pub membership: Arc<TYPES::Membership>,
+
+    /// Table for the in-progress DRB computation tasks.
+    pub drb_computations: BTreeMap<TYPES::Epoch, JoinHandle<DrbResult>>,
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
