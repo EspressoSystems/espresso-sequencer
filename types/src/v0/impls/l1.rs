@@ -125,7 +125,10 @@ impl JsonRpcClient for RpcClient {
         R: DeserializeOwned + Send,
     {
         let res = match self {
-            Self::Http { conn, .. } => conn.request(method, params).await?,
+            Self::Http { conn, .. } => conn
+                .request(method, params)
+                .await
+                .inspect_err(|err| tracing::warn!(method, "L1 RPC error: {err:#}"))?,
             Self::Ws {
                 conn,
                 reconnect,
@@ -192,7 +195,10 @@ impl JsonRpcClient for RpcClient {
                         }
                         Err(err)?
                     }
-                    Err(err) => Err(err)?,
+                    Err(err) => {
+                        tracing::warn!(method, "L1 RPC error: {err:#}");
+                        Err(err)?
+                    }
                 }
             }
         };
