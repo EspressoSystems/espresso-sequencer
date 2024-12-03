@@ -28,7 +28,7 @@ use libp2p::kad::{
     store::RecordStore, Behaviour as KademliaBehaviour, BootstrapError, Event as KademliaEvent,
 };
 use libp2p_identity::PeerId;
-use store::ValidatedStore;
+use store::{file_backed::FileBackedStore, validated::ValidatedStore};
 use tokio::{spawn, sync::mpsc::UnboundedSender, time::sleep};
 use tracing::{debug, error, warn};
 
@@ -143,7 +143,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     /// print out the routing table to stderr
     pub fn print_routing_table(
         &mut self,
-        kadem: &mut KademliaBehaviour<ValidatedStore<MemoryStore, K>>,
+        kadem: &mut KademliaBehaviour<FileBackedStore<ValidatedStore<MemoryStore, K>>>,
     ) {
         let mut err = format!("KBUCKETS: PID: {:?}, ", self.peer_id);
         let v = kadem.kbuckets().collect::<Vec<_>>();
@@ -179,7 +179,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
         factor: NonZeroUsize,
         backoff: ExponentialBackoff,
         retry_count: u8,
-        kad: &mut KademliaBehaviour<ValidatedStore<MemoryStore, K>>,
+        kad: &mut KademliaBehaviour<FileBackedStore<ValidatedStore<MemoryStore, K>>>,
     ) {
         // noop
         if retry_count == 0 {
@@ -247,7 +247,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     /// update state based on recv-ed get query
     fn handle_get_query(
         &mut self,
-        store: &mut ValidatedStore<MemoryStore, K>,
+        store: &mut FileBackedStore<ValidatedStore<MemoryStore, K>>,
         record_results: GetRecordResult,
         id: QueryId,
         mut last: bool,
@@ -405,7 +405,7 @@ impl<K: SignatureKey + 'static> DHTBehaviour<K> {
     pub fn dht_handle_event(
         &mut self,
         event: KademliaEvent,
-        store: &mut ValidatedStore<MemoryStore, K>,
+        store: &mut FileBackedStore<ValidatedStore<MemoryStore, K>>,
     ) -> Option<NetworkEvent> {
         match event {
             KademliaEvent::OutboundQueryProgressed {

@@ -51,6 +51,10 @@ pub struct NetworkNodeConfig<T: NodeType> {
     #[builder(default)]
     pub stake_table: Option<T::Membership>,
 
+    /// The path to the file to save the DHT to
+    #[builder(default)]
+    pub dht_file_path: Option<String>,
+
     /// The signed authentication message sent to the remote peer
     /// If not supplied we will not send an authentication message during the handshake
     #[builder(default)]
