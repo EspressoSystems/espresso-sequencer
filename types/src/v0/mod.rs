@@ -81,7 +81,6 @@ macro_rules! reexport_latest_version_of_type {
 }
 
 /// Re-export types which have not changed across any minor version.
-
 macro_rules! reexport_unchanged_types {
     ($($t:ident),+ $(,)?) => {
         $(
@@ -145,7 +144,9 @@ reexport_unchanged_types!(
     BlockSize,
 );
 
-pub(crate) use v0_3::{L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient};
+pub(crate) use v0_3::{
+    L1ClientMetrics, L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient,
+};
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,

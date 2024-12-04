@@ -1,4 +1,8 @@
-#![cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+#![cfg(all(
+    any(test, feature = "testing"),
+    not(target_os = "windows"),
+    not(feature = "embedded-db")
+))]
 #![allow(dead_code)]
 use std::sync::Arc;
 
@@ -116,7 +120,7 @@ impl MockSolver {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "embedded-db")))]
 mod test {
     use committable::Committable;
     use espresso_types::{

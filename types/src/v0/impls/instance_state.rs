@@ -1,11 +1,13 @@
 use crate::v0::{
-    retain_accounts, traits::StateCatchup, v0_99::ChainConfig, FeeMerkleTree, GenesisHeader,
-    L1BlockInfo, L1Client, PubKey, Timestamp, Upgrade, UpgradeMode,
+    traits::StateCatchup, v0_99::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
+    Timestamp, Upgrade, UpgradeMode,
 };
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
 use std::{collections::BTreeMap, sync::Arc};
-use vbs::version::{StaticVersion, StaticVersionType, Version};
+use vbs::version::Version;
+#[cfg(any(test, feature = "testing"))]
+use vbs::version::{StaticVersion, StaticVersionType};
 
 use super::state::ValidatedState;
 
@@ -187,7 +189,10 @@ pub mod mock {
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 
     use super::*;
-    use crate::{BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment};
+    use crate::{
+        retain_accounts, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+        FeeMerkleTree,
+    };
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {

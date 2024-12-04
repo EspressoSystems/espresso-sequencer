@@ -194,7 +194,7 @@ impl BuilderConfig {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "embedded-db")))]
 mod test {
     use std::{
         str::FromStr,

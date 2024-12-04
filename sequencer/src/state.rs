@@ -166,6 +166,7 @@ where
         .write()
         .await
         .context("opening transaction for state update")?;
+
     store_state_update(&mut tx, proposed_leaf.height(), &state, delta).await?;
 
     if parent_chain_config != state.chain_config {

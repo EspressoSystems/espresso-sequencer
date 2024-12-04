@@ -62,10 +62,13 @@ impl Options {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
-    async fn create(self) -> anyhow::Result<Persistence> {
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
+        let path = self.path.clone();
+        let store_undecided_state = self.store_undecided_state;
+
         Ok(Persistence {
-            store_undecided_state: self.store_undecided_state,
-            inner: Arc::new(RwLock::new(Inner { path: self.path })),
+            store_undecided_state,
+            inner: Arc::new(RwLock::new(Inner { path })),
         })
     }
 

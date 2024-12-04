@@ -3,17 +3,18 @@ use async_trait::async_trait;
 use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
+use derive_more::derive::{From, Into};
 use espresso_types::{
     parse_duration,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
-use hotshot_query_service::data_source::storage::sql::Write;
+use hotshot_query_service::data_source::storage::sql::{syntax_helpers::MAX_FN, Db};
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
-        sql::{include_migrations, query_as, Config, SqlStorage, Transaction},
+        sql::{include_migrations, query_as, Config, SqlStorage},
     },
     Transaction as _, VersionedDataSource,
 };
@@ -31,29 +32,14 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
-use std::sync::Arc;
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]
 #[derivative(Debug)]
-pub struct Options {
-    /// Postgres URI.
-    ///
-    /// This is a shorthand for setting a number of other options all at once. The URI has the
-    /// following format ([brackets] indicate optional segments):
-    ///
-    ///   postgres[ql]://[username[:password]@][host[:port],]/database[?parameter_list]
-    ///
-    /// Options set explicitly via other env vars or flags will take precedence, so you can use this
-    /// URI to set a baseline and then use other parameters to override or add configuration. In
-    /// addition, there are some parameters which cannot be set via the URI, such as TLS.
-    // Hide from debug output since may contain sensitive data.
-    #[derivative(Debug = "ignore")]
-    pub(crate) uri: Option<String>,
-
+pub struct PostgresOptions {
     /// Hostname for the remote Postgres database server.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_HOST")]
     pub(crate) host: Option<String>,
@@ -79,6 +65,59 @@ pub struct Options {
     /// Use TLS for an encrypted connection to the database.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_USE_TLS")]
     pub(crate) use_tls: bool,
+}
+
+#[derive(Parser, Clone, Derivative, Default, From, Into)]
+#[derivative(Debug)]
+pub struct SqliteOptions {
+    /// Base directory for the SQLite database.
+    /// The SQLite file will be created in the `sqlite` subdirectory with filename as `database`.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_STORAGE_PATH",
+        value_parser = build_sqlite_path
+    )]
+    pub(crate) path: PathBuf,
+}
+
+pub fn build_sqlite_path(path: &str) -> anyhow::Result<PathBuf> {
+    let sub_dir = PathBuf::from_str(path)?.join("sqlite");
+
+    // if `sqlite` sub dir does not exist then create it
+    if !sub_dir.exists() {
+        std::fs::create_dir_all(&sub_dir)
+            .with_context(|| format!("failed to create directory: {:?}", sub_dir))?;
+    }
+
+    Ok(sub_dir.join("database"))
+}
+
+/// Options for database-backed persistence, supporting both Postgres and SQLite.
+#[derive(Parser, Clone, Derivative, Default, From, Into)]
+#[derivative(Debug)]
+pub struct Options {
+    #[cfg(not(feature = "embedded-db"))]
+    #[clap(flatten)]
+    pub(crate) postgres_options: PostgresOptions,
+
+    #[cfg(feature = "embedded-db")]
+    #[clap(flatten)]
+    pub(crate) sqlite_options: SqliteOptions,
+
+    /// Database URI for Postgres or SQLite.
+    ///
+    /// This is a shorthand for setting a number of other options all at once. The URI has the
+    /// following format ([brackets] indicate optional segments):
+    ///
+    /// - **Postgres:** `postgres[ql]://[username[:password]@][host[:port],]/database[?parameter_list]`
+    /// - **SQLite:** `sqlite://path/to/db.sqlite`
+    ///
+    /// Options set explicitly via other env vars or flags will take precedence, so you can use this
+    /// URI to set a baseline and then use other parameters to override or add configuration. In
+    /// addition, there are some parameters which cannot be set via the URI, such as TLS.
+    // Hide from debug output since may contain sensitive data.
+    #[derivative(Debug = "ignore")]
+    pub(crate) uri: Option<String>,
 
     /// This will enable the pruner and set the default pruning parameters unless provided.
     /// Default parameters:
@@ -123,7 +162,7 @@ pub struct Options {
     ///
     /// Any connection which has been open and unused longer than this duration will be
     /// automatically closed to reduce load on the server.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_IDLE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "10m")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_IDLE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "10m")]
     pub(crate) idle_connection_timeout: Duration,
 
     /// The maximum lifetime of a database connection.
@@ -132,8 +171,11 @@ pub struct Options {
     /// (and, if needed, replaced), even if it is otherwise healthy. It is good practice to refresh
     /// even healthy connections once in a while (e.g. daily) in case of resource leaks in the
     /// server implementation.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "30m")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "30m")]
     pub(crate) connection_timeout: Duration,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_DATABASE_SLOW_STATEMENT_THRESHOLD", value_parser = parse_duration, default_value = "1s")]
+    pub(crate) slow_statement_threshold: Duration,
 
     /// The minimum number of database connections to maintain at any time.
     ///
@@ -142,7 +184,7 @@ pub struct Options {
     /// connections when at least this many simultaneous connections are frequently needed.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_POSTGRES_MIN_CONNECTIONS",
+        env = "ESPRESSO_SEQUENCER_DATABASE_MIN_CONNECTIONS",
         default_value = "0"
     )]
     pub(crate) min_connections: u32,
@@ -153,12 +195,101 @@ pub struct Options {
     /// (or begin a transaction) will block until one of the existing connections is released.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_POSTGRES_MAX_CONNECTIONS",
+        env = "ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS",
         default_value = "25"
     )]
     pub(crate) max_connections: u32,
+
+    // Keep the database connection pool when persistence is created,
+    // allowing it to be reused across multiple instances instead of creating
+    // a new pool each time such as for API, consensus storage etc
+    // This also ensures all storage instances adhere to the MAX_CONNECTIONS limit if set
+    //
+    // Note: Cloning the `Pool` is lightweight and efficient because it simply
+    // creates a new reference-counted handle to the underlying pool state.
+    #[clap(skip)]
+    pub(crate) pool: Option<sqlx::Pool<Db>>,
 }
 
+#[cfg(not(feature = "embedded-db"))]
+impl From<PostgresOptions> for Config {
+    fn from(opt: PostgresOptions) -> Self {
+        let mut cfg = Config::default();
+
+        if let Some(host) = opt.host {
+            cfg = cfg.host(host);
+        }
+
+        if let Some(port) = opt.port {
+            cfg = cfg.port(port);
+        }
+
+        if let Some(database) = &opt.database {
+            cfg = cfg.database(database);
+        }
+
+        if let Some(user) = &opt.user {
+            cfg = cfg.user(user);
+        }
+
+        if let Some(password) = &opt.password {
+            cfg = cfg.password(password);
+        }
+
+        if opt.use_tls {
+            cfg = cfg.tls();
+        }
+
+        cfg = cfg.max_connections(20);
+        cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
+        cfg = cfg.connection_timeout(Duration::from_secs(10240));
+        cfg = cfg.slow_statement_threshold(Duration::from_secs(1));
+
+        cfg
+    }
+}
+
+#[cfg(feature = "embedded-db")]
+impl From<SqliteOptions> for Config {
+    fn from(opt: SqliteOptions) -> Self {
+        let mut cfg = Config::default();
+
+        cfg = cfg.db_path(opt.path);
+        cfg = cfg.max_connections(20);
+        cfg = cfg.idle_connection_timeout(Duration::from_secs(120));
+        cfg = cfg.connection_timeout(Duration::from_secs(10240));
+        cfg = cfg.slow_statement_threshold(Duration::from_secs(2));
+        cfg
+    }
+}
+
+#[cfg(not(feature = "embedded-db"))]
+impl From<PostgresOptions> for Options {
+    fn from(opt: PostgresOptions) -> Self {
+        Options {
+            postgres_options: opt,
+            max_connections: 20,
+            idle_connection_timeout: Duration::from_secs(120),
+            connection_timeout: Duration::from_secs(10240),
+            slow_statement_threshold: Duration::from_secs(1),
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(feature = "embedded-db")]
+impl From<SqliteOptions> for Options {
+    fn from(opt: SqliteOptions) -> Self {
+        Options {
+            sqlite_options: opt,
+            max_connections: 10,
+            idle_connection_timeout: Duration::from_secs(120),
+            connection_timeout: Duration::from_secs(10240),
+            slow_statement_threshold: Duration::from_secs(1),
+            ..Default::default()
+        }
+    }
+}
 impl TryFrom<Options> for Config {
     type Error = anyhow::Error;
 
@@ -167,25 +298,57 @@ impl TryFrom<Options> for Config {
             Some(uri) => uri.parse()?,
             None => Self::default(),
         };
-        cfg = cfg.migrations(include_migrations!("$CARGO_MANIFEST_DIR/api/migrations"));
 
-        if let Some(host) = opt.host {
-            cfg = cfg.host(host);
+        if let Some(pool) = opt.pool {
+            cfg = cfg.pool(pool);
         }
-        if let Some(port) = opt.port {
-            cfg = cfg.port(port);
+
+        cfg = cfg.max_connections(opt.max_connections);
+        cfg = cfg.idle_connection_timeout(opt.idle_connection_timeout);
+        cfg = cfg.min_connections(opt.min_connections);
+        cfg = cfg.connection_timeout(opt.connection_timeout);
+        cfg = cfg.slow_statement_threshold(opt.slow_statement_threshold);
+
+        #[cfg(not(feature = "embedded-db"))]
+        {
+            cfg = cfg.migrations(include_migrations!(
+                "$CARGO_MANIFEST_DIR/api/migrations/postgres"
+            ));
+
+            let pg_options = opt.postgres_options;
+
+            if let Some(host) = pg_options.host {
+                cfg = cfg.host(host);
+            }
+
+            if let Some(port) = pg_options.port {
+                cfg = cfg.port(port);
+            }
+
+            if let Some(database) = &pg_options.database {
+                cfg = cfg.database(database);
+            }
+
+            if let Some(user) = &pg_options.user {
+                cfg = cfg.user(user);
+            }
+
+            if let Some(password) = &pg_options.password {
+                cfg = cfg.password(password);
+            }
+
+            if pg_options.use_tls {
+                cfg = cfg.tls();
+            }
         }
-        if let Some(database) = &opt.database {
-            cfg = cfg.database(database);
-        }
-        if let Some(user) = &opt.user {
-            cfg = cfg.user(user);
-        }
-        if let Some(password) = &opt.password {
-            cfg = cfg.password(password);
-        }
-        if opt.use_tls {
-            cfg = cfg.tls();
+
+        #[cfg(feature = "embedded-db")]
+        {
+            cfg = cfg.migrations(include_migrations!(
+                "$CARGO_MANIFEST_DIR/api/migrations/sqlite"
+            ));
+
+            cfg = cfg.db_path(opt.sqlite_options.path);
         }
 
         if opt.prune {
@@ -269,6 +432,7 @@ impl From<PruningOptions> for PrunerCfg {
         if let Some(interval) = opt.interval {
             cfg = cfg.with_interval(interval);
         }
+
         cfg
     }
 }
@@ -277,12 +441,15 @@ impl From<PruningOptions> for PrunerCfg {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
-    async fn create(self) -> anyhow::Result<Persistence> {
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
+        let store_undecided_state = self.store_undecided_state;
+        let config = self.clone().try_into()?;
         let persistence = Persistence {
-            store_undecided_state: self.store_undecided_state,
-            db: SqlStorage::connect(self.try_into()?).await?,
+            store_undecided_state,
+            db: SqlStorage::connect(config).await?,
         };
         persistence.migrate_quorum_proposal_leaf_hashes().await?;
+        self.pool = Some(persistence.db.pool());
         Ok(persistence)
     }
 
@@ -293,6 +460,7 @@ impl PersistenceOptions for Options {
 }
 
 /// Postgres-backed persistence.
+#[derive(Clone)]
 pub struct Persistence {
     db: SqlStorage,
     store_undecided_state: bool,
@@ -307,10 +475,13 @@ impl Persistence {
     /// and if so we populate the column manually.
     async fn migrate_quorum_proposal_leaf_hashes(&self) -> anyhow::Result<()> {
         let mut tx = self.db.write().await?;
+
         let mut proposals = tx.fetch("SELECT * FROM quorum_proposals");
+
         let mut updates = vec![];
         while let Some(row) = proposals.next().await {
             let row = row?;
+
             let hash: Option<String> = row.try_get("leaf_hash")?;
             if hash.is_none() {
                 let view: i64 = row.try_get("view")?;
@@ -327,6 +498,7 @@ impl Persistence {
 
         tx.upsert("quorum_proposals", ["view", "leaf_hash"], ["view"], updates)
             .await?;
+
         tx.commit().await
     }
 }
@@ -359,7 +531,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn save_config(&self, cfg: &NetworkConfig) -> anyhow::Result<()> {
-        tracing::info!("saving config to Postgres");
+        tracing::info!("saving config to database");
         let json = serde_json::to_value(cfg)?;
 
         let mut tx = self.db.write().await?;
@@ -402,8 +574,8 @@ impl SequencerPersistence for Persistence {
         // Generate an event for the new leaves and, only if it succeeds, clean up data we no longer
         // need.
         let consumer = dyn_clone::clone(consumer);
-        let tx = self.db.write().await?;
-        if let Err(err) = collect_garbage(tx, view, consumer).await {
+
+        if let Err(err) = collect_garbage(self, view, consumer).await {
             // GC/event processing failure is not an error, since by this point we have at least
             // managed to persist the decided leaves successfully, and GC will just run again at the
             // next decide. Log an error but do not return it.
@@ -600,12 +772,14 @@ impl SequencerPersistence for Persistence {
         if !matches!(action, HotShotAction::Propose | HotShotAction::Vote) {
             return Ok(());
         }
-        let stmt = "
-        INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
-        ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
+
+        let stmt = format!(
+            "INSERT INTO highest_voted_view (id, view) VALUES (0, $1) 
+            ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(highest_voted_view.view, excluded.view)"
+        );
 
         let mut tx = self.db.write().await?;
-        tx.execute(query(stmt).bind(view.u64() as i64)).await?;
+        tx.execute(query(&stmt).bind(view.u64() as i64)).await?;
         tx.commit().await
     }
     async fn update_undecided_state(
@@ -700,17 +874,21 @@ impl SequencerPersistence for Persistence {
 }
 
 async fn collect_garbage(
-    mut tx: Transaction<Write>,
+    storage: &Persistence,
     view: ViewNumber,
     consumer: impl EventConsumer,
 ) -> anyhow::Result<()> {
-    // Clean up and collect VID shares.
+    // In SQLite, overlapping read and write transactions can lead to database errors.
+    // To avoid this:
+    // - start a read transaction to query and collect all the necessary data.
+    // - Commit (or implicitly drop) the read transaction once the data is fetched.
+    // - use the collected data to generate a "decide" event for the consumer.
+    // - begin a write transaction to delete the data and update the event stream.
+    let mut tx = storage.db.read().await?;
 
+    // collect VID shares.
     let mut vid_shares = tx
-        .fetch_all(
-            query("DELETE FROM vid_share where view <= $1 RETURNING view, data")
-                .bind(view.u64() as i64),
-        )
+        .fetch_all(query("SELECT * FROM vid_share where view <= $1").bind(view.u64() as i64))
         .await?
         .into_iter()
         .map(|row| {
@@ -722,12 +900,9 @@ async fn collect_garbage(
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
 
-    // Clean up and collect DA proposals.
+    // collect DA proposals.
     let mut da_proposals = tx
-        .fetch_all(
-            query("DELETE FROM da_proposal where view <= $1 RETURNING view, data")
-                .bind(view.u64() as i64),
-        )
+        .fetch_all(query("SELECT * FROM da_proposal where view <= $1").bind(view.u64() as i64))
         .await?
         .into_iter()
         .map(|row| {
@@ -739,10 +914,7 @@ async fn collect_garbage(
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
 
-    // Clean up and collect leaves, except do not delete the most recent leaf: we need to remember
-    // this so that in case we restart, we can pick up from the last decided leaf. We still do
-    // include this leaf in the query results (the `UNION` clause) so we can include it in the
-    // decide event we send to the consumer.
+    // collect leaves
     let mut leaves = tx
         .fetch_all(
             query("SELECT view, leaf, qc FROM anchor_leaf WHERE view <= $1")
@@ -759,14 +931,6 @@ async fn collect_garbage(
             Ok((view as u64, (leaf, qc)))
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
-
-    tx.execute(query("DELETE FROM anchor_leaf WHERE view < $1").bind(view.u64() as i64))
-        .await?;
-
-    // Clean up old proposals. These are not part of the decide event we generate for the consumer,
-    // so we don't need to return them.
-    tx.execute(query("DELETE FROM quorum_proposals where view <= $1").bind(view.u64() as i64))
-        .await?;
 
     // Exclude from the decide event any leaves which have definitely already been processed. We may
     // have selected an already-processed leaf because the oldest leaf -- the last leaf processed in
@@ -802,6 +966,8 @@ async fn collect_garbage(
     } else {
         leaves
     };
+
+    drop(tx);
 
     // Generate a decide event for each leaf, to be processed by the event consumer. We make a
     // separate event for each leaf because it is possible we have non-consecutive leaves in our
@@ -847,6 +1013,7 @@ async fn collect_garbage(
             .await?;
     }
 
+    let mut tx = storage.db.write().await?;
     // Now that we have definitely processed leaves up to `view`, we can update
     // `last_processed_view` so we don't process these leaves again. We may still fail at this
     // point, or shut down, and fail to complete this update. At worst this will lead to us sending
@@ -860,6 +1027,22 @@ async fn collect_garbage(
     )
     .await?;
 
+    tx.execute(query("DELETE FROM vid_share where view <= $1").bind(view.u64() as i64))
+        .await?;
+
+    tx.execute(query("DELETE FROM da_proposal where view <= $1").bind(view.u64() as i64))
+        .await?;
+
+    // Clean up leaves, but do not delete the most recent one (all leaves with a view number less than the given value).
+    // This is necessary to ensure that, in case of a restart, we can resume from the last decided leaf.
+    tx.execute(query("DELETE FROM anchor_leaf WHERE view < $1").bind(view.u64() as i64))
+        .await?;
+
+    // Clean up old proposals. These are not part of the decide event we generate for the consumer,
+    // so we don't need to return them.
+    tx.execute(query("DELETE FROM quorum_proposals where view <= $1").bind(view.u64() as i64))
+        .await?;
+
     tx.commit().await
 }
 
@@ -871,23 +1054,31 @@ mod testing {
 
     #[async_trait]
     impl TestablePersistence for Persistence {
-        type Storage = TmpDb;
+        type Storage = Arc<TmpDb>;
 
         async fn tmp_storage() -> Self::Storage {
-            TmpDb::init().await
+            Arc::new(TmpDb::init().await)
         }
 
         async fn connect(db: &Self::Storage) -> Self {
-            Options {
-                port: Some(db.port()),
-                host: Some(db.host()),
-                user: Some("postgres".into()),
-                password: Some("password".into()),
-                ..Default::default()
+            #[cfg(not(feature = "embedded-db"))]
+            {
+                let mut opt: Options = PostgresOptions {
+                    port: Some(db.port()),
+                    host: Some(db.host()),
+                    user: Some("postgres".into()),
+                    password: Some("password".into()),
+                    ..Default::default()
+                }
+                .into();
+                opt.create().await.unwrap()
             }
-            .create()
-            .await
-            .unwrap()
+
+            #[cfg(feature = "embedded-db")]
+            {
+                let mut opt: Options = SqliteOptions { path: db.path() }.into();
+                opt.create().await.unwrap()
+            }
         }
     }
 }
