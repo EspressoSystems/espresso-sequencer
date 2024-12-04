@@ -495,7 +495,11 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         genesis_state.prefund_account(address, amount);
     }
 
-    let l1_client = l1_params.options.connect(l1_params.url).await?;
+    let l1_client = l1_params
+        .options
+        .with_metrics(metrics)
+        .connect(l1_params.url)
+        .await?;
     l1_client.spawn_tasks().await;
     let l1_genesis = match genesis.l1_finalized {
         L1Finalized::Block(b) => b,
