@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fetch_proposals","handle_events","load_anchor_view","scan_proposals"],"macro":["spawn_with_log_level"],"struct":["ProposalFetcherConfig","SequencerContext","TaskList"],"type":["Consensus"]};
