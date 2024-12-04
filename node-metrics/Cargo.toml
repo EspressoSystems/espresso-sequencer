@@ -8,9 +8,11 @@ edition = { workspace = true }
 [features]
 testing = ["serde_json", "espresso-types/testing"]
 
+[dev-dependencies]
+node-metrics = { path = ".", features = [ "testing" ] }
+
 [dependencies]
-async-compatibility-layer = { workspace = true } 
-async-std = { workspace = true }
+async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
@@ -21,6 +23,7 @@ futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
+tokio = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-types = { workspace = true }

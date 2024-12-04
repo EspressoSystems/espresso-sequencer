@@ -49,7 +49,6 @@ Just is not available in the official ubuntu repos.
 
 To run the SQL tests docker needs to be installed and running.
 
-    export RUSTFLAGS='--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
     export "PATH=$PWD/target/release:$PATH"
     cargo build --release --bin diff-test
     just test --no-fail-fast

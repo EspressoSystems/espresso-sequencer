@@ -1,4 +1,7 @@
+#![allow(clippy::needless_lifetimes)]
+
 use core::fmt::Display;
+use jf_signature::{bls_over_bn254, schnorr};
 use sequencer_utils::logging;
 use std::{
     cmp::Ordering,
@@ -8,6 +11,7 @@ use std::{
     path::PathBuf,
     time::Duration,
 };
+use tagged_base64::TaggedBase64;
 
 use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
@@ -17,7 +21,7 @@ use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use url::Url;
 
-use crate::{api, persistence};
+use crate::{api, context::ProposalFetcherConfig, persistence};
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
 // can be added, in any combination, to the service. These include, for example, the API server.
@@ -38,7 +42,6 @@ use crate::{api, persistence};
 // BEST NOT TO ADD REQUIRED ARGUMENTS TO THIS TYPE, since the required arguments will be required
 // even if the user is only asking for help on a module. Try to give every argument on this type a
 // default value, even if it is a bit arbitrary.
-
 #[derive(Parser, Clone, Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Options {
@@ -197,10 +200,18 @@ pub struct Options {
     /// The maximum number of bytes we will send in a single Libp2p gossip message
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_TRANSMIT_SIZE",
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_GOSSIP_TRANSMIT_SIZE",
         default_value = "2000000"
     )]
-    pub libp2p_max_transmit_size: usize,
+    pub libp2p_max_gossip_transmit_size: usize,
+
+    /// The maximum number of bytes we will send in a single Libp2p direct message
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_DIRECT_TRANSMIT_SIZE",
+        default_value = "20000000"
+    )]
+    pub libp2p_max_direct_transmit_size: u64,
 
     /// The URL we advertise to other nodes as being for our public API.
     /// Should be supplied in `http://host:port` form.
@@ -296,7 +307,7 @@ pub struct Options {
         conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
-    pub private_staking_key: Option<BLSPrivKey>,
+    pub private_staking_key: Option<TaggedBase64>,
 
     /// Private state signing key.
     ///
@@ -307,7 +318,7 @@ pub struct Options {
         conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
-    pub private_state_key: Option<StateSignKey>,
+    pub private_state_key: Option<TaggedBase64>,
 
     /// Add optional modules to the service.
     ///
@@ -366,6 +377,9 @@ pub struct Options {
 
     #[clap(flatten)]
     pub identity: Identity,
+
+    #[clap(flatten)]
+    pub proposal_fetcher_config: ProposalFetcherConfig,
 }
 
 impl Options {
@@ -376,19 +390,26 @@ impl Options {
     pub fn private_keys(&self) -> anyhow::Result<(BLSPrivKey, StateSignKey)> {
         if let Some(path) = &self.key_file {
             let vars = dotenvy::from_path_iter(path)?.collect::<Result<HashMap<_, _>, _>>()?;
-            let staking = vars
-                .get("ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")
-                .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")?
-                .parse()?;
-            let state = vars
-                .get("ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")
-                .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")?
-                .parse()?;
+            let staking = TaggedBase64::parse(
+                vars.get("ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")
+                    .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")?,
+            )?
+            .try_into()?;
+
+            let state = TaggedBase64::parse(
+                vars.get("ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")
+                    .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")?,
+            )?
+            .try_into()?;
+
             Ok((staking, state))
         } else if let (Some(staking), Some(state)) = (
             self.private_staking_key.clone(),
             self.private_state_key.clone(),
         ) {
+            let staking = bls_over_bn254::SignKey::try_from(staking)?;
+            let state = schnorr::SignKey::try_from(state)?;
+
             Ok((staking, state))
         } else {
             bail!("neither key file nor full set of private keys was provided")

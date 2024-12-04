@@ -11,20 +11,22 @@ use espresso_types::{
 use futures::future::Future;
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::VersionedDataSource,
+    data_source::{UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
-};
-use hotshot_types::network::{
-    BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig,
 };
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
+    stake_table::StakeTableEntry,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
+};
+use hotshot_types::{
+    network::{BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig},
+    traits::node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::Url;
@@ -71,6 +73,7 @@ pub trait SequencerDataSource:
     AvailabilityDataSource<SeqTypes>
     + NodeDataSource<SeqTypes>
     + StatusDataSource
+    + UpdateDataSource<SeqTypes>
     + VersionedDataSource
     + Sized
 {
@@ -111,6 +114,14 @@ pub(crate) trait StateSignatureDataSource<N: ConnectedNetwork<PubKey>> {
 
 pub(crate) trait NodeStateDataSource {
     fn node_state(&self) -> impl Send + Future<Output = &NodeState>;
+}
+
+pub(crate) trait StakeTableDataSource<T: NodeType> {
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    fn get_stake_table(
+        &self,
+        epoch: Option<<T as NodeType>::Epoch>,
+    ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
 }
 
 pub(crate) trait CatchupDataSource: Sync {
@@ -216,7 +227,6 @@ pub struct PublicHotShotConfig {
     num_nodes_with_stake: NonZeroUsize,
     known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
     known_da_nodes: Vec<PeerConfig<PubKey>>,
-    my_own_validator_config: PublicValidatorConfig,
     da_staked_committee_size: usize,
     fixed_leader_for_gpuvid: usize,
     next_view_timeout: u64,
@@ -246,7 +256,6 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_nodes_with_stake,
             known_nodes_with_stake,
             known_da_nodes,
-            my_own_validator_config,
             da_staked_committee_size,
             fixed_leader_for_gpuvid,
             next_view_timeout,
@@ -271,7 +280,6 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_nodes_with_stake,
             known_nodes_with_stake,
             known_da_nodes,
-            my_own_validator_config: my_own_validator_config.into(),
             da_staked_committee_size,
             fixed_leader_for_gpuvid,
             next_view_timeout,
@@ -294,16 +302,12 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
 }
 
 impl PublicHotShotConfig {
-    pub fn into_hotshot_config(
-        self,
-        my_own_validator_config: ValidatorConfig<PubKey>,
-    ) -> HotShotConfig<PubKey> {
+    pub fn into_hotshot_config(self) -> HotShotConfig<PubKey> {
         HotShotConfig {
             start_threshold: self.start_threshold,
             num_nodes_with_stake: self.num_nodes_with_stake,
             known_nodes_with_stake: self.known_nodes_with_stake,
             known_da_nodes: self.known_da_nodes,
-            my_own_validator_config,
             da_staked_committee_size: self.da_staked_committee_size,
             fixed_leader_for_gpuvid: self.fixed_leader_for_gpuvid,
             next_view_timeout: self.next_view_timeout,
@@ -406,7 +410,7 @@ impl PublicNetworkConfig {
             transaction_size: self.transaction_size,
             key_type_name: self.key_type_name,
             libp2p_config: self.libp2p_config,
-            config: self.config.into_hotshot_config(my_own_validator_config),
+            config: self.config.into_hotshot_config(),
             cdn_marshal_address: self.cdn_marshal_address,
             combined_network_config: self.combined_network_config,
             commit_sha: self.commit_sha,

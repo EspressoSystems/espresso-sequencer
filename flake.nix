@@ -45,12 +45,9 @@
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
-      ASYNC_FLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" ";
-      RUSTFLAGS = "${ASYNC_FLAGS} --cfg hotshot_example";
-      RUSTDOCFLAGS = ASYNC_FLAGS;
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
-      rustEnvVars = { inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR; };
+      rustEnvVars = { inherit RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR; };
 
       solhintPkg = { buildNpmPackage, fetchFromGitHub }:
         buildNpmPackage rec {
@@ -195,8 +192,9 @@
             # Rust tools
             cargo-audit
             cargo-edit
-            cargo-sort
+            cargo-hack
             cargo-nextest
+            cargo-sort
             typos
             just
             nightlyToolchain.passthru.availableComponents.rust-analyzer
@@ -227,12 +225,15 @@
           ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
           ;
           shellHook = ''
-            # Add node binaries to PATH
+            # Add node binaries to PATH for development
             export PATH="$PWD/node_modules/.bin:$PATH"
+
             # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
             # with rustup installations.
             export CARGO_HOME=$HOME/.cargo-nix
-            export PATH="$PWD/$CARGO_TARGET_DIR/release:$PATH"
+
+            # Add rust binaries to PATH for native demo
+            export PATH="$PWD/$CARGO_TARGET_DIR/debug:$PATH"
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
           FOUNDRY_SOLC = "${solc}/bin/solc";

@@ -17,7 +17,7 @@ use sequencer::{
 };
 use vbs::version::StaticVersionType;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     opt.logging.init();
@@ -152,12 +152,13 @@ where
         libp2p_history_length: opt.libp2p_history_length,
         libp2p_max_ihave_length: opt.libp2p_max_ihave_length,
         libp2p_max_ihave_messages: opt.libp2p_max_ihave_messages,
-        libp2p_max_transmit_size: opt.libp2p_max_transmit_size,
+        libp2p_max_gossip_transmit_size: opt.libp2p_max_gossip_transmit_size,
+        libp2p_max_direct_transmit_size: opt.libp2p_max_direct_transmit_size,
+        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
         libp2p_mesh_n: opt.libp2p_mesh_n,
         libp2p_mesh_n_high: opt.libp2p_mesh_n_high,
         libp2p_heartbeat_interval: opt.libp2p_heartbeat_interval,
         libp2p_mesh_n_low: opt.libp2p_mesh_n_low,
-        libp2p_mesh_outbound_min: opt.libp2p_mesh_outbound_min,
         libp2p_published_message_ids_cache_time: opt.libp2p_published_message_ids_cache_time,
         libp2p_iwant_followup_time: opt.libp2p_iwant_followup_time,
         libp2p_max_messages_per_rpc: opt.libp2p_max_messages_per_rpc,
@@ -178,6 +179,7 @@ where
         }),
         fallback_builder_url: opt.fallback_builder_url,
     };
+    let proposal_fetcher_config = opt.proposal_fetcher_config;
 
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
@@ -226,6 +228,7 @@ where
                             opt.is_da,
                             opt.identity,
                             marketplace_config,
+                            proposal_fetcher_config,
                         )
                         .await
                     }
@@ -245,6 +248,7 @@ where
                 opt.is_da,
                 opt.identity,
                 marketplace_config,
+                proposal_fetcher_config,
             )
             .await?
         }
@@ -259,7 +263,7 @@ mod restart_tests;
 mod test {
     use std::time::Duration;
 
-    use async_std::task::spawn;
+    use tokio::spawn;
 
     use espresso_types::{MockSequencerVersions, PubKey};
     use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
@@ -277,7 +281,7 @@ mod test {
 
     use super::*;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_startup_before_orchestrator() {
         setup_test();
 
@@ -308,9 +312,13 @@ mod test {
         let opt = Options::parse_from([
             "sequencer",
             "--private-staking-key",
-            &priv_key.to_string(),
+            &priv_key.to_tagged_base64().expect("valid key").to_string(),
             "--private-state-key",
-            &state_key.sign_key_ref().to_string(),
+            &state_key
+                .sign_key_ref()
+                .to_tagged_base64()
+                .expect("valid key")
+                .to_string(),
             "--genesis-file",
             &genesis_file.display().to_string(),
         ]);
@@ -366,6 +374,6 @@ mod test {
             "{lines:#?}"
         );
 
-        task.cancel().await;
+        task.abort();
     }
 }

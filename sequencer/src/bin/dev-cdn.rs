@@ -16,6 +16,7 @@ use hotshot_types::traits::{node_implementation::NodeType, signature_key::Signat
 use portpicker::pick_unused_port;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use sequencer::network::cdn::{TestingDef, WrappedSignatureKey};
+use tokio::spawn;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -26,7 +27,7 @@ struct Args {
     port: u16,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();
@@ -99,8 +100,8 @@ async fn main() -> Result<()> {
     let marshal = Marshal::<TestingDef<SeqTypes>>::new(marshal_config).await?;
 
     // Spawn the tasks
-    let broker_jh = async_spawn(broker.start());
-    let marshal_jh = async_spawn(marshal.start());
+    let broker_jh = spawn(broker.start());
+    let marshal_jh = spawn(marshal.start());
 
     // Await on both
     let _ = broker_jh.await;

@@ -4,7 +4,6 @@ pub mod create_node_validator_api;
 use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
-use async_std::task::JoinHandle;
 use espresso_types::{BackoffParams, SeqTypes};
 use futures::channel::mpsc::SendError;
 use futures::future::Either;
@@ -28,6 +27,9 @@ use std::str::FromStr;
 use std::time::Duration;
 use tide_disco::socket::Connection;
 use tide_disco::{api::ApiError, Api};
+use tokio::spawn;
+use tokio::task::JoinHandle;
+use tokio::time::sleep;
 use url::Url;
 use vbs::version::{StaticVersion, StaticVersionType, Version};
 
@@ -542,7 +544,7 @@ impl ProcessProduceLeafStreamTask {
         K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
         // let future = Self::process_consume_leaf_stream(leaf_stream_retriever, leaf_sender);
-        let task_handle = async_std::task::spawn(Self::connect_and_process_leaves(
+        let task_handle = spawn(Self::connect_and_process_leaves(
             leaf_stream_retriever,
             leaf_sender,
         ));
@@ -617,7 +619,7 @@ impl ProcessProduceLeafStreamTask {
                     // to the maximum of 5 seconds.
 
                     delay = backoff_params.backoff(delay);
-                    async_std::task::sleep(delay).await;
+                    sleep(delay).await;
                     continue;
                 }
 
@@ -666,7 +668,7 @@ impl ProcessProduceLeafStreamTask {
 impl Drop for ProcessProduceLeafStreamTask {
     fn drop(&mut self) {
         if let Some(task_handle) = self.task_handle.take() {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -905,7 +907,7 @@ impl ProcessNodeIdentityUrlStreamTask {
         S: Stream<Item = Url> + Send + Sync + Unpin + 'static,
         K: Sink<NodeIdentity, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle = async_std::task::spawn(Self::process_node_identity_url_stream(
+        let task_handle = spawn(Self::process_node_identity_url_stream(
             url_receiver,
             node_identity_sender,
         ));
@@ -967,7 +969,7 @@ impl Drop for ProcessNodeIdentityUrlStreamTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }

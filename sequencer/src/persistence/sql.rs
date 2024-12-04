@@ -1,5 +1,4 @@
 use anyhow::Context;
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use clap::Parser;
 use committable::Committable;
@@ -26,10 +25,13 @@ use hotshot_types::{
     simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
+    vid::VidSchemeType,
     vote::HasViewNumber,
 };
+use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
+use std::sync::Arc;
 use std::{collections::BTreeMap, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
@@ -116,6 +118,45 @@ pub struct Options {
     /// fetching from peers.
     #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
     pub(crate) archive: bool,
+
+    /// The maximum idle time of a database connection.
+    ///
+    /// Any connection which has been open and unused longer than this duration will be
+    /// automatically closed to reduce load on the server.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_IDLE_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "10m")]
+    pub(crate) idle_connection_timeout: Duration,
+
+    /// The maximum lifetime of a database connection.
+    ///
+    /// Any connection which has been open longer than this duration will be automatically closed
+    /// (and, if needed, replaced), even if it is otherwise healthy. It is good practice to refresh
+    /// even healthy connections once in a while (e.g. daily) in case of resource leaks in the
+    /// server implementation.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_CONNECTION_TIMEOUT", value_parser = parse_duration, default_value = "30m")]
+    pub(crate) connection_timeout: Duration,
+
+    /// The minimum number of database connections to maintain at any time.
+    ///
+    /// The database client will, to the best of its ability, maintain at least `min` open
+    /// connections at all times. This can be used to reduce the latency hit of opening new
+    /// connections when at least this many simultaneous connections are frequently needed.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_POSTGRES_MIN_CONNECTIONS",
+        default_value = "0"
+    )]
+    pub(crate) min_connections: u32,
+
+    /// The maximum number of database connections to maintain at any time.
+    ///
+    /// Once `max` connections are in use simultaneously, further attempts to acquire a connection
+    /// (or begin a transaction) will block until one of the existing connections is released.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_POSTGRES_MAX_CONNECTIONS",
+        default_value = "25"
+    )]
+    pub(crate) max_connections: u32,
 }
 
 impl TryFrom<Options> for Config {
@@ -336,8 +377,15 @@ impl SequencerPersistence for Persistence {
         let values = leaf_chain
             .into_iter()
             .map(|(info, qc)| {
+                // The leaf may come with a large payload attached. We don't care about this payload
+                // because we already store it separately, as part of the DA proposal. Storing it
+                // here contributes to load on the DB for no reason, so we remove it before
+                // serializing the leaf.
+                let mut leaf = info.leaf.clone();
+                leaf.unfill_block_payload();
+
                 let view = qc.view_number.u64() as i64;
-                let leaf_bytes = bincode::serialize(&info.leaf)?;
+                let leaf_bytes = bincode::serialize(&leaf)?;
                 let qc_bytes = bincode::serialize(&qc)?;
                 Ok((view, leaf_bytes, qc_bytes))
             })
@@ -531,6 +579,7 @@ impl SequencerPersistence for Persistence {
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.view_number().u64();
@@ -758,6 +807,10 @@ async fn collect_garbage(
         if let Some(proposal) = da_proposals.remove(&view) {
             let payload = Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
             leaf.fill_block_payload_unchecked(payload);
+        } else if view == ViewNumber::genesis().u64() {
+            // We don't get a DA proposal for the genesis view, but we know what the payload always
+            // is.
+            leaf.fill_block_payload_unchecked(Payload::empty().0);
         } else {
             tracing::debug!(view, "DA proposal not available at decide");
         }
@@ -848,7 +901,7 @@ mod test {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::traits::signature_key::SignatureKey;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
         // Create some quorum proposals to test with.
         let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;

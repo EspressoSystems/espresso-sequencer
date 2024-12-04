@@ -1,9 +1,5 @@
 use crate::parse_duration;
 use async_broadcast::{InactiveReceiver, Sender};
-use async_std::{
-    sync::{Arc, Mutex},
-    task::JoinHandle,
-};
 use clap::Parser;
 use ethers::{
     prelude::{H256, U256},
@@ -11,7 +7,12 @@ use ethers::{
 };
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use std::{num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+};
+use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -115,7 +116,12 @@ pub struct L1Client {
 #[derive(Clone, Debug)]
 pub(crate) enum RpcClient {
     Http(Http),
-    Ws(Ws),
+    Ws {
+        conn: Arc<RwLock<Ws>>,
+        reconnect: Arc<Mutex<L1ReconnectTask>>,
+        url: Url,
+        retry_delay: Duration,
+    },
 }
 
 /// In-memory view of the L1 state, updated asynchronously.
@@ -133,3 +139,11 @@ pub(crate) enum L1Event {
 
 #[derive(Debug, Default)]
 pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
+
+#[derive(Debug, Default)]
+pub(crate) enum L1ReconnectTask {
+    Reconnecting(JoinHandle<()>),
+    #[default]
+    Idle,
+    Cancelled,
+}

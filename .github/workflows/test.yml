@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg hotshot_example'
   RUST_LOG: info,libp2p=off,node=error
   CARGO_TERM_COLOR: always
 
@@ -30,8 +29,7 @@ jobs:
       - uses: rui314/setup-mold@v1
 
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
       - name: Install nextest
         uses: taiki-e/install-action@nextest
 
@@ -57,8 +55,6 @@ jobs:
       - uses: rui314/setup-mold@v1
 
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
@@ -102,18 +98,10 @@ jobs:
     needs: build-test-artifacts
     runs-on: ubuntu-latest
     steps:
-      - name: Fix submodule permissions check
-        run: |
-          git config --global --add safe.directory '*'
-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
 
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install nextest
         uses: taiki-e/install-action@nextest
@@ -142,23 +130,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Nix
-        uses: cachix/install-nix-action@V27
+        uses: cachix/install-nix-action@v30
 
       - name: Configure PATH
         run: PATH="$PWD/target/debug:$PATH"
 
-      - name: Fix submodule permissions check
-        run: |
-          git config --global --add safe.directory '*'
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: taiki-e/install-action@nextest
 
@@ -197,15 +174,10 @@ jobs:
     needs: build-test-bins
     runs-on: ubuntu-latest
     steps:
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
       - name: Install Nix
-        uses: cachix/install-nix-action@V27
+        uses: cachix/install-nix-action@v30
 
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Download archive
         uses: actions/download-artifact@v4

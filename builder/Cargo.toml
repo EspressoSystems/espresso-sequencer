@@ -5,21 +5,15 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
-[features]
-default = ["libp2p"]
-libp2p = ["sequencer/libp2p"]
-
 [dependencies]
 anyhow = { workspace = true }
 async-broadcast = { workspace = true }
-async-compatibility-layer = { workspace = true }
-async-lock = "2.2"
-async-std = { workspace = true }
+async-lock = { workspace = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 committable = { workspace = true }
 dotenvy = { workspace = true }
-espresso-types = { path = "../types", features = ["testing"] }
+espresso-types = { path = "../types" }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot = { workspace = true }
@@ -36,12 +30,13 @@ libp2p-networking = { workspace = true }
 marketplace-builder-shared = { workspace = true }
 portpicker = { workspace = true }
 rand = "0.8.5"
-sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer = { path = "../sequencer" }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 surf = "2.3.1"
 surf-disco = { workspace = true }
 tide-disco = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }

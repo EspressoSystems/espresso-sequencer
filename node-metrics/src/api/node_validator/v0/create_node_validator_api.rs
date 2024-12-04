@@ -12,7 +12,7 @@ use crate::service::{
     data_state::{DataState, ProcessLeafStreamTask, ProcessNodeIdentityStreamTask},
     server_message::ServerMessage,
 };
-use async_std::{sync::RwLock, task::JoinHandle};
+use async_lock::RwLock;
 use espresso_types::{PubKey, SeqTypes};
 use futures::{
     channel::mpsc::{self, Receiver, SendError, Sender},
@@ -21,6 +21,7 @@ use futures::{
 use hotshot_query_service::Leaf;
 use hotshot_types::event::{Event, EventType};
 use serde::{Deserialize, Serialize};
+use tokio::{spawn, task::JoinHandle};
 use url::Url;
 
 pub struct NodeValidatorAPI<K> {
@@ -89,7 +90,7 @@ impl HotShotEventProcessingTask {
         K1: Sink<Url, Error = SendError> + Send + Unpin + 'static,
         K2: Sink<Leaf<SeqTypes>, Error = SendError> + Send + Unpin + 'static,
     {
-        let task_handle = async_std::task::spawn(Self::process_messages(
+        let task_handle = spawn(Self::process_messages(
             event_stream,
             url_sender,
             leaf_sender,
@@ -177,7 +178,7 @@ impl HotShotEventProcessingTask {
 impl Drop for HotShotEventProcessingTask {
     fn drop(&mut self) {
         if let Some(task_handle) = self.task_handle.take() {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -208,7 +209,7 @@ impl ProcessExternalMessageHandlingTask {
         S: Stream<Item = ExternalMessage> + Send + Unpin + 'static,
         K: Sink<Url, Error = SendError> + Send + Unpin + 'static,
     {
-        let task_handle = async_std::task::spawn(Self::process_external_messages(
+        let task_handle = spawn(Self::process_external_messages(
             external_message_receiver,
             url_sender,
         ));
@@ -263,7 +264,7 @@ impl ProcessExternalMessageHandlingTask {
 impl Drop for ProcessExternalMessageHandlingTask {
     fn drop(&mut self) {
         if let Some(task_handle) = self.task_handle.take() {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -376,6 +377,7 @@ mod test {
     };
     use futures::channel::mpsc::{self, Sender};
     use tide_disco::App;
+    use tokio::spawn;
 
     struct TestState(Sender<InternalClientMessage<Sender<ServerMessage>>>);
 
@@ -385,7 +387,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     #[ignore]
     async fn test_full_setup_example() {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(32);
@@ -451,13 +453,13 @@ mod test {
         };
 
         // We would like to wait until being signaled
-        let app_serve_handle = async_std::task::spawn(async move {
+        let app_serve_handle = spawn(async move {
             let app_serve_result = app.serve("0.0.0.0:9000", STATIC_VER_0_1).await;
             tracing::info!("app serve result: {:?}", app_serve_result);
         });
         tracing::info!("now listening on port 9000");
 
-        app_serve_handle.await;
+        let _ = app_serve_handle.await;
 
         drop(node_validator_task_state);
         drop(process_consume_leaves);

@@ -112,7 +112,7 @@ fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
         .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let args = Args::parse();
     args.logging.init();
