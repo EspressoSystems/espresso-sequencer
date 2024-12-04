@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["collect_garbage"],"struct":["Options","Persistence","PruningOptions"]};
