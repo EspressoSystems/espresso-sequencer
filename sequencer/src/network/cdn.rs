@@ -72,7 +72,7 @@ impl<T: SignatureKey> SignatureScheme for WrappedSignatureKey<T> {
         };
 
         todo_by!(
-            "2024-12-13",
+            "2025-1-4",
             "Only accept the namespaced message once everyone has upgraded"
         );
         public_key.0.validate(&signature, message)
@@ -104,7 +104,7 @@ impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
 }
 
 todo_by!(
-    "2024-12-13",
+    "2025-1-4",
     "Remove this, switching to TCP+TLS singularly when everyone has updated"
 );
 /// The user definition for the Push CDN.

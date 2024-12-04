@@ -10,7 +10,6 @@ testing = [
   "hotshot-testing",
   "marketplace-builder-core",
   "marketplace-builder-shared",
-  "hotshot-builder-api",
   "espresso-types/testing",
   "sequencer-utils/testing",
   "hotshot-query-service/testing",
@@ -69,14 +68,12 @@ ethers = { workspace = true }
 futures = { workspace = true }
 
 hotshot = { workspace = true }
-hotshot-builder-api = { workspace = true, optional = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { workspace = true }
-libp2p-networking = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
