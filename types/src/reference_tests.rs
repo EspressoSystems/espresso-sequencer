@@ -47,6 +47,7 @@ use crate::{
 
 type V1Serializer = vbs::Serializer<StaticVersion<0, 1>>;
 type V2Serializer = vbs::Serializer<StaticVersion<0, 2>>;
+type V3Serializer = vbs::Serializer<StaticVersion<0, 3>>;
 type V99Serializer = vbs::Serializer<StaticVersion<0, 99>>;
 
 async fn reference_payload() -> Payload {
@@ -231,6 +232,7 @@ change in the serialization of this data structure.
     let actual = match version {
         "v1" => V1Serializer::serialize(&reference).unwrap(),
         "v2" => V2Serializer::serialize(&reference).unwrap(),
+        "v3" => V3Serializer::serialize(&reference).unwrap(),
         "v99" => V99Serializer::serialize(&reference).unwrap(),
         _ => panic!("invalid version"),
     };
@@ -260,6 +262,7 @@ change in the serialization of this data structure.
     let parsed: T = match version {
         "v1" => V1Serializer::deserialize(&expected).unwrap(),
         "v2" => V2Serializer::deserialize(&expected).unwrap(),
+        "v3" => V3Serializer::deserialize(&expected).unwrap(),
         "v99" => V99Serializer::deserialize(&expected).unwrap(),
         _ => panic!("invalid version"),
     };

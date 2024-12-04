@@ -161,6 +161,10 @@ impl<'de> Deserialize<'de> for Header {
                         seq.next_element()?
                             .ok_or_else(|| de::Error::missing_field("fields"))?,
                     )),
+                    EitherOrVersion::Version(Version { major: 0, minor: 3 }) => Ok(Header::V3(
+                        seq.next_element()?
+                            .ok_or_else(|| de::Error::missing_field("fields"))?,
+                    )),
                     EitherOrVersion::Version(Version {
                         major: 0,
                         minor: 99,
@@ -194,6 +198,9 @@ impl<'de> Deserialize<'de> for Header {
                         .map_err(de::Error::custom)?;
                     let result = match version {
                         EitherOrVersion::Version(Version { major: 0, minor: 2 }) => Ok(Header::V2(
+                            serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
+                        )),
+                        EitherOrVersion::Version(Version { major: 0, minor: 3 }) => Ok(Header::V3(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
                         EitherOrVersion::Version(Version {
@@ -527,6 +534,22 @@ impl Header {
                 builder_signature: builder_signature.first().copied(),
             }),
             2 => Self::V2(v0_2::Header {
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
+                height,
+                timestamp,
+                l1_head: l1.head,
+                l1_finalized: l1.finalized,
+                payload_commitment,
+                builder_commitment,
+                ns_table,
+                block_merkle_tree_root,
+                fee_merkle_tree_root,
+                fee_info: fee_info[0],
+                builder_signature: builder_signature.first().copied(),
+            }),
+            3 => Self::V3(v0_3::Header {
                 chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
                     chain_config,
                 )),
