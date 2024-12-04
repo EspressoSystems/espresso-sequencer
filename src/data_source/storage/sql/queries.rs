@@ -1,3 +1,4 @@
+#![allow(clippy::needless_lifetimes)]
 // Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
@@ -81,9 +82,9 @@ pub(super) mod state;
 /// ```
 #[derive(Derivative, Default)]
 #[derivative(Debug)]
-pub struct QueryBuilder<'q> {
+pub struct QueryBuilder<'a> {
     #[derivative(Debug = "ignore")]
-    arguments: <Db as Database>::Arguments<'q>,
+    arguments: <Db as Database>::Arguments<'a>,
 }
 
 impl<'q> QueryBuilder<'q> {
@@ -95,6 +96,7 @@ impl<'q> QueryBuilder<'q> {
         self.arguments.add(arg).map_err(|err| QueryError::Error {
             message: format!("{err:#}"),
         })?;
+
         Ok(format!("${}", self.arguments.len()))
     }
 
@@ -112,7 +114,7 @@ impl<'q> QueryBuilder<'q> {
     }
 }
 
-impl<'q> QueryBuilder<'q> {
+impl QueryBuilder<'_> {
     /// Construct a SQL `WHERE` clause which filters for a header exactly matching `id`.
     pub fn header_where_clause<Types: NodeType>(
         &mut self,
@@ -356,7 +358,7 @@ impl<Mode> Transaction<Mode> {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE {where_clause}
-              ORDER BY h.height ASC
+              ORDER BY h.height
               LIMIT 1"
         );
         let row = query.query(&sql).fetch_one(self.as_mut()).await?;

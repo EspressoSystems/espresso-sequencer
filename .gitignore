@@ -9,3 +9,6 @@ lcov.info
 /vsc
 
 /.vscode
+
+# for sqlite databases created during the tests
+/tmp

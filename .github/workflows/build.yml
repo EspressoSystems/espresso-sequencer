@@ -8,18 +8,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
       RUST_LOG: info
     steps:
-      - uses: styfle/cancel-workflow-action@0.12.1
-        name: Cancel Outdated Builds
-        with:
-          all_but_latest: true
-          access_token: ${{ github.token }}
-
       - uses: actions/checkout@v4
         name: Checkout Repository
 
@@ -36,21 +34,12 @@ jobs:
 
       # Run Clippy on all targets. The lint workflow doesn't run Clippy on tests, because the tests
       # don't compile with all combinations of features.
-      - name: Clippy
+      - name: Clippy(all-features)
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
-      # Install nextest
-      - name: Install Nextest
-        run: cargo install cargo-nextest
-      
-      - name: Test
-        run: |
-          cargo nextest run --workspace --release --all-features
-        timeout-minutes: 60
+      - name: Clippy(no-storage)
+        run: cargo clippy --workspace --features no-storage --all-targets -- -D warnings
 
-      - name: Doc Test
-        run: cargo test --release --all-features --doc
-        
       - name: Generate Documentation
         run: |
           cargo doc --no-deps --lib --release --all-features
@@ -63,3 +52,42 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./target/doc
           cname: tide-disco.docs.espressosys.com
+  test-sqlite:
+    runs-on: ubuntu-latest
+    env:
+      RUST_LOG: info
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - uses: Swatinem/rust-cache@v2
+        name: Enable Rust Caching
+
+        # Install nextest
+      - name: Install Nextest
+        run: cargo install cargo-nextest
+
+      - name: Test
+        run: |
+          cargo nextest run --workspace --release --all-features
+        timeout-minutes: 60
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    env:
+      RUST_LOG: info
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout Repository
+
+      - uses: Swatinem/rust-cache@v2
+        name: Enable Rust Caching
+
+      # Install nextest
+      - name: Install Nextest
+        run: cargo install cargo-nextest
+
+      - name: Test
+        run: |
+          cargo nextest run --workspace --release --features "no-storage, testing"
+        timeout-minutes: 60

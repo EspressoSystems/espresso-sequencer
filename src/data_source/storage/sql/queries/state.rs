@@ -16,6 +16,8 @@ use super::{
     super::transaction::{query_as, Transaction, TransactionMode, Write},
     DecodeError, QueryBuilder,
 };
+use crate::data_source::storage::sql::build_where_in;
+use crate::data_source::storage::sql::sqlx::Row;
 use crate::{
     data_source::storage::{MerklizedStateHeightStorage, MerklizedStateStorage},
     merklized_state::{MerklizedState, Snapshot},
@@ -29,7 +31,8 @@ use jf_merkle_tree::{
     prelude::{MerkleNode, MerkleProof},
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
-use sqlx::{types::BitVec, FromRow};
+use sqlx::types::BitVec;
+use sqlx::types::JsonValue;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
@@ -56,38 +59,44 @@ where
 
         // Get all the nodes in the path to the index.
         // Order by pos DESC is to return nodes from the leaf to the root
-
         let (query, sql) = build_get_path_query(state_type, traversal_path.clone(), created)?;
-        let nodes = query
-            .query_as::<Node>(&sql)
-            .fetch_all(self.as_mut())
-            .await?;
+        let rows = query.query(&sql).fetch_all(self.as_mut()).await?;
+
+        let nodes: Vec<Node> = rows.into_iter().map(|r| r.into()).collect();
 
         // insert all the hash ids to a hashset which is used to query later
         // HashSet is used to avoid duplicates
         let mut hash_ids = HashSet::new();
-        nodes.iter().for_each(|n| {
-            hash_ids.insert(n.hash_id);
-            if let Some(children) = &n.children {
+        for node in nodes.iter() {
+            hash_ids.insert(node.hash_id);
+            if let Some(children) = &node.children {
+                let children: Vec<i32> =
+                    serde_json::from_value(children.clone()).map_err(|e| QueryError::Error {
+                        message: format!("Error deserializing 'children' into Vec<i32>: {e}"),
+                    })?;
                 hash_ids.extend(children);
             }
-        });
+        }
 
         // Find all the hash values and create a hashmap
         // Hashmap will be used to get the hash value of the nodes children and the node itself.
-        let hashes: HashMap<i32, Vec<u8>> =
-            query_as("SELECT id, value FROM hash WHERE id = ANY( $1)")
-                .bind(hash_ids.into_iter().collect::<Vec<i32>>())
+        let hashes = if !hash_ids.is_empty() {
+            let (query, sql) = build_where_in("SELECT id, value FROM hash", "id", hash_ids)?;
+            query
+                .query_as(&sql)
                 .fetch(self.as_mut())
-                .try_collect()
-                .await?;
+                .try_collect::<HashMap<i32, Vec<u8>>>()
+                .await?
+        } else {
+            HashMap::new()
+        };
 
         let mut proof_path = VecDeque::with_capacity(State::tree_height());
         for Node {
             hash_id,
             children,
             children_bitvec,
-            index,
+            idx,
             entry,
             ..
         } in nodes.iter()
@@ -96,9 +105,18 @@ where
                 let value = hashes.get(hash_id).ok_or(QueryError::Error {
                     message: format!("node's value references non-existent hash {hash_id}"),
                 })?;
-                match (children, children_bitvec, index, entry) {
+
+                match (children, children_bitvec, idx, entry) {
                     // If the row has children then its a branch
                     (Some(children), Some(children_bitvec), None, None) => {
+                        let children: Vec<i32> =
+                            serde_json::from_value(children.clone()).map_err(|e| {
+                                QueryError::Error {
+                                    message: format!(
+                                        "Error deserializing 'children' into Vec<i32>: {e}"
+                                    ),
+                                }
+                            })?;
                         let mut children = children.iter();
 
                         // Reconstruct the Children MerkleNodes from storage.
@@ -293,7 +311,9 @@ impl<Mode: TransactionMode> Transaction<Mode> {
         };
 
         // Make sure the requested snapshot is up to date.
+
         let height = self.get_last_state_height().await?;
+
         if height < (created as usize) {
             return Err(QueryError::NotFound);
         }
@@ -319,15 +339,49 @@ pub(crate) fn build_hash_batch_insert(
 }
 
 // Represents a row in a state table
-#[derive(Debug, Default, Clone, FromRow)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Node {
-    pub(crate) path: Vec<i32>,
+    pub(crate) path: JsonValue,
     pub(crate) created: i64,
     pub(crate) hash_id: i32,
-    pub(crate) children: Option<Vec<i32>>,
+    pub(crate) children: Option<JsonValue>,
     pub(crate) children_bitvec: Option<BitVec>,
-    pub(crate) index: Option<serde_json::Value>,
-    pub(crate) entry: Option<serde_json::Value>,
+    pub(crate) idx: Option<JsonValue>,
+    pub(crate) entry: Option<JsonValue>,
+}
+
+#[cfg(feature = "embedded-db")]
+impl From<sqlx::sqlite::SqliteRow> for Node {
+    fn from(row: sqlx::sqlite::SqliteRow) -> Self {
+        let bit_string: Option<String> = row.get_unchecked("children_bitvec");
+        let children_bitvec: Option<BitVec> =
+            bit_string.map(|b| b.chars().map(|c| c == '1').collect());
+
+        Self {
+            path: row.get_unchecked("path"),
+            created: row.get_unchecked("created"),
+            hash_id: row.get_unchecked("hash_id"),
+            children: row.get_unchecked("children"),
+            children_bitvec,
+            idx: row.get_unchecked("idx"),
+            entry: row.get_unchecked("entry"),
+        }
+    }
+}
+
+#[cfg(not(feature = "embedded-db"))]
+impl From<sqlx::postgres::PgRow> for Node {
+    fn from(row: sqlx::postgres::PgRow) -> Self {
+        Self {
+            path: row.get_unchecked("path"),
+            created: row.get_unchecked("created"),
+            hash_id: row.get_unchecked("hash_id"),
+            children: row.get_unchecked("children"),
+            children_bitvec: row.get_unchecked("children_bitvec"),
+            idx: row.get_unchecked("idx"),
+            entry: row.get_unchecked("entry"),
+        }
+    }
 }
 
 impl Node {
@@ -344,18 +398,27 @@ impl Node {
                 "hash_id",
                 "children",
                 "children_bitvec",
-                "index",
+                "idx",
                 "entry",
             ],
             ["path", "created"],
             nodes.into_iter().map(|n| {
+                #[cfg(feature = "embedded-db")]
+                let children_bitvec: Option<String> = n
+                    .children_bitvec
+                    .clone()
+                    .map(|b| b.iter().map(|bit| if bit { '1' } else { '0' }).collect());
+
+                #[cfg(not(feature = "embedded-db"))]
+                let children_bitvec = n.children_bitvec.clone();
+
                 (
                     n.path.clone(),
                     n.created,
                     n.hash_id,
                     n.children.clone(),
-                    n.children_bitvec.clone(),
-                    n.index.clone(),
+                    children_bitvec,
+                    n.idx.clone(),
                     n.entry.clone(),
                 )
             }),
@@ -371,15 +434,20 @@ fn build_get_path_query<'q>(
 ) -> QueryResult<(QueryBuilder<'q>, String)> {
     let mut query = QueryBuilder::default();
     let mut traversal_path = traversal_path.into_iter().map(|x| x as i32);
-    let created = query.bind(created)?;
 
     // We iterate through the path vector skipping the first element after each iteration
     let len = traversal_path.len();
     let mut sub_queries = Vec::new();
+
+    query.bind(created)?;
+
     for _ in 0..=len {
-        let node_path = query.bind(traversal_path.clone().rev().collect::<Vec<_>>())?;
+        let path = traversal_path.clone().rev().collect::<Vec<_>>();
+        let path: serde_json::Value = path.into();
+        let node_path = query.bind(path)?;
+
         let sub_query = format!(
-            "(SELECT * FROM {table} WHERE path = {node_path} AND created <= {created} ORDER BY created DESC LIMIT 1)",
+            "SELECT * FROM (SELECT * FROM {table} WHERE path = {node_path} AND created <= $1 ORDER BY created DESC LIMIT 1)",
         );
 
         sub_queries.push(sub_query);
@@ -387,7 +455,17 @@ fn build_get_path_query<'q>(
     }
 
     let mut sql: String = sub_queries.join(" UNION ");
-    sql.push_str("ORDER BY path DESC");
+
+    sql = format!("SELECT * FROM ({sql}) as t ");
+
+    // PostgreSQL already orders JSON arrays by length, so no additional function is needed
+    // For SQLite, `length()` is used to sort by length.
+    if cfg!(feature = "embedded-db") {
+        sql.push_str("ORDER BY length(t.path) DESC");
+    } else {
+        sql.push_str("ORDER BY t.path DESC");
+    }
+
     Ok((query, sql))
 }
 
@@ -442,7 +520,7 @@ mod test {
                 [(
                     block_height as i64,
                     format!("randomHash{i}"),
-                    "t",
+                    "t".to_string(),
                     0,
                     test_data,
                 )],
@@ -505,7 +583,13 @@ mod test {
             "header",
             ["height", "hash", "payload_hash", "timestamp", "data"],
             ["height"],
-            [(2i64, "randomstring", "t", 0, test_data)],
+            [(
+                2i64,
+                "randomstring".to_string(),
+                "t".to_string(),
+                0,
+                test_data,
+            )],
         )
         .await
         .unwrap();
@@ -538,14 +622,10 @@ mod test {
         // Find all the nodes of Index 0 in table
         let mut tx = storage.read().await.unwrap();
         let rows = query("SELECT * from test_tree where path = $1 ORDER BY created")
-            .bind(node_path)
+            .bind(serde_json::to_value(node_path).unwrap())
             .fetch(tx.as_mut());
 
-        let nodes: Vec<_> = rows
-            .map(|res| Node::from_row(&res.unwrap()))
-            .try_collect()
-            .await
-            .unwrap();
+        let nodes: Vec<Node> = rows.map(|res| res.unwrap().into()).collect().await;
         // There should be only 2 versions of this node
         assert!(nodes.len() == 2, "incorrect number of nodes");
         assert_eq!(nodes[0].created, 1, "wrong block height");
@@ -600,7 +680,13 @@ mod test {
             "header",
             ["height", "hash", "payload_hash", "timestamp", "data"],
             ["height"],
-            [(block_height as i64, "randomString", "t", 0, test_data)],
+            [(
+                block_height as i64,
+                "randomString".to_string(),
+                "t".to_string(),
+                0,
+                test_data,
+            )],
         )
         .await
         .unwrap();
@@ -665,8 +751,8 @@ mod test {
                 ["height"],
                 [(
                     2i64,
-                    "randomString2",
-                    "t",
+                    "randomString2".to_string(),
+                    "t".to_string(),
                     0,
                     serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()}),
                 )],
@@ -730,7 +816,7 @@ mod test {
                 [(
                     i as i64,
                     format!("hash{i}"),
-                    "t",
+                    "t".to_string(),
                     0,
                     serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})
                 )],
@@ -796,7 +882,13 @@ mod test {
             "header",
             ["height", "hash", "payload_hash", "timestamp", "data"],
             ["height"],
-            [(block_height as i64, "randomString", "t", 0, test_data)],
+            [(
+                block_height as i64,
+                "randomString".to_string(),
+                "t".to_string(),
+                0,
+                test_data,
+            )],
         )
         .await
         .unwrap();
@@ -862,7 +954,7 @@ mod test {
                 [(
                     block_height as i64,
                     format!("rarndomString{i}"),
-                    "t",
+                    "t".to_string(),
                     0,
                     test_data,
                 )],
@@ -924,7 +1016,13 @@ mod test {
             "header",
             ["height", "hash", "payload_hash", "timestamp", "data"],
             ["height"],
-            [(block_height as i64, "randomStringgg", "t", 0, test_data)],
+            [(
+                block_height as i64,
+                "randomStringgg".to_string(),
+                "t".to_string(),
+                0,
+                test_data,
+            )],
         )
         .await
         .unwrap();
@@ -955,7 +1053,13 @@ mod test {
             "header",
             ["height", "hash", "payload_hash", "timestamp", "data"],
             ["height"],
-            [(2i64, "randomHashString", "t", 0, test_data)],
+            [(
+                2i64,
+                "randomHashString".to_string(),
+                "t".to_string(),
+                0,
+                test_data,
+            )],
         )
         .await
         .unwrap();
@@ -975,12 +1079,12 @@ mod test {
             .rev()
             .map(|n| *n as i32)
             .collect::<Vec<_>>();
-        tx.execute_one(
+        tx.execute(
             query(&format!(
                 "DELETE FROM {} WHERE created = 2 and path = $1",
                 MockMerkleTree::state_type()
             ))
-            .bind(node_path),
+            .bind(serde_json::to_value(node_path).unwrap()),
         )
         .await
         .expect("failed to delete internal node");
@@ -1076,7 +1180,7 @@ mod test {
                 [(
                     block_height as i64,
                     format!("hash{block_height}"),
-                    "hash",
+                    "hash".to_string(),
                     0i64,
                     serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(tree.commitment()).unwrap()}),
                 )],
@@ -1199,8 +1303,8 @@ mod test {
                 ["height"],
                 [(
                     0i64,
-                    "hash",
-                    "hash",
+                    "hash".to_string(),
+                    "hash".to_string(),
                     0,
                     serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()}),
                 )],
@@ -1247,12 +1351,13 @@ mod test {
             // Now delete the leaf node for the last entry we inserted, corrupting the database.
             let index = serde_json::to_value(tree_size - 1).unwrap();
             let mut tx = storage.write().await.unwrap();
-            tx.execute_one_with_retries(
-                &format!(
-                    "DELETE FROM {} WHERE index = $1",
+
+            tx.execute(
+                query(&format!(
+                    "DELETE FROM {} WHERE idx = $1",
                     MockMerkleTree::state_type()
-                ),
-                (index,),
+                ))
+                .bind(serde_json::to_value(index).unwrap()),
             )
             .await
             .unwrap();

@@ -120,11 +120,13 @@ where
     D: VersionedDataSource + Send,
     U: Send + Sync,
 {
-    type Transaction<'a> = D::Transaction<'a>
+    type Transaction<'a>
+        = D::Transaction<'a>
     where
         Self: 'a;
 
-    type ReadOnly<'a> = D::ReadOnly<'a>
+    type ReadOnly<'a>
+        = D::ReadOnly<'a>
     where
         Self: 'a;
 
