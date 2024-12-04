@@ -6,7 +6,7 @@ use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as Broker
 use cdn_marshal::{Config as MarshalConfig, Marshal};
 use derivative::Derivative;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, traits::PersistenceOptions, v0_3::ChainConfig, FeeAccount,
+    eth_signature_key::EthKeyPair, traits::PersistenceOptions, v0_99::ChainConfig, FeeAccount,
     MockSequencerVersions, PrivKey, PubKey, SeqTypes, Transaction,
 };
 use ethers::utils::{Anvil, AnvilInstance};

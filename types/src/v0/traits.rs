@@ -29,7 +29,7 @@ use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    v0::impls::ValidatedState, v0_3::ChainConfig, BackoffParams, BlockMerkleTree, Event,
+    v0::impls::ValidatedState, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, Event,
     FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NetworkConfig,
     SeqTypes,
 };

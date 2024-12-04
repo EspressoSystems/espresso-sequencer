@@ -29,8 +29,8 @@ use crate::{
         header::{EitherOrVersion, VersionedHeader},
         MarketplaceVersion,
     },
-    v0_1, v0_2,
-    v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
+    v0_1, v0_2, v0_3,
+    v0_99::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
     Header, L1BlockInfo, L1Snapshot, Leaf2, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
@@ -80,6 +80,11 @@ impl Committable for Header {
                 .u64_field("version_minor", 3)
                 .field("fields", fields.commit())
                 .finalize(),
+            Self::V99(fields) => RawCommitmentBuilder::new(&Self::tag())
+                .u64_field("version_major", 0)
+                .u64_field("version_minor", 3)
+                .field("fields", fields.commit())
+                .finalize(),
         }
     }
 
@@ -104,6 +109,14 @@ impl Serialize for Header {
             .serialize(serializer),
             Self::V3(fields) => VersionedHeader {
                 version: EitherOrVersion::Version(Version { major: 0, minor: 3 }),
+                fields: fields.clone(),
+            }
+            .serialize(serializer),
+            Self::V99(fields) => VersionedHeader {
+                version: EitherOrVersion::Version(Version {
+                    major: 0,
+                    minor: 99,
+                }),
                 fields: fields.clone(),
             }
             .serialize(serializer),
@@ -148,7 +161,10 @@ impl<'de> Deserialize<'de> for Header {
                         seq.next_element()?
                             .ok_or_else(|| de::Error::missing_field("fields"))?,
                     )),
-                    EitherOrVersion::Version(Version { major: 0, minor: 3 }) => Ok(Header::V3(
+                    EitherOrVersion::Version(Version {
+                        major: 0,
+                        minor: 99,
+                    }) => Ok(Header::V99(
                         seq.next_element()?
                             .ok_or_else(|| de::Error::missing_field("fields"))?,
                     )),
@@ -180,7 +196,10 @@ impl<'de> Deserialize<'de> for Header {
                         EitherOrVersion::Version(Version { major: 0, minor: 2 }) => Ok(Header::V2(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
-                        EitherOrVersion::Version(Version { major: 0, minor: 3 }) => Ok(Header::V3(
+                        EitherOrVersion::Version(Version {
+                            major: 0,
+                            minor: 99,
+                        }) => Ok(Header::V99(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
                         EitherOrVersion::Version(v) => {
@@ -240,6 +259,10 @@ impl Header {
             Self::V1(_) => Version { major: 0, minor: 1 },
             Self::V2(_) => Version { major: 0, minor: 2 },
             Self::V3(_) => Version { major: 0, minor: 3 },
+            Self::V99(_) => Version {
+                major: 0,
+                minor: 99,
+            },
         }
     }
     #[allow(clippy::too_many_arguments)]
@@ -299,7 +322,24 @@ impl Header {
                 builder_signature: builder_signature.first().copied(),
             }),
             3 => Self::V3(v0_3::Header {
-                chain_config: v0_3::ResolvableChainConfig::from(chain_config),
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
+                height,
+                timestamp,
+                l1_head,
+                l1_finalized,
+                payload_commitment,
+                builder_commitment,
+                ns_table,
+                block_merkle_tree_root,
+                fee_merkle_tree_root,
+                fee_info: fee_info[0], // NOTE this is asserted to exist above
+                builder_signature: builder_signature.first().copied(),
+            }),
+
+            99 => Self::V99(v0_99::Header {
+                chain_config: v0_99::ResolvableChainConfig::from(chain_config),
                 height,
                 timestamp,
                 l1_head,
@@ -328,6 +368,7 @@ macro_rules! field {
             Self::V1(data) => &data.$name,
             Self::V2(data) => &data.$name,
             Self::V3(data) => &data.$name,
+            Self::V99(data) => &data.$name,
         }
     };
 }
@@ -338,6 +379,7 @@ macro_rules! field_mut {
             Self::V1(data) => &mut data.$name,
             Self::V2(data) => &mut data.$name,
             Self::V3(data) => &mut data.$name,
+            Self::V99(data) => &mut data.$name,
         }
     };
 }
@@ -500,7 +542,7 @@ impl Header {
                 fee_info: fee_info[0],
                 builder_signature: builder_signature.first().copied(),
             }),
-            3 => Self::V3(v0_3::Header {
+            99 => Self::V99(v0_99::Header {
                 chain_config: chain_config.into(),
                 height,
                 timestamp,
@@ -551,11 +593,12 @@ impl Header {
 
 impl Header {
     /// A commitment to a ChainConfig or a full ChainConfig.
-    pub fn chain_config(&self) -> v0_3::ResolvableChainConfig {
+    pub fn chain_config(&self) -> v0_99::ResolvableChainConfig {
         match self {
-            Self::V1(fields) => v0_3::ResolvableChainConfig::from(&fields.chain_config),
-            Self::V2(fields) => v0_3::ResolvableChainConfig::from(&fields.chain_config),
-            Self::V3(fields) => fields.chain_config,
+            Self::V1(fields) => v0_99::ResolvableChainConfig::from(&fields.chain_config),
+            Self::V2(fields) => v0_99::ResolvableChainConfig::from(&fields.chain_config),
+            Self::V3(fields) => v0_99::ResolvableChainConfig::from(&fields.chain_config),
+            Self::V99(fields) => fields.chain_config,
         }
     }
 
@@ -672,7 +715,8 @@ impl Header {
         match self {
             Self::V1(fields) => vec![fields.fee_info],
             Self::V2(fields) => vec![fields.fee_info],
-            Self::V3(fields) => fields.fee_info.clone(),
+            Self::V3(fields) => vec![fields.fee_info],
+            Self::V99(fields) => fields.fee_info.clone(),
         }
     }
 
@@ -692,7 +736,8 @@ impl Header {
             // empty/non-empty
             Self::V1(fields) => fields.builder_signature.as_slice().to_vec(),
             Self::V2(fields) => fields.builder_signature.as_slice().to_vec(),
-            Self::V3(fields) => fields.builder_signature.clone(),
+            Self::V3(fields) => fields.builder_signature.as_slice().to_vec(),
+            Self::V99(fields) => fields.builder_signature.clone(),
         }
     }
 }
@@ -722,7 +767,8 @@ impl BlockHeader<SeqTypes> for Header {
         match self {
             Self::V1(_) => None,
             Self::V2(_) => None,
-            Self::V3(fields) => Some(fields.auction_results.clone()),
+            Self::V3(_) => None,
+            Self::V99(fields) => Some(fields.auction_results.clone()),
         }
     }
 
@@ -1590,7 +1636,7 @@ mod test_headers {
         let deserialized: Header = serde_json::from_str(&serialized).unwrap();
         assert_eq!(v2_header, deserialized);
 
-        let v3_header = Header::create(
+        let v99_header = Header::create(
             genesis.instance_state.chain_config,
             1,
             2,
@@ -1606,12 +1652,15 @@ mod test_headers {
                 account: fee_account,
             }],
             Default::default(),
-            Version { major: 0, minor: 3 },
+            Version {
+                major: 0,
+                minor: 99,
+            },
         );
 
-        let serialized = serde_json::to_string(&v3_header).unwrap();
+        let serialized = serde_json::to_string(&v99_header).unwrap();
         let deserialized: Header = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(v3_header, deserialized);
+        assert_eq!(v99_header, deserialized);
 
         let v1_bytes = BincodeSerializer::<StaticVersion<0, 1>>::serialize(&v1_header).unwrap();
         let deserialized: Header =
@@ -1623,9 +1672,9 @@ mod test_headers {
             BincodeSerializer::<StaticVersion<0, 2>>::deserialize(&v2_bytes).unwrap();
         assert_eq!(v2_header, deserialized);
 
-        let v3_bytes = BincodeSerializer::<StaticVersion<0, 3>>::serialize(&v3_header).unwrap();
+        let v99_bytes = BincodeSerializer::<StaticVersion<0, 99>>::serialize(&v99_header).unwrap();
         let deserialized: Header =
-            BincodeSerializer::<StaticVersion<0, 3>>::deserialize(&v3_bytes).unwrap();
-        assert_eq!(v3_header, deserialized);
+            BincodeSerializer::<StaticVersion<0, 99>>::deserialize(&v99_bytes).unwrap();
+        assert_eq!(v99_header, deserialized);
     }
 }

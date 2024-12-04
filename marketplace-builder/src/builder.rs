@@ -8,7 +8,7 @@ use async_broadcast::{
 use async_lock::RwLock;
 use espresso_types::{
     eth_signature_key::EthKeyPair,
-    v0_3::{ChainConfig, RollupRegistration},
+    v0_99::{ChainConfig, RollupRegistration},
     FeeAmount, L1Client, MarketplaceVersion, MockSequencerVersions, NamespaceId, NodeState,
     Payload, SeqTypes, SequencerVersions, ValidatedState, V0_1,
 };
@@ -29,7 +29,7 @@ use hotshot_events_service::{
 use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+        block_contents::{vid_commitment, Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
@@ -207,7 +207,7 @@ mod test {
     use committable::Committable;
     use espresso_types::{
         mock::MockStateCatchup,
-        v0_3::{RollupRegistration, RollupRegistrationBody},
+        v0_99::{RollupRegistration, RollupRegistrationBody},
         Event, FeeAccount, Leaf2, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
         SequencerVersions, Transaction,
     };
@@ -618,28 +618,17 @@ mod test {
         let signature = bundle.signature;
         assert!(signature.verify(txn_commit, address).is_ok());
 
-        let (payload, _) = Payload::from_transactions(
-            vec![registered_transaction],
-            &ValidatedState::default(),
-            &NodeState::default(),
-        )
-        .await
-        .expect("unable to create payload");
-
-        let encoded_txns = payload.encode().to_vec();
-        let block_size = encoded_txns.len() as u64;
-
-        let fees = base_fee * block_size;
+        let fee = base_fee * registered_transaction.minimum_block_size();
 
         let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
             &keypair,
-            fees.as_u64().unwrap(),
+            fee.as_u64().unwrap(),
             parent_view_number + 1,
         )
         .unwrap();
 
         let sequencing_fee = BuilderFee {
-            fee_amount: fees.as_u64().unwrap(),
+            fee_amount: fee.as_u64().unwrap(),
             fee_account: FeeAccount::from(address),
             fee_signature,
         };
@@ -749,28 +738,17 @@ mod test {
         let signature = bundle.signature;
         assert!(signature.verify(txn_commit, address).is_ok());
 
-        let (payload, _) = Payload::from_transactions(
-            vec![unregistered_transaction],
-            &ValidatedState::default(),
-            &NodeState::default(),
-        )
-        .await
-        .expect("unable to create payload");
-
-        let encoded_txns = payload.encode().to_vec();
-        let block_size = encoded_txns.len() as u64;
-
-        let fees = base_fee * block_size;
+        let fee = base_fee * unregistered_transaction.minimum_block_size();
 
         let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
                     &keypair,
-                    fees.as_u64().unwrap(),
+                    fee.as_u64().unwrap(),
                     parent_view_number + 1,
                 )
                 .unwrap();
 
         let sequencing_fee = BuilderFee {
-            fee_amount: fees.as_u64().unwrap(),
+            fee_amount: fee.as_u64().unwrap(),
             fee_account: FeeAccount::from(address),
             fee_signature,
         };

@@ -59,10 +59,8 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
-    let membership = StaticCommittee::new(
-        vec![],                      /* no eligible leaders */
-        vec![PeerConfig::default()], /* one committee member, necessary to generate a VID share */
-    );
+    let committee = vec![PeerConfig::default()]; /* one committee member, necessary to generate a VID share */
+    let membership = StaticCommittee::new(committee.clone(), committee);
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },

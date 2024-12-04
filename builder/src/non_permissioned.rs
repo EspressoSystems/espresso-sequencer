@@ -4,7 +4,7 @@ use anyhow::Context;
 use async_broadcast::broadcast;
 use async_lock::RwLock;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
+    eth_signature_key::EthKeyPair, v0_99::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
     ValidatedState,
 };
 use hotshot::traits::BlockPayload;
