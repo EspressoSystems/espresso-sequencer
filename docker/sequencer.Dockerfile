@@ -46,10 +46,8 @@ RUN chmod +x /bin/sequencer
 # configuration beyond the lifetime of the Docker container itself.
 ENV ESPRESSO_SEQUENCER_STORAGE_PATH=/store/sequencer
 
-ENTRYPOINT ["/bin/sequencer"]
-
 # We run the additional `status` and `catchup` modules by default. These are modules that require
 # minimal resources (no persistent storage) but improve the functionality of the network.
-CMD ["--", "http", "--", "status", "--", "catchup"]
+CMD ["/bin/sequencer", "--", "http", "--", "status", "--", "catchup"]
 HEALTHCHECK --interval=1s --timeout=1s --retries=100 CMD curl --fail http://localhost:${ESPRESSO_SEQUENCER_API_PORT}/healthcheck  || exit 1
 EXPOSE ${ESPRESSO_SEQUENCER_API_PORT}

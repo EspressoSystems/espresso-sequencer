@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -eEu -o pipefail
 
 export ESPRESSO_SEQUENCER_EMBEDDED_DB=${ESPRESSO_SEQUENCER_EMBEDDED_DB:-false}
