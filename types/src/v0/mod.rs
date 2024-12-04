@@ -144,7 +144,6 @@ reexport_unchanged_types!(
     ViewBasedUpgrade,
     BlockSize,
 );
-
 pub(crate) use v0_3::{L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient};
 
 #[derive(

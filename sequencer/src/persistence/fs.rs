@@ -10,8 +10,8 @@ use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
-    message::Proposal,
-    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
+    message::{convert_proposal, Proposal},
+    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
     traits::{block_contents::BlockPayload, node_implementation::ConsensusTime},
     utils::View,
     vid::VidSchemeType,
@@ -27,6 +27,8 @@ use std::{
 };
 
 use crate::ViewNumber;
+
+use super::{downgrade_commitment_map, downgrade_leaf, upgrade_commitment_map};
 
 /// Options for file system backed persistence.
 #[derive(Parser, Clone, Debug)]
@@ -235,7 +237,7 @@ impl Inner {
             let bytes =
                 fs::read(&path).context(format!("reading decided leaf {}", path.display()))?;
             let (mut leaf, qc) =
-                bincode::deserialize::<(Leaf2, QuorumCertificate2<SeqTypes>)>(&bytes)
+                bincode::deserialize::<(Leaf, QuorumCertificate<SeqTypes>)>(&bytes)
                     .context(format!("parsing decided leaf {}", path.display()))?;
 
             // Include the VID share if available.
@@ -258,7 +260,7 @@ impl Inner {
             }
 
             let info = LeafInfo {
-                leaf,
+                leaf: leaf.into(),
                 vid_share,
 
                 // Note: the following fields are not used in Decide event processing, and should be
@@ -286,7 +288,7 @@ impl Inner {
                 .handle_event(&Event {
                     view_number: ViewNumber::new(view),
                     event: EventType::Decide {
-                        qc: Arc::new(qc),
+                        qc: Arc::new(qc.to_qc2()),
                         leaf_chain: Arc::new(vec![leaf]),
                         block_size: None,
                     },
@@ -346,14 +348,18 @@ impl Inner {
                 let bytes =
                     fs::read(&file).context(format!("reading decided leaf {}", file.display()))?;
                 let (leaf, qc) =
-                    bincode::deserialize::<(Leaf2, QuorumCertificate2<SeqTypes>)>(&bytes)
+                    bincode::deserialize::<(Leaf, QuorumCertificate<SeqTypes>)>(&bytes)
                         .context(format!("parsing decided leaf {}", file.display()))?;
                 if let Some((anchor_leaf, _)) = &anchor {
                     if leaf.view_number() > anchor_leaf.view_number() {
-                        anchor = Some((leaf, qc));
+                        let leaf2 = leaf.into();
+                        let qc2 = qc.to_qc2();
+                        anchor = Some((leaf2, qc2));
                     }
                 } else {
-                    anchor = Some((leaf, qc));
+                    let leaf2 = leaf.into();
+                    let qc2 = qc.to_qc2();
+                    anchor = Some((leaf2, qc2));
                 }
             }
 
@@ -447,7 +453,7 @@ impl SequencerPersistence for Persistence {
             fs::remove_file(&legacy_path).context("removing legacy anchor leaf file")?;
         }
 
-        for (info, qc) in leaf_chain {
+        for (info, qc2) in leaf_chain {
             let view = info.leaf.view_number().u64();
             let file_path = path.join(view.to_string()).with_extension("txt");
             inner.replace(
@@ -459,7 +465,9 @@ impl SequencerPersistence for Persistence {
                     Ok(false)
                 },
                 |mut file| {
-                    let bytes = bincode::serialize(&(&info.leaf, qc))?;
+                    let leaf = downgrade_leaf(info.leaf.clone());
+                    let qc = qc2.to_qc();
+                    let bytes = bincode::serialize(&(&leaf, qc))?;
                     file.write_all(&bytes)?;
                     Ok(())
                 },
@@ -500,7 +508,9 @@ impl SequencerPersistence for Persistence {
             return Ok(None);
         }
         let bytes = fs::read(&path).context("read")?;
-        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+        let value: (CommitmentMap<Leaf>, _) =
+            bincode::deserialize(&bytes).context("deserialize")?;
+        Ok(Some((upgrade_commitment_map(value.0), value.1)))
     }
 
     async fn load_da_proposal(
@@ -601,6 +611,8 @@ impl SequencerPersistence for Persistence {
         leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let leaves = downgrade_commitment_map(leaves);
+
         if !self.store_undecided_state {
             return Ok(());
         }
@@ -625,6 +637,8 @@ impl SequencerPersistence for Persistence {
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(proposal.clone());
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
         let dir_path = inner.quorum_proposals_dir_path();
@@ -689,11 +703,12 @@ impl SequencerPersistence for Persistence {
                 let proposal_bytes = fs::read(file)?;
 
                 // Then, deserialize.
-                let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                     bincode::deserialize(&proposal_bytes)?;
+                let proposal2 = convert_proposal(proposal);
 
                 // Push to the map and we're done.
-                map.insert(view_number, proposal);
+                map.insert(view_number, proposal2);
             }
         }
 
@@ -708,8 +723,9 @@ impl SequencerPersistence for Persistence {
         let dir_path = inner.quorum_proposals_dir_path();
         let file_path = dir_path.join(view.to_string()).with_extension("txt");
         let bytes = fs::read(file_path)?;
-        let proposal = bincode::deserialize(&bytes)?;
-        Ok(proposal)
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&bytes)?;
+        let proposal2 = convert_proposal(proposal);
+        Ok(proposal2)
     }
 
     async fn load_upgrade_certificate(
@@ -758,7 +774,6 @@ impl SequencerPersistence for Persistence {
             Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
         ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        // TODO:
         Ok(())
     }
 }
