@@ -2,8 +2,6 @@
 
 use super::*;
 use anyhow::bail;
-use async_compatibility_layer::art::async_timeout;
-use async_std::task::{sleep, spawn, JoinHandle};
 use cdn_broker::{
     reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
     Broker, Config as BrokerConfig,

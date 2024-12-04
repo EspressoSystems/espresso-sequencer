@@ -65,7 +65,7 @@ use hotshot_types::{
 pub use options::Options;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
+use std::{fmt::Debug, marker::PhantomData};
 use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
 
@@ -554,7 +554,10 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::{collections::HashMap, time::Duration};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        time::Duration,
+    };
 
     use catchup::NullStateCatchup;
     use committable::Committable;

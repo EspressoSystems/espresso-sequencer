@@ -4,7 +4,6 @@
 use std::path::Path;
 
 use anyhow::Result;
-use async_compatibility_layer::art::async_spawn;
 use cdn_broker::{
     reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
     Broker, Config as BrokerConfig,
