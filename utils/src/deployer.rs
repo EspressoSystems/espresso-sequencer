@@ -455,7 +455,7 @@ pub async fn deploy<K: SignatureKey>(
             tracing::info!(
                 %stake_table_address,
                 %owner,
-                "transferring fee contract proxy ownership to multisig",
+                "transferring PermissionedStakeTable ownership to multisig",
             );
             stake_table.transfer_ownership(owner).send().await?.await?;
         }
