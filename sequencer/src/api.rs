@@ -1336,8 +1336,9 @@ mod test {
     use espresso_types::{
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
-        TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
+        MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1871,7 +1872,7 @@ mod test {
         setup_test();
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: None,
@@ -1903,7 +1904,7 @@ mod test {
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
@@ -1912,7 +1913,7 @@ mod test {
             stop_voting_time: None,
         });
 
-        let upgrade_type = UpgradeType::Fee {
+        let upgrade_type = UpgradeType::Marketplace {
             chain_config: ChainConfig {
                 max_block_size: 400.into(),
                 base_fee: 2.into(),
@@ -1985,6 +1986,7 @@ mod test {
                 _ => continue,
             }
         };
+        tracing::info!(?new_version_first_view, "seen upgrade proposal");
 
         let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
@@ -2016,8 +2018,11 @@ mod test {
                 .map(|state| state.chain_config.resolve())
                 .collect();
 
+            tracing::info!(?height, ?new_version_first_view, "checking config");
+
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
+                tracing::info!(?configs, "configs");
                 if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
