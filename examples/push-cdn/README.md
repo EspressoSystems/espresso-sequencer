@@ -51,7 +51,7 @@ sleep 1m
 just example_fixed_leader multi-validator-push-cdn -- 9 http://127.0.0.1:4444
 ```
 
-Where ones using `example_gpuvid_leader` could be the leader and should be running on a nvidia GPU, and other validators using `example_fixed_leader` will never be a leader. In practice, these url should be changed to the corresponding ip and port.
+Where ones using `example_gpuvid_leader` could be the leader and should be running on an nvidia GPU, and other validators using `example_fixed_leader` will never be a leader. In practice, these url should be changed to the corresponding ip and port.
 
 
 If you don't have a gpu but want to test out fixed leader, you can run:
