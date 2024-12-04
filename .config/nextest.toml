@@ -9,9 +9,10 @@ filter = 'test(slow_test_restart)'
 threads-required = 'num-cpus'
 
 [profile.slow]
-slow-timeout = "2m"
+slow-timeout.period = "2m"
+slow-timeout.terminate-after = 2 # terminate test after 2 * 2 = 4 mins
 default-filter = 'test(slow_)'
-retries = 2
+retries = 3
 
 [profile.all]
 slow-timeout = "2m"
