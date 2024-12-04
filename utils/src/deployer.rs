@@ -445,7 +445,10 @@ pub async fn deploy<K: SignatureKey>(
         let stake_table_address = contracts
             .deploy_tx(
                 Contract::PermissonedStakeTable,
-                PermissionedStakeTable::deploy(l1.clone(), ())?,
+                PermissionedStakeTable::deploy(
+                    l1.clone(),
+                    (), // TODO initial stake table
+                )?,
             )
             .await?;
         let stake_table = PermissionedStakeTable::new(stake_table_address, l1.clone());

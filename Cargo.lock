@@ -4119,6 +4119,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "contract-bindings",
+ "derive_more 1.0.0",
  "diff-test-bn254",
  "ethers",
  "hotshot-types",

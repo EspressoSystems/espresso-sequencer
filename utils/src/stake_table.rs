@@ -1,4 +1,6 @@
+use contract_bindings::permissioned_stake_table::NodeInfo;
 use hotshot::types::SignatureKey;
+use hotshot_contract_adapter::stake_table::ParsedEdOnBN254Point;
 use hotshot_types::network::PeerConfigKeys;
 use std::{fs, path::Path};
 
@@ -23,5 +25,24 @@ impl<K: SignatureKey> PermissionedStakeTableConfig<K> {
                 path.display()
             )),
         )
+    }
+}
+
+impl<K: SignatureKey> From<PermissionedStakeTableConfig<K>> for Vec<NodeInfo> {
+    fn from(value: PermissionedStakeTableConfig<K>) -> Self {
+        value
+            .public_keys
+            .into_iter()
+            .map(|peer_config| {
+                let g1: ParsedEdOnBN254Point = peer_config.state_ver_key.to_affine().into();
+                // XXX We don't have a trait on the Bls key to provide .to_affine()
+                // let g2: ParsedG2Point = peer_config.stake_table_key.to_affine().into();
+                NodeInfo {
+                    bls_vk: todo!(),
+                    schnorr_vk: g1.into(),
+                    is_da: peer_config.da,
+                }
+            })
+            .collect()
     }
 }

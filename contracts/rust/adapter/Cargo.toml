@@ -15,6 +15,7 @@ ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 contract-bindings = { path = "../../../contract-bindings" }
+derive_more = { workspace = true }
 diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
 ethers = { version = "2.0.4" }
 hotshot-types = { workspace = true }
