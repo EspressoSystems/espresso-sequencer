@@ -5,10 +5,15 @@ use ethers::{
     prelude::{H256, U256},
     providers::{Http, Provider, Ws},
 };
+use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
-use tokio::{sync::Mutex, task::JoinHandle};
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+};
+use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -82,6 +87,9 @@ pub struct L1ClientOptions {
         default_value = "10000"
     )]
     pub l1_events_max_block_range: u64,
+
+    #[clap(skip = Arc::<Box<dyn Metrics>>::new(Box::new(NoMetrics)))]
+    pub metrics: Arc<Box<dyn Metrics>>,
 }
 
 #[derive(Clone, Debug)]
@@ -111,8 +119,17 @@ pub struct L1Client {
 /// An Ethereum RPC client over HTTP or WebSockets.
 #[derive(Clone, Debug)]
 pub(crate) enum RpcClient {
-    Http(Http),
-    Ws(Ws),
+    Http {
+        conn: Http,
+        metrics: Arc<L1ClientMetrics>,
+    },
+    Ws {
+        conn: Arc<RwLock<Ws>>,
+        reconnect: Arc<Mutex<L1ReconnectTask>>,
+        url: Url,
+        retry_delay: Duration,
+        metrics: Arc<L1ClientMetrics>,
+    },
 }
 
 /// In-memory view of the L1 state, updated asynchronously.
@@ -130,3 +147,19 @@ pub(crate) enum L1Event {
 
 #[derive(Debug, Default)]
 pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
+
+#[derive(Debug, Default)]
+pub(crate) enum L1ReconnectTask {
+    Reconnecting(JoinHandle<()>),
+    #[default]
+    Idle,
+    Cancelled,
+}
+
+#[derive(Debug)]
+pub(crate) struct L1ClientMetrics {
+    pub(crate) head: Box<dyn Gauge>,
+    pub(crate) finalized: Box<dyn Gauge>,
+    pub(crate) ws_reconnects: Box<dyn Counter>,
+    pub(crate) stream_reconnects: Box<dyn Counter>,
+}

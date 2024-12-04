@@ -8,6 +8,9 @@ edition = { workspace = true }
 [features]
 testing = ["serde_json", "espresso-types/testing"]
 
+[dev-dependencies]
+node-metrics = { path = ".", features = [ "testing" ] }
+
 [dependencies]
 async-lock = { workspace = true }
 async-trait = { workspace = true }

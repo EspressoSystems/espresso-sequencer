@@ -9,7 +9,6 @@ use anyhow::Result;
 use committable::Committable;
 use espresso_types::{FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
-use hotshot_query_service::merklized_state::Snapshot;
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
     explorer::{self, ExplorerDataSource},
@@ -18,8 +17,9 @@ use hotshot_query_service::{
     },
     node, ApiState, Error,
 };
+use hotshot_query_service::{merklized_state::Snapshot, node::NodeDataSource};
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     traits::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, Versions},
@@ -30,12 +30,12 @@ use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
 use tide_disco::{method::ReadState, Api, Error as _, StatusCode};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 use super::{
     data_source::{
         CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
+        StakeTableDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     StorageState,
 };
@@ -174,18 +174,47 @@ where
     Ok(api)
 }
 
-type NodeApi<N, P, D, V, ApiVer> = Api<AvailState<N, P, D, V>, node::Error, ApiVer>;
-
-pub(super) fn node<N, P, D, V: Versions>() -> Result<NodeApi<N, P, D, V, SequencerApiVersion>>
+pub(super) fn node<S>() -> Result<Api<S, node::Error, StaticVersion<0, 1>>>
 where
-    N: ConnectedNetwork<PubKey>,
-    D: SequencerDataSource + Send + Sync + 'static,
-    P: SequencerPersistence,
+    S: 'static + Send + Sync + ReadState,
+    <S as ReadState>::State:
+        Send + Sync + StakeTableDataSource<SeqTypes> + NodeDataSource<SeqTypes>,
 {
-    let api = node::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(
-        &Default::default(),
-        SequencerApiVersion::instance(),
-    )?;
+    // Extend the base API
+    let mut options = node::Options::default();
+    let extension = toml::from_str(include_str!("../../api/node.toml"))?;
+    options.extensions.push(extension);
+
+    // Create the base API with our extensions
+    let mut api = node::define_api::<S, SeqTypes, _>(&options, SequencerApiVersion::instance())?;
+
+    // Tack on the application logic
+    api.at("stake_table", |req, state| {
+        async move {
+            // Try to get the epoch from the request. If this fails, error
+            // as it was probably a mistake
+            let epoch = EpochNumber::new(req.integer_param("epoch_number").map_err(|_| {
+                hotshot_query_service::node::Error::Custom {
+                    message: "Epoch number is required".to_string(),
+                    status: StatusCode::BAD_REQUEST,
+                }
+            })?);
+
+            Ok(state
+                .read(|state| state.get_stake_table(Some(epoch)).boxed())
+                .await)
+        }
+        .boxed()
+    })?
+    .at("stake_table_current", |_, state| {
+        async move {
+            Ok(state
+                .read(|state| state.get_stake_table(None).boxed())
+                .await)
+        }
+        .boxed()
+    })?;
+
     Ok(api)
 }
 pub(super) fn submit<N, P, S, ApiVer: StaticVersionType + 'static>() -> Result<Api<S, Error, ApiVer>>

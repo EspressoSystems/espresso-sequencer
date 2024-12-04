@@ -16,15 +16,17 @@ use hotshot_query_service::{
     node::NodeDataSource,
     status::StatusDataSource,
 };
-use hotshot_types::network::{
-    BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig,
-};
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
+    stake_table::StakeTableEntry,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
     HotShotConfig, PeerConfig, ValidatorConfig,
+};
+use hotshot_types::{
+    network::{BuilderType, CombinedNetworkConfig, Libp2pConfig, RandomBuilderConfig},
+    traits::node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::Url;
@@ -112,6 +114,14 @@ pub(crate) trait StateSignatureDataSource<N: ConnectedNetwork<PubKey>> {
 
 pub(crate) trait NodeStateDataSource {
     fn node_state(&self) -> impl Send + Future<Output = &NodeState>;
+}
+
+pub(crate) trait StakeTableDataSource<T: NodeType> {
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    fn get_stake_table(
+        &self,
+        epoch: Option<<T as NodeType>::Epoch>,
+    ) -> impl Send + Future<Output = Vec<StakeTableEntry<T::SignatureKey>>>;
 }
 
 pub(crate) trait CatchupDataSource: Sync {

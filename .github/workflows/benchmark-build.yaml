@@ -17,13 +17,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Fix submodule permissions check
-        run: |
-          git config --global --add safe.directory '*'
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
       - name: Install just command runner
         run: |
           sudo snap install --edge --classic just
@@ -31,8 +24,6 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
@@ -76,17 +67,8 @@ jobs:
   build-arm:
     runs-on: buildjet-16vcpu-ubuntu-2204-arm
     steps:
-      - name: Fix submodule permissions check
-        run: |
-          git config --global --add safe.directory '*'
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
@@ -144,8 +126,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Download executables AMD
         uses: actions/download-artifact@v4

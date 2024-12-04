@@ -1,3 +1,5 @@
+#![allow(clippy::needless_lifetimes)]
+
 use core::fmt::Display;
 use jf_signature::{bls_over_bn254, schnorr};
 use sequencer_utils::logging;
@@ -19,7 +21,7 @@ use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use url::Url;
 
-use crate::{api, persistence};
+use crate::{api, context::ProposalFetcherConfig, persistence};
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
 // can be added, in any combination, to the service. These include, for example, the API server.
@@ -40,7 +42,6 @@ use crate::{api, persistence};
 // BEST NOT TO ADD REQUIRED ARGUMENTS TO THIS TYPE, since the required arguments will be required
 // even if the user is only asking for help on a module. Try to give every argument on this type a
 // default value, even if it is a bit arbitrary.
-
 #[derive(Parser, Clone, Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Options {
@@ -376,6 +377,9 @@ pub struct Options {
 
     #[clap(flatten)]
     pub identity: Identity,
+
+    #[clap(flatten)]
+    pub proposal_fetcher_config: ProposalFetcherConfig,
 }
 
 impl Options {

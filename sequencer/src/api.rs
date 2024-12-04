@@ -5,7 +5,7 @@ use async_lock::RwLock;
 use async_once_cell::Lazy;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
-use data_source::{CatchupDataSource, SubmitDataSource};
+use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
@@ -26,9 +26,14 @@ use hotshot_types::{
     event::Event,
     light_client::StateSignatureRequestBody,
     network::NetworkConfig,
-    traits::{network::ConnectedNetwork, node_implementation::Versions, ValidatedState as _},
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{NodeType, Versions},
+        ValidatedState as _,
+    },
     utils::{View, ViewInner},
 };
+use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
 use std::sync::Arc;
 
@@ -154,6 +159,43 @@ impl<N: ConnectedNetwork<PubKey>, D: Send + Sync, V: Versions, P: SequencerPersi
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         self.as_ref().submit(tx).await
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
+    StakeTableDataSource<SeqTypes> for StorageState<N, P, D, V>
+{
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    async fn get_stake_table(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_stake_table(epoch).await
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
+    StakeTableDataSource<SeqTypes> for ApiState<N, P, V>
+{
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    async fn get_stake_table(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        // Get the epoch from the argument or the current epoch if not provided
+        let epoch = if let Some(epoch) = epoch {
+            epoch
+        } else {
+            self.consensus().await.read().await.cur_epoch().await
+        };
+
+        self.consensus()
+            .await
+            .read()
+            .await
+            .memberships
+            .quorum_membership
+            .stake_table(epoch)
     }
 }
 
@@ -469,7 +511,6 @@ pub mod test_helpers {
     use tokio::{spawn, time::sleep};
 
     use espresso_types::{
-        mock::MockStateCatchup,
         v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
     };
@@ -497,6 +538,7 @@ pub mod test_helpers {
 
     use super::*;
     use crate::{
+        catchup::NullStateCatchup,
         persistence::no_storage,
         testing::{
             run_marketplace_builder, run_test_builder, wait_for_decide_on_handle, TestConfig,
@@ -536,12 +578,12 @@ pub mod test_helpers {
         network_config: Option<TestConfig<{ NUM_NODES }>>,
     }
 
-    impl Default for TestNetworkConfigBuilder<5, no_storage::Options, MockStateCatchup> {
+    impl Default for TestNetworkConfigBuilder<5, no_storage::Options, NullStateCatchup> {
         fn default() -> Self {
             TestNetworkConfigBuilder {
                 state: std::array::from_fn(|_| ValidatedState::default()),
                 persistence: Some([no_storage::Options; 5]),
-                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                catchup: Some(std::array::from_fn(|_| NullStateCatchup::default())),
                 network_config: None,
                 api_config: None,
             }
@@ -549,15 +591,15 @@ pub mod test_helpers {
     }
 
     impl<const NUM_NODES: usize>
-        TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, NullStateCatchup>
     {
         pub fn with_num_nodes(
-        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, NullStateCatchup>
         {
             TestNetworkConfigBuilder {
                 state: std::array::from_fn(|_| ValidatedState::default()),
                 persistence: Some([no_storage::Options; { NUM_NODES }]),
-                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                catchup: Some(std::array::from_fn(|_| NullStateCatchup::default())),
                 network_config: None,
                 api_config: None,
             }
@@ -1472,7 +1514,6 @@ mod test {
     use tokio::time::sleep;
 
     use espresso_types::{
-        mock::MockStateCatchup,
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
@@ -1512,7 +1553,7 @@ mod test {
     };
     use super::*;
     use crate::{
-        catchup::StatePeers,
+        catchup::{NullStateCatchup, StatePeers},
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
     };
@@ -1528,7 +1569,7 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
+        let config = TestNetworkConfigBuilder::<5, _, NullStateCatchup>::default()
             .api_config(options)
             .network_config(network_config)
             .build();

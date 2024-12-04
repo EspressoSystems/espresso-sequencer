@@ -1551,7 +1551,7 @@ dependencies = [
  "rcgen 0.13.1",
  "redis 0.25.4",
  "rkyv",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "rustls-pki-types",
  "sqlx",
  "thiserror",
@@ -1585,7 +1585,7 @@ dependencies = [
  "rcgen 0.13.1",
  "redis 0.26.1",
  "rkyv",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "rustls-pki-types",
  "sqlx",
  "thiserror",
@@ -2859,7 +2859,6 @@ dependencies = [
  "hotshot",
  "hotshot-orchestrator",
  "hotshot-query-service",
- "hotshot-testing",
  "hotshot-types",
  "itertools 0.12.1",
  "jf-merkle-tree",
@@ -2868,6 +2867,7 @@ dependencies = [
  "lru 0.12.5",
  "num-traits",
  "paste",
+ "portpicker",
  "pretty_assertions",
  "rand 0.8.5",
  "sequencer-utils",
@@ -3529,7 +3529,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
 dependencies = [
  "futures-io",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "rustls-pki-types",
 ]
 
@@ -4241,7 +4241,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.62"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=jb/leaf-fetching#924cefae0c4b7fd7dfe039391b56816e9d61be1b"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=jb/leaf-fetching#c5e825fb2e5b4b6ab5e0b960e82dbf61f673f0a1"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4686,7 +4686,7 @@ dependencies = [
  "http 1.1.0",
  "hyper 1.5.0",
  "hyper-util",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.0",
@@ -5915,7 +5915,7 @@ dependencies = [
  "quinn",
  "rand 0.8.5",
  "ring 0.17.8",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "socket2 0.5.7",
  "thiserror",
  "tokio",
@@ -6009,7 +6009,7 @@ dependencies = [
  "libp2p-identity",
  "rcgen 0.11.3",
  "ring 0.17.8",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "rustls-webpki 0.101.7",
  "thiserror",
  "x509-parser",
@@ -6329,6 +6329,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-types",
  "jf-signature 0.2.0",
+ "marketplace-solver",
  "portpicker",
  "rand 0.8.5",
  "serde",
@@ -6683,6 +6684,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-types",
+ "node-metrics",
  "prometheus-parse",
  "reqwest 0.12.9",
  "serde",
@@ -7672,7 +7674,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "socket2 0.5.7",
  "thiserror",
  "tokio",
@@ -7689,7 +7691,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.8",
  "rustc-hash",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "slab",
  "thiserror",
  "tinyvec",
@@ -8390,9 +8392,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.16"
+version = "0.23.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eee87ff5d9b36712a58574e12e9f0ea80f915a5b0ac518d322b24a465617925e"
+checksum = "9c9cc1d47e243d655ace55ed38201c19ae02c148ae56412ab8750e8f0166ab7f"
 dependencies = [
  "log",
  "once_cell",
@@ -8703,6 +8705,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_distr",
  "reqwest 0.12.9",
+ "sequencer",
  "sequencer-utils",
  "serde",
  "serde_json",
@@ -10207,7 +10210,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "rustls-pki-types",
  "tokio",
 ]
@@ -10643,7 +10646,7 @@ dependencies = [
  "flate2",
  "log",
  "once_cell",
- "rustls 0.23.16",
+ "rustls 0.23.18",
  "rustls-pki-types",
  "url",
  "webpki-roots 0.26.6",
