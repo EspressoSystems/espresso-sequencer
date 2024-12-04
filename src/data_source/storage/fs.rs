@@ -281,7 +281,7 @@ pub trait Revert {
     fn revert(&mut self);
 }
 
-impl<'a, Types> Revert for RwLockWriteGuard<'a, FileSystemStorageInner<Types>>
+impl<Types> Revert for RwLockWriteGuard<'_, FileSystemStorageInner<Types>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -293,7 +293,7 @@ where
     }
 }
 
-impl<'a, Types> Revert for RwLockReadGuard<'a, FileSystemStorageInner<Types>>
+impl<Types> Revert for RwLockReadGuard<'_, FileSystemStorageInner<Types>>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
@@ -357,10 +357,12 @@ impl<Types: NodeType> VersionedDataSource for FileSystemStorage<Types>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    type Transaction<'a> = Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
+    type Transaction<'a>
+        = Transaction<RwLockWriteGuard<'a, FileSystemStorageInner<Types>>>
     where
         Self: 'a;
-    type ReadOnly<'a> = Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
+    type ReadOnly<'a>
+        = Transaction<RwLockReadGuard<'a, FileSystemStorageInner<Types>>>
     where
         Self: 'a;
 

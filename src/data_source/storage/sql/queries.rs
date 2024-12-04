@@ -1,3 +1,4 @@
+#![allow(clippy::needless_lifetimes)]
 // Copyright (c) 2022 Espresso Systems (espressosys.com)
 // This file is part of the HotShot Query Service library.
 //
@@ -81,9 +82,9 @@ pub(super) mod state;
 /// ```
 #[derive(Derivative, Default)]
 #[derivative(Debug)]
-pub struct QueryBuilder<'q> {
+pub struct QueryBuilder<'a> {
     #[derivative(Debug = "ignore")]
-    arguments: <Db as Database>::Arguments<'q>,
+    arguments: <Db as Database>::Arguments<'a>,
 }
 
 impl<'q> QueryBuilder<'q> {
@@ -113,7 +114,7 @@ impl<'q> QueryBuilder<'q> {
     }
 }
 
-impl<'q> QueryBuilder<'q> {
+impl QueryBuilder<'_> {
     /// Construct a SQL `WHERE` clause which filters for a header exactly matching `id`.
     pub fn header_where_clause<Types: NodeType>(
         &mut self,

@@ -205,10 +205,12 @@ impl<S> VersionedDataSource for FailStorage<S>
 where
     S: VersionedDataSource,
 {
-    type Transaction<'a> = Transaction<S::Transaction<'a>>
+    type Transaction<'a>
+        = Transaction<S::Transaction<'a>>
     where
         Self: 'a;
-    type ReadOnly<'a> = Transaction<S::ReadOnly<'a>>
+    type ReadOnly<'a>
+        = Transaction<S::ReadOnly<'a>>
     where
         Self: 'a;
 

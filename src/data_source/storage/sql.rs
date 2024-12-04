@@ -777,10 +777,12 @@ impl PruneStorage for SqlStorage {
 }
 
 impl VersionedDataSource for SqlStorage {
-    type Transaction<'a> = Transaction<Write>
+    type Transaction<'a>
+        = Transaction<Write>
     where
         Self: 'a;
-    type ReadOnly<'a> = Transaction<Read>
+    type ReadOnly<'a>
+        = Transaction<Read>
     where
         Self: 'a;
 

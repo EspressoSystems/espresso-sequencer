@@ -22,7 +22,7 @@ pub(super) struct Migrator<'a> {
 }
 
 #[async_trait]
-impl<'a> AsyncTransaction for Migrator<'a> {
+impl AsyncTransaction for Migrator<'_> {
     type Error = sqlx::Error;
 
     async fn execute(&mut self, queries: &[&str]) -> sqlx::Result<usize> {
@@ -38,7 +38,7 @@ impl<'a> AsyncTransaction for Migrator<'a> {
 }
 
 #[async_trait]
-impl<'a> AsyncQuery<Vec<Migration>> for Migrator<'a> {
+impl AsyncQuery<Vec<Migration>> for Migrator<'_> {
     async fn query(&mut self, query: &str) -> sqlx::Result<Vec<Migration>> {
         let mut tx = self.conn.begin().await?;
 
@@ -68,4 +68,4 @@ impl<'a> AsyncQuery<Vec<Migration>> for Migrator<'a> {
     }
 }
 
-impl<'a> AsyncMigrate for Migrator<'a> {}
+impl AsyncMigrate for Migrator<'_> {}

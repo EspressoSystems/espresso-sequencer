@@ -119,11 +119,13 @@ where
     D: VersionedDataSource + Send,
     U: Send + Sync,
 {
-    type Transaction<'a> = D::Transaction<'a>
+    type Transaction<'a>
+        = D::Transaction<'a>
     where
         Self: 'a;
 
-    type ReadOnly<'a> = D::ReadOnly<'a>
+    type ReadOnly<'a>
+        = D::ReadOnly<'a>
     where
         Self: 'a;
 
@@ -144,22 +146,28 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
 {
-    type LeafRange<R> = D::LeafRange<R>
+    type LeafRange<R>
+        = D::LeafRange<R>
     where
         R: RangeBounds<usize> + Send;
-    type BlockRange<R> = D::BlockRange<R>
+    type BlockRange<R>
+        = D::BlockRange<R>
     where
         R: RangeBounds<usize> + Send;
-    type PayloadRange<R> = D::PayloadRange<R>
+    type PayloadRange<R>
+        = D::PayloadRange<R>
     where
         R: RangeBounds<usize> + Send;
-    type PayloadMetadataRange<R> = D::PayloadMetadataRange<R>
+    type PayloadMetadataRange<R>
+        = D::PayloadMetadataRange<R>
     where
         R: RangeBounds<usize> + Send;
-    type VidCommonRange<R> = D::VidCommonRange<R>
+    type VidCommonRange<R>
+        = D::VidCommonRange<R>
     where
         R: RangeBounds<usize> + Send;
-    type VidCommonMetadataRange<R> = D::VidCommonMetadataRange<R>
+    type VidCommonMetadataRange<R>
+        = D::VidCommonMetadataRange<R>
     where
         R: RangeBounds<usize> + Send;
 
