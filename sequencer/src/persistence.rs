@@ -10,7 +10,7 @@
 
 use async_trait::async_trait;
 use committable::Committable;
-use espresso_types::v0_99::ChainConfig;
+use espresso_types::{v0_99::ChainConfig, Leaf, Leaf2};
 use hotshot_types::{consensus::CommitmentMap, data::QuorumProposal};
 
 pub mod fs;
