@@ -203,7 +203,7 @@ pub type V0_1 = StaticVersion<0, 1>;
 
 pub type FeeVersion = StaticVersion<0, 2>;
 
-pub type EpochVersion = StaticVersion<0, 3>;
+pub type EpochVersion = StaticVersion<0, 100>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 
