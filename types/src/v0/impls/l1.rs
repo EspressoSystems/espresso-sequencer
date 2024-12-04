@@ -30,7 +30,7 @@ use tokio::{
 use tracing::Instrument;
 use url::Url;
 
-use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, RpcClient};
+use super::{v0_1::L1ClientMetrics, L1BlockInfo, L1State, L1UpdateTask, RpcClient};
 use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1ReconnectTask, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {

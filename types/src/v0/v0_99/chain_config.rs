@@ -58,7 +58,7 @@ impl Committable for ChainConfig {
         };
 
         // With `ChainConfig` upgrades we want commitments w/out
-        // fields added >= v0_3 to have the same commitment as <= v0_3
+        // fields added >= v0_99 to have the same commitment as <= v0_99
         // commitment. Therefore `None` values are simply ignored.
         let comm = if let Some(bid_recipient) = self.bid_recipient {
             comm.fixed_size_field("bid_recipient", &bid_recipient.to_fixed_bytes())
