@@ -81,7 +81,6 @@ macro_rules! reexport_latest_version_of_type {
 }
 
 /// Re-export types which have not changed across any minor version.
-
 macro_rules! reexport_unchanged_types {
     ($($t:ident),+ $(,)?) => {
         $(
