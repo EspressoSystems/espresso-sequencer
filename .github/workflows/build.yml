@@ -110,7 +110,7 @@ jobs:
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+          cargo build --locked --release --features "embedded-db testing" --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
