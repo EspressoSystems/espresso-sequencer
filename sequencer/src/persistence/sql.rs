@@ -21,8 +21,8 @@ use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
-    message::Proposal,
-    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
+    message::{convert_proposal, Proposal},
+    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
     traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
     vid::VidSchemeType,
@@ -35,6 +35,8 @@ use std::sync::Arc;
 use std::{collections::BTreeMap, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
+
+use super::{downgrade_commitment_map, downgrade_leaf, upgrade_commitment_map};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]
@@ -315,9 +317,9 @@ impl Persistence {
             if hash.is_none() {
                 let view: i64 = row.try_get("view")?;
                 let data: Vec<u8> = row.try_get("data")?;
-                let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                     bincode::deserialize(&data)?;
-                let leaf = Leaf2::from_quorum_proposal(&proposal.data);
+                let leaf = Leaf::from_quorum_proposal(&proposal.data);
                 let leaf_hash = Committable::commit(&leaf);
                 tracing::info!(view, %leaf_hash, "populating quorum proposal leaf hash");
                 updates.push((view, leaf_hash.to_string()));
@@ -376,13 +378,15 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let values = leaf_chain
             .into_iter()
-            .map(|(info, qc)| {
+            .map(|(info, qc2)| {
                 // The leaf may come with a large payload attached. We don't care about this payload
                 // because we already store it separately, as part of the DA proposal. Storing it
                 // here contributes to load on the DB for no reason, so we remove it before
                 // serializing the leaf.
-                let mut leaf = info.leaf.clone();
+                let mut leaf = downgrade_leaf(info.leaf.clone());
                 leaf.unfill_block_payload();
+
+                let qc = qc2.to_qc();
 
                 let view = qc.view_number.u64() as i64;
                 let leaf_bytes = bincode::serialize(&leaf)?;
@@ -440,12 +444,14 @@ impl SequencerPersistence for Persistence {
         };
 
         let leaf_bytes: Vec<u8> = row.get("leaf");
-        let leaf = bincode::deserialize(&leaf_bytes)?;
+        let leaf: Leaf = bincode::deserialize(&leaf_bytes)?;
+        let leaf2: Leaf2 = leaf.into();
 
         let qc_bytes: Vec<u8> = row.get("qc");
-        let qc = bincode::deserialize(&qc_bytes)?;
+        let qc: QuorumCertificate<SeqTypes> = bincode::deserialize(&qc_bytes)?;
+        let qc2 = qc.to_qc2();
 
-        Ok(Some((leaf, qc)))
+        Ok(Some((leaf2, qc2)))
     }
 
     async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
@@ -470,12 +476,13 @@ impl SequencerPersistence for Persistence {
         };
 
         let leaves_bytes: Vec<u8> = row.get("leaves");
-        let leaves = bincode::deserialize(&leaves_bytes)?;
+        let leaves: CommitmentMap<Leaf> = bincode::deserialize(&leaves_bytes)?;
+        let leaves2 = upgrade_commitment_map(leaves);
 
         let state_bytes: Vec<u8> = row.get("state");
         let state = bincode::deserialize(&state_bytes)?;
 
-        Ok(Some((leaves, state)))
+        Ok(Some((leaves2, state)))
     }
 
     async fn load_da_proposal(
@@ -536,9 +543,9 @@ impl SequencerPersistence for Persistence {
                     let view: i64 = row.get("view");
                     let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
                     let bytes: Vec<u8> = row.get("data");
-                    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
+                    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                         bincode::deserialize(&bytes)?;
-                    Ok((view_number, proposal))
+                    Ok((view_number, convert_proposal(proposal)))
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?,
         ))
@@ -554,7 +561,8 @@ impl SequencerPersistence for Persistence {
                 .bind(view.u64() as i64)
                 .fetch_one(tx.as_mut())
                 .await?;
-        let proposal = bincode::deserialize(&data)?;
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&data)?;
+        let proposal = convert_proposal(proposal);
         Ok(proposal)
     }
 
@@ -613,6 +621,8 @@ impl SequencerPersistence for Persistence {
         leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let leaves = downgrade_commitment_map(leaves);
+
         if !self.store_undecided_state {
             return Ok(());
         }
@@ -634,9 +644,11 @@ impl SequencerPersistence for Persistence {
         &self,
         proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(proposal.clone());
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
-        let leaf_hash = Committable::commit(&Leaf2::from_quorum_proposal(&proposal.data));
+        let leaf_hash = Committable::commit(&Leaf::from_quorum_proposal(&proposal.data));
         let mut tx = self.db.write().await?;
         tx.upsert(
             "quorum_proposals",
@@ -694,7 +706,6 @@ impl SequencerPersistence for Persistence {
             Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
         ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        // TODO:
         Ok(())
     }
 }
