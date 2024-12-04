@@ -463,16 +463,14 @@ pub trait SurfDiscoAvailabilityAPIPathResolver {
     fn resolve_path_for_height(&self, height: u64) -> String;
 }
 
-impl<'a> SurfDiscoAvailabilityAPIPathResolver
-    for SurfDiscoAvailabilityAPIStream<'a, Leaf<SeqTypes>>
-{
+impl SurfDiscoAvailabilityAPIPathResolver for SurfDiscoAvailabilityAPIStream<'_, Leaf<SeqTypes>> {
     fn resolve_path_for_height(&self, height: u64) -> String {
         format!("availability/stream/leaves/{}", height)
     }
 }
 
-impl<'a> SurfDiscoAvailabilityAPIPathResolver
-    for SurfDiscoAvailabilityAPIStream<'a, BlockQueryData<SeqTypes>>
+impl SurfDiscoAvailabilityAPIPathResolver
+    for SurfDiscoAvailabilityAPIStream<'_, BlockQueryData<SeqTypes>>
 {
     fn resolve_path_for_height(&self, height: u64) -> String {
         format!("availability/stream/blocks/{}", height)
@@ -493,8 +491,8 @@ pub trait UpdateBlockHeightForEntry<T> {
     fn update_block_height_for_entry(&mut self, entry: &T);
 }
 
-impl<'a> UpdateBlockHeightForEntry<Leaf<SeqTypes>>
-    for SurfDiscoAvailabilityAPIStream<'a, Leaf<SeqTypes>>
+impl UpdateBlockHeightForEntry<Leaf<SeqTypes>>
+    for SurfDiscoAvailabilityAPIStream<'_, Leaf<SeqTypes>>
 {
     fn block_height_for_entry(&self, entry: &Leaf<SeqTypes>) -> u64 {
         entry.height()
@@ -505,8 +503,8 @@ impl<'a> UpdateBlockHeightForEntry<Leaf<SeqTypes>>
     }
 }
 
-impl<'a> UpdateBlockHeightForEntry<BlockQueryData<SeqTypes>>
-    for SurfDiscoAvailabilityAPIStream<'a, BlockQueryData<SeqTypes>>
+impl UpdateBlockHeightForEntry<BlockQueryData<SeqTypes>>
+    for SurfDiscoAvailabilityAPIStream<'_, BlockQueryData<SeqTypes>>
 {
     fn block_height_for_entry(&self, entry: &BlockQueryData<SeqTypes>) -> u64 {
         entry.height()
@@ -517,7 +515,7 @@ impl<'a> UpdateBlockHeightForEntry<BlockQueryData<SeqTypes>>
     }
 }
 
-impl<'a> SurfDiscoAvailabilityAPIStream<'a, Leaf<SeqTypes>> {
+impl SurfDiscoAvailabilityAPIStream<'_, Leaf<SeqTypes>> {
     pub fn new_leaf_stream(
         client: surf_disco::Client<hotshot_query_service::Error, Version01>,
         starting_block: u64,
@@ -532,7 +530,7 @@ impl<'a> SurfDiscoAvailabilityAPIStream<'a, Leaf<SeqTypes>> {
     }
 }
 
-impl<'a> SurfDiscoAvailabilityAPIStream<'a, BlockQueryData<SeqTypes>> {
+impl SurfDiscoAvailabilityAPIStream<'_, BlockQueryData<SeqTypes>> {
     pub fn new_block_stream(
         client: surf_disco::Client<hotshot_query_service::Error, Version01>,
         starting_block: u64,
@@ -547,18 +545,17 @@ impl<'a> SurfDiscoAvailabilityAPIStream<'a, BlockQueryData<SeqTypes>> {
     }
 }
 
-impl<'a, T> SurfDiscoAvailabilityAPIStream<'a, T>
+impl<T> SurfDiscoAvailabilityAPIStream<'_, T>
 where
     T: serde::de::DeserializeOwned,
     Self: SurfDiscoAvailabilityAPIPathResolver + UpdateBlockHeightForEntry<T>,
 {
 }
 
-impl<'a, T> Stream for SurfDiscoAvailabilityAPIStream<'a, T>
+impl<T> Stream for SurfDiscoAvailabilityAPIStream<'_, T>
 where
     T: serde::de::DeserializeOwned,
     Self: SurfDiscoAvailabilityAPIPathResolver + UpdateBlockHeightForEntry<T>,
-    'a: 'static,
 {
     type Item = T;
 
