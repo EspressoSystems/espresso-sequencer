@@ -71,13 +71,7 @@ impl<T: Serialize + DeserializeOwned + Clone> LedgerLog<T> {
         let len = store.iter().len();
         tracing::info!("loading LedgerLog {}, len={}", file_pattern, len);
 
-        let cache_start = if len > cache_size {
-            len - cache_size
-        } else {
-            // If the cache is large enough to contain every object in storage, we start it at index
-            // 0 so that it does.
-            0
-        };
+        let cache_start = len.saturating_sub(cache_size);
         let mut missing = 0;
         let mut cache = store
             .iter()
@@ -220,7 +214,7 @@ pub struct Iter<'a, T: Serialize + DeserializeOwned> {
     store: append_log::Iter<'a, BincodeLoadStore<Option<T>>>,
 }
 
-impl<'a, T: Serialize + DeserializeOwned + Clone> Iterator for Iter<'a, T> {
+impl<T: Serialize + DeserializeOwned + Clone> Iterator for Iter<'_, T> {
     type Item = Option<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -264,7 +258,7 @@ impl<'a, T: Serialize + DeserializeOwned + Clone> Iterator for Iter<'a, T> {
     }
 }
 
-impl<'a, T: Serialize + DeserializeOwned + Clone> ExactSizeIterator for Iter<'a, T> {}
+impl<T: Serialize + DeserializeOwned + Clone> ExactSizeIterator for Iter<'_, T> {}
 
 #[cfg(test)]
 mod test {

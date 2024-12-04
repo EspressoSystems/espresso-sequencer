@@ -560,22 +560,28 @@ where
     for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
-    type LeafRange<R> = BoxStream<'static, Fetch<LeafQueryData<Types>>>
+    type LeafRange<R>
+        = BoxStream<'static, Fetch<LeafQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
-    type BlockRange<R> = BoxStream<'static, Fetch<BlockQueryData<Types>>>
+    type BlockRange<R>
+        = BoxStream<'static, Fetch<BlockQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
-    type PayloadRange<R> = BoxStream<'static, Fetch<PayloadQueryData<Types>>>
+    type PayloadRange<R>
+        = BoxStream<'static, Fetch<PayloadQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
-    type PayloadMetadataRange<R> = BoxStream<'static, Fetch<PayloadMetadata<Types>>>
+    type PayloadMetadataRange<R>
+        = BoxStream<'static, Fetch<PayloadMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send;
-    type VidCommonRange<R> = BoxStream<'static, Fetch<VidCommonQueryData<Types>>>
+    type VidCommonRange<R>
+        = BoxStream<'static, Fetch<VidCommonQueryData<Types>>>
     where
         R: RangeBounds<usize> + Send;
-    type VidCommonMetadataRange<R> = BoxStream<'static, Fetch<VidCommonMetadata<Types>>>
+    type VidCommonMetadataRange<R>
+        = BoxStream<'static, Fetch<VidCommonMetadata<Types>>>
     where
         R: RangeBounds<usize> + Send;
 
@@ -715,10 +721,12 @@ where
     S: VersionedDataSource + Send + Sync,
     P: Send + Sync,
 {
-    type Transaction<'a> = S::Transaction<'a>
+    type Transaction<'a>
+        = S::Transaction<'a>
     where
         Self: 'a;
-    type ReadOnly<'a> = S::ReadOnly<'a>
+    type ReadOnly<'a>
+        = S::ReadOnly<'a>
     where
         Self: 'a;
 
@@ -761,10 +769,12 @@ where
     S: VersionedDataSource + Send + Sync,
     P: Send + Sync,
 {
-    type Transaction<'a> = S::Transaction<'a>
+    type Transaction<'a>
+        = S::Transaction<'a>
     where
         Self: 'a;
-    type ReadOnly<'a> = S::ReadOnly<'a>
+    type ReadOnly<'a>
+        = S::ReadOnly<'a>
     where
         Self: 'a;
 

@@ -627,40 +627,28 @@ mod test {
 
     #[async_trait]
     impl AvailabilityDataSource<MockTypes> for CompositeState {
-        type LeafRange<R> =
-            <MockDataSource as AvailabilityDataSource<
-                MockTypes,
-            >>::LeafRange<R>
+        type LeafRange<R>
+            = <MockDataSource as AvailabilityDataSource<MockTypes>>::LeafRange<R>
         where
             R: RangeBounds<usize> + Send;
-        type BlockRange<R> =
-            <MockDataSource as AvailabilityDataSource<
-                MockTypes,
-            >>::BlockRange<R>
+        type BlockRange<R>
+            = <MockDataSource as AvailabilityDataSource<MockTypes>>::BlockRange<R>
         where
             R: RangeBounds<usize> + Send;
-        type PayloadRange<R> =
-            <MockDataSource as AvailabilityDataSource<
-                MockTypes,
-            >>::PayloadRange<R>
+        type PayloadRange<R>
+            = <MockDataSource as AvailabilityDataSource<MockTypes>>::PayloadRange<R>
         where
             R: RangeBounds<usize> + Send;
-        type PayloadMetadataRange<R> =
-            <MockDataSource as AvailabilityDataSource<
-                MockTypes,
-            >>::PayloadMetadataRange<R>
+        type PayloadMetadataRange<R>
+            = <MockDataSource as AvailabilityDataSource<MockTypes>>::PayloadMetadataRange<R>
         where
             R: RangeBounds<usize> + Send;
-        type VidCommonRange<R> =
-            <MockDataSource as AvailabilityDataSource<
-                MockTypes,
-            >>::VidCommonRange<R>
+        type VidCommonRange<R>
+            = <MockDataSource as AvailabilityDataSource<MockTypes>>::VidCommonRange<R>
         where
             R: RangeBounds<usize> + Send;
-        type VidCommonMetadataRange<R> =
-            <MockDataSource as AvailabilityDataSource<
-                MockTypes,
-            >>::VidCommonMetadataRange<R>
+        type VidCommonMetadataRange<R>
+            = <MockDataSource as AvailabilityDataSource<MockTypes>>::VidCommonMetadataRange<R>
         where
             R: RangeBounds<usize> + Send;
 

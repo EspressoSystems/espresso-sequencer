@@ -37,7 +37,6 @@
 ///     for<'a> i64: Type<DB> + Encode<'a, DB>,
 /// {}
 /// ```
-
 #[cfg(feature = "embedded-db")]
 pub type Db = sqlx::Sqlite;
 #[cfg(not(feature = "embedded-db"))]

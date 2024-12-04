@@ -293,7 +293,7 @@ where
     }
 }
 
-impl<'de> serde::de::Visitor<'de> for MonetaryValueVisitor {
+impl serde::de::Visitor<'_> for MonetaryValueVisitor {
     type Value = MonetaryValue;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
