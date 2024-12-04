@@ -944,10 +944,21 @@ mod test {
             .pruner_cfg(
                 PrunerCfg::new()
                     .with_target_retention(Duration::from_secs(0))
-                    .with_interval(Duration::from_secs(1)),
+                    .with_interval(Duration::from_secs(5)),
             )
             .unwrap()
-            .connect(provider.clone())
+            .builder(provider.clone())
+            .await
+            .unwrap()
+            // Set a fast retry for failed operations. Occasionally storage operations will fail due
+            // to conflicting write-mode transactions running concurrently. This is ok as they will
+            // be retried. Having a fast retry interval speeds up the test.
+            .with_min_retry_interval(Duration::from_millis(100))
+            // Randomize retries a lot. This will temporarlly separate competing transactions write
+            // transactions with high probability, so that one of them quickly gets exclusive access
+            // to the database.
+            .with_retry_randomization_factor(3.)
+            .build()
             .await
             .unwrap();
 

@@ -239,6 +239,18 @@ pub(super) fn trigger_fetch_for_parent<Types, S, P>(
             // Check if we already have the parent.
             match fetcher.storage.read().await {
                 Ok(mut tx) => {
+                    // Don't bother fetching a pruned leaf.
+                    if let Ok(pruned_height) = tx.load_pruned_height().await {
+                        if !pruned_height.map_or(true, |ph| height > ph) {
+                            tracing::info!(
+                                height,
+                                ?pruned_height,
+                                "not fetching pruned parent leaf"
+                            );
+                            return;
+                        }
+                    }
+
                     if tx.get_leaf(((height - 1) as usize).into()).await.is_ok() {
                         return;
                     }
