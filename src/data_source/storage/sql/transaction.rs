@@ -95,6 +95,40 @@ pub trait TransactionMode: Send + Sync {
 impl TransactionMode for Write {
     #[allow(unused_variables)]
     async fn begin(conn: &mut <Db as Database>::Connection) -> anyhow::Result<()> {
+        // SQLite automatically sets the read/write mode of a transactions based on the statements
+        // in it. However, there is still a good reason to explicitly enable write mode right from
+        // the start: if a transaction first executes a read statement and then a write statement,
+        // it will be upgraded from a read transaction to a write transaction. Because this involves
+        // obtaining a different kind of lock while already holding one, it can cause a deadlock,
+        // e.g.:
+        // * Transaction A executes a read statement, obtaining a read lock
+        // * Transaction B executes a write statement and begins waiting for a write lock
+        // * Transaction A executes a write statement and begins waiting for a write lock
+        //
+        // Transaction A can never obtain its write lock because it must first wait for transaction
+        // B to get a write lock, which cannot happen because B is in turn waiting for A to release
+        // its read lock.
+        //
+        // This type of deadlock cannot happen if transaction A immediately starts as a write, since
+        // it will then only ever try to acquire one type of lock (a write lock). By working with
+        // this restriction (transactions are either readers or writers, but never upgradable), we
+        // avoid deadlock, we more closely imitate the concurrency semantics of postgres, and we
+        // take advantage of the SQLite busy timeout, which may allow a transaction to acquire a
+        // lock and succeed (after a small delay), even when there was a conflicting transaction in
+        // progress. Whereas a deadlock is always an automatic rollback.
+        //
+        // The proper way to begin a write transaction in SQLite is with `BEGIN IMMEDIATE`. However,
+        // sqlx does not expose any way to customize the `BEGIN` statement that starts a
+        // transaction. A servicable workaround is to perform some write statement before performing
+        // any read statement, ensuring that the first lock we acquire is exclusive. A write
+        // statement that has no actual effect on the database is suitable for this purpose, hence
+        // the `WHERE false`.
+        #[cfg(feature = "embedded-db")]
+        conn.execute("UPDATE header SET height = height WHERE false")
+            .await?;
+
+        // With Postgres things are much more straightforward: just tell Postgres we want a write
+        // transaction immediately after opening it.
         #[cfg(not(feature = "embedded-db"))]
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             .await?;
@@ -110,6 +144,14 @@ impl TransactionMode for Write {
 impl TransactionMode for Read {
     #[allow(unused_variables)]
     async fn begin(conn: &mut <Db as Database>::Connection) -> anyhow::Result<()> {
+        // With Postgres, we explicitly set the transaction mode to specify that we want the
+        // strongest possible consistency semantics in case of competing transactions
+        // (SERIALIZABLE), and we want to wait until this is possible rather than failing
+        // (DEFERRABLE).
+        //
+        // With SQLite, there is nothing to be done here, as SQLite automatically starts
+        // transactions in read-only mode, and always has serializable concurrency unless we
+        // explicity opt in to dirty reads with a pragma.
         #[cfg(not(feature = "embedded-db"))]
         conn.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE")
             .await?;
