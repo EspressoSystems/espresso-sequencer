@@ -9,7 +9,7 @@
 //! persistence which is _required_ to run a node.
 
 use async_trait::async_trait;
-use espresso_types::{traits::PersistenceOptions, v0_3::ChainConfig};
+use espresso_types::v0_3::ChainConfig;
 
 pub mod fs;
 pub mod no_storage;
@@ -23,7 +23,7 @@ pub trait ChainConfigPersistence: Sized + Send + Sync {
 #[cfg(any(test, feature = "testing"))]
 mod testing {
 
-    use espresso_types::v0::traits::SequencerPersistence;
+    use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 
     use super::*;
     #[allow(dead_code)]
@@ -49,7 +49,7 @@ mod persistence_tests {
     use async_lock::RwLock;
     use committable::Committable;
     use espresso_types::{
-        traits::{EventConsumer, NullEventConsumer},
+        traits::{EventConsumer, NullEventConsumer, PersistenceOptions},
         Event, Leaf, NodeState, PubKey, SeqTypes, ValidatedState,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};

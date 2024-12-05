@@ -106,7 +106,11 @@ impl From<sqlx::Error> for SolverError {
     }
 }
 
-#[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+#[cfg(all(
+    any(test, feature = "testing"),
+    not(target_os = "windows"),
+    not(feature = "embedded-db")
+))]
 pub mod mock {
     use hotshot_query_service::data_source::sql::testing::TmpDb;
 
@@ -143,7 +147,7 @@ pub mod mock {
     }
 }
 
-#[cfg(all(test, not(target_os = "windows")))]
+#[cfg(all(test, not(target_os = "windows"), not(feature = "embedded-db")))]
 mod test {
     use crate::database::mock::setup_mock_database;
     use hotshot::helpers::initialize_logging;

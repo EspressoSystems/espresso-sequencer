@@ -7,8 +7,13 @@ fi
 
 set -euxo pipefail
 
-nix develop .#crossShell --ignore-environment --command cargo build --release
-nix develop .#armCrossShell --ignore-environment --command cargo build --release
+nix develop .#crossShell --ignore-environment --command bash -c "cargo build --release \
+&& cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml \
+&& cargo build --bin espresso-dev-node --release --all-features"
+
+nix develop .#armCrossShell --ignore-environment --command bash -c "cargo build --release \
+&& cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml \
+&& cargo build --bin espresso-dev-node --release --all-features"
 
 # The rest of the script doesn't run in a nix shell but we need to know where
 # the binaries are.
@@ -41,7 +46,7 @@ for ARCH in "amd64" "arm64"; do
       ;;
   esac
   mkdir -p ${WORKDIR}/target/$ARCH/release
-    for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "espresso-bridge" "espresso-dev-node" "marketplace-solver" "marketplace-builder" "dev-rollup" "utils"; do
+    for binary in "cdn-broker" "cdn-marshal" "cdn-whitelist" "deploy" "dev-rollup" "espresso-bridge" "espresso-dev-node" "keygen" "marketplace-builder" "marketplace-solver" "nasty-client" "node-metrics" "orchestrator" "permissionless-builder" "pub-key" "reset-storage" "sequencer" "sequencer-sqlite" "state-prover" "state-relay-server" "submit-transactions" "utils"; do
     cp -v "${CARGO_TARGET_DIR}/${TARGET}/release/$binary" ${WORKDIR}/target/$ARCH/release
   done
 done
@@ -49,9 +54,9 @@ done
 mkdir -p ${WORKDIR}/docker/scripts
 cp -v docker/scripts/sequencer-awssecretsmanager.sh ${WORKDIR}/docker/scripts
 
-# Copy the dev-node launch script
+# Copy the dev-node and sequencer script
 mkdir -p ${WORKDIR}/scripts
-cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}/scripts
+cp -v scripts/{launch-dev-node-with-postgres,sequencer-entrypoint} ${WORKDIR}/scripts
 
 export DOCKER_BUILDKIT=1
 docker build -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}

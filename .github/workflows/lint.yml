@@ -32,5 +32,8 @@ jobs:
       - name: Format Check
         run: cargo fmt -- --check
 
-      - name: Check
-        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - name: Check (embedded-db)
+        run: cargo clippy --workspace --features "embedded-db testing" --all-targets -- -D warnings
+      
+      - name: Check (postgres)
+        run: cargo clippy --workspace --features testing --all-targets -- -D warnings

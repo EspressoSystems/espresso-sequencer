@@ -371,20 +371,12 @@ pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
 
     fn set_view_retention(&mut self, view_retention: u64);
-
-    async fn create(self) -> anyhow::Result<Self::Persistence>;
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
-
-    async fn create_catchup_provider(
-        self,
-        backoff: BackoffParams,
-    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        self.create().await?.into_catchup_provider(backoff)
-    }
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Sized + Send + Sync + 'static {
+pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
         self,

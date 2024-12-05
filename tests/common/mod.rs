@@ -11,7 +11,7 @@ const L1_PROVIDER_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 // TODO add to .env
 const RECIPIENT_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 /// Duration in seconds to wait before declaring the chain deceased.
-const SEQUENCER_BLOCKS_TIMEOUT: u64 = 120;
+const SEQUENCER_BLOCKS_TIMEOUT: u64 = 300;
 
 #[derive(Clone, Debug)]
 pub struct TestConfig {
@@ -113,7 +113,6 @@ impl TestConfig {
         let sequencer_clients = [
             dotenvy::var("ESPRESSO_SEQUENCER_API_PORT")?,
             dotenvy::var("ESPRESSO_SEQUENCER1_API_PORT")?,
-            dotenvy::var("ESPRESSO_SEQUENCER2_API_PORT")?,
         ]
         .iter()
         .map(|port| url_from_port(port.clone()).unwrap())

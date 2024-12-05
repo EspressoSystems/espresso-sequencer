@@ -64,6 +64,7 @@ impl SequencerDataSource for DataSource {
         if let Some(limit) = fetch_limit {
             builder = builder.with_rate_limit(limit);
         }
+
         if let Some(delay) = active_fetch_delay {
             builder = builder.with_active_fetch_delay(delay);
         }
@@ -455,12 +456,25 @@ mod impl_testable_data_source {
     use crate::api::{self, data_source::testing::TestableSequencerDataSource};
 
     fn tmp_options(db: &TmpDb) -> Options {
-        Options {
-            port: Some(db.port()),
-            host: Some(db.host()),
-            user: Some("postgres".into()),
-            password: Some("password".into()),
-            ..Default::default()
+        #[cfg(not(feature = "embedded-db"))]
+        {
+            let opt = crate::persistence::sql::PostgresOptions {
+                port: Some(db.port()),
+                host: Some(db.host()),
+                user: Some("postgres".into()),
+                password: Some("password".into()),
+                ..Default::default()
+            };
+
+            opt.into()
+        }
+
+        #[cfg(feature = "embedded-db")]
+        {
+            let opt = crate::persistence::sql::SqliteOptions {
+                path: Some(db.path()),
+            };
+            opt.into()
         }
     }
 

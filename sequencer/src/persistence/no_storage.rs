@@ -31,7 +31,7 @@ impl PersistenceOptions for Options {
 
     fn set_view_retention(&mut self, _: u64) {}
 
-    async fn create(self) -> anyhow::Result<Self::Persistence> {
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
         Ok(NoStorage)
     }
 

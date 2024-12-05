@@ -89,12 +89,16 @@ impl PersistenceOptions for Options {
         self.consensus_view_retention = view_retention;
     }
 
-    async fn create(self) -> anyhow::Result<Persistence> {
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
+        let path = self.path.clone();
+        let store_undecided_state = self.store_undecided_state;
+        let view_retention = self.consensus_view_retention;
+
         Ok(Persistence {
-            store_undecided_state: self.store_undecided_state,
+            store_undecided_state,
             inner: Arc::new(RwLock::new(Inner {
-                path: self.path,
-                view_retention: self.consensus_view_retention,
+                path,
+                view_retention,
             })),
         })
     }
