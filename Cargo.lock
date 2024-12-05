@@ -1267,7 +1267,7 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.56 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.56)",
  "hotshot-state-prover",
  "hotshot-types",
  "jf-signature 0.2.0",
@@ -4101,6 +4101,33 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.56"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.56#c8046e6debb533c6abf431866ccf1d3787338982"
+dependencies = [
+ "async-broadcast",
+ "async-lock 2.8.0",
+ "async-trait",
+ "clap",
+ "derivative",
+ "derive_more 0.99.18",
+ "either",
+ "futures",
+ "hotshot-types",
+ "libp2p-identity",
+ "rand 0.8.5",
+ "serde",
+ "snafu 0.8.5",
+ "tagged-base64",
+ "tide-disco",
+ "tokio",
+ "toml 0.8.19",
+ "tracing",
+ "tracing-test",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-events-service"
+version = "0.1.56"
 source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=hotshot%2F0.5.82#f7b6da149c2aa3c15996ece0a07d30039f540680"
 dependencies = [
  "async-broadcast",
@@ -6177,7 +6204,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.56 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.56)",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
@@ -6244,7 +6271,7 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.56 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=hotshot%2F0.5.82)",
  "hotshot-example-types",
  "hotshot-task-impls",
  "hotshot-testing",
@@ -6275,7 +6302,7 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.56 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.56)",
  "hotshot-query-service",
  "hotshot-types",
  "marketplace-solver",
@@ -8618,7 +8645,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.56 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.56)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
