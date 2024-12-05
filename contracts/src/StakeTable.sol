@@ -21,6 +21,9 @@ contract StakeTable is AbstractStakeTable {
     /// account.
     error NodeAlreadyRegistered();
 
+    /// Error raised when a user tries to withdraw funds from a node that is not registered.
+    error NodeNotRegistered();
+
     /// Error raised when a user tries to make a deposit or request an exit but does not control the
     /// node public key.
     error Unauthenticated();
@@ -232,7 +235,7 @@ contract StakeTable is AbstractStakeTable {
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external override {
-        uint256 fixedStakeAmount = this.minStakeAmount();
+        uint256 fixedStakeAmount = minStakeAmount();
 
         // Verify that the sender amount is the minStakeAmount
         if (amount < fixedStakeAmount) {
@@ -368,17 +371,42 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw past their `exitEpoch`.
     ///
     /// @param blsVK The BLS verification key to withdraw
+    /// @param blsSig The BLS signature that authenticates the ethereum account this function is
+    /// called from the caller
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint256) {
+    /// TODO: This function should be tested
+    function withdrawFunds(BN254.G2Point memory blsVK, BN254.G1Point memory blsSig)
+        external
+        override
+        returns (uint256)
+    {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
+        // Verify that the node is already registered.
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
+
+        // Verify that the balance is greater than zero
+        uint256 balance = node.balance;
+        if (balance == 0) {
+            revert InsufficientBalance(0, 0);
+        }
+
+        // Verify that the validator can sign for that blsVK
+        bytes memory message = abi.encode(msg.sender);
+        BLSSig.verifyBlsSig(message, blsSig, blsVK);
+
+        // Verify that the exit escrow period is over.
         if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
             revert PrematureWithdrawal();
         }
-        uint256 balance = node.balance;
+
+        // Delete the node from the stake table.
         delete nodes[key];
 
+        // Transfer the balance to the node's account.
         SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
 
         return balance;
@@ -387,7 +415,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Minimum stake amount
     /// @return Minimum stake amount
     /// TODO: This value should be a variable modifiable by admin
-    function minStakeAmount() external pure returns (uint256) {
+    function minStakeAmount() public pure returns (uint256) {
         return 10 ether;
     }
 }

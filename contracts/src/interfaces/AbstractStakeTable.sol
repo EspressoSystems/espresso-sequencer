@@ -125,6 +125,11 @@ abstract contract AbstractStakeTable {
     /// withdraw past their `exitEpoch`.
     ///
     /// @param blsVK The BLS verification key to withdraw
+    /// @param blsSig The BLS signature that authenticates the ethereum account this function is
+    /// called from the caller
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G2Point memory blsVK) external virtual returns (uint256);
+    function withdrawFunds(BN254.G2Point memory blsVK, BN254.G1Point memory blsSig)
+        external
+        virtual
+        returns (uint256);
 }
