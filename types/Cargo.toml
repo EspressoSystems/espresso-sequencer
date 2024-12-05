@@ -8,7 +8,6 @@ edition = "2021"
 testing = []
 
 [dependencies]
-
 anyhow = { workspace = true }
 ark-serialize = { workspace = true }
 async-broadcast = { workspace = true }
@@ -26,7 +25,6 @@ ethers = { workspace = true }
 fluent-asserter = "0.1.9"
 futures = { workspace = true }
 hotshot = { workspace = true }
-hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }

@@ -10,7 +10,6 @@ testing = [
   "hotshot-testing",
   "marketplace-builder-core",
   "marketplace-builder-shared",
-  "hotshot-builder-api",
   "espresso-types/testing",
   "sequencer-utils/testing",
   "hotshot-query-service/testing",
@@ -49,6 +48,7 @@ async-lock = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
+todo_by = "0.3"
 
 # CDN imports
 cdn-broker = { workspace = true }
@@ -67,7 +67,6 @@ ethers = { workspace = true }
 futures = { workspace = true }
 
 hotshot = { workspace = true }
-hotshot-builder-api = { workspace = true, optional = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }

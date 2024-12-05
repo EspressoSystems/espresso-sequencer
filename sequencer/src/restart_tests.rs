@@ -9,7 +9,10 @@ use crate::{
     SequencerApiVersion,
 };
 use anyhow::bail;
-use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as BrokerConfig};
+use cdn_broker::{
+    reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
+    Broker, Config as BrokerConfig,
+};
 use cdn_marshal::{Config as MarshalConfig, Marshal};
 use clap::Parser;
 use derivative::Derivative;
@@ -859,6 +862,9 @@ async fn start_broker(ports: &mut PortPicker, dir: &Path) -> JoinHandle<()> {
             public_key: WrappedSignatureKey(public_key),
             private_key,
         },
+
+        user_message_hook: NoMessageHook,
+        broker_message_hook: NoMessageHook,
 
         ca_cert_path: None,
         ca_key_path: None,
