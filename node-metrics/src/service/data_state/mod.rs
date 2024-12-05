@@ -627,8 +627,7 @@ mod tests {
         };
         let instance_state = NodeState::mock();
 
-        let sample_leaf = Leaf::genesis(&validated_state, &instance_state)
-            .await;
+        let sample_leaf = Leaf::genesis(&validated_state, &instance_state).await;
 
         let mut leaf_sender = leaf_sender;
         // We should be able to send a leaf without issue

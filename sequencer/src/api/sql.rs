@@ -4,7 +4,7 @@ use committable::{Commitment, Committable};
 use espresso_types::{
     get_l1_deposits,
     v0_99::{ChainConfig, IterableFeeInfo},
-    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf2, NodeState, ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, Leaf2, NodeState, ValidatedState,
 };
 use hotshot::traits::ValidatedState as _;
 use hotshot_query_service::{
@@ -21,7 +21,7 @@ use hotshot_query_service::{
     Resolvable,
 };
 use hotshot_types::{
-    data::{QuorumProposal2, ViewNumber},
+    data::{QuorumProposal, ViewNumber},
     message::Proposal,
     traits::node_implementation::ConsensusTime,
 };
@@ -443,8 +443,8 @@ where
     .bind(param)
     .fetch_one(tx.as_mut())
     .await?;
-    let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> = bincode::deserialize(&data)?;
-    Ok(Leaf2::from_quorum_proposal(&proposal.data))
+    let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&data)?;
+    Ok(Leaf::from_quorum_proposal(&proposal.data).into())
 }
 
 #[cfg(any(test, feature = "testing"))]
