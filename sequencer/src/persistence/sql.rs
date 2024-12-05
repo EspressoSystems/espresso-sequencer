@@ -488,9 +488,9 @@ impl Persistence {
             if hash.is_none() {
                 let view: i64 = row.try_get("view")?;
                 let data: Vec<u8> = row.try_get("data")?;
-                let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                     bincode::deserialize(&data)?;
-                let leaf = Leaf2::from_quorum_proposal(&proposal.data);
+                let leaf = Leaf::from_quorum_proposal(&proposal.data);
                 let leaf_hash = Committable::commit(&leaf);
                 tracing::info!(view, %leaf_hash, "populating quorum proposal leaf hash");
                 updates.push((view, leaf_hash.to_string()));
@@ -1106,6 +1106,7 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
     use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
     use espresso_types::{Leaf, NodeState, ValidatedState};
@@ -1142,11 +1143,13 @@ mod test {
             _pd: Default::default(),
         };
 
-        let qp1 = quorum_proposal.clone();
+        let qp1: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(quorum_proposal.clone());
 
         quorum_proposal.data.view_number = ViewNumber::new(1);
-        let qp2 = quorum_proposal.clone();
 
+        let qp2: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(quorum_proposal.clone());
         let qps = [qp1, qp2];
 
         // Create persistence and add the quorum proposals with NULL leaf hash.
@@ -1184,7 +1187,7 @@ mod test {
             );
             assert_eq!(
                 row.get::<String, _>("leaf_hash"),
-                Committable::commit(&Leaf2::from_quorum_proposal(&qp.data)).to_string()
+                Committable::commit(&Leaf::from_quorum_proposal(&qp.data)).to_string()
             );
         }
     }
