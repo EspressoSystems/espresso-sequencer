@@ -1,6 +1,7 @@
 use anyhow::Context;
 use espresso_types::{FeeAccount, FeeAmount, FeeMerkleTree, Header};
 use ethers::types::Address;
+use futures::{stream::BoxStream, StreamExt};
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
@@ -48,12 +49,25 @@ impl SequencerClient {
     pub async fn subscribe_headers(
         &self,
         height: u64,
-    ) -> anyhow::Result<Connection<Header, Unsupported, ClientError, SequencerApiVersion>> {
+    ) -> anyhow::Result<BoxStream<'static, Result<Header, ClientError>>> {
         self.0
             .socket(&format!("availability/stream/headers/{height}"))
-            .subscribe()
+            .subscribe::<Header>()
             .await
             .context("subscribing to Espresso headers")
+            .map(|s| s.boxed())
+    }
+
+    /// Subscribe to a stream of Block Headers
+    pub async fn subscribe_blocks(
+        &self,
+        height: u64,
+    ) -> anyhow::Result<Connection<Header, Unsupported, ClientError, SequencerApiVersion>> {
+        self.0
+            .socket(&format!("availability/stream/blocks/{height}"))
+            .subscribe()
+            .await
+            .context("subscribing to Espresso Blocks")
     }
 
     /// Get the balance for a given account at a given block height, defaulting to current balance.
