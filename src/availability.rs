@@ -499,11 +499,11 @@ fn enforce_range_limit(from: usize, until: usize, limit: usize) -> Result<(), Er
 mod test {
     use super::*;
     use crate::{
-        data_source::{storage::no_storage, ExtensibleDataSource},
+        data_source::ExtensibleDataSource,
         status::StatusDataSource,
         task::BackgroundTask,
         testing::{
-            consensus::{MockDataSource, MockNetwork, TestableDataSource},
+            consensus::{MockDataSource, MockNetwork},
             mocks::{mock_transaction, MockBase, MockHeader, MockPayload, MockTypes},
             setup_test,
         },
@@ -777,34 +777,10 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_api() {
-        test_api_helper::<MockDataSource>(Duration::from_millis(500)).await;
-    }
-
-    // This test runs the `postgres` Docker image, which doesn't work on Windows.
-    #[cfg(not(target_os = "windows"))]
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_api_no_storage() {
-        // With a long enough fetch timeout, we can run the API without any local storage and it
-        // still works: missing data is fetched on demand or proactively from a peer.
-        //
-        // We set the timeout very conservatively here at 5s, so the test passes deterministically
-        // even in resource-constrained environments like CI builders. In practice, on a reasonably
-        // powerful server with a fast connection to a powerful peer, this timeout can likely be
-        // made much shorter, under 1s.
-        test_api_helper::<no_storage::testing::DataSource>(Duration::from_secs(5)).await;
-    }
-
-    async fn test_api_helper<D: TestableDataSource>(fetch_timeout: Duration) {
         setup_test();
 
         // Create the consensus network.
-        let mut network = MockNetwork::<D>::init_with_config(|cfg| {
-            // Make the rate of empty block production slower than the API fetching timeout.
-            // Otherwise, we will produce new blocks faster than we can fetch them (particularly in
-            // the no-storage case, where fetching is quite slow) and the test will never finish.
-            cfg.builder_timeout = fetch_timeout + Duration::from_millis(500);
-        })
-        .await;
+        let mut network = MockNetwork::<MockDataSource>::init().await;
         network.start().await;
 
         // Start the web server.
@@ -812,14 +788,7 @@ mod test {
         let mut app = App::<_, Error>::with_state(ApiState::from(network.data_source()));
         app.register_module(
             "availability",
-            define_api(
-                &Options {
-                    fetch_timeout,
-                    ..Default::default()
-                },
-                MockBase::instance(),
-            )
-            .unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(

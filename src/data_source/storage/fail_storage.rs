@@ -58,6 +58,7 @@ pub enum FailableAction {
     GetVidCommonRange,
     GetVidCommonMetadataRange,
     GetTransaction,
+    FirstAvailableLeaf,
 
     /// Target any action for failure.
     Any,
@@ -440,6 +441,12 @@ where
     ) -> QueryResult<TransactionQueryData<Types>> {
         self.maybe_fail_read(FailableAction::GetTransaction).await?;
         self.inner.get_transaction(hash).await
+    }
+
+    async fn first_available_leaf(&mut self, from: u64) -> QueryResult<LeafQueryData<Types>> {
+        self.maybe_fail_read(FailableAction::FirstAvailableLeaf)
+            .await?;
+        self.inner.first_available_leaf(from).await
     }
 }
 

@@ -226,7 +226,7 @@ mod test {
     use std::time::Duration;
     use surf_disco::Client;
     use tempfile::TempDir;
-    use tide_disco::App;
+    use tide_disco::{App, Error as _};
     use tokio::time::sleep;
     use toml::toml;
 
@@ -468,6 +468,21 @@ mod test {
             tx_sizes.push(leaf.block_payload().unwrap().encode().len());
         }
         tracing::info!(?tx_heights, ?tx_sizes, "transactions sequenced");
+
+        // Wait for the aggregator to process the inserted blocks.
+        while let Err(err) = client
+            .get::<usize>(&format!("node/transactions/count/{}", tx_heights[1]))
+            .send()
+            .await
+        {
+            if err.status() == StatusCode::NOT_FOUND {
+                tracing::info!(?tx_heights, "waiting for aggregator");
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            } else {
+                panic!("unexpected error: {err:#}");
+            }
+        }
 
         // Range including empty blocks (genesis block) only
         assert_eq!(

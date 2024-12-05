@@ -37,9 +37,6 @@ jobs:
       - name: Clippy(all-features)
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
-      - name: Clippy(no-storage)
-        run: cargo clippy --workspace --features no-storage --all-targets -- -D warnings
-
       - name: Generate Documentation
         run: |
           cargo doc --no-deps --lib --release --all-features
@@ -89,5 +86,5 @@ jobs:
 
       - name: Test
         run: |
-          cargo nextest run --workspace --release --features "no-storage, testing"
+          cargo nextest run --workspace --release --features "testing"
         timeout-minutes: 60

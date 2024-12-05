@@ -16,7 +16,10 @@ use super::{AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers};
 use crate::{
     availability::{QueryablePayload, TransactionHash, TransactionQueryData},
     data_source::{
-        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        storage::{
+            pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
+            UpdateAvailabilityStorage,
+        },
         update::VersionedDataSource,
     },
     Payload, QueryResult,
@@ -70,6 +73,8 @@ where
     where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
         // We don't actively fetch transactions, because without a satisfying block payload, we have

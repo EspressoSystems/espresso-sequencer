@@ -19,7 +19,10 @@ use super::{
 use crate::{
     availability::{BlockId, QueryablePayload},
     data_source::{
-        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        storage::{
+            pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
+            UpdateAvailabilityStorage,
+        },
         update::VersionedDataSource,
     },
     Header, Payload, QueryError,
@@ -118,6 +121,7 @@ where
     Payload<Types>: QueryablePayload<Types>,
     S: VersionedDataSource + 'static,
     for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+    for<'a> S::ReadOnly<'a>: AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
     P: AvailabilityProvider<Types>,
 {
     // Check if at least the header is available in local storage. If it is, we benefit two ways:
@@ -151,7 +155,7 @@ where
     // header and leaf.
     match req {
         BlockId::Number(n) => {
-            fetch_leaf_with_callbacks(callback.fetcher(), n.into(), [callback.into()]);
+            fetch_leaf_with_callbacks(tx, callback.fetcher(), n.into(), [callback.into()]).await?;
         }
         BlockId::Hash(h) => {
             // Given only the hash, we cannot tell if the corresonding leaf actually exists, since

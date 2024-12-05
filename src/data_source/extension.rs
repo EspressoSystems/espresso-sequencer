@@ -13,9 +13,10 @@
 use super::VersionedDataSource;
 use crate::{
     availability::{
-        AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash,
-        TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata, VidCommonQueryData,
+        AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
+        LeafQueryData, PayloadMetadata, PayloadQueryData, QueryableHeader, QueryablePayload,
+        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata,
+        VidCommonQueryData,
     },
     explorer::{self, ExplorerDataSource, ExplorerHeader, ExplorerTransaction},
     merklized_state::{
@@ -30,7 +31,7 @@ use crate::{
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
-use std::ops::RangeBounds;
+use std::ops::{Bound, RangeBounds};
 use tagged_base64::TaggedBase64;
 
 /// Wrapper to add extensibility to an existing data source.
@@ -146,31 +147,6 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
 {
-    type LeafRange<R>
-        = D::LeafRange<R>
-    where
-        R: RangeBounds<usize> + Send;
-    type BlockRange<R>
-        = D::BlockRange<R>
-    where
-        R: RangeBounds<usize> + Send;
-    type PayloadRange<R>
-        = D::PayloadRange<R>
-    where
-        R: RangeBounds<usize> + Send;
-    type PayloadMetadataRange<R>
-        = D::PayloadMetadataRange<R>
-    where
-        R: RangeBounds<usize> + Send;
-    type VidCommonRange<R>
-        = D::VidCommonRange<R>
-    where
-        R: RangeBounds<usize> + Send;
-    type VidCommonMetadataRange<R>
-        = D::VidCommonMetadataRange<R>
-    where
-        R: RangeBounds<usize> + Send;
-
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync,
@@ -207,41 +183,91 @@ where
     {
         self.data_source.get_vid_common_metadata(id).await
     }
-    async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
+    async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_leaf_range(range).await
     }
-    async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_block_range(range).await
     }
-    async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_payload_range(range).await
     }
-    async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_payload_metadata_range(range).await
     }
-    async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+    async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_vid_common_range(range).await
     }
-    async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
+    async fn get_vid_common_metadata_range<R>(
+        &self,
+        range: R,
+    ) -> FetchStream<VidCommonMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static,
     {
         self.data_source.get_vid_common_metadata_range(range).await
+    }
+
+    async fn get_leaf_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<LeafQueryData<Types>> {
+        self.data_source.get_leaf_range_rev(start, end).await
+    }
+    async fn get_block_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<BlockQueryData<Types>> {
+        self.data_source.get_block_range_rev(start, end).await
+    }
+    async fn get_payload_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<PayloadQueryData<Types>> {
+        self.data_source.get_payload_range_rev(start, end).await
+    }
+    async fn get_payload_metadata_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<PayloadMetadata<Types>> {
+        self.data_source
+            .get_payload_metadata_range_rev(start, end)
+            .await
+    }
+    async fn get_vid_common_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<VidCommonQueryData<Types>> {
+        self.data_source.get_vid_common_range_rev(start, end).await
+    }
+    async fn get_vid_common_metadata_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<VidCommonMetadata<Types>> {
+        self.data_source
+            .get_vid_common_metadata_range_rev(start, end)
+            .await
     }
     async fn get_transaction(
         &self,

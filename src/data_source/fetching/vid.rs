@@ -20,7 +20,10 @@ use super::{
 use crate::{
     availability::{BlockId, QueryablePayload, VidCommonMetadata, VidCommonQueryData},
     data_source::{
-        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        storage::{
+            pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
+            UpdateAvailabilityStorage,
+        },
         VersionedDataSource,
     },
     fetching::{self, request, Callback},
@@ -92,6 +95,8 @@ where
     where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
         fetch_header_and_then(
@@ -274,6 +279,8 @@ where
     where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
         // Trigger the full VID object to be fetched. This will be enough to satisfy this request

@@ -31,13 +31,6 @@ file-system-data-source = ["atomic_store"]
 # Enable a lightweight data source for status APIs without the archival availability API.
 metrics-data-source = []
 
-# Enable a mock persistence layer which doesn't actually persist anything.
-#
-# This is useful for adversarial testing, as it can be used to test the behavior of the query
-# service where data is never available locally and must always be fetched on demand from a peer
-# query service.
-no-storage = []
-
 # Enable the availability data source backed by a Postgres database.
 sql-data-source = ["include_dir", "refinery", "refinery-core", "sqlx", "log"]
 

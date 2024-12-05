@@ -15,9 +15,11 @@ use super::Provider;
 use crate::{
     availability::{LeafQueryData, PayloadQueryData, VidCommonQueryData},
     fetching::request::{LeafRequest, PayloadRequest, VidCommonRequest},
+    types::HeightIndexed,
     Error, Payload, VidCommon,
 };
 use async_trait::async_trait;
+use committable::Committable;
 use futures::try_join;
 use hotshot_types::{
     traits::{node_implementation::NodeType, EncodeBytes},
@@ -93,23 +95,31 @@ where
 }
 
 #[async_trait]
-impl<Types, Ver: StaticVersionType> Provider<Types, LeafRequest> for QueryServiceProvider<Ver>
+impl<Types, Ver: StaticVersionType> Provider<Types, LeafRequest<Types>>
+    for QueryServiceProvider<Ver>
 where
     Types: NodeType,
 {
-    async fn fetch(&self, req: LeafRequest) -> Option<LeafQueryData<Types>> {
+    async fn fetch(&self, req: LeafRequest<Types>) -> Option<LeafQueryData<Types>> {
         match self
             .client
-            .get::<LeafQueryData<Types>>(&format!("availability/leaf/{}", usize::from(req)))
+            .get::<LeafQueryData<Types>>(&format!("availability/leaf/{}", req.height))
             .send()
             .await
         {
             Ok(mut leaf) => {
-                // TODO we should also download a chain of QCs justifying the inclusion of `leaf` in
-                // the chain at the requested height. However, HotShot currently lacks a good light
-                // client API to verify this chain, so for now we just trust the other server.
-                // https://github.com/EspressoSystems/HotShot/issues/2137
-                // https://github.com/EspressoSystems/hotshot-query-service/issues/354
+                if leaf.height() != req.height {
+                    tracing::error!(?req, ?leaf, "received leaf with the wrong height");
+                    return None;
+                }
+                if leaf.hash() != req.expected_leaf {
+                    tracing::error!(?req, ?leaf, hash = ?leaf.hash(), "received leaf with the wrong hash");
+                    return None;
+                }
+                if leaf.qc().commit() != req.expected_qc {
+                    tracing::error!(?req, ?leaf, hash = ?leaf.qc().commit(), "received leaf with the wrong QC");
+                    return None;
+                }
 
                 // There is a potential DOS attack where the peer sends us a leaf with the full
                 // payload in it, which uses redundant resources in the database, since we fetch and
@@ -340,15 +350,13 @@ mod test {
 
         // Now we will actually fetch the missing data. First, since our node is not really
         // connected to consensus, we need to give it a leaf after the range of interest so it
-        // learns about the correct block height.
+        // learns about the correct block height. We will temporarily lock requests to the provider
+        // so that we can verify that without the provider, the node does _not_ get the data.
+        provider.block().await;
         data_source
             .append(leaves.last().cloned().unwrap().into())
             .await
             .unwrap();
-
-        // Block requests to the provider so that we can verify that without the provider, the node
-        // does _not_ get the data.
-        provider.block().await;
 
         tracing::info!("requesting fetchable resources");
         let req_leaf = data_source.get_leaf(test_leaf.height() as usize).await;
@@ -799,15 +807,15 @@ mod test {
         let leaves = leaves.take(2).collect::<Vec<_>>().await;
         let test_leaf = &leaves[0];
 
+        // Cause requests to fail temporarily, so we can test retries.
+        provider.fail();
+
         // Give the node a leaf after the range of interest so it learns about the correct block
         // height.
         data_source
             .append(leaves.last().cloned().unwrap().into())
             .await
             .unwrap();
-
-        // Cause requests to fail temporarily, so we can test retries.
-        provider.fail();
 
         tracing::info!("requesting leaf from failing providers");
         let fut = data_source.get_leaf(test_leaf.height() as usize).await;
@@ -936,10 +944,21 @@ mod test {
             .pruner_cfg(
                 PrunerCfg::new()
                     .with_target_retention(Duration::from_secs(0))
-                    .with_interval(Duration::from_secs(1)),
+                    .with_interval(Duration::from_secs(5)),
             )
             .unwrap()
-            .connect(provider.clone())
+            .builder(provider.clone())
+            .await
+            .unwrap()
+            // Set a fast retry for failed operations. Occasionally storage operations will fail due
+            // to conflicting write-mode transactions running concurrently. This is ok as they will
+            // be retried. Having a fast retry interval speeds up the test.
+            .with_min_retry_interval(Duration::from_millis(100))
+            // Randomize retries a lot. This will temporarlly separate competing transactions write
+            // transactions with high probability, so that one of them quickly gets exclusive access
+            // to the database.
+            .with_retry_randomization_factor(3.)
+            .build()
             .await
             .unwrap();
 
@@ -1039,6 +1058,7 @@ mod test {
                 break;
             }
             tracing::info!(?sync_status, "waiting for node to sync");
+            sleep(Duration::from_secs(1)).await;
         }
 
         // The node remains fully synced even after some time; no pruning.

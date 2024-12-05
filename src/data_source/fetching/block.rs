@@ -20,7 +20,10 @@ use super::{
 use crate::{
     availability::{BlockId, BlockQueryData, PayloadMetadata, PayloadQueryData, QueryablePayload},
     data_source::{
-        storage::{AvailabilityStorage, UpdateAvailabilityStorage},
+        storage::{
+            pruning::PrunedHeightStorage, AvailabilityStorage, NodeStorage,
+            UpdateAvailabilityStorage,
+        },
         VersionedDataSource,
     },
     fetching::{
@@ -89,6 +92,8 @@ where
     where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
         fetch_header_and_then(
@@ -209,6 +214,8 @@ where
     where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
@@ -321,6 +328,8 @@ where
     where
         S: VersionedDataSource + 'static,
         for<'a> S::Transaction<'a>: UpdateAvailabilityStorage<Types>,
+        for<'a> S::ReadOnly<'a>:
+            AvailabilityStorage<Types> + NodeStorage<Types> + PrunedHeightStorage,
         P: AvailabilityProvider<Types>,
     {
         // Trigger the full block to be fetched. This will be enough to satisfy this request for the

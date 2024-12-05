@@ -24,10 +24,13 @@ use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::{
     future::Future,
-    stream::{BoxStream, Stream, StreamExt},
+    stream::{BoxStream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
-use std::{cmp::Ordering, ops::RangeBounds};
+use std::{
+    cmp::Ordering,
+    ops::{Bound, RangeBounds},
+};
 
 #[derive(Derivative, From, Display)]
 #[derivative(Ord = "feature_allow_slow_enum")]
@@ -90,6 +93,8 @@ impl<Types: NodeType> PartialOrd for BlockId<Types> {
     }
 }
 
+pub type FetchStream<T> = BoxStream<'static, Fetch<T>>;
+
 /// An interface for querying a HotShot blockchain.
 ///
 /// This interface provides expressive queries over all the data which is made available by HotShot
@@ -122,31 +127,6 @@ pub trait AvailabilityDataSource<Types: NodeType>
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    type LeafRange<R>: Stream<Item = Fetch<LeafQueryData<Types>>> + Unpin + Send + 'static
-    where
-        R: RangeBounds<usize> + Send;
-    type BlockRange<R>: Stream<Item = Fetch<BlockQueryData<Types>>> + Unpin + Send + 'static
-    where
-        R: RangeBounds<usize> + Send;
-    type PayloadRange<R>: Stream<Item = Fetch<PayloadQueryData<Types>>> + Unpin + Send + 'static
-    where
-        R: RangeBounds<usize> + Send;
-    type PayloadMetadataRange<R>: Stream<Item = Fetch<PayloadMetadata<Types>>>
-        + Unpin
-        + Send
-        + 'static
-    where
-        R: RangeBounds<usize> + Send;
-    type VidCommonRange<R>: Stream<Item = Fetch<VidCommonQueryData<Types>>> + Unpin + Send + 'static
-    where
-        R: RangeBounds<usize> + Send;
-    type VidCommonMetadataRange<R>: Stream<Item = Fetch<VidCommonMetadata<Types>>>
-        + Unpin
-        + Send
-        + 'static
-    where
-        R: RangeBounds<usize> + Send;
-
     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<Types>>
     where
         ID: Into<LeafId<Types>> + Send + Sync;
@@ -171,29 +151,68 @@ where
     where
         ID: Into<BlockId<Types>> + Send + Sync;
 
-    async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
+    async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+    async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+    async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+    async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+    async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
+    async fn get_vid_common_metadata_range<R>(
+        &self,
+        range: R,
+    ) -> FetchStream<VidCommonMetadata<Types>>
     where
         R: RangeBounds<usize> + Send + 'static;
+
+    async fn get_leaf_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<LeafQueryData<Types>>;
+
+    async fn get_block_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<BlockQueryData<Types>>;
+
+    async fn get_payload_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<PayloadQueryData<Types>>;
+
+    async fn get_payload_metadata_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<PayloadMetadata<Types>>;
+
+    async fn get_vid_common_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<VidCommonQueryData<Types>>;
+
+    async fn get_vid_common_metadata_range_rev(
+        &self,
+        start: Bound<usize>,
+        end: usize,
+    ) -> FetchStream<VidCommonMetadata<Types>>;
 
     /// Returns the transaction with the given `hash`.
     async fn get_transaction(

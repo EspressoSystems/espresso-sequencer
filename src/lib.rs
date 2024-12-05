@@ -259,7 +259,7 @@
 //! # use async_trait::async_trait;
 //! # use hotshot_query_service::{Header, QueryResult, VidShare};
 //! # use hotshot_query_service::availability::{
-//! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
+//! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, FetchStream, LeafId, LeafQueryData,
 //! #   PayloadMetadata, PayloadQueryData, TransactionHash, TransactionQueryData,
 //! #   VidCommonMetadata, VidCommonQueryData,
 //! # };
@@ -269,7 +269,7 @@
 //! # };
 //! # use hotshot_query_service::status::{HasMetrics, StatusDataSource};
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
-//! # use std::ops::RangeBounds;
+//! # use std::ops::{Bound, RangeBounds};
 //! # type AppQueryData = ();
 //! // Our AppState takes an underlying data source `D` which already implements the relevant
 //! // traits, and adds some state for use with other modules.
@@ -283,25 +283,6 @@
 //! impl<D: AvailabilityDataSource<AppTypes> + Send + Sync>
 //!     AvailabilityDataSource<AppTypes> for AppState<D>
 //! {
-//!     type LeafRange<R> = D::LeafRange<R>
-//!     where
-//!         R: RangeBounds<usize> + Send;
-//!     type BlockRange<R> = D::BlockRange<R>
-//!     where
-//!         R: RangeBounds<usize> + Send;
-//!     type PayloadRange<R> = D::PayloadRange<R>
-//!     where
-//!         R: RangeBounds<usize> + Send;
-//!     type PayloadMetadataRange<R> = D::PayloadMetadataRange<R>
-//!     where
-//!         R: RangeBounds<usize> + Send;
-//!     type VidCommonRange<R> = D::VidCommonRange<R>
-//!     where
-//!         R: RangeBounds<usize> + Send;
-//!     type VidCommonMetadataRange<R> = D::VidCommonMetadataRange<R>
-//!     where
-//!         R: RangeBounds<usize> + Send;
-//!
 //!     async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<AppTypes>>
 //!     where
 //!         ID: Into<LeafId<AppTypes>> + Send + Sync,
@@ -326,24 +307,30 @@
 //! #   where
 //! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
 //! #   async fn get_transaction(&self, hash: TransactionHash<AppTypes>) -> Fetch<TransactionQueryData<AppTypes>> { todo!() }
-//! #   async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
+//! #   async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<AppTypes>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+//! #   async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<AppTypes>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+//! #   async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<AppTypes>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+//! #   async fn get_payload_metadata_range<R>(&self, range: R) -> FetchStream<PayloadMetadata<AppTypes>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+//! #   async fn get_vid_common_range<R>(&self, range: R) -> FetchStream<VidCommonQueryData<AppTypes>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
-//! #   async fn get_vid_common_metadata_range<R>(&self, range: R) -> Self::VidCommonMetadataRange<R>
+//! #   async fn get_vid_common_metadata_range<R>(&self, range: R) -> FetchStream<VidCommonMetadata<AppTypes>>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
+//! #   async fn get_leaf_range_rev(&self, start: Bound<usize>, end: usize) -> FetchStream<LeafQueryData<AppTypes>> { todo!() }
+//! #   async fn get_block_range_rev(&self, start: Bound<usize>, end: usize) -> FetchStream<BlockQueryData<AppTypes>> { todo!() }
+//! #   async fn get_payload_range_rev(&self, start: Bound<usize>, end: usize) -> FetchStream<PayloadQueryData<AppTypes>> { todo!() }
+//! #   async fn get_payload_metadata_range_rev(&self, start: Bound<usize>, end: usize) -> FetchStream<PayloadMetadata<AppTypes>> { todo!() }
+//! #   async fn get_vid_common_range_rev(&self, start: Bound<usize>, end: usize) -> FetchStream<VidCommonQueryData<AppTypes>> { todo!() }
+//! #   async fn get_vid_common_metadata_range_rev(&self, start: Bound<usize>, end: usize) -> FetchStream<VidCommonMetadata<AppTypes>> { todo!() }
 //! }
 //!
 //! // Implement data source trait for node API by delegating to the underlying data source.
@@ -461,6 +448,7 @@ use vbs::version::StaticVersionType;
 
 pub use hotshot_types::{
     data::Leaf,
+    simple_certificate::QuorumCertificate,
     vid::{VidCommitment, VidCommon, VidShare},
 };
 
@@ -593,7 +581,7 @@ mod test {
     use super::*;
     use crate::{
         availability::{
-            AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, LeafId,
+            AvailabilityDataSource, BlockId, BlockInfo, BlockQueryData, Fetch, FetchStream, LeafId,
             LeafQueryData, PayloadMetadata, PayloadQueryData, TransactionHash,
             TransactionQueryData, UpdateAvailabilityData, VidCommonMetadata, VidCommonQueryData,
         },
@@ -611,7 +599,7 @@ mod test {
     use futures::future::FutureExt;
     use hotshot_types::simple_certificate::QuorumCertificate;
     use portpicker::pick_unused_port;
-    use std::ops::RangeBounds;
+    use std::ops::{Bound, RangeBounds};
     use std::time::Duration;
     use surf_disco::Client;
     use tempfile::TempDir;
@@ -627,31 +615,6 @@ mod test {
 
     #[async_trait]
     impl AvailabilityDataSource<MockTypes> for CompositeState {
-        type LeafRange<R>
-            = <MockDataSource as AvailabilityDataSource<MockTypes>>::LeafRange<R>
-        where
-            R: RangeBounds<usize> + Send;
-        type BlockRange<R>
-            = <MockDataSource as AvailabilityDataSource<MockTypes>>::BlockRange<R>
-        where
-            R: RangeBounds<usize> + Send;
-        type PayloadRange<R>
-            = <MockDataSource as AvailabilityDataSource<MockTypes>>::PayloadRange<R>
-        where
-            R: RangeBounds<usize> + Send;
-        type PayloadMetadataRange<R>
-            = <MockDataSource as AvailabilityDataSource<MockTypes>>::PayloadMetadataRange<R>
-        where
-            R: RangeBounds<usize> + Send;
-        type VidCommonRange<R>
-            = <MockDataSource as AvailabilityDataSource<MockTypes>>::VidCommonRange<R>
-        where
-            R: RangeBounds<usize> + Send;
-        type VidCommonMetadataRange<R>
-            = <MockDataSource as AvailabilityDataSource<MockTypes>>::VidCommonMetadataRange<R>
-        where
-            R: RangeBounds<usize> + Send;
-
         async fn get_leaf<ID>(&self, id: ID) -> Fetch<LeafQueryData<MockTypes>>
         where
             ID: Into<LeafId<MockTypes>> + Send + Sync,
@@ -688,31 +651,37 @@ mod test {
         {
             self.hotshot_qs.get_vid_common_metadata(id).await
         }
-        async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
+        async fn get_leaf_range<R>(&self, range: R) -> FetchStream<LeafQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_leaf_range(range).await
         }
-        async fn get_block_range<R>(&self, range: R) -> Self::BlockRange<R>
+        async fn get_block_range<R>(&self, range: R) -> FetchStream<BlockQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_block_range(range).await
         }
-        async fn get_payload_range<R>(&self, range: R) -> Self::PayloadRange<R>
+        async fn get_payload_range<R>(&self, range: R) -> FetchStream<PayloadQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_payload_range(range).await
         }
-        async fn get_payload_metadata_range<R>(&self, range: R) -> Self::PayloadMetadataRange<R>
+        async fn get_payload_metadata_range<R>(
+            &self,
+            range: R,
+        ) -> FetchStream<PayloadMetadata<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_payload_metadata_range(range).await
         }
-        async fn get_vid_common_range<R>(&self, range: R) -> Self::VidCommonRange<R>
+        async fn get_vid_common_range<R>(
+            &self,
+            range: R,
+        ) -> FetchStream<VidCommonQueryData<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
@@ -721,11 +690,57 @@ mod test {
         async fn get_vid_common_metadata_range<R>(
             &self,
             range: R,
-        ) -> Self::VidCommonMetadataRange<R>
+        ) -> FetchStream<VidCommonMetadata<MockTypes>>
         where
             R: RangeBounds<usize> + Send + 'static,
         {
             self.hotshot_qs.get_vid_common_metadata_range(range).await
+        }
+        async fn get_leaf_range_rev(
+            &self,
+            start: Bound<usize>,
+            end: usize,
+        ) -> FetchStream<LeafQueryData<MockTypes>> {
+            self.hotshot_qs.get_leaf_range_rev(start, end).await
+        }
+        async fn get_block_range_rev(
+            &self,
+            start: Bound<usize>,
+            end: usize,
+        ) -> FetchStream<BlockQueryData<MockTypes>> {
+            self.hotshot_qs.get_block_range_rev(start, end).await
+        }
+        async fn get_payload_range_rev(
+            &self,
+            start: Bound<usize>,
+            end: usize,
+        ) -> FetchStream<PayloadQueryData<MockTypes>> {
+            self.hotshot_qs.get_payload_range_rev(start, end).await
+        }
+        async fn get_payload_metadata_range_rev(
+            &self,
+            start: Bound<usize>,
+            end: usize,
+        ) -> FetchStream<PayloadMetadata<MockTypes>> {
+            self.hotshot_qs
+                .get_payload_metadata_range_rev(start, end)
+                .await
+        }
+        async fn get_vid_common_range_rev(
+            &self,
+            start: Bound<usize>,
+            end: usize,
+        ) -> FetchStream<VidCommonQueryData<MockTypes>> {
+            self.hotshot_qs.get_vid_common_range_rev(start, end).await
+        }
+        async fn get_vid_common_metadata_range_rev(
+            &self,
+            start: Bound<usize>,
+            end: usize,
+        ) -> FetchStream<VidCommonMetadata<MockTypes>> {
+            self.hotshot_qs
+                .get_vid_common_metadata_range_rev(start, end)
+                .await
         }
         async fn get_transaction(
             &self,

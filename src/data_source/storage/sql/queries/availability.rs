@@ -13,7 +13,7 @@
 //! Availability storage implementation for a database query engine.
 
 use super::{
-    super::transaction::{Transaction, TransactionMode},
+    super::transaction::{query, Transaction, TransactionMode},
     QueryBuilder, BLOCK_COLUMNS, LEAF_COLUMNS, PAYLOAD_COLUMNS, PAYLOAD_METADATA_COLUMNS,
     VID_COMMON_COLUMNS, VID_COMMON_METADATA_COLUMNS,
 };
@@ -246,7 +246,7 @@ where
             "SELECT {PAYLOAD_METADATA_COLUMNS}
               FROM header AS h
               JOIN payload AS p ON h.height = p.height
-              {where_clause}
+              {where_clause} AND p.num_transactions IS NOT NULL
               ORDER BY h.height ASC"
         );
         Ok(query
@@ -337,5 +337,16 @@ where
                 block.height()
             ),
         })
+    }
+
+    async fn first_available_leaf(&mut self, from: u64) -> QueryResult<LeafQueryData<Types>> {
+        let row = query(&format!(
+            "SELECT {LEAF_COLUMNS} FROM leaf WHERE height >= $1 ORDER BY height LIMIT 1"
+        ))
+        .bind(from as i64)
+        .fetch_one(self.as_mut())
+        .await?;
+        let leaf = LeafQueryData::from_row(&row)?;
+        Ok(leaf)
     }
 }

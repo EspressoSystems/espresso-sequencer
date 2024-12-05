@@ -14,5 +14,5 @@
 sql = { max-threads = 2 }
 
 [[profile.default.overrides]]
-filter = 'test(sql) | test(query_service) | test(no_storage)'
+filter = 'test(sql) | test(query_service)'
 test-group = 'sql'

@@ -248,8 +248,12 @@ where
                 .try_get::<String, _>("payload_hash")?
                 .parse()
                 .decode_error("malformed payload hash")?,
-            size: row.try_get::<i32, _>("payload_size")? as u64,
-            num_transactions: row.try_get::<i32, _>("num_transactions")? as u64,
+            size: row
+                .try_get::<Option<i32>, _>("payload_size")?
+                .ok_or(sqlx::Error::RowNotFound)? as u64,
+            num_transactions: row
+                .try_get::<Option<i32>, _>("num_transactions")?
+                .ok_or(sqlx::Error::RowNotFound)? as u64,
         })
     }
 }
