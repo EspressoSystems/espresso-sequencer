@@ -5,7 +5,7 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    parse_duration,
+    downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
 };
@@ -35,8 +35,6 @@ use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
-
-use super::{downgrade_commitment_map, downgrade_leaf, upgrade_commitment_map};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]

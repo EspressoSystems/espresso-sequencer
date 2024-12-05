@@ -28,7 +28,7 @@ use std::{
 
 use crate::ViewNumber;
 
-use super::{downgrade_commitment_map, downgrade_leaf, upgrade_commitment_map};
+use espresso_types::{downgrade_commitment_map, downgrade_leaf, upgrade_commitment_map};
 
 /// Options for file system backed persistence.
 #[derive(Parser, Clone, Debug)]

@@ -9,9 +9,7 @@
 //! persistence which is _required_ to run a node.
 
 use async_trait::async_trait;
-use committable::Committable;
-use espresso_types::{v0_99::ChainConfig, Leaf, Leaf2};
-use hotshot_types::{consensus::CommitmentMap, data::QuorumProposal};
+use espresso_types::v0_99::ChainConfig;
 
 pub mod fs;
 pub mod no_storage;
@@ -20,42 +18,6 @@ pub mod sql;
 #[async_trait]
 pub trait ChainConfigPersistence: Sized + Send + Sync {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
-}
-
-fn downgrade_leaf(leaf2: Leaf2) -> Leaf {
-    if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
-        panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
-    }
-    let quorum_proposal = QuorumProposal {
-        block_header: leaf2.block_header().clone(),
-        view_number: leaf2.view_number(),
-        justify_qc: leaf2.justify_qc().to_qc(),
-        upgrade_certificate: leaf2.upgrade_certificate(),
-        proposal_certificate: None,
-    };
-    let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
-    if let Some(payload) = leaf2.block_payload() {
-        leaf.fill_block_payload_unchecked(payload);
-    }
-    leaf
-}
-
-fn upgrade_commitment_map(map: CommitmentMap<Leaf>) -> CommitmentMap<Leaf2> {
-    map.into_values()
-        .map(|leaf| {
-            let leaf2: Leaf2 = leaf.into();
-            (leaf2.commit(), leaf2)
-        })
-        .collect()
-}
-
-fn downgrade_commitment_map(map: CommitmentMap<Leaf2>) -> CommitmentMap<Leaf> {
-    map.into_values()
-        .map(|leaf2| {
-            let leaf = downgrade_leaf(leaf2);
-            (<Leaf as Committable>::commit(&leaf), leaf)
-        })
-        .collect()
 }
 
 #[cfg(any(test, feature = "testing"))]

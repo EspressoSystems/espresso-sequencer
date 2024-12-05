@@ -13,12 +13,12 @@ use crate::service::{
     server_message::ServerMessage,
 };
 use async_lock::RwLock;
-use espresso_types::{PubKey, SeqTypes};
+use espresso_types::{downgrade_leaf, PubKey, SeqTypes};
 use futures::{
     channel::mpsc::{self, Receiver, SendError, Sender},
     Sink, SinkExt, Stream, StreamExt,
 };
-use hotshot_query_service::Leaf2;
+use hotshot_query_service::Leaf;
 use hotshot_types::event::{Event, EventType};
 use serde::{Deserialize, Serialize};
 use tokio::{spawn, task::JoinHandle};
@@ -88,7 +88,7 @@ impl HotShotEventProcessingTask {
     where
         S: Stream<Item = Event<SeqTypes>> + Send + Unpin + 'static,
         K1: Sink<Url, Error = SendError> + Send + Unpin + 'static,
-        K2: Sink<Leaf2<SeqTypes>, Error = SendError> + Send + Unpin + 'static,
+        K2: Sink<Leaf<SeqTypes>, Error = SendError> + Send + Unpin + 'static,
     {
         let task_handle = spawn(Self::process_messages(
             event_stream,
@@ -107,7 +107,7 @@ impl HotShotEventProcessingTask {
     where
         S: Stream<Item = Event<SeqTypes>> + Send + Unpin + 'static,
         K1: Sink<Url, Error = SendError> + Unpin,
-        K2: Sink<Leaf2<SeqTypes>, Error = SendError> + Unpin,
+        K2: Sink<Leaf<SeqTypes>, Error = SendError> + Unpin,
     {
         let mut event_stream = event_receiver;
         let mut url_sender = url_sender;
@@ -127,7 +127,8 @@ impl HotShotEventProcessingTask {
             match event {
                 EventType::Decide { leaf_chain, .. } => {
                     for leaf_info in leaf_chain.iter().rev() {
-                        let leaf = leaf_info.leaf.clone();
+                        let leaf2 = leaf_info.leaf.clone();
+                        let leaf = downgrade_leaf(leaf2);
 
                         let send_result = leaf_sender.send(leaf).await;
                         if let Err(err) = send_result {
@@ -279,7 +280,7 @@ impl Drop for ProcessExternalMessageHandlingTask {
 pub async fn create_node_validator_processing(
     config: NodeValidatorConfig,
     internal_client_message_receiver: Receiver<InternalClientMessage<Sender<ServerMessage>>>,
-    leaf_receiver: Receiver<Leaf2<SeqTypes>>,
+    leaf_receiver: Receiver<Leaf<SeqTypes>>,
 ) -> Result<NodeValidatorAPI<Sender<Url>>, CreateNodeValidatorProcessingError> {
     let client_thread_state = ClientThreadState::<Sender<ServerMessage>>::new(
         Default::default(),

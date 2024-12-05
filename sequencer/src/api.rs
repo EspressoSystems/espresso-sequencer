@@ -1315,8 +1315,10 @@ mod api_tests {
         for (leaf, qc) in chain1.iter().chain(&chain2) {
             tracing::info!(height = leaf.height(), "check archive");
             let qd = data_source.get_leaf(leaf.height() as usize).await.await;
-            assert_eq!(qd.leaf(), leaf);
-            assert_eq!(qd.qc(), qc);
+            let stored_leaf: Leaf2 = qd.leaf().clone().into();
+            let stored_qc = qd.qc().clone().to_qc2();
+            assert_eq!(&stored_leaf, leaf);
+            assert_eq!(&stored_qc, qc);
         }
     }
 

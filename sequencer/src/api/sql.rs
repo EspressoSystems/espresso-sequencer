@@ -255,7 +255,7 @@ async fn load_accounts<Mode: TransactionMode>(
         }
     }
 
-    Ok((snapshot, leaf.leaf().clone()))
+    Ok((snapshot, leaf.leaf().clone().into()))
 }
 
 async fn load_chain_config<Mode: TransactionMode>(
@@ -284,7 +284,7 @@ async fn reconstruct_state<Mode: TransactionMode>(
         .get_leaf((from_height as usize).into())
         .await
         .context(format!("leaf {from_height} not available"))?;
-    let from_leaf = from_leaf.leaf();
+    let from_leaf: Leaf2 = from_leaf.leaf().clone().into();
     ensure!(
         from_leaf.view_number() < to_view,
         "state reconstruction: starting state {:?} must be before ending state {to_view:?}",
@@ -301,7 +301,7 @@ async fn reconstruct_state<Mode: TransactionMode>(
     let mut parent = to_leaf.parent_commitment();
     tracing::debug!(?to_leaf, ?parent, view = ?to_view, "have required leaf");
     leaves.push_front(to_leaf.clone());
-    while parent != Committable::commit(from_leaf) {
+    while parent != Committable::commit(&from_leaf) {
         let leaf = get_leaf_from_proposal(tx, "leaf_hash = $1", &parent.to_string())
             .await
             .context(format!(
@@ -321,7 +321,7 @@ async fn reconstruct_state<Mode: TransactionMode>(
     let mut accounts = accounts.iter().copied().collect::<HashSet<_>>();
     // Add in all the accounts we will need to replay any of the headers, to ensure that we don't
     // need to do catchup recursively.
-    let (catchup, dependencies) = header_dependencies(tx, instance, parent, &leaves).await?;
+    let (catchup, dependencies) = header_dependencies(tx, instance, &parent, &leaves).await?;
     accounts.extend(dependencies);
     let accounts = accounts.into_iter().collect::<Vec<_>>();
     state.fee_merkle_tree = load_accounts(tx, from_height, &accounts)
@@ -350,8 +350,8 @@ async fn reconstruct_state<Mode: TransactionMode>(
     }
 
     // Apply subsequent headers to compute the later state.
-    for proposal in &leaves {
-        state = compute_state_update(&state, instance, &catchup, parent, proposal)
+    for proposal in leaves {
+        state = compute_state_update(&state, instance, &catchup, &parent, &proposal)
             .await
             .context(format!(
                 "unable to reconstruct state because state update {} failed",

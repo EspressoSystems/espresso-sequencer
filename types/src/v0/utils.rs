@@ -1,8 +1,14 @@
 use anyhow::Context;
 use bytesize::ByteSize;
 use clap::Parser;
+use committable::Committable;
 use derive_more::{From, Into};
 use futures::future::BoxFuture;
+use hotshot_types::{
+    consensus::CommitmentMap,
+    data::{Leaf, Leaf2, QuorumProposal},
+    traits::node_implementation::NodeType,
+};
 use rand::Rng;
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
 use serde::{Deserialize, Serialize};
@@ -18,6 +24,46 @@ use time::{
     format_description::well_known::Rfc3339 as TimestampFormat, macros::time, Date, OffsetDateTime,
 };
 use tokio::time::sleep;
+
+pub fn downgrade_leaf<Types: NodeType>(leaf2: Leaf2<Types>) -> Leaf<Types> {
+    if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
+        panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
+    }
+    let quorum_proposal = QuorumProposal {
+        block_header: leaf2.block_header().clone(),
+        view_number: leaf2.view_number(),
+        justify_qc: leaf2.justify_qc().to_qc(),
+        upgrade_certificate: leaf2.upgrade_certificate(),
+        proposal_certificate: None,
+    };
+    let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+    if let Some(payload) = leaf2.block_payload() {
+        leaf.fill_block_payload_unchecked(payload);
+    }
+    leaf
+}
+
+pub fn upgrade_commitment_map<Types: NodeType>(
+    map: CommitmentMap<Leaf<Types>>,
+) -> CommitmentMap<Leaf2<Types>> {
+    map.into_values()
+        .map(|leaf| {
+            let leaf2: Leaf2<Types> = leaf.into();
+            (leaf2.commit(), leaf2)
+        })
+        .collect()
+}
+
+pub fn downgrade_commitment_map<Types: NodeType>(
+    map: CommitmentMap<Leaf2<Types>>,
+) -> CommitmentMap<Leaf<Types>> {
+    map.into_values()
+        .map(|leaf2| {
+            let leaf = downgrade_leaf(leaf2);
+            (<Leaf<Types> as Committable>::commit(&leaf), leaf)
+        })
+        .collect()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Update<T> {

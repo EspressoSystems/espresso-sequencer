@@ -1375,8 +1375,7 @@ pub mod tests {
         let (_, _, _, mut data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
         let leaf_1 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
-            .await
-            .into();
+            .await;
         let block_1 = create_block_detail_from_leaf(&leaf_1);
         data_state.add_latest_block(clone_block_detail(&block_1));
 
@@ -1617,8 +1616,7 @@ pub mod tests {
 
         // send a new leaf
         let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
-            .await
-            .into();
+            .await;
         let expected_block = create_block_detail_from_leaf(&leaf);
         let arc_expected_block = Arc::new(expected_block);
 

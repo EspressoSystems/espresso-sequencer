@@ -11,7 +11,7 @@ use futures::{
     channel::mpsc::{self, Sender},
     FutureExt, Sink, SinkExt, Stream, StreamExt,
 };
-use hotshot_query_service::Leaf2;
+use hotshot_query_service::Leaf;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{CircuitField, StateVerKey};
 use hotshot_types::signature_key::BLSPubKey;
@@ -461,11 +461,11 @@ impl HotshotQueryServiceLeafStreamRetriever {
 }
 
 impl LeafStreamRetriever for HotshotQueryServiceLeafStreamRetriever {
-    type Item = Leaf2<SeqTypes>;
+    type Item = Leaf<SeqTypes>;
     type ItemError = hotshot_query_service::Error;
     type Error = hotshot_query_service::Error;
     type Stream = surf_disco::socket::Connection<
-        Leaf2<SeqTypes>,
+        Leaf<SeqTypes>,
         surf_disco::socket::Unsupported,
         Self::ItemError,
         Version01,
@@ -496,7 +496,7 @@ impl LeafStreamRetriever for HotshotQueryServiceLeafStreamRetriever {
                     "availability/stream/leaves/{}",
                     start_block_height
                 ))
-                .subscribe::<espresso_types::Leaf2>()
+                .subscribe::<espresso_types::Leaf>()
                 .await;
 
             let leaves_stream = match leaves_stream_result {
@@ -540,8 +540,8 @@ impl ProcessProduceLeafStreamTask {
     /// returned state.
     pub fn new<R, K>(leaf_stream_retriever: R, leaf_sender: K) -> Self
     where
-        R: LeafStreamRetriever<Item = Leaf2<SeqTypes>> + Send + Sync + 'static,
-        K: Sink<Leaf2<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>> + Send + Sync + 'static,
+        K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
         // let future = Self::process_consume_leaf_stream(leaf_stream_retriever, leaf_sender);
         let task_handle = spawn(Self::connect_and_process_leaves(
@@ -556,8 +556,8 @@ impl ProcessProduceLeafStreamTask {
 
     async fn connect_and_process_leaves<R, K>(leaf_stream_retriever: R, leaf_sender: K)
     where
-        R: LeafStreamRetriever<Item = Leaf2<SeqTypes>>,
-        K: Sink<Leaf2<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
+        K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
         // We want to try and ensure that we are connected to the HotShot Query
         // Service, and are consuming leaves.
@@ -596,7 +596,7 @@ impl ProcessProduceLeafStreamTask {
         leaf_stream_receiver: &R,
     ) -> Result<R::Stream, RetrieveLeafStreamError>
     where
-        R: LeafStreamRetriever<Item = Leaf2<SeqTypes>>,
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
     {
         let backoff_params = BackoffParams::default();
         let mut delay = Duration::ZERO;
@@ -639,8 +639,8 @@ impl ProcessProduceLeafStreamTask {
     /// will return.
     async fn process_consume_leaf_stream<R, K>(leaves_stream: R::Stream, leaf_sender: K)
     where
-        R: LeafStreamRetriever<Item = Leaf2<SeqTypes>>,
-        K: Sink<Leaf2<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
+        K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
         let mut leaf_sender = leaf_sender;
         let mut leaves_stream = leaves_stream;

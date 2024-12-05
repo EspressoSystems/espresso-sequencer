@@ -29,10 +29,9 @@ use tokio::{
 };
 
 use hotshot_orchestrator::client::OrchestratorClient;
-use hotshot_query_service::Leaf2;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{EpochNumber, ViewNumber},
+    data::{EpochNumber, Leaf2, ViewNumber},
     network::NetworkConfig,
     traits::{
         metrics::Metrics,
