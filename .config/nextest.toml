@@ -1,7 +1,16 @@
 [profile.default]
-slow-timeout = "2m"
+# Kill tests after 3 periods of 2m, because they are probably hanging
+slow-timeout = { period = "2m", terminate-after = 3 }
 default-filter = 'not (test(slow_) | package(tests))'
 retries = 2
+
+[[profile.default.overrides]]
+# This test is fast if it works (usually about 150ms) but sometimes hangs,
+# especially when running concurrently with other tests. Kill it after 500ms and
+# retry up to 10 times.
+filter = 'test(test_process_client_handling_stream_subscribe_node_identity)'
+slow-timeout = { period = "500ms", terminate-after = 1 }
+retries  = 10
 
 # The restart tests run an entire sequencing network, and so are quite resource intensive.
 [[profile.default.overrides]]
