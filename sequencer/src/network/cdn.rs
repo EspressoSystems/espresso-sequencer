@@ -27,6 +27,8 @@ pub enum Topic {
     Da = 1,
 }
 
+pub enum Namespace {}
+
 // Make sure the topics are the same as defined in `HotShot`.
 const_assert_eq!(Topic::Global as u8, HotShotTopic::Global as u8);
 const_assert_eq!(Topic::Da as u8, HotShotTopic::Da as u8);
@@ -44,6 +46,9 @@ impl<T: SignatureKey> SignatureScheme for WrappedSignatureKey<T> {
     type PublicKey = Self;
 
     /// Sign a message of arbitrary data and return the serialized signature
+    ///
+    /// The namespace is prefixed to the message before signing to prevent
+    /// signature replay attacks in different parts of the system.
     fn sign(
         private_key: &Self::PrivateKey,
         namespace: &str,
@@ -57,6 +62,9 @@ impl<T: SignatureKey> SignatureScheme for WrappedSignatureKey<T> {
     }
 
     /// Verify a message of arbitrary data and return the result
+    ///
+    /// The namespace is prefixed to the message before verification to prevent
+    /// signature replay attacks in different parts of the system.
     fn verify(
         public_key: &Self::PublicKey,
         namespace: &str,
