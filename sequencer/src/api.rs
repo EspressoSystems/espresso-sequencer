@@ -1801,13 +1801,16 @@ mod test {
         // The catchup should successfully retrieve the correct chain config.
         let node = &network.peers[0];
         let peers = node.node_state().peers;
-        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
+        peers.try_fetch_chain_config(0, cf.commit()).await.unwrap();
 
         // Test a catchup request for node #1, which is connected to a dishonest peer.
         // This request will result in an error due to the malicious chain config provided by the peer.
         let node = &network.peers[1];
         let peers = node.node_state().peers;
-        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
+        peers
+            .try_fetch_chain_config(0, cf.commit())
+            .await
+            .unwrap_err();
 
         network.server.shut_down().await;
         handle.abort();
