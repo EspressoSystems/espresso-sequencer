@@ -33,6 +33,7 @@ use jf_vid::VidScheme;
 use sqlx::Row;
 use sqlx::{query, Executor};
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use tempfile::TempDir;
 
 use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
@@ -81,14 +82,26 @@ pub struct SqliteOptions {
 }
 
 pub fn build_sqlite_path(path: &str) -> anyhow::Result<PathBuf> {
-    let sub_dir = PathBuf::from_str(path)?.join("sqlite");
+    let mut sub_dir = PathBuf::from_str(path)?.join("sqlite");
 
     // if `sqlite` sub dir does not exist then create it
     if !sub_dir.exists() {
-        std::fs::create_dir_all(&sub_dir)
-            .with_context(|| format!("failed to create directory: {:?}", sub_dir))?;
-    }
+        sub_dir = if let Ok(()) = std::fs::create_dir_all(&sub_dir) {
+            sub_dir
+        } else {
+            let temp = TempDir::new()
+                .with_context(|| "failed to initialize default storage directory".to_string())?;
 
+            let sub = &sub_dir.strip_prefix("/")?;
+            dbg!(&temp);
+            let temp = temp.path().join(sub);
+            dbg!(&temp);
+            std::fs::create_dir_all(&temp)
+                .with_context(|| format!("failed to create directory: {:?}", temp))?;
+            temp
+        };
+    };
+    dbg!(&sub_dir.join("database"));
     Ok(sub_dir.join("database"))
 }
 

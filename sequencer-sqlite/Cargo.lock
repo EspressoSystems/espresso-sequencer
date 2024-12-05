@@ -8441,6 +8441,7 @@ dependencies = [
  "strum",
  "surf-disco",
  "tagged-base64",
+ "tempfile",
  "tide-disco",
  "time 0.3.36",
  "tokio",

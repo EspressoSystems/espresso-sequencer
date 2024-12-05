@@ -41,6 +41,7 @@ vergen = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
+tempfile = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-broadcast = { workspace = true }
@@ -114,7 +115,6 @@ static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
-tempfile = { workspace = true, optional = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
