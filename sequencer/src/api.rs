@@ -1064,6 +1064,7 @@ mod api_tests {
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
+    use hotshot_types::drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT};
     use hotshot_types::{
         data::QuorumProposal2, event::LeafInfo, simple_certificate::QuorumCertificate,
         traits::node_implementation::ConsensusTime,
@@ -1253,8 +1254,8 @@ mod api_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: [0; 32],
-            drb_result: [0; 32],
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),

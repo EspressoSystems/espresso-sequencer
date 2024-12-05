@@ -1112,7 +1112,9 @@ mod test {
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        simple_certificate::QuorumCertificate, traits::signature_key::SignatureKey,
+        drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
+        simple_certificate::QuorumCertificate,
+        traits::signature_key::SignatureKey,
     };
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1135,8 +1137,8 @@ mod test {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: [0; 32],
-                drb_result: [0; 32],
+                drb_seed: INITIAL_DRB_SEED_INPUT,
+                drb_result: INITIAL_DRB_RESULT,
             },
             signature,
             _pd: Default::default(),

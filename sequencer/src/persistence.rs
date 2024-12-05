@@ -51,6 +51,7 @@ mod persistence_tests {
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
         data::{DaProposal, QuorumProposal2, VidDisperseShare, ViewNumber},
+        drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
         event::{EventType, HotShotAction, LeafInfo},
         message::Proposal,
         simple_certificate::{QuorumCertificate, UpgradeCertificate},
@@ -189,8 +190,8 @@ mod persistence_tests {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: [0; 32],
-                drb_result: [0; 32],
+                drb_seed: INITIAL_DRB_SEED_INPUT,
+                drb_result: INITIAL_DRB_RESULT,
             },
             signature,
             _pd: Default::default(),
@@ -602,8 +603,8 @@ mod persistence_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: [0; 32],
-            drb_result: [0; 32],
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
         };
         let mut qc = QuorumCertificate::genesis::<TestVersions>(
             &ValidatedState::default(),
