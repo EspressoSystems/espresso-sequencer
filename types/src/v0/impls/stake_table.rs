@@ -19,9 +19,11 @@ pub struct StaticCommittee<T: NodeType> {
     eligible_leaders: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake
+    // TODO I feel like this should be `HashSet` instead of `Vec`
     stake_table: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake
+    // TODO I feel like this should be `HashSet` instead of `Vec`
     da_stake_table: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake, indexed by public key
