@@ -488,9 +488,9 @@ impl Persistence {
             if hash.is_none() {
                 let view: i64 = row.try_get("view")?;
                 let data: Vec<u8> = row.try_get("data")?;
-                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                let proposal: Proposal<SeqTypes, QuorumProposal2<SeqTypes>> =
                     bincode::deserialize(&data)?;
-                let leaf = Leaf::from_quorum_proposal(&proposal.data);
+                let leaf = Leaf2::from_quorum_proposal(&proposal.data);
                 let leaf_hash = Committable::commit(&leaf);
                 tracing::info!(view, %leaf_hash, "populating quorum proposal leaf hash");
                 updates.push((view, leaf_hash.to_string()));
@@ -936,9 +936,9 @@ async fn collect_garbage(
         .map(|row| {
             let view: i64 = row.get("view");
             let leaf_data: Vec<u8> = row.get("leaf");
-            let leaf = bincode::deserialize::<Leaf2>(&leaf_data)?;
+            let leaf = bincode::deserialize::<Leaf>(&leaf_data)?;
             let qc_data: Vec<u8> = row.get("qc");
-            let qc = bincode::deserialize::<QuorumCertificate2<SeqTypes>>(&qc_data)?;
+            let qc = bincode::deserialize::<QuorumCertificate<SeqTypes>>(&qc_data)?;
             Ok((view as u64, (leaf, qc)))
         })
         .collect::<anyhow::Result<BTreeMap<_, _>>>()?;
@@ -1003,7 +1003,7 @@ async fn collect_garbage(
         }
 
         let leaf_info = LeafInfo {
-            leaf,
+            leaf: leaf.into(),
             vid_share,
 
             // Note: the following fields are not used in Decide event processing, and
@@ -1017,7 +1017,7 @@ async fn collect_garbage(
                 view_number: ViewNumber::new(view),
                 event: EventType::Decide {
                     leaf_chain: Arc::new(vec![leaf_info]),
-                    qc: Arc::new(qc),
+                    qc: Arc::new(qc.to_qc2()),
                     block_size: None,
                 },
             })
