@@ -30,7 +30,7 @@ contract StakeTable_register_Test is Test {
     S public stakeTable;
     ExampleToken public token;
     LightClientMock public lcMock;
-    uint256 public constant INITIAL_BALANCE = 1_000;
+    uint256 public constant INITIAL_BALANCE = 10 ether;
     address public exampleTokenCreator;
 
     function genClientWallet(address sender)
@@ -83,7 +83,7 @@ contract StakeTable_register_Test is Test {
     }
 
     function testFuzz_RevertWhen_InvalidBLSSig(uint256 scalar) external {
-        uint64 depositAmount = 10;
+        uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
 
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
@@ -111,7 +111,7 @@ contract StakeTable_register_Test is Test {
     //     LCMock.setCurrentEpoch(3);
     //     uint64 currentEpoch = stakeTable.currentEpoch();
 
-    //     uint64 depositAmount = 10;
+    //     uint64 depositAmount = 10 ether;
     //     vm.prank(exampleTokenCreator);
     //     token.approve(address(stakeTable), depositAmount);
 
@@ -150,7 +150,7 @@ contract StakeTable_register_Test is Test {
     // }
 
     function test_RevertWhen_NodeAlreadyRegistered() external {
-        uint64 depositAmount = 10;
+        uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
 
         (
@@ -174,7 +174,7 @@ contract StakeTable_register_Test is Test {
     }
 
     function test_RevertWhen_NoTokenAllowanceOrBalance() external {
-        uint64 depositAmount = 10;
+        uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 10;
 
         (
@@ -202,6 +202,24 @@ contract StakeTable_register_Test is Test {
         vm.stopPrank();
     }
 
+    function test_RevertWhen_WrongStakeAmount() external {
+        uint64 depositAmount = 5 ether;
+        uint64 validUntilEpoch = 10;
+
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator);
+
+        assertEq(ERC20(token).balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+        vm.prank(exampleTokenCreator);
+        // The call to register is expected to fail because the depositAmount has not been approved
+        // and thus the stake table contract cannot lock the stake.
+        vm.expectRevert(abi.encodeWithSelector(S.InsufficientStakeAmount.selector, depositAmount));
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+    }
+
     /// @dev Tests a correct registration
     function test_Registration_succeeds() external {
         (
@@ -210,7 +228,7 @@ contract StakeTable_register_Test is Test {
             BN254.G1Point memory sig
         ) = genClientWallet(exampleTokenCreator);
 
-        uint64 depositAmount = 10;
+        uint64 depositAmount = 10 ether;
         uint64 validUntilEpoch = 5;
 
         // Prepare for the token transfer

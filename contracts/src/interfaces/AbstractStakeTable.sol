@@ -52,14 +52,13 @@ abstract contract AbstractStakeTable {
     /// @notice Represents a HotShot validator node
     /// In the dual-staking model, a HotShot validator could have multiple `Node` entries.
     /// @param account The Ethereum account of the validator.
-    /// @param stakeType The type of token staked.
     /// @param balance The amount of token staked.
     /// @param registerEpoch The starting epoch for the validator.
     /// @param exitEpoch The ending epoch for the validator.
     /// @param schnorrVK The Schnorr verification key associated.
     struct Node {
         address account;
-        uint64 balance;
+        uint256 balance;
         uint64 registerEpoch;
         uint64 exitEpoch;
         EdOnBN254.EdOnBN254Point schnorrVK;
@@ -68,7 +67,7 @@ abstract contract AbstractStakeTable {
     // === Table State & Stats ===
 
     /// @notice Look up the balance of `blsVK`
-    function lookupStake(BN254.G2Point memory blsVK) external view virtual returns (uint64);
+    function lookupStake(BN254.G2Point memory blsVK) external view virtual returns (uint256);
     /// @notice Look up the full `Node` state associated with `blsVK`
     function lookupNode(BN254.G2Point memory blsVK) external view virtual returns (Node memory);
 
@@ -102,7 +101,7 @@ abstract contract AbstractStakeTable {
     function register(
         BN254.G2Point memory blsVK,
         EdOnBN254.EdOnBN254Point memory schnorrVK,
-        uint64 amount,
+        uint256 amount,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external virtual;
@@ -112,10 +111,10 @@ abstract contract AbstractStakeTable {
     /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(BN254.G2Point memory blsVK, uint64 amount)
+    function deposit(BN254.G2Point memory blsVK, uint256 amount)
         external
         virtual
-        returns (uint64, uint64);
+        returns (uint256, uint64);
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
@@ -127,5 +126,5 @@ abstract contract AbstractStakeTable {
     ///
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G2Point memory blsVK) external virtual returns (uint64);
+    function withdrawFunds(BN254.G2Point memory blsVK) external virtual returns (uint256);
 }

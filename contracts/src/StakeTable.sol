@@ -44,14 +44,11 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when the staker does not have the sufficient balance on the stake ERC20 token
     error InsufficientBalance(uint256, uint256);
 
+    // Error raised when the staker does not register with the correct stakeAmount
+    error InsufficientStakeAmount(uint256);
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(bytes32 keyHash => Node node) public nodes;
-
-    /// Total native stake locked for the latest stake table (HEAD).
-    uint256 public totalNativeStake;
-
-    /// Total restaked stake locked for the latest stake table (HEAD).
-    uint256 public totalRestakedStake;
 
     /// Total stake locked;
     uint256 public totalStake;
@@ -110,7 +107,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Look up the balance of `blsVK`
     /// @param blsVK BLS public key controlled by the user.
     /// @return Current balance owned by the user.
-    function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint64) {
+    function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint256) {
         Node memory node = this.lookupNode(blsVK);
         return node.balance;
     }
@@ -218,18 +215,30 @@ contract StakeTable is AbstractStakeTable {
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
     /// (cannot be smaller than the current epoch)
     ///
-    /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
-    /// the contract only treat it as auxiliary info submitted by `blsVK`.
-    /// @dev `blsSig` field is necessary to prevent "rogue public-key attack".
+    /// @dev The function will revert if the sender does not have the correct stake amount.
+    /// @dev The function will revert if the sender does not have the correct allowance.
+    /// @dev The function will revert if the sender does not have the correct balance.
+    /// @dev The function will revert if the sender does not have the correct BLS signature.
+    /// `blsSig` field is necessary to prevent "rogue public-key attack".
     /// The signature is over the caller address of the function to ensure that each message is
     /// unique.
+    /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
+    /// the contract only treat it as auxiliary info submitted by `blsVK`.
+    /// @dev The function will revert if the sender does not have the correct registration epoch.
     function register(
         BN254.G2Point memory blsVK,
         EdOnBN254.EdOnBN254Point memory schnorrVK,
-        uint64 amount,
+        uint256 amount,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external override {
+        uint256 fixedStakeAmount = this.minStakeAmount();
+
+        // Verify that the sender amount is the minStakeAmount
+        if (amount < fixedStakeAmount) {
+            revert InsufficientStakeAmount(amount);
+        }
+
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
@@ -240,14 +249,14 @@ contract StakeTable is AbstractStakeTable {
 
         // Verify that this contract has permissions to access the validator's stake token.
         uint256 allowance = ERC20(tokenAddress).allowance(msg.sender, address(this));
-        if (allowance < amount) {
-            revert InsufficientAllowance(allowance, amount);
+        if (allowance < fixedStakeAmount) {
+            revert InsufficientAllowance(allowance, fixedStakeAmount);
         }
 
         // Verify that the validator has the balance for this stake token.
         uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
-        if (balance < amount) {
-            revert InsufficientBalance(balance, amount);
+        if (balance < fixedStakeAmount) {
+            revert InsufficientBalance(balance, fixedStakeAmount);
         }
 
         // Verify that the validator can sign for that blsVK
@@ -265,20 +274,22 @@ contract StakeTable is AbstractStakeTable {
         appendRegistrationQueue(registerEpoch, queueSize);
 
         // Transfer the stake amount of ERC20 tokens from the sender to this contract.
-        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+        SafeTransferLib.safeTransferFrom(
+            ERC20(tokenAddress), msg.sender, address(this), fixedStakeAmount
+        );
 
         // Update the total staked amount
-        totalStake += amount;
+        totalStake += fixedStakeAmount;
 
         // Create an entry for the node.
         node.account = msg.sender;
-        node.balance = amount;
+        node.balance = fixedStakeAmount;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registerEpoch;
 
         nodes[key] = node;
 
-        emit Registered(key, registerEpoch, amount);
+        emit Registered(key, registerEpoch, fixedStakeAmount);
     }
 
     /// @notice Deposit more stakes to registered keys
@@ -287,10 +298,10 @@ contract StakeTable is AbstractStakeTable {
     /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(BN254.G2Point memory blsVK, uint64 amount)
+    function deposit(BN254.G2Point memory blsVK, uint256 amount)
         external
         override
-        returns (uint64, uint64)
+        returns (uint256, uint64)
     {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
@@ -358,18 +369,25 @@ contract StakeTable is AbstractStakeTable {
     ///
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint64) {
+    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint256) {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
         if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
             revert PrematureWithdrawal();
         }
-        uint64 balance = node.balance;
+        uint256 balance = node.balance;
         delete nodes[key];
 
         SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
 
         return balance;
+    }
+
+    /// @notice Minimum stake amount
+    /// @return Minimum stake amount
+    /// TODO: This value should be a variable modifiable by admin
+    function minStakeAmount() external pure returns (uint256) {
+        return 10 ether;
     }
 }
