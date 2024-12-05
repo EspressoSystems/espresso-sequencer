@@ -15,10 +15,11 @@ testing = [
   "hotshot-query-service/testing",
 ]
 benchmarking = []
+embedded-db = ["hotshot-query-service/embedded-db"]
 
 [[bin]]
 name = "espresso-dev-node"
-required-features = ["testing"]
+required-features = ["testing", "embedded-db"]
 
 [dev-dependencies]
 escargot = "0.5.10"
@@ -29,10 +30,10 @@ hotshot-testing = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
-tempfile = { workspace = true }
 
 # Enable "testing" feature when running tests
 sequencer = { path = ".", features = [ "testing" ] }
+tempfile = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -47,7 +48,6 @@ async-lock = { workspace = true }
 async-once-cell = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
-parking_lot = "0.12"
 todo_by = "0.3"
 
 # CDN imports
@@ -77,8 +77,6 @@ hotshot-state-prover = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
-marketplace-builder-core = { workspace = true, optional = true }
-marketplace-builder-shared = { workspace = true, optional = true }
 
 hotshot-types = { workspace = true }
 include_dir = "0.7"
@@ -86,13 +84,16 @@ itertools = { workspace = true }
 jf-crhf = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-rescue = { workspace = true }
-tempfile = { workspace = true, optional = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
 libp2p = { workspace = true }
+libp2p-networking = { workspace = true }
+marketplace-builder-core = { workspace = true, optional = true }
+marketplace-builder-shared = { workspace = true, optional = true }
 marketplace-solver = { path = "../marketplace-solver" }
 num_enum = "0.7"
+parking_lot = "0.12"
 portpicker = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
@@ -113,6 +114,7 @@ static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
+tempfile = { workspace = true, optional = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }

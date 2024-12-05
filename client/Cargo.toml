@@ -9,6 +9,7 @@ publish = false
 anyhow = { workspace = true }
 espresso-types = { path = "../types" }
 ethers = { workspace = true }
+futures = { workspace = true }
 jf-merkle-tree = { workspace = true }
 surf-disco = { workspace = true }
 tokio = { workspace = true }

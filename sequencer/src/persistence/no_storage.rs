@@ -29,7 +29,7 @@ pub struct Options;
 impl PersistenceOptions for Options {
     type Persistence = NoStorage;
 
-    async fn create(self) -> anyhow::Result<Self::Persistence> {
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
         Ok(NoStorage)
     }
 
