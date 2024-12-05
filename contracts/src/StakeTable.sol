@@ -37,6 +37,13 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when a user tries to withdraw funds before the exit escrow period is over.
     error PrematureWithdrawal();
 
+    // Error raised when this contract does not have the sufficient allowance on the stake ERC20
+    // token
+    error InsufficientAllowance(uint256, uint256);
+
+    // Error raised when the staker does not have the sufficient balance on the stake ERC20 token
+    error InsufficientBalance(uint256, uint256);
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(bytes32 keyHash => Node node) public nodes;
 
@@ -45,6 +52,9 @@ contract StakeTable is AbstractStakeTable {
 
     /// Total restaked stake locked for the latest stake table (HEAD).
     uint256 public totalRestakedStake;
+
+    /// Total stake locked;
+    uint256 public totalStake;
 
     /// Address of the native token contract.
     address public tokenAddress;
@@ -95,14 +105,6 @@ contract StakeTable is AbstractStakeTable {
     /// @return current epoch (computed from the current block)
     function currentEpoch() public pure returns (uint64) {
         return 0;
-    }
-
-    /// @notice Total stakes of the registered keys in the latest stake table (Head).
-    /// @dev Given that the current implementation does not support restaking, the second value of
-    /// the output is set to 0.
-    /// @return The total stake for native token and restaked token respectively.
-    function totalStake() external view override returns (uint256, uint256) {
-        return (totalNativeStake, totalRestakedStake);
     }
 
     /// @notice Look up the balance of `blsVK`
@@ -211,7 +213,6 @@ contract StakeTable is AbstractStakeTable {
     /// @param blsVK The BLS verification key
     /// @param schnorrVK The Schnorr verification key (as the auxiliary info)
     /// @param amount The amount to register
-    /// @param stakeType The type of staking (native or restaking)
     /// @param blsSig The BLS signature that authenticates the ethereum account this function is
     /// called from
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
@@ -226,14 +227,9 @@ contract StakeTable is AbstractStakeTable {
         BN254.G2Point memory blsVK,
         EdOnBN254.EdOnBN254Point memory schnorrVK,
         uint64 amount,
-        StakeType stakeType,
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external override {
-        if (stakeType != StakeType.Native) {
-            revert RestakingNotImplemented();
-        }
-
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
 
@@ -255,22 +251,21 @@ contract StakeTable is AbstractStakeTable {
             revert NodeAlreadyRegistered();
         }
 
+        // Transfer the stake amount of ERC20 tokens from the sender to this contract.
+        SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
+
+        // Update the total staked amount
+        totalStake += amount;
+
         // Create an entry for the node.
         node.account = msg.sender;
         node.balance = amount;
-        node.stakeType = stakeType;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registerEpoch;
 
         nodes[key] = node;
 
-        // Lock the deposited tokens in this contract.
-        if (stakeType == StakeType.Native) {
-            totalNativeStake += amount;
-            SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
-        } // Other case will be implemented when we support restaking
-
-        emit Registered(key, registerEpoch, stakeType, amount);
+        emit Registered(key, registerEpoch, amount);
     }
 
     /// @notice Deposit more stakes to registered keys
