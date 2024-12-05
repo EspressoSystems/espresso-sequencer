@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{bail, ensure, Context};
 use espresso_types::{
-    traits::StateCatchup, v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
+    traits::StateCatchup, v0_99::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
     Leaf2, ValidatedState,
 };
 use futures::future::Future;
@@ -166,6 +166,7 @@ where
         .write()
         .await
         .context("opening transaction for state update")?;
+
     store_state_update(&mut tx, proposed_leaf.height(), &state, delta).await?;
 
     if parent_chain_config != state.chain_config {

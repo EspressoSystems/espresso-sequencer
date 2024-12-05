@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use hotshot::traits::election::static_committee::StaticCommittee;
+
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
     signature_key::BLSPubKey,
@@ -9,43 +10,61 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
 };
+
 use serde::{Deserialize, Serialize};
 
 mod header;
+
 mod impls;
+
 pub mod traits;
+
 mod utils;
+
 pub use header::Header;
+
 pub use impls::{
     get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
     StateValidationError,
 };
+
 pub use utils::*;
+
 use vbs::version::{StaticVersion, StaticVersionType};
 
 #[cfg(any(test, feature = "testing"))]
 pub use impls::mock;
 
 // This is the single source of truth for minor versions supported by this major version.
+
 //
+
 // It is written as a higher-level macro which takes a macro invocation as an argument and appends
+
 // the comma-separated list of minor version identifiers to the arguments of the given invocation.
+
 // This is to get around Rust's lazy macro expansion: this macro forces expansion of the given
+
 // invocation. We would rather write something like `some_macro!(args, minor_versions!())`, but the
+
 // `minor_versions!()` argument would not be expanded for pattern-matching in `some_macro!`, so
+
 // instead we write `with_minor_versions!(some_macro!(args))`.
+
 macro_rules! with_minor_versions {
     ($m:ident!($($arg:tt),*)) => {
-        $m!($($arg,)* v0_1, v0_2, v0_3);
+        $m!($($arg,)* v0_1, v0_2, v0_3, v0_99);
     };
 }
 
 // Define sub-modules for each supported minor version.
+
 macro_rules! define_modules {
     ($($m:ident),+) => {
         $(pub mod $m;)+
     };
 }
+
 with_minor_versions!(define_modules!());
 
 macro_rules! assert_eq_all_versions_of_type {
@@ -70,6 +89,7 @@ macro_rules! reexport_unchanged_types {
         )+
     }
 }
+
 reexport_unchanged_types!(
     AccountQueryData,
     BlockMerkleCommitment,
@@ -123,6 +143,7 @@ reexport_unchanged_types!(
     ViewBasedUpgrade,
     BlockSize,
 );
+
 pub(crate) use v0_3::{
     L1ClientMetrics, L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient,
 };
@@ -130,6 +151,7 @@ pub(crate) use v0_3::{
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
 )]
+
 pub struct SeqTypes;
 
 impl NodeType for SeqTypes {
@@ -145,7 +167,9 @@ impl NodeType for SeqTypes {
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
+
 #[derive(Clone, Default, Debug, Copy)]
+
 pub struct SequencerVersions<Base: StaticVersionType, Upgrade: StaticVersionType> {
     _pd: PhantomData<(Base, Upgrade)>,
 }
@@ -175,23 +199,32 @@ impl<Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static> Ve
 pub type MockSequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
 
 pub type V0_0 = StaticVersion<0, 0>;
+
 pub type V0_1 = StaticVersion<0, 1>;
+
 pub type FeeVersion = StaticVersion<0, 2>;
-pub type MarketplaceVersion = StaticVersion<0, 3>;
-pub type EpochVersion = StaticVersion<0, 4>;
+
+pub type EpochVersion = StaticVersion<0, 100>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
+
 pub type Leaf2 = hotshot_types::data::Leaf2<SeqTypes>;
+
 pub type Event = hotshot::types::Event<SeqTypes>;
 
 pub type PubKey = BLSPubKey;
+
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 pub type NetworkConfig = hotshot_types::network::NetworkConfig<PubKey>;
 
 pub use self::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};
+
 pub use crate::v0_1::{
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
-use crate::v0_3::SolverAuctionResults;
+
+use crate::v0_99::SolverAuctionResults;
+
+pub type MarketplaceVersion = StaticVersion<0, 99>;

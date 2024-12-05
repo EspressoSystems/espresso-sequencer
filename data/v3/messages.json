@@ -8,19 +8,13 @@
             "data": {
               "block_header": {
                 "fields": {
-                  "auction_results": {
-                    "reserve_bids": [],
-                    "view_number": 0,
-                    "winning_bids": []
-                  },
                   "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
                   "builder_commitment": "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_",
-                  "builder_signature": [],
+                  "builder_signature": null,
                   "chain_config": {
                     "chain_config": {
                       "Left": {
                         "base_fee": "0",
-                        "bid_recipient": null,
                         "chain_id": "35353",
                         "fee_contract": null,
                         "fee_recipient": "0x0000000000000000000000000000000000000000",
@@ -28,12 +22,10 @@
                       }
                     }
                   },
-                  "fee_info": [
-                    {
-                      "account": "0x0000000000000000000000000000000000000000",
-                      "amount": "0"
-                    }
-                  ],
+                  "fee_info": {
+                    "account": "0x0000000000000000000000000000000000000000",
+                    "amount": "0"
+                  },
                   "fee_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAKA",
                   "height": 0,
                   "l1_finalized": null,
@@ -106,7 +98,7 @@
         "General": {
           "Vote": {
             "data": {
-              "leaf_commit": "COMMIT~OKSLSeNGssYMfKSuB2uAM78yenmn7z8DaeAZYsIhcy-c"
+              "leaf_commit": "COMMIT~EfU0gW2LYJvl8O-KeUQ7-RWlFZpHufcuRotW-QHXNy80"
             },
             "signature": [
               "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U",

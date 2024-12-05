@@ -4,7 +4,7 @@ use std::{
 };
 
 use espresso_types::{
-    v0_3::{BidTx, RollupRegistration, RollupUpdate},
+    v0_99::{BidTx, RollupRegistration, RollupUpdate},
     NamespaceId,
 };
 use futures::FutureExt;

@@ -4,11 +4,10 @@ use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
 use committable::Committable;
+use espresso_types::traits::SequencerPersistence;
 use espresso_types::{
-    v0::traits::{PersistenceOptions, StateCatchup},
-    v0_3::ChainConfig,
-    BackoffParams, BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment,
-    FeeMerkleTree, Leaf2, NodeState,
+    v0::traits::StateCatchup, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, FeeAccount,
+    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NodeState,
 };
 use futures::future::{Future, FutureExt};
 use hotshot_types::{
@@ -53,10 +52,10 @@ impl<ApiVer: StaticVersionType> Client<ServerError, ApiVer> {
 /// A catchup implementation that falls back to a remote provider, but prefers a local provider when
 /// supported.
 pub(crate) async fn local_and_remote(
-    local_opt: impl PersistenceOptions,
+    persistence: impl SequencerPersistence,
     remote: impl StateCatchup + 'static,
 ) -> Arc<dyn StateCatchup> {
-    match local_opt.create_catchup_provider(*remote.backoff()).await {
+    match persistence.into_catchup_provider(*remote.backoff()) {
         Ok(local) => Arc::new(vec![local, Arc::new(remote)]),
         Err(err) => {
             tracing::warn!("not using local catchup: {err:#}");

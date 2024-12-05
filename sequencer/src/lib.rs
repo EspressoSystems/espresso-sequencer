@@ -7,16 +7,17 @@ mod external_event_handler;
 pub mod options;
 pub mod state_signature;
 
+mod restart_tests;
+
 mod message_compat_tests;
 
 use anyhow::Context;
 use catchup::StatePeers;
 use context::{ProposalFetcherConfig, SequencerContext};
 use espresso_types::{
-    traits::EventConsumer, BackoffParams, L1Client, L1ClientOptions, NodeState, PubKey, SeqTypes,
+    traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
-use ethers::types::U256;
 use futures::FutureExt;
 use genesis::L1Finalized;
 use hotshot::traits::election::static_committee::StaticCommittee;
@@ -32,7 +33,7 @@ use url::Url;
 pub mod persistence;
 pub mod state;
 use derivative::Derivative;
-use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
+use espresso_types::v0::traits::SequencerPersistence;
 pub use genesis::Genesis;
 use hotshot::traits::implementations::{
     derive_libp2p_multiaddr, CombinedNetworks, GossipConfig, Libp2pNetwork, RequestResponseConfig,
@@ -50,13 +51,11 @@ use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
-    network::NetworkConfig,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
-        network::{ConnectedNetwork, Topic},
+        network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType, Versions},
-        signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
     utils::BuilderCommitment,
     ValidatorConfig,
@@ -64,9 +63,12 @@ use hotshot_types::{
 pub use options::Options;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
+use std::{fmt::Debug, marker::PhantomData};
 use vbs::version::{StaticVersion, StaticVersionType};
 pub mod network;
+
+mod run;
+pub use run::main;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
 #[derive(Derivative, Serialize, Deserialize)]
@@ -186,19 +188,19 @@ pub struct L1Params {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn init_node<P: PersistenceOptions, V: Versions>(
+pub async fn init_node<P: SequencerPersistence, V: Versions>(
     genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    persistence_opt: P,
+    persistence: P,
     l1_params: L1Params,
     seq_versions: V,
     event_consumer: impl EventConsumer + 'static,
     is_da: bool,
     identity: Identity,
-    marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P::Persistence>>,
+    marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P>>,
     proposal_fetcher_config: ProposalFetcherConfig,
-) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, V>> {
+) -> anyhow::Result<SequencerContext<network::Production, P, V>> {
     // Expose git information via status API.
     metrics
         .text_family(
@@ -299,7 +301,6 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
     // Print the libp2p public key
     info!("Starting Libp2p with PeerID: {}", libp2p_public_key);
 
-    let persistence = persistence_opt.clone().create().await?;
     let (mut network_config, wait_for_orchestrator) = match (
         persistence.load_config().await?,
         network_params.config_peers,
@@ -504,7 +505,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         genesis_state,
         l1_genesis: Some(l1_genesis),
         peers: catchup::local_and_remote(
-            persistence_opt,
+            persistence.clone(),
             StatePeers::<SequencerApiVersion>::from_urls(
                 network_params.state_peers,
                 network_params.catchup_backoff,
@@ -545,15 +546,20 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::{collections::HashMap, time::Duration};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        time::Duration,
+    };
 
     use catchup::NullStateCatchup;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
-        Event, FeeAccount, MarketplaceVersion, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, L1Client, MarketplaceVersion, NetworkConfig, PubKey, SeqTypes,
+        Transaction, Upgrade,
     };
+    use ethers::types::U256;
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -569,9 +575,12 @@ pub mod testing {
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
+    use hotshot_types::traits::network::Topic;
+    use hotshot_types::traits::signature_key::StakeTableEntryType;
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
+        traits::signature_key::BuilderSignatureKey,
         traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
         HotShotConfig, PeerConfig,
     };
@@ -892,7 +901,7 @@ pub mod testing {
             &self,
             i: usize,
             mut state: ValidatedState,
-            persistence_opt: P,
+            mut persistence_opt: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
             stake_table_capacity: u64,
@@ -931,11 +940,13 @@ pub mod testing {
             let builder_account = Self::builder_key().fee_account();
             tracing::info!(%builder_account, "prefunding builder account");
             state.prefund_account(builder_account, U256::max_value().into());
+
+            let persistence = persistence_opt.create().await.unwrap();
             let node_state = NodeState::new(
                 i as u64,
                 state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(self.l1_url.clone()).await.unwrap(),
-                catchup::local_and_remote(persistence_opt.clone(), catchup).await,
+                catchup::local_and_remote(persistence.clone(), catchup).await,
                 V::Base::VERSION,
             )
             .with_current_version(V::Base::version())
@@ -954,6 +965,8 @@ pub mod testing {
                 state_key = %my_peer_config.state_ver_key,
                 "starting node",
             );
+
+            let persistence = persistence_opt.create().await.unwrap();
             SequencerContext::init(
                 NetworkConfig {
                     config,
@@ -964,7 +977,7 @@ pub mod testing {
                 validator_config,
                 membership,
                 node_state,
-                persistence_opt.create().await.unwrap(),
+                persistence,
                 network,
                 self.state_relay_url.clone(),
                 metrics,

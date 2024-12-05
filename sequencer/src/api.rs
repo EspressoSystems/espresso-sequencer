@@ -8,9 +8,9 @@ use committable::Commitment;
 use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, MockSequencerVersions, NodeState,
-    PubKey, Transaction, ValidatedState,
+    retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
+    ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -20,7 +20,6 @@ use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
     event::Event,
@@ -41,7 +40,7 @@ use self::data_source::{
     HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
 };
 use crate::{
-    catchup::CatchupStorage, context::Consensus, network, state_signature::StateSigner, SeqTypes,
+    catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
     SequencerApiVersion, SequencerContext,
 };
 
@@ -491,11 +490,13 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> StateSig
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use std::time::Duration;
-
     use committable::Committable;
+    use hotshot_state_prover::service::light_client_genesis_from_stake_table;
+    use std::time::Duration;
     use tokio::{spawn, time::sleep};
 
+    use crate::network;
+    use espresso_types::MockSequencerVersions;
     use espresso_types::{
         v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
@@ -1053,6 +1054,7 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
 
+    use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
         Header, Leaf, Leaf2, NamespaceId,
@@ -1079,6 +1081,7 @@ mod api_tests {
     use vbs::version::StaticVersion;
 
     use super::{update::ApiEventConsumer, *};
+    use crate::network;
     use crate::{
         persistence::no_storage::NoStorage,
         testing::{wait_for_decide_on_handle, TestConfigBuilder},
@@ -1336,8 +1339,9 @@ mod test {
     use espresso_types::{
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
-        TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
+        MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1871,7 +1875,7 @@ mod test {
         setup_test();
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: None,
@@ -1903,7 +1907,7 @@ mod test {
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
@@ -1912,7 +1916,7 @@ mod test {
             stop_voting_time: None,
         });
 
-        let upgrade_type = UpgradeType::Fee {
+        let upgrade_type = UpgradeType::Marketplace {
             chain_config: ChainConfig {
                 max_block_size: 400.into(),
                 base_fee: 2.into(),
@@ -1985,6 +1989,7 @@ mod test {
                 _ => continue,
             }
         };
+        tracing::info!(?new_version_first_view, "seen upgrade proposal");
 
         let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
@@ -2016,8 +2021,11 @@ mod test {
                 .map(|state| state.chain_config.resolve())
                 .collect();
 
+            tracing::info!(?height, ?new_version_first_view, "checking config");
+
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
+                tracing::info!(?configs, "configs");
                 if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
@@ -2054,7 +2062,7 @@ mod test {
                     .state(Default::default())
                     .status(Default::default()),
             )
-            .persistences(persistence)
+            .persistences(persistence.clone())
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
         let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
@@ -2111,12 +2119,7 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let persistence: [_; NUM_NODES] = storage
-            .iter()
-            .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+
         let config = TestNetworkConfigBuilder::default()
             .api_config(
                 SqlDataSource::options(&storage[0], Options::with_port(port))

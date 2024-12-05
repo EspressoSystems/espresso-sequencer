@@ -7,13 +7,19 @@ doc *args:
 demo *args:
     docker compose up {{args}}
 
-demo-native *args:
-    cargo build --profile test
+demo-native *args: build
     scripts/demo-native {{args}}
 
-demo-native-mp:
-    cargo build --release
-    scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml
+build:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    # Use the same target dir for both `build` invocations
+    export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-target}
+    cargo build --profile test
+    cargo build --profile test --manifest-path ./sequencer-sqlite/Cargo.toml
+
+demo-native-mp *args: build
+    scripts/demo-native -f process-compose.yaml -f process-compose-mp.yml {{args}}
 
 demo-native-benchmark:
     cargo build --release --features benchmarking
@@ -38,22 +44,30 @@ anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test *args:
-	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
-	cargo nextest run --locked --workspace --all-features --verbose {{args}}
+    @echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
+    @echo 'features: "embedded-db"'
+    cargo nextest run --locked --workspace --features embedded-db --verbose {{args}}
+    cargo nextest run --locked --workspace --verbose {{args}}
 
 test-slow:
-	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
-	cargo nextest run --locked --release --workspace --all-features --verbose --profile slow
+    @echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
+    @echo 'features: "embedded-db"'
+    cargo nextest run --locked --release --workspace --features embedded-db --verbose --profile slow
+    cargo nextest run --locked --release --workspace --verbose --profile slow
 
 test-all:
-	cargo nextest run --locked --release --workspace --all-features --verbose --profile all
+    @echo 'features: "embedded-db"'
+    cargo nextest run --locked --release --workspace --features embedded-db --verbose --profile all
+    cargo nextest run --locked --release --workspace --verbose --profile all
 
 test-integration:
 	@echo 'NOTE that demo-native must be running for this test to succeed.'
 	cargo nextest run --all-features --nocapture --profile integration
 
 clippy:
-    cargo clippy --workspace --all-features --all-targets -- -D warnings
+    @echo 'features: "embedded-db"'
+    cargo clippy --workspace --features embedded-db --all-targets -- -D warnings
+    cargo clippy --workspace -- -D warnings
 
 check-features *args:
     cargo hack check --each-feature {{args}}
