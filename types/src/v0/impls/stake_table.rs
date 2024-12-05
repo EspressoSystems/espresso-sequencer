@@ -7,7 +7,12 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use std::{cmp::max, collections::BTreeMap, num::NonZeroU64, str::FromStr};
+use std::{
+    cmp::max,
+    collections::{BTreeMap, HashSet},
+    num::NonZeroU64,
+    str::FromStr,
+};
 use thiserror::Error;
 use url::Url;
 
@@ -20,11 +25,11 @@ pub struct StaticCommittee<T: NodeType> {
 
     /// The nodes on the committee and their stake
     // TODO I feel like this should be `HashSet` instead of `Vec`
-    stake_table: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
+    stake_table: HashSet<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake
     // TODO I feel like this should be `HashSet` instead of `Vec`
-    da_stake_table: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
+    da_stake_table: HashSet<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake, indexed by public key
     indexed_stake_table:
@@ -55,7 +60,7 @@ impl<TYPES: NodeType> StaticCommittee<TYPES> {
             .provider
             .get_stake_table::<TYPES>(l1_block_height, self.contract_address.unwrap())
             .await;
-        self.stake_table = table;
+        self.stake_table = HashSet::from_iter(table);
     }
     // We need a constructor to match our concrete type.
     pub fn new_stake(
@@ -109,8 +114,8 @@ impl<TYPES: NodeType> StaticCommittee<TYPES> {
 
         Self {
             eligible_leaders,
-            stake_table: members,
-            da_stake_table: da_members,
+            stake_table: HashSet::from_iter(members),
+            da_stake_table: HashSet::from_iter(da_members),
             indexed_stake_table,
             indexed_da_stake_table,
             epoch_size,
@@ -127,7 +132,7 @@ pub struct LeaderLookupError;
 impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
     type Error = LeaderLookupError;
 
-    /// DO NOT USE. Dummy constructor to comply w/ trait.
+    // DO NOT USE. Dummy constructor to comply w/ trait.
     fn new(
         // TODO remove `new` from trait and remove this fn as well.
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
@@ -177,8 +182,8 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
 
         Self {
             eligible_leaders,
-            stake_table: members,
-            da_stake_table: da_members,
+            stake_table: HashSet::from_iter(members),
+            da_stake_table: HashSet::from_iter(da_members),
             indexed_stake_table,
             indexed_da_stake_table,
             epoch_size: 12, // TODO get the real number from config (I think)
@@ -191,14 +196,14 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         &self,
         _epoch: <TYPES as NodeType>::Epoch,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
-        self.stake_table.clone()
+        self.stake_table.clone().into_iter().collect()
     }
     /// Get the stake table for the current view
     fn da_stake_table(
         &self,
         _epoch: <TYPES as NodeType>::Epoch,
     ) -> Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> {
-        self.da_stake_table.clone()
+        self.da_stake_table.clone().into_iter().collect()
     }
 
     /// Get all members of the committee for the current view
