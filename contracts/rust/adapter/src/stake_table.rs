@@ -1,17 +1,21 @@
 use crate::jellyfish::u256_to_field;
 use ark_ec::{
-    twisted_edwards::{Affine, TECurveConfig},
+    short_weierstrass,
+    twisted_edwards::{self, Affine, TECurveConfig},
     AffineRepr,
 };
-use ark_ff::{BigInteger, Fp2, Fp2Config, PrimeField};
-use contract_bindings::permissioned_stake_table::{EdOnBN254Point, NodeInfo};
-use derive_more::derive::From;
+use ark_ed_on_bn254::EdwardsConfig;
+use ark_ff::{BigInteger, PrimeField};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use contract_bindings::permissioned_stake_table::{self, EdOnBN254Point, NodeInfo};
+use diff_test_bn254::ParsedG2Point;
 use ethers::{
     abi::AbiDecode,
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::{network::PeerConfigKeys, signature_key::BLSPubKey};
+use hotshot_types::{light_client::StateVerKey, signature_key::BLSPubKey};
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 // TODO: (alex) maybe move these commonly shared util to a crate
@@ -48,6 +52,13 @@ impl From<ParsedEdOnBN254Point> for EdOnBN254Point {
             x: value.x,
             y: value.y,
         }
+    }
+}
+
+impl From<EdOnBN254Point> for ParsedEdOnBN254Point {
+    fn from(value: EdOnBN254Point) -> Self {
+        let EdOnBN254Point { x, y } = value;
+        Self { x, y }
     }
 }
 
@@ -95,86 +106,71 @@ where
     }
 }
 
-// /// Intermediate representation of `G2Point` in Solidity
-// #[derive(Clone, PartialEq, Eq, Debug, EthAbiType, EthAbiCodec)]
-// pub struct ParsedG2Point {
-//     /// x0 of x = x0 + u * x1 coordinate
-//     pub x0: U256,
-//     /// x1 of x = x0 + u * x1 coordinate
-//     pub x1: U256,
-//     /// y0 of y = y0 + u * y1 coordinate
-//     pub y0: U256,
-//     /// y1 of y = y0 + u * y1 coordinate
-//     pub y1: U256,
-// }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NodeInfoJf {
+    pub stake_table_key: BLSPubKey,
+    pub state_ver_key: StateVerKey,
+    pub da: bool,
+}
 
-// impl FromStr for ParsedG2Point {
-//     type Err = AbiError;
-//     fn from_str(s: &str) -> Result<Self, Self::Err> {
-//         let parsed: (Self,) = AbiDecode::decode_hex(s)?;
-//         Ok(parsed.0)
-//     }
-// }
+impl From<NodeInfoJf> for NodeInfo {
+    fn from(value: NodeInfoJf) -> Self {
+        let NodeInfoJf {
+            stake_table_key,
+            state_ver_key,
+            da,
+        } = value;
+        let ParsedG2Point { x0, x1, y0, y1 } = stake_table_key.to_affine().into();
+        let schnorr: ParsedEdOnBN254Point = state_ver_key.to_affine().into();
+        Self {
+            bls_vk: permissioned_stake_table::G2Point {
+                x_0: x0,
+                x_1: x1,
+                y_0: y0,
+                y_1: y1,
+            },
+            schnorr_vk: schnorr.into(),
+            is_da: da,
+        }
+    }
+}
 
-// impl<P: TECurveConfig<BaseField = Fp2<C>>, C> From<ParsedG2Point> for Affine<P>
-// where
-//     C: Fp2Config,
-// {
-//     fn from(p: ParsedG2Point) -> Self {
-//         Self::new_unchecked(
-//             Fp2::new(u256_to_field(p.x0), u256_to_field(p.x1)),
-//             Fp2::new(u256_to_field(p.y0), u256_to_field(p.y1)),
-//         )
-//     }
-// }
-
-// impl<P: TECurveConfig<BaseField = Fp2<C>>, C> From<Affine<P>> for ParsedG2Point
-// where
-//     C: Fp2Config,
-// {
-//     fn from(p: Affine<P>) -> Self {
-//         Self {
-//             x0: field_to_u256(p.x().unwrap().c0),
-//             x1: field_to_u256(p.x().unwrap().c1),
-//             y0: field_to_u256(p.y().unwrap().c0),
-//             y1: field_to_u256(p.y().unwrap().c1),
-//         }
-//     }
-// }
-
-// pub trait ToAffine {
-//     fn to_affine(&self) -> Affine<P>;
-// }
-// impl<P: TECurveConfig<BaseField = Fp2<C>>, C> ToAffine for BLSPubKey
-// where
-//     C: Fp2Config,
-// {
-//     fn to_affine(&self) -> Affine<P> {
-//         self.to_affine()
-//     }
-// }
-
-#[derive(Clone, Debug, From)]
-pub struct NodeInfoSol(NodeInfo);
-
-// impl From<> for NodeInfoSol {
-//     fn from(p: PeerConfigKeys<BLSPubKey>) -> Self {
-//         let bls: ParsedG2Point = p.stake_table_key.to_affine().into();
-//         let schnorr: ParsedG1Point = p.state_ver_key.to_affine().into();
-//         Self(NodeInfo {
-//             bls_vk: bls.into(),
-//             schnorr_vk: schnorr.into(),
-//             is_da: p.da,
-//         })
-//     }
-// }
-
-// impl From<NodeInfoSol> for PeerConfigKeys<BLSPubKey> {
-//     fn from(p: NodeInfoSol) -> Self {
-//         PeerConfigKeys {
-//             bls_pub_key: p.0.bls_pub_key,
-//             ip: p.0.ip,
-//             port: p.0.port,
-//         }
-//     }
-// }
+impl From<NodeInfo> for NodeInfoJf {
+    fn from(value: NodeInfo) -> Self {
+        let NodeInfo {
+            bls_vk,
+            schnorr_vk,
+            is_da,
+        } = value;
+        let stake_table_key = {
+            let g2 = diff_test_bn254::ParsedG2Point {
+                x0: bls_vk.x_0,
+                x1: bls_vk.x_1,
+                y0: bls_vk.y_0,
+                y1: bls_vk.y_1,
+            };
+            let g2_affine = short_weierstrass::Affine::<ark_bn254::g2::Config>::from(g2);
+            let mut bytes = vec![];
+            // TODO: remove serde round-trip once jellyfin provides a way to
+            // convert from Affine representation to VerKey.
+            //
+            // Serialization and de-serialization shouldn't fail.
+            g2_affine
+                .into_group()
+                .serialize_compressed(&mut bytes)
+                .unwrap();
+            BLSPubKey::deserialize_compressed(&bytes[..]).unwrap()
+        };
+        let state_ver_key = {
+            let g1_point: ParsedEdOnBN254Point = schnorr_vk.into();
+            let state_sk_affine = twisted_edwards::Affine::<EdwardsConfig>::from(g1_point);
+            StateVerKey::from(state_sk_affine)
+        };
+        Self {
+            stake_table_key,
+            state_ver_key,
+            da: is_da,
+        }
+        .into()
+    }
+}

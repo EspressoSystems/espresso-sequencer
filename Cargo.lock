@@ -2847,11 +2847,7 @@ name = "espresso-types"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "ark-bn254",
- "ark-ec",
- "ark-ed-on-bn254",
  "ark-serialize",
- "ark-std",
  "async-broadcast",
  "async-trait",
  "base64-bytes",
@@ -4134,6 +4130,7 @@ dependencies = [
  "jf-utils",
  "num-bigint",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
