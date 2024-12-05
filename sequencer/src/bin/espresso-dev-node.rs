@@ -604,6 +604,7 @@ mod tests {
                 "ESPRESSO_SEQUENCER_STORAGE_PATH",
                 tmp_dir.path().as_os_str(),
             )
+            .env("ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS", "25")
             .spawn()
             .unwrap();
 
@@ -910,6 +911,7 @@ mod tests {
                 "ESPRESSO_SEQUENCER_STORAGE_PATH",
                 tmp_dir.path().as_os_str(),
             )
+            .env("ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS", "25")
             .spawn()
             .unwrap();
 
