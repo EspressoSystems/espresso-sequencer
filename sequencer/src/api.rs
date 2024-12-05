@@ -4,11 +4,11 @@ use anyhow::{bail, Context};
 use async_lock::RwLock;
 use async_once_cell::Lazy;
 use async_trait::async_trait;
-use committable::{Commitment, Committable};
+use committable::Commitment;
 use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    retain_accounts, v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData,
+    retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
     BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
     ValidatedState,
 };
@@ -193,7 +193,6 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             .read()
             .await
             .memberships
-            .quorum_membership
             .stake_table(epoch)
     }
 }
@@ -287,9 +286,9 @@ impl<
         let handle = handle.read().await;
         let consensus = handle.consensus();
         let mut consensus = consensus.write().await;
-        let (state, delta, leaf_commit) = match consensus.validated_state_map().get(&view) {
+        let (state, delta) = match consensus.validated_state_map().get(&view) {
             Some(View {
-                view_inner: ViewInner::Leaf { state, delta, leaf },
+                view_inner: ViewInner::Leaf { state, delta, .. },
             }) => {
                 let mut state = (**state).clone();
 
@@ -308,7 +307,7 @@ impl<
                     };
                 }
 
-                (Arc::new(state), delta.clone(), *leaf)
+                (Arc::new(state), delta.clone())
             }
             _ => {
                 // If we don't already have a leaf for this view, or if we don't have the view
@@ -317,23 +316,10 @@ impl<
                 // map to ensure consistency.
                 let mut state = ValidatedState::from_header(leaf.block_header());
                 state.fee_merkle_tree = tree.clone();
-                let res = (Arc::new(state), None, Committable::commit(&leaf));
-                consensus
-                    .update_saved_leaves(leaf, &handle.hotshot.upgrade_lock)
-                    .await;
-                res
+                (Arc::new(state), None)
             }
         };
-        if let Err(err) = consensus.update_validated_state_map(
-            view,
-            View {
-                view_inner: ViewInner::Leaf {
-                    state,
-                    delta,
-                    leaf: leaf_commit,
-                },
-            },
-        ) {
+        if let Err(err) = consensus.update_leaf(leaf, Arc::clone(&state), delta) {
             tracing::warn!(?view, "cannot update fetched account state: {err:#}");
         }
         tracing::info!(?view, "updated with fetched account state");
@@ -685,8 +671,6 @@ pub mod test_helpers {
             {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.marketplace_builder_port(),
-                    NodeState::default().with_current_version(V::Base::VERSION),
-                    cfg.state[0].clone(),
                 )
                 .await;
                 builder_tasks.push(task);
@@ -1073,15 +1057,16 @@ mod api_tests {
     use espresso_types::MockSequencerVersions;
     use espresso_types::{
         traits::{EventConsumer, PersistenceOptions},
-        Header, Leaf, NamespaceId,
+        Header, Leaf, Leaf2, NamespaceId,
     };
     use ethers::utils::Anvil;
     use futures::{future, stream::StreamExt};
     use hotshot_query_service::availability::{
         AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
     };
+    use hotshot_types::drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT};
     use hotshot_types::{
-        data::QuorumProposal, event::LeafInfo, simple_certificate::QuorumCertificate,
+        data::QuorumProposal2, event::LeafInfo, simple_certificate::QuorumCertificate,
         traits::node_implementation::ConsensusTime,
     };
 
@@ -1255,7 +1240,7 @@ mod api_tests {
         // Create two non-consecutive leaf chains.
         let mut chain1 = vec![];
 
-        let mut quorum_proposal = QuorumProposal::<SeqTypes> {
+        let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
             block_header: Leaf::genesis(&Default::default(), &NodeState::mock())
                 .await
                 .block_header()
@@ -1265,22 +1250,26 @@ mod api_tests {
                 &ValidatedState::default(),
                 &NodeState::mock(),
             )
-            .await,
+            .await
+            .to_qc2(),
             upgrade_certificate: None,
-            proposal_certificate: None,
+            view_change_evidence: None,
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
             &ValidatedState::default(),
             &NodeState::mock(),
         )
-        .await;
+        .await
+        .to_qc2();
 
         let mut justify_qc = qc.clone();
         for i in 0..5 {
             *quorum_proposal.block_header.height_mut() = i;
             quorum_proposal.view_number = ViewNumber::new(i);
             quorum_proposal.justify_qc = justify_qc;
-            let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+            let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
             justify_qc = qc.clone();
@@ -1327,12 +1316,14 @@ mod api_tests {
         for (leaf, qc) in chain1.iter().chain(&chain2) {
             tracing::info!(height = leaf.height(), "check archive");
             let qd = data_source.get_leaf(leaf.height() as usize).await.await;
-            assert_eq!(qd.leaf(), leaf);
-            assert_eq!(qd.qc(), qc);
+            let stored_leaf: Leaf2 = qd.leaf().clone().into();
+            let stored_qc = qd.qc().clone().to_qc2();
+            assert_eq!(&stored_leaf, leaf);
+            assert_eq!(&stored_qc, qc);
         }
     }
 
-    fn leaf_info(leaf: Leaf) -> LeafInfo<SeqTypes> {
+    fn leaf_info(leaf: Leaf2) -> LeafInfo<SeqTypes> {
         LeafInfo {
             leaf,
             vid_share: None,
@@ -1351,8 +1342,9 @@ mod test {
     use espresso_types::{
         traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        BackoffParams, FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions,
-        TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
+        MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1886,7 +1878,7 @@ mod test {
         setup_test();
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: None,
@@ -1918,7 +1910,7 @@ mod test {
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
@@ -1927,7 +1919,7 @@ mod test {
             stop_voting_time: None,
         });
 
-        let upgrade_type = UpgradeType::Fee {
+        let upgrade_type = UpgradeType::Marketplace {
             chain_config: ChainConfig {
                 max_block_size: 400.into(),
                 base_fee: 2.into(),
@@ -2000,6 +1992,7 @@ mod test {
                 _ => continue,
             }
         };
+        tracing::info!(?new_version_first_view, "seen upgrade proposal");
 
         let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
@@ -2031,8 +2024,11 @@ mod test {
                 .map(|state| state.chain_config.resolve())
                 .collect();
 
+            tracing::info!(?height, ?new_version_first_view, "checking config");
+
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
+                tracing::info!(?configs, "configs");
                 if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);

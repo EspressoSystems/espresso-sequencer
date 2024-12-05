@@ -239,7 +239,7 @@ where
             signer_bit_vec_var[stake_table_capacity - 1].0,
         )?);
     }
-    let acc_amount_var = circuit.sum(&signed_amount_var)?;
+    let acc_amount_var = PlonkCircuit::sum(&mut circuit, &signed_amount_var)?;
     circuit.enforce_leq(stake_table_state_pub_var.threshold, acc_amount_var)?;
 
     // checking the commitment for the list of schnorr keys

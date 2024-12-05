@@ -6,8 +6,8 @@ use committable::Commitment;
 use committable::Committable;
 use espresso_types::traits::SequencerPersistence;
 use espresso_types::{
-    v0::traits::StateCatchup, v0_3::ChainConfig, BackoffParams, BlockMerkleTree, FeeAccount,
-    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf, NodeState,
+    v0::traits::StateCatchup, v0_99::ChainConfig, BackoffParams, BlockMerkleTree, FeeAccount,
+    FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree, Leaf2, NodeState,
 };
 use futures::future::{Future, FutureExt};
 use hotshot_types::{
@@ -262,7 +262,7 @@ pub(crate) trait CatchupStorage: Sync {
         _height: u64,
         _view: ViewNumber,
         _accounts: &[FeeAccount],
-    ) -> impl Send + Future<Output = anyhow::Result<(FeeMerkleTree, Leaf)>> {
+    ) -> impl Send + Future<Output = anyhow::Result<(FeeMerkleTree, Leaf2)>> {
         // Merklized state catchup is only supported by persistence backends that provide merklized
         // state storage. This default implementation is overridden for those that do. Otherwise,
         // catchup can still be provided by fetching undecided merklized state from consensus
@@ -316,7 +316,7 @@ where
         height: u64,
         view: ViewNumber,
         accounts: &[FeeAccount],
-    ) -> anyhow::Result<(FeeMerkleTree, Leaf)> {
+    ) -> anyhow::Result<(FeeMerkleTree, Leaf2)> {
         self.inner()
             .get_accounts(instance, height, view, accounts)
             .await
@@ -407,7 +407,7 @@ where
 
         if cf.commit() != commitment {
             panic!(
-                "Critical error: Mismatched chain config detected. Expected chain config: {:?}, but got: {:?}. 
+                "Critical error: Mismatched chain config detected. Expected chain config: {:?}, but got: {:?}.
                 This may indicate a compromised database",
                 commitment,
                 cf.commit()

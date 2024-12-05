@@ -4,7 +4,7 @@ use anyhow::Context;
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
 use clap::Parser;
-use committable::{Commitment, Committable};
+use committable::Commitment;
 use derivative::Derivative;
 use espresso_types::{
     parse_duration,
@@ -16,8 +16,9 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
+    traits::election::static_committee::StaticCommittee,
     types::{Event, EventType, SystemContextHandle},
-    MarketplaceConfig, Memberships, SystemContext,
+    MarketplaceConfig, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 use parking_lot::Mutex;
@@ -28,10 +29,9 @@ use tokio::{
 };
 
 use hotshot_orchestrator::client::OrchestratorClient;
-use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::{EpochNumber, ViewNumber},
+    data::{EpochNumber, Leaf2, ViewNumber},
     network::NetworkConfig,
     traits::{
         metrics::Metrics,
@@ -123,7 +123,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     pub async fn init(
         network_config: NetworkConfig<PubKey>,
         validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
-        memberships: Memberships<SeqTypes>,
+        membership: StaticCommittee<SeqTypes>,
         instance_state: NodeState,
         persistence: P,
         network: Arc<N>,
@@ -173,7 +173,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             validator_config.private_key.clone(),
             instance_state.node_id,
             config.clone(),
-            memberships,
+            membership,
             network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),
@@ -318,7 +318,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.handle.write().await.shut_down().await
     }
 
-    pub async fn decided_leaf(&self) -> Leaf<SeqTypes> {
+    pub async fn decided_leaf(&self) -> Leaf2<SeqTypes> {
         self.handle.read().await.decided_leaf().await
     }
 
@@ -478,7 +478,7 @@ async fn handle_events<V: Versions>(
 #[tracing::instrument(skip_all)]
 async fn scan_proposals<N, P, V>(
     consensus: Arc<RwLock<Consensus<N, P, V>>>,
-    fetcher: Sender<(ViewNumber, Commitment<Leaf<SeqTypes>>)>,
+    fetcher: Sender<(ViewNumber, Commitment<Leaf2<SeqTypes>>)>,
 ) where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
@@ -504,7 +504,7 @@ async fn scan_proposals<N, P, V>(
 async fn fetch_proposals<N, P, V>(
     consensus: Arc<RwLock<Consensus<N, P, V>>>,
     persistence: Arc<impl SequencerPersistence>,
-    mut scanner: Receiver<(ViewNumber, Commitment<Leaf<SeqTypes>>)>,
+    mut scanner: Receiver<(ViewNumber, Commitment<Leaf2<SeqTypes>>)>,
     fetch_timeout: Duration,
 ) where
     N: ConnectedNetwork<PubKey>,
@@ -550,7 +550,7 @@ async fn fetch_proposals<N, P, V>(
                 .context("error saving fetched proposal")?;
 
             // Add the fetched leaf to HotShot state, so consensus can make use of it.
-            let leaf = Leaf::from_quorum_proposal(&proposal.data);
+            let leaf = Leaf2::from_quorum_proposal(&proposal.data);
             let handle = consensus.read().await;
             let consensus = handle.consensus();
             let mut consensus = consensus.write().await;
@@ -561,20 +561,10 @@ async fn fetch_proposals<N, P, V>(
                     view_inner: ViewInner::Da { .. }
                 })
             ) {
-                let v = View {
-                    view_inner: ViewInner::Leaf {
-                        leaf: Committable::commit(&leaf),
-                        state: Arc::new(ValidatedState::from_header(leaf.block_header())),
-                        delta: None,
-                    },
-                };
-                if let Err(err) = consensus.update_validated_state_map(view, v) {
-                    tracing::warn!("unable to update validated state map: {err:#}");
+                let state = Arc::new(ValidatedState::from_header(leaf.block_header()));
+                if let Err(err) = consensus.update_leaf(leaf, state, None) {
+                    tracing::warn!("unable to update leaf: {err:#}");
                 }
-                consensus
-                    .update_saved_leaves(leaf, &handle.hotshot.upgrade_lock)
-                    .await;
-                tracing::debug!("added view to validated state map view proposal fetcher");
             }
 
             Ok(())
