@@ -16,15 +16,12 @@ use ethers::{
     utils::hex,
 };
 use futures::future::{BoxFuture, FutureExt};
-use hotshot::types::SignatureKey;
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
 };
 use std::sync::Arc;
 use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
-
-use crate::stake_table::PermissionedStakeTableConfig;
 
 /// Set of predeployed contracts.
 #[derive(Clone, Debug, Parser)]
