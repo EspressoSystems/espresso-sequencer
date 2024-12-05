@@ -23,7 +23,7 @@ pub trait ChainConfigPersistence: Sized + Send + Sync {
 }
 
 fn downgrade_leaf(leaf2: Leaf2) -> Leaf {
-    if leaf2.drb_seed != [0; 96] && leaf2.drb_result != [0; 32] {
+    if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
         panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
     }
     let quorum_proposal = QuorumProposal {
@@ -227,7 +227,7 @@ mod persistence_tests {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: [0; 96],
+                drb_seed: [0; 32],
                 drb_result: [0; 32],
             },
             signature,
@@ -640,7 +640,7 @@ mod persistence_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: [0; 96],
+            drb_seed: [0; 32],
             drb_result: [0; 32],
         };
         let mut qc = QuorumCertificate::genesis::<TestVersions>(

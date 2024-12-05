@@ -1253,7 +1253,7 @@ mod api_tests {
             .to_qc2(),
             upgrade_certificate: None,
             view_change_evidence: None,
-            drb_seed: [0; 96],
+            drb_seed: [0; 32],
             drb_result: [0; 32],
         };
         let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(

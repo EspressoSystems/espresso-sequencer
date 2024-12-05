@@ -782,7 +782,7 @@ impl SequencerPersistence for Persistence {
         }
 
         let stmt = format!(
-            "INSERT INTO highest_voted_view (id, view) VALUES (0, $1) 
+            "INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
             ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(highest_voted_view.view, excluded.view)"
         );
 
@@ -1137,7 +1137,7 @@ mod test {
                 .to_qc2(),
                 upgrade_certificate: None,
                 view_change_evidence: None,
-                drb_seed: [0; 96],
+                drb_seed: [0; 32],
                 drb_result: [0; 32],
             },
             signature,
