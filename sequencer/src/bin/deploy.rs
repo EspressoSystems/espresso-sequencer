@@ -118,8 +118,8 @@ struct Options {
     ///
     /// public_keys = [
     ///   {
-    ///     stake_table_key = "BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U",
-    ///     state_ver_key = "SCHNORR_VER_KEY~lJqDaVZyM0hWP2Br52IX5FeE-dCAIC-dPX7bL5-qUx-vjbunwe-ENOeZxj6FuOyvDCFzoGeP7yZ0fM995qF-CRE",
+    ///     stake_table_key = "BLS_VER_KEY~...",
+    ///     state_ver_key = "SCHNORR_VER_KEY~...",
     ///     da = true,
     ///   },
     /// ]

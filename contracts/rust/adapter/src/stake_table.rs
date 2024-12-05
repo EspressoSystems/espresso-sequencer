@@ -171,7 +171,6 @@ impl From<NodeInfo> for NodeInfoJf {
             state_ver_key,
             da: is_da,
         }
-        .into()
     }
 }
 
