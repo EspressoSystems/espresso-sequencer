@@ -2759,7 +2759,6 @@ dependencies = [
  "committable",
  "contract-bindings",
  "derive_more 1.0.0",
- "dyn-clone",
  "ethers",
  "fluent-asserter",
  "futures",
@@ -4109,7 +4108,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.62"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.74#d17f0d667b590b5131d30b47ce1842eb59035127"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=jb/leaf-fetching#adad23f8c7466bead1a614b155e6fc905cd3a6e2"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -8403,7 +8402,6 @@ dependencies = [
  "derivative",
  "derive_more 1.0.0",
  "dotenvy",
- "dyn-clone",
  "espresso-types",
  "ethers",
  "futures",
