@@ -4270,7 +4270,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.62"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=jb/leaf-fetching#adad23f8c7466bead1a614b155e6fc905cd3a6e2"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.75#fec63771185ca66f618d983aad6f84683f1bc8e1"
 dependencies = [
  "anyhow",
  "ark-serialize",
