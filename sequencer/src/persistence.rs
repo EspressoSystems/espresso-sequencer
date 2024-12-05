@@ -24,7 +24,7 @@ pub trait ChainConfigPersistence: Sized + Send + Sync {
 
 fn downgrade_leaf(leaf2: Leaf2) -> Leaf {
     if leaf2.drb_seed != [0; 96] && leaf2.drb_result != [0; 32] {
-        tracing::error!("Losing DRB information!");
+        panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
     }
     let quorum_proposal = QuorumProposal {
         block_header: leaf2.block_header().clone(),
