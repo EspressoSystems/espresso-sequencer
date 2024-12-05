@@ -108,7 +108,6 @@
         RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
         RUST_BACKTRACE = 1;
         RUST_LOG = "info";
-        RUSTFLAGS=" --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" --cfg hotshot_example";
       in {
       	checks = {
           pre-commit-check = pre-commit-hooks.lib.${system}.run {
