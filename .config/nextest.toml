@@ -6,8 +6,8 @@ retries = 2
 
 [[profile.default.overrides]]
 # This test is fast if it works (usually about 150ms) but sometimes hangs,
-# especially when running concurrently with other tests. Kill it after 500ms and
-# retry up to 10 times.
+# especially when running concurrently with other tests. Kill it after a while
+# and retry up to 10 times.
 filter = 'test(test_process_client_handling_stream_subscribe_node_identity)'
 slow-timeout = { period = "2s", terminate-after = 1 }
 retries  = 10
