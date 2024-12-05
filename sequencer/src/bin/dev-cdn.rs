@@ -4,7 +4,10 @@
 use std::path::Path;
 
 use anyhow::Result;
-use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as BrokerConfig};
+use cdn_broker::{
+    reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
+    Broker, Config as BrokerConfig,
+};
 use cdn_marshal::{Config as MarshalConfig, Marshal};
 use clap::Parser;
 use espresso_types::SeqTypes;
@@ -68,6 +71,9 @@ async fn main() -> Result<()> {
             public_key: WrappedSignatureKey(public_key),
             private_key,
         },
+
+        user_message_hook: NoMessageHook,
+        broker_message_hook: NoMessageHook,
 
         ca_cert_path: None,
         ca_key_path: None,
