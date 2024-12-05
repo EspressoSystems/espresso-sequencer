@@ -14,7 +14,7 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::U256,
 };
-use hotshot_types::{light_client::StateVerKey, signature_key::BLSPubKey};
+use hotshot_types::{light_client::StateVerKey, network::PeerConfigKeys, signature_key::BLSPubKey};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -172,5 +172,21 @@ impl From<NodeInfo> for NodeInfoJf {
             da: is_da,
         }
         .into()
+    }
+}
+
+impl From<PeerConfigKeys<BLSPubKey>> for NodeInfoJf {
+    fn from(value: PeerConfigKeys<BLSPubKey>) -> Self {
+        let PeerConfigKeys {
+            stake_table_key,
+            state_ver_key,
+            da,
+            ..
+        } = value;
+        Self {
+            stake_table_key,
+            state_ver_key,
+            da,
+        }
     }
 }

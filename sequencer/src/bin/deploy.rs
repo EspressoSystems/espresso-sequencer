@@ -1,7 +1,6 @@
 use std::{fs::File, io::stdout, path::PathBuf};
 
 use clap::Parser;
-use espresso_types::PubKey;
 use ethers::types::Address;
 use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -143,9 +142,7 @@ async fn main() -> anyhow::Result<()> {
     let genesis = light_client_genesis(&sequencer_url, opt.stake_table_capacity).boxed();
 
     let initial_stake_table = if let Some(path) = opt.initial_stake_table_path {
-        Some(PermissionedStakeTableConfig::<PubKey>::from_toml_file(
-            &path,
-        )?)
+        Some(PermissionedStakeTableConfig::from_toml_file(&path)?.into())
     } else {
         None
     };

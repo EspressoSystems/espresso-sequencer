@@ -7,7 +7,7 @@ use contract_bindings::{
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
-    permissioned_stake_table::PermissionedStakeTable,
+    permissioned_stake_table::{NodeInfo, PermissionedStakeTable},
     plonk_verifier::PlonkVerifier,
 };
 use derive_more::Display;
@@ -311,7 +311,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn deploy<K: SignatureKey>(
+pub async fn deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
@@ -321,7 +321,7 @@ pub async fn deploy<K: SignatureKey>(
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
     permissioned_prover: Option<Address>,
     mut contracts: Contracts,
-    initial_stake_table: Option<PermissionedStakeTableConfig<K>>,
+    initial_stake_table: Option<Vec<NodeInfo>>,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;
     let chain_id = provider.get_chainid().await?.as_u64();
@@ -442,13 +442,11 @@ pub async fn deploy<K: SignatureKey>(
 
     // `PermissionedStakeTable.sol`
     if should_deploy(ContractGroup::PermissionedStakeTable, &only) {
+        let initial_stake_table: Vec<_> = initial_stake_table.unwrap_or_default();
         let stake_table_address = contracts
             .deploy_tx(
                 Contract::PermissonedStakeTable,
-                PermissionedStakeTable::deploy(
-                    l1.clone(),
-                    (), // TODO initial stake table
-                )?,
+                PermissionedStakeTable::deploy(l1.clone(), initial_stake_table)?,
             )
             .await?;
         let stake_table = PermissionedStakeTable::new(stake_table_address, l1.clone());
