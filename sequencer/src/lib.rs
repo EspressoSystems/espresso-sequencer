@@ -20,7 +20,6 @@ use espresso_types::{
 };
 use futures::FutureExt;
 use genesis::L1Finalized;
-use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::traits::election::Membership;
 use std::sync::Arc;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -386,12 +385,6 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         topics
     };
 
-    // Create the HotShot membership
-    let membership = StaticCommittee::new(
-        network_config.config.known_nodes_with_stake.clone(),
-        network_config.config.known_nodes_with_stake.clone(),
-    );
-
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
@@ -516,6 +509,13 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         upgrades: genesis.upgrades,
         current_version: V::Base::VERSION,
     };
+
+    // Create the HotShot membership
+    let membership = StaticCommittee::new_stake(
+        network_config.config.known_nodes_with_stake.clone(),
+        network_config.config.known_nodes_with_stake.clone(),
+        &instance_state,
+    );
 
     let mut ctx = SequencerContext::init(
         network_config,
@@ -954,6 +954,7 @@ pub mod testing {
             .with_upgrades(upgrades);
 
             // Create the HotShot membership
+            // TODO use our own implementation and pull from contract
             let membership = StaticCommittee::new(
                 config.known_nodes_with_stake.clone(),
                 config.known_nodes_with_stake.clone(),

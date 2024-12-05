@@ -16,7 +16,6 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::StaticCommittee,
     types::{Event, EventType, SystemContextHandle},
     MarketplaceConfig, SystemContext,
 };

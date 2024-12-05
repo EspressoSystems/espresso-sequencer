@@ -31,7 +31,8 @@ use super::{
 };
 use crate::{
     traits::StateCatchup,
-    v0_99::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
+    v0_3::{ChainConfig, ResolvableChainConfig},
+    v0_99::{FullNetworkTx, IterableFeeInfo},
     BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf2,
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,

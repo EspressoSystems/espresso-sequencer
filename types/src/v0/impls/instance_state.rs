@@ -1,5 +1,5 @@
 use crate::v0::{
-    traits::StateCatchup, v0_99::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
+    traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
     Timestamp, Upgrade, UpgradeMode,
 };
 use hotshot_types::traits::states::InstanceState;
@@ -17,7 +17,7 @@ use super::state::ValidatedState;
 #[derive(derive_more::Debug, Clone)]
 pub struct NodeState {
     pub node_id: u64,
-    pub chain_config: crate::v0_99::ChainConfig,
+    pub chain_config: crate::v0_3::ChainConfig,
     pub l1_client: L1Client,
     #[debug("{}", peers.name())]
     pub peers: Arc<dyn StateCatchup>,
@@ -46,7 +46,7 @@ pub struct NodeState {
 impl NodeState {
     pub fn new(
         node_id: u64,
-        chain_config: ChainConfig,
+        chain_config: crate::v0_3::ChainConfig,
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
         current_version: Version,
