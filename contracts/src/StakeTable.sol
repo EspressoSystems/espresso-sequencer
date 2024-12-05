@@ -230,6 +230,27 @@ contract StakeTable is AbstractStakeTable {
         BN254.G1Point memory blsSig,
         uint64 validUntilEpoch
     ) external override {
+        bytes32 key = _hashBlsKey(blsVK);
+        Node memory node = nodes[key];
+
+        // Verify that the node is not already registered.
+        if (node.account != address(0x0)) {
+            revert NodeAlreadyRegistered();
+        }
+
+        // Verify that this contract has permissions to access the validator's stake token.
+        uint256 allowance = ERC20(tokenAddress).allowance(msg.sender, address(this));
+        if (allowance < amount) {
+            revert InsufficientAllowance(allowance, amount);
+        }
+
+        // Verify that the validator has the balance for this stake token.
+        uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
+        if (balance < amount) {
+            revert InsufficientBalance(balance, amount);
+        }
+
+        // Verify that the validator can sign for that blsVK
         bytes memory message = abi.encode(msg.sender);
         BLSSig.verifyBlsSig(message, blsSig, blsVK);
 
@@ -242,14 +263,6 @@ contract StakeTable is AbstractStakeTable {
             revert InvalidNextRegistrationEpoch(registerEpoch, validUntilEpoch);
         }
         appendRegistrationQueue(registerEpoch, queueSize);
-
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
-
-        // The node must not already be registered.
-        if (node.account != address(0x0)) {
-            revert NodeAlreadyRegistered();
-        }
 
         // Transfer the stake amount of ERC20 tokens from the sender to this contract.
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);

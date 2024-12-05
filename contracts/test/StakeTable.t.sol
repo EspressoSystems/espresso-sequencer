@@ -89,6 +89,10 @@ contract StakeTable_register_Test is Test {
         (BN254.G2Point memory blsVK, EdOnBN254.EdOnBN254Point memory schnorrVK,) =
             genClientWallet(exampleTokenCreator);
 
+        // Prepare for the token transfer
+        vm.startPrank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
         // Ensure the scalar is valid
         // Note: Apparently BN254.scalarMul is not well defined when the scalar is 0
         scalar = bound(scalar, 1, BN254.R_MOD - 1);
@@ -99,6 +103,7 @@ contract StakeTable_register_Test is Test {
         // Failed signature verification
         vm.expectRevert(BLSSig.BLSSigVerificationFailed.selector);
         stakeTable.register(blsVK, schnorrVK, depositAmount, badSig, validUntilEpoch);
+        vm.stopPrank();
     }
 
     // commenting out epoch related tests for now
@@ -168,7 +173,7 @@ contract StakeTable_register_Test is Test {
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
     }
 
-    function test_RevertWhen_TransferFailed() external {
+    function test_RevertWhen_NoTokenAllowanceOrBalance() external {
         uint64 depositAmount = 10;
         uint64 validUntilEpoch = 10;
 
@@ -182,16 +187,19 @@ contract StakeTable_register_Test is Test {
         vm.prank(exampleTokenCreator);
         // The call to register is expected to fail because the depositAmount has not been approved
         // and thus the stake table contract cannot lock the stake.
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.expectRevert(abi.encodeWithSelector(S.InsufficientAllowance.selector, 0, depositAmount));
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
         // A user with 0 balance cannot register either
         address newUser = makeAddr("New user with zero balance");
         (blsVK, schnorrVK, sig) = genClientWallet(newUser);
 
-        vm.prank(newUser);
-        vm.expectRevert("TRANSFER_FROM_FAILED");
+        vm.startPrank(newUser);
+        // Prepare for the token transfer by giving the StakeTable contract the required allowance
+        token.approve(address(stakeTable), depositAmount);
+        vm.expectRevert(abi.encodeWithSelector(S.InsufficientBalance.selector, 0, depositAmount));
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+        vm.stopPrank();
     }
 
     /// @dev Tests a correct registration
