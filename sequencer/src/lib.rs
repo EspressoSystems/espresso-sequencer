@@ -18,11 +18,11 @@ use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
-use futures::FutureExt;
 use genesis::L1Finalized;
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::traits::election::Membership;
 use std::sync::Arc;
+use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
@@ -469,11 +469,11 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         })?;
 
         tracing::warn!("Waiting for at least one connection to be initialized");
-        futures::select! {
-            _ = cdn_network.wait_for_ready().fuse() => {
+        select! {
+            _ = cdn_network.wait_for_ready() => {
                 tracing::warn!("CDN connection initialized");
             },
-            _ = p2p_network.wait_for_ready().fuse() => {
+            _ = p2p_network.wait_for_ready() => {
                 tracing::warn!("P2P connection initialized");
             },
         };
