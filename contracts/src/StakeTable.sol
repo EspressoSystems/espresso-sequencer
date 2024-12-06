@@ -113,10 +113,9 @@ contract StakeTable is AbstractStakeTable {
         return 0;
     }
 
-    /// @notice Look up the balance of `blsVK`
+    /// @notice Look up the balance of `blsVK`g
     /// @param blsVK BLS public key controlled by the user.
     /// @return Current balance owned by the user.
-    /// TODO modify this according to the current spec
     function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint256) {
         Node memory node = this.lookupNode(blsVK);
         return node.balance;
@@ -132,6 +131,7 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Get the next available epoch and queue size in that epoch
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function nextRegistrationEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
@@ -155,6 +155,7 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the registration queue (after insertion of new element in
     // the queue)
     /// TODO modify this according to the current spec
+    /// TODO modify this according to the current spec
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableRegistrationEpoch = epoch;
         _numPendingRegistrations = queueSize + 1;
@@ -162,11 +163,13 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending registration requests in the waiting queue
     /// TODO modify this according to the current spec
+    /// TODO modify this according to the current spec
     function numPendingRegistrations() external view override returns (uint64) {
         return _numPendingRegistrations;
     }
 
     /// @notice Get the next available epoch for exit and queue size in that epoch
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function nextExitEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
@@ -189,12 +192,14 @@ contract StakeTable is AbstractStakeTable {
     // @param epoch next available exit epoch
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     /// TODO modify this according to the current spec
+    /// TODO modify this according to the current spec
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableExitEpoch = epoch;
         _numPendingExits = queueSize + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function numPendingExits() external view override returns (uint64) {
         return _numPendingExits;
@@ -214,6 +219,7 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
         if (node.balance > 100) {
@@ -303,7 +309,6 @@ contract StakeTable is AbstractStakeTable {
         node.account = msg.sender;
         node.balance = fixedStakeAmount;
         node.schnorrVK = schnorrVK;
-        node.blsVK = blsVK;
         node.registerEpoch = registerEpoch;
 
         nodes[key] = node;
@@ -355,6 +360,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @dev TODO modify this according to the current spec
+    /// @dev TODO modify this according to the current spec
     /// @param blsVK The BLS verification key to exit
     function requestExit(BN254.G2Point memory blsVK) external override {
         bytes32 key = _hashBlsKey(blsVK);
@@ -390,9 +396,6 @@ contract StakeTable is AbstractStakeTable {
     ///
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    /// TODO: This function should be tested
-    /// TODO modify this according to the current spec
-
     function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint256) {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
@@ -412,6 +415,8 @@ contract StakeTable is AbstractStakeTable {
         if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
             revert PrematureWithdrawal();
         }
+
+        // Delete the node from the stake table.
 
         // Delete the node from the stake table.
         delete nodes[key];

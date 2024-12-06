@@ -75,6 +75,7 @@ abstract contract AbstractStakeTable {
 
     /// @notice Look up the balance of `blsVK`
     function lookupStake(BN254.G2Point memory blsVK) external view virtual returns (uint256);
+
     /// @notice Look up the full `Node` state associated with `blsVK`
     function lookupNode(BN254.G2Point memory blsVK) external view virtual returns (Node memory);
 
@@ -96,8 +97,7 @@ abstract contract AbstractStakeTable {
     /// @param blsVK The BLS verification key
     /// @param schnorrVK The Schnorr verification key (as the auxiliary info)
     /// @param amount The amount to register
-    /// @param blsSig The BLS signature that authenticates the ethereum account this function is
-    /// called from
+    /// @param blsSig The BLS signature that the caller owns the `blsVK`
     /// @param validUntilEpoch The maximum epoch the sender is willing to wait to be included
     /// (cannot be smaller than the current epoch)
     /// @dev No validity check on `schnorrVK`, as it's assumed to be sender's responsibility,
