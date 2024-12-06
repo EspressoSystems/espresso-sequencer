@@ -458,7 +458,7 @@ contract StakeTable is AbstractStakeTable {
             revert ExitRequestInProgress();
         }
 
-        // The staker does not provide a new key
+        // The staker does not provide a key change
         if (
             (newBlsKey == currBlsKey && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK))
                 || (
@@ -469,7 +469,7 @@ contract StakeTable is AbstractStakeTable {
             revert NoKeyChange();
         }
 
-        // Update the node's schnorr key
+        // Update the node's schnorr key once it's not the same as the old one and it's nonzero
         if (
             !EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK)
                 && !EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
@@ -477,7 +477,7 @@ contract StakeTable is AbstractStakeTable {
             node.schnorrVK = newSchnorrVK;
         }
 
-        // Update the node's bls key
+        // Update the node's bls key once it's not the same as the old one and it's nonzero
         if (newBlsKey != currBlsKey && newBlsKey != bytes32(0)) {
             // Verify that the validator can sign for that blsVK
             bytes memory message = abi.encode(msg.sender);
