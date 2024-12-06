@@ -440,7 +440,7 @@ async fn test_quorum_proposal_task_view_sync() {
     };
 
     let inputs = vec![random![
-        ViewSyncFinalizeCertificate2Recv(cert.clone()),
+        ViewSyncFinalizeCertificateRecv(cert.clone()),
         SendPayloadCommitmentAndMetadata(
             payload_commitment,
             builder_commitment,

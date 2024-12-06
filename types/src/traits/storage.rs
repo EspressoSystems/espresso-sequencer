@@ -18,7 +18,9 @@ use jf_vid::VidScheme;
 use super::node_implementation::NodeType;
 use crate::{
     consensus::{CommitmentMap, View},
-    data::{DaProposal, Leaf, Leaf2, QuorumProposal, QuorumProposal2, VidDisperseShare},
+    data::{
+        DaProposal, DaProposal2, Leaf, Leaf2, QuorumProposal, QuorumProposal2, VidDisperseShare,
+    },
     event::HotShotAction,
     message::Proposal,
     simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
@@ -34,6 +36,12 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     async fn append_da(
         &self,
         proposal: &Proposal<TYPES, DaProposal<TYPES>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
+    ) -> Result<()>;
+    /// Add a proposal to the stored DA proposals.
+    async fn append_da2(
+        &self,
+        proposal: &Proposal<TYPES, DaProposal2<TYPES>>,
         vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> Result<()>;
     /// Add a proposal we sent to the store

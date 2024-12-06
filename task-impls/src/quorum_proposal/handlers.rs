@@ -20,7 +20,8 @@ use committable::Committable;
 use hotshot_task::dependency_task::HandleDepOutput;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
-    data::{Leaf2, QuorumProposal, VidDisperse, ViewChangeEvidence},
+    data::{Leaf2, QuorumProposal2, VidDisperse, ViewChangeEvidence},
+    drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
     message::Proposal,
     simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     traits::{
@@ -50,7 +51,7 @@ pub(crate) enum ProposalDependency {
     /// For the `Qc2Formed` event.
     Qc,
 
-    /// For the `ViewSyncFinalizeCertificate2Recv` event.
+    /// For the `ViewSyncFinalizeCertificateRecv` event.
     ViewSyncCert,
 
     /// For the `Qc2Formed` event timeout branch.
@@ -296,14 +297,15 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
             .context(warn!("Failed to construct marketplace block header"))?
         };
 
-        let proposal = QuorumProposal {
+        let proposal = QuorumProposal2 {
             block_header,
             view_number: self.view_number,
-            justify_qc: parent_qc.to_qc(),
+            justify_qc: parent_qc,
             upgrade_certificate,
-            proposal_certificate,
-        }
-        .into();
+            view_change_evidence: proposal_certificate,
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
+        };
 
         let proposed_leaf = Leaf2::from_quorum_proposal(&proposal);
         ensure!(
@@ -376,7 +378,7 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
                         parent_qc = Some(qc.clone());
                     }
                 },
-                HotShotEvent::ViewSyncFinalizeCertificate2Recv(cert) => {
+                HotShotEvent::ViewSyncFinalizeCertificateRecv(cert) => {
                     view_sync_finalize_cert = Some(cert.clone());
                 }
                 HotShotEvent::VidDisperseSend(share, _) => {

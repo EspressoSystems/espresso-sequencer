@@ -17,7 +17,7 @@ use crate::{
     data::{Leaf, Leaf2},
     message::UpgradeLock,
     traits::{
-        node_implementation::{NodeType, Versions},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vid::VidCommitment,
@@ -40,6 +40,8 @@ pub struct QuorumData<TYPES: NodeType> {
 pub struct QuorumData2<TYPES: NodeType> {
     /// Commitment to the leaf
     pub leaf_commit: Commitment<Leaf2<TYPES>>,
+    /// Epoch number
+    pub epoch: TYPES::Epoch,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a DA vote.
@@ -48,12 +50,27 @@ pub struct DaData {
     pub payload_commit: VidCommitment,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a DA vote.
+pub struct DaData2<TYPES: NodeType> {
+    /// Commitment to a block payload
+    pub payload_commit: VidCommitment,
+    /// Epoch number
+    pub epoch: TYPES::Epoch,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a timeout vote.
 pub struct TimeoutData<TYPES: NodeType> {
     /// View the timeout is for
     pub view: TYPES::View,
 }
-
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a timeout vote.
+pub struct TimeoutData2<TYPES: NodeType> {
+    /// View the timeout is for
+    pub view: TYPES::View,
+    /// Epoch number
+    pub epoch: TYPES::Epoch,
+}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Pre Commit vote.
 pub struct ViewSyncPreCommitData<TYPES: NodeType> {
@@ -61,6 +78,16 @@ pub struct ViewSyncPreCommitData<TYPES: NodeType> {
     pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::View,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Pre Commit vote.
+pub struct ViewSyncPreCommitData2<TYPES: NodeType> {
+    /// The relay this vote is intended for
+    pub relay: u64,
+    /// The view number we are trying to sync on
+    pub round: TYPES::View,
+    /// Epoch number
+    pub epoch: TYPES::Epoch,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Commit vote.
@@ -71,12 +98,32 @@ pub struct ViewSyncCommitData<TYPES: NodeType> {
     pub round: TYPES::View,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Commit vote.
+pub struct ViewSyncCommitData2<TYPES: NodeType> {
+    /// The relay this vote is intended for
+    pub relay: u64,
+    /// The view number we are trying to sync on
+    pub round: TYPES::View,
+    /// Epoch number
+    pub epoch: TYPES::Epoch,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Finalize vote.
 pub struct ViewSyncFinalizeData<TYPES: NodeType> {
     /// The relay this vote is intended for
     pub relay: u64,
     /// The view number we are trying to sync on
     pub round: TYPES::View,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
+/// Data used for a Finalize vote.
+pub struct ViewSyncFinalizeData2<TYPES: NodeType> {
+    /// The relay this vote is intended for
+    pub relay: u64,
+    /// The view number we are trying to sync on
+    pub round: TYPES::View,
+    /// Epoch number
+    pub epoch: TYPES::Epoch,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a Upgrade vote.
@@ -94,6 +141,18 @@ pub struct UpgradeProposalData<TYPES: NodeType + DeserializeOwned> {
     pub old_version_last_view: TYPES::View,
     /// The first block for which the new version will be in effect.
     pub new_version_first_view: TYPES::View,
+}
+
+/// Data used for an upgrade once epochs are implemented
+pub struct UpgradeData2<TYPES: NodeType> {
+    /// The old version that we are upgrading from
+    pub old_version: Version,
+    /// The new version that we are upgrading to
+    pub new_version: Version,
+    /// A unique identifier for the specific protocol being voted on
+    pub hash: Vec<u8>,
+    /// The first epoch in which the upgrade will be in effect
+    pub epoch: TYPES::Epoch,
 }
 
 /// Marker trait for data or commitments that can be voted on.
@@ -120,9 +179,13 @@ mod sealed {
 impl<T: NodeType> QuorumMarker for QuorumData<T> {}
 impl<T: NodeType> QuorumMarker for QuorumData2<T> {}
 impl<T: NodeType> QuorumMarker for TimeoutData<T> {}
+impl<T: NodeType> QuorumMarker for TimeoutData2<T> {}
 impl<T: NodeType> QuorumMarker for ViewSyncPreCommitData<T> {}
 impl<T: NodeType> QuorumMarker for ViewSyncCommitData<T> {}
 impl<T: NodeType> QuorumMarker for ViewSyncFinalizeData<T> {}
+impl<T: NodeType> QuorumMarker for ViewSyncPreCommitData2<T> {}
+impl<T: NodeType> QuorumMarker for ViewSyncCommitData2<T> {}
+impl<T: NodeType> QuorumMarker for ViewSyncFinalizeData2<T> {}
 impl<T: NodeType + DeserializeOwned> QuorumMarker for UpgradeProposalData<T> {}
 
 /// A simple yes vote over some votable type.
@@ -272,9 +335,18 @@ impl<TYPES: NodeType> Committable for QuorumData<TYPES> {
 
 impl<TYPES: NodeType> Committable for QuorumData2<TYPES> {
     fn commit(&self) -> Commitment<Self> {
-        committable::RawCommitmentBuilder::new("Quorum data")
-            .var_size_bytes(self.leaf_commit.as_ref())
-            .finalize()
+        let QuorumData2 { leaf_commit, epoch } = self;
+
+        if **epoch == 0 {
+            committable::RawCommitmentBuilder::new("Quorum data")
+                .var_size_bytes(leaf_commit.as_ref())
+                .finalize()
+        } else {
+            committable::RawCommitmentBuilder::new("Quorum data")
+                .var_size_bytes(leaf_commit.as_ref())
+                .u64(**epoch)
+                .finalize()
+        }
     }
 }
 
@@ -286,11 +358,47 @@ impl<TYPES: NodeType> Committable for TimeoutData<TYPES> {
     }
 }
 
+impl<TYPES: NodeType> Committable for TimeoutData2<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let TimeoutData2 { view, epoch } = self;
+
+        if **epoch == 0 {
+            committable::RawCommitmentBuilder::new("Timeout data")
+                .u64(**view)
+                .finalize()
+        } else {
+            committable::RawCommitmentBuilder::new("Timeout data")
+                .u64(**view)
+                .u64(**epoch)
+                .finalize()
+        }
+    }
+}
+
 impl Committable for DaData {
     fn commit(&self) -> Commitment<Self> {
         committable::RawCommitmentBuilder::new("DA data")
             .var_size_bytes(self.payload_commit.as_ref())
             .finalize()
+    }
+}
+
+impl<TYPES: NodeType> Committable for DaData2<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let DaData2 {
+            payload_commit,
+            epoch,
+        } = self;
+        if **epoch == 0 {
+            committable::RawCommitmentBuilder::new("DA data")
+                .var_size_bytes(payload_commit.as_ref())
+                .finalize()
+        } else {
+            committable::RawCommitmentBuilder::new("DA data")
+                .var_size_bytes(payload_commit.as_ref())
+                .u64(**epoch)
+                .finalize()
+        }
     }
 }
 
@@ -306,6 +414,26 @@ impl<TYPES: NodeType> Committable for UpgradeProposalData<TYPES> {
             .u16(self.new_version.major)
             .u16(self.old_version.minor)
             .u16(self.old_version.major)
+            .finalize()
+    }
+}
+
+impl<TYPES: NodeType> Committable for UpgradeData2<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let UpgradeData2 {
+            old_version,
+            new_version,
+            hash,
+            epoch,
+        } = self;
+
+        committable::RawCommitmentBuilder::new("Upgrade data")
+            .u16(old_version.minor)
+            .u16(old_version.major)
+            .u16(new_version.minor)
+            .u16(new_version.major)
+            .var_size_bytes(hash.as_slice())
+            .u64(**epoch)
             .finalize()
     }
 }
@@ -326,14 +454,75 @@ impl<TYPES: NodeType> Committable for ViewSyncPreCommitData<TYPES> {
     }
 }
 
+impl<TYPES: NodeType> Committable for ViewSyncPreCommitData2<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let ViewSyncPreCommitData2 {
+            relay,
+            round,
+            epoch,
+        } = self;
+
+        if **epoch == 0 {
+            view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Precommit")
+        } else {
+            committable::RawCommitmentBuilder::new("View Sync Precommit")
+                .u64(*relay)
+                .u64(**round)
+                .u64(**epoch)
+                .finalize()
+        }
+    }
+}
+
 impl<TYPES: NodeType> Committable for ViewSyncFinalizeData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
         view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Finalize")
     }
 }
+
+impl<TYPES: NodeType> Committable for ViewSyncFinalizeData2<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let ViewSyncFinalizeData2 {
+            relay,
+            round,
+            epoch,
+        } = self;
+
+        if **epoch == 0 {
+            view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Finalize")
+        } else {
+            committable::RawCommitmentBuilder::new("View Sync Finalize")
+                .u64(*relay)
+                .u64(**round)
+                .u64(**epoch)
+                .finalize()
+        }
+    }
+}
+
 impl<TYPES: NodeType> Committable for ViewSyncCommitData<TYPES> {
     fn commit(&self) -> Commitment<Self> {
         view_and_relay_commit::<TYPES, Self>(self.round, self.relay, "View Sync Commit")
+    }
+}
+
+impl<TYPES: NodeType> Committable for ViewSyncCommitData2<TYPES> {
+    fn commit(&self) -> Commitment<Self> {
+        let ViewSyncCommitData2 {
+            relay,
+            round,
+            epoch,
+        } = self;
+
+        if **epoch == 0 {
+            view_and_relay_commit::<TYPES, Self>(*round, *relay, "View Sync Commit")
+        } else {
+            committable::RawCommitmentBuilder::new("View Sync Commit")
+                .u64(*relay)
+                .u64(**round)
+                .u64(**epoch)
+                .finalize()
+        }
     }
 }
 
@@ -352,6 +541,7 @@ impl<TYPES: NodeType> QuorumVote<TYPES> {
         let signature = self.signature;
         let data = QuorumData2 {
             leaf_commit: Commitment::from_raw(bytes),
+            epoch: TYPES::Epoch::new(0),
         };
         let view_number = self.view_number;
 
@@ -382,21 +572,73 @@ impl<TYPES: NodeType> QuorumVote2<TYPES> {
     }
 }
 
+impl<TYPES: NodeType> DaVote<TYPES> {
+    /// Convert a `QuorumVote` to a `QuorumVote2`
+    pub fn to_vote2(self) -> DaVote2<TYPES> {
+        let signature = self.signature;
+        let data = DaData2 {
+            payload_commit: self.data.payload_commit,
+            epoch: TYPES::Epoch::new(0),
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
+impl<TYPES: NodeType> DaVote2<TYPES> {
+    /// Convert a `QuorumVote2` to a `QuorumVote`
+    pub fn to_vote(self) -> DaVote<TYPES> {
+        let signature = self.signature;
+        let data = DaData {
+            payload_commit: self.data.payload_commit,
+        };
+        let view_number = self.view_number;
+
+        SimpleVote {
+            signature,
+            data,
+            view_number,
+        }
+    }
+}
+
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
+
 /// Quorum vote Alias
 pub type QuorumVote<TYPES> = SimpleVote<TYPES, QuorumData<TYPES>>;
 // Type aliases for simple use of all the main votes.  We should never see `SimpleVote` outside this file
 /// Quorum vote Alias
 pub type QuorumVote2<TYPES> = SimpleVote<TYPES, QuorumData2<TYPES>>;
+
 /// DA vote type alias
 pub type DaVote<TYPES> = SimpleVote<TYPES, DaData>;
+/// DA vote 2 type alias
+pub type DaVote2<TYPES> = SimpleVote<TYPES, DaData2<TYPES>>;
+
 /// Timeout Vote type alias
 pub type TimeoutVote<TYPES> = SimpleVote<TYPES, TimeoutData<TYPES>>;
-/// View Sync Commit Vote type alias
-pub type ViewSyncCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>>;
+/// Timeout Vote 2 type alias
+pub type TimeoutVote2<TYPES> = SimpleVote<TYPES, TimeoutData2<TYPES>>;
+
 /// View Sync Pre Commit Vote type alias
 pub type ViewSyncPreCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncPreCommitData<TYPES>>;
+/// View Sync Pre Commit Vote 2 type alias
+pub type ViewSyncPreCommitVote2<TYPES> = SimpleVote<TYPES, ViewSyncPreCommitData2<TYPES>>;
 /// View Sync Finalize Vote type alias
 pub type ViewSyncFinalizeVote<TYPES> = SimpleVote<TYPES, ViewSyncFinalizeData<TYPES>>;
+/// View Sync Finalize Vote 2 type alias
+pub type ViewSyncFinalizeVote2<TYPES> = SimpleVote<TYPES, ViewSyncFinalizeData2<TYPES>>;
+/// View Sync Commit Vote type alias
+pub type ViewSyncCommitVote<TYPES> = SimpleVote<TYPES, ViewSyncCommitData<TYPES>>;
+/// View Sync Commit Vote 2 type alias
+pub type ViewSyncCommitVote2<TYPES> = SimpleVote<TYPES, ViewSyncCommitData2<TYPES>>;
+
 /// Upgrade proposal vote
 pub type UpgradeVote<TYPES> = SimpleVote<TYPES, UpgradeProposalData<TYPES>>;
+/// Upgrade proposal 2 vote
+pub type UpgradeVote2<TYPES> = SimpleVote<TYPES, UpgradeData2<TYPES>>;

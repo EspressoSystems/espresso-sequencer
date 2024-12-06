@@ -399,12 +399,17 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     upgrade_lock: UpgradeLock<TYPES, V>,
     view_number: TYPES::View,
-    epoch_number: TYPES::Epoch,
+    epoch_height: u64,
     storage: Arc<RwLock<I::Storage>>,
     leaf: Leaf2<TYPES>,
     vid_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
     extended_vote: bool,
 ) -> Result<()> {
+    let epoch_number = TYPES::Epoch::new(epoch_from_block_number(
+        leaf.block_header().block_number(),
+        epoch_height,
+    ));
+
     ensure!(
         quorum_membership.has_stake(&public_key, epoch_number),
         info!(
@@ -417,6 +422,7 @@ pub(crate) async fn submit_vote<TYPES: NodeType, I: NodeImplementation<TYPES>, V
     let vote = QuorumVote2::<TYPES>::create_signed_vote(
         QuorumData2 {
             leaf_commit: leaf.commit(),
+            epoch: epoch_number,
         },
         view_number,
         &public_key,

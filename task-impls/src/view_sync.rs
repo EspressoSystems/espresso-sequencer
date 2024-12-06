@@ -18,7 +18,7 @@ use hotshot_task::task::TaskState;
 use hotshot_types::{
     message::{GeneralConsensusMessage, UpgradeLock},
     simple_certificate::{
-        ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
+        ViewSyncCommitCertificate, ViewSyncFinalizeCertificate, ViewSyncPreCommitCertificate,
     },
     simple_vote::{
         ViewSyncCommitData, ViewSyncCommitVote, ViewSyncFinalizeData, ViewSyncFinalizeVote,
@@ -92,17 +92,16 @@ pub struct ViewSyncTaskState<TYPES: NodeType, V: Versions> {
 
     /// Map of pre-commit vote accumulates for the relay
     pub pre_commit_relay_map: RwLock<
-        RelayMap<TYPES, ViewSyncPreCommitVote<TYPES>, ViewSyncPreCommitCertificate2<TYPES>, V>,
+        RelayMap<TYPES, ViewSyncPreCommitVote<TYPES>, ViewSyncPreCommitCertificate<TYPES>, V>,
     >,
 
     /// Map of commit vote accumulates for the relay
     pub commit_relay_map:
-        RwLock<RelayMap<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>, V>>,
+        RwLock<RelayMap<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate<TYPES>, V>>,
 
     /// Map of finalize vote accumulates for the relay
-    pub finalize_relay_map: RwLock<
-        RelayMap<TYPES, ViewSyncFinalizeVote<TYPES>, ViewSyncFinalizeCertificate2<TYPES>, V>,
-    >,
+    pub finalize_relay_map:
+        RwLock<RelayMap<TYPES, ViewSyncFinalizeVote<TYPES>, ViewSyncFinalizeCertificate<TYPES>, V>>,
 
     /// Timeout duration for view sync rounds
     pub view_sync_timeout: Duration,
@@ -263,19 +262,19 @@ impl<TYPES: NodeType, V: Versions> ViewSyncTaskState<TYPES, V> {
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Result<()> {
         match event.as_ref() {
-            HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
+            HotShotEvent::ViewSyncPreCommitCertificateRecv(certificate) => {
                 tracing::debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.view_number();
                 self.send_to_or_create_replica(event, view, &event_stream)
                     .await;
             }
-            HotShotEvent::ViewSyncCommitCertificate2Recv(certificate) => {
+            HotShotEvent::ViewSyncCommitCertificateRecv(certificate) => {
                 tracing::debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.view_number();
                 self.send_to_or_create_replica(event, view, &event_stream)
                     .await;
             }
-            HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
+            HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
                 tracing::debug!("Received view sync cert for phase {:?}", certificate);
                 let view = certificate.view_number();
                 self.send_to_or_create_replica(event, view, &event_stream)
@@ -521,7 +520,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
-            HotShotEvent::ViewSyncPreCommitCertificate2Recv(certificate) => {
+            HotShotEvent::ViewSyncPreCommitCertificateRecv(certificate) => {
                 let last_seen_certificate = ViewSyncPhase::PreCommit;
 
                 // Ignore certificate if it is for an older round
@@ -607,7 +606,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }));
             }
 
-            HotShotEvent::ViewSyncCommitCertificate2Recv(certificate) => {
+            HotShotEvent::ViewSyncCommitCertificateRecv(certificate) => {
                 let last_seen_certificate = ViewSyncPhase::Commit;
 
                 // Ignore certificate if it is for an older round
@@ -706,7 +705,7 @@ impl<TYPES: NodeType, V: Versions> ViewSyncReplicaTaskState<TYPES, V> {
                 }));
             }
 
-            HotShotEvent::ViewSyncFinalizeCertificate2Recv(certificate) => {
+            HotShotEvent::ViewSyncFinalizeCertificateRecv(certificate) => {
                 // Ignore certificate if it is for an older round
                 if certificate.view_number() < self.next_view {
                     tracing::warn!("We're already in a higher round");

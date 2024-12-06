@@ -12,11 +12,11 @@ use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
-    data::{DaProposal, PackedBundle},
+    data::{DaProposal2, PackedBundle},
     event::{Event, EventType},
     message::{Proposal, UpgradeLock},
-    simple_certificate::DaCertificate,
-    simple_vote::{DaData, DaVote},
+    simple_certificate::DaCertificate2,
+    simple_vote::{DaData2, DaVote2},
     traits::{
         block_contents::vid_commitment,
         election::Membership,
@@ -61,7 +61,7 @@ pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Version
     pub network: Arc<I::Network>,
 
     /// A map of `DaVote` collector tasks.
-    pub vote_collectors: VoteCollectorsMap<TYPES, DaVote<TYPES>, DaCertificate<TYPES>, V>,
+    pub vote_collectors: VoteCollectorsMap<TYPES, DaVote2<TYPES>, DaCertificate2<TYPES>, V>,
 
     /// This Nodes public key
     pub public_key: TYPES::SignatureKey,
@@ -143,8 +143,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
             }
             HotShotEvent::DaProposalValidated(proposal, sender) => {
                 let cur_view = self.consensus.read().await.cur_view();
+                let view_number = proposal.data.view_number();
+                let epoch_number = proposal.data.epoch_number;
+
                 ensure!(
-                  cur_view <= proposal.data.view_number() + 1,
+                  cur_view <= view_number + 1,
                   debug!(
                     "Validated DA proposal for prior view but it's too old now Current view {:?}, DA Proposal view {:?}", 
                     cur_view,
@@ -155,7 +158,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 // Proposal is fresh and valid, notify the application layer
                 broadcast_event(
                     Event {
-                        view_number: self.cur_view,
+                        view_number,
                         event: EventType::DaProposal {
                             proposal: proposal.clone(),
                             sender: sender.clone(),
@@ -166,31 +169,31 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                 .await;
 
                 ensure!(
-                    self.membership
-                        .has_da_stake(&self.public_key, self.cur_epoch),
+                    self.membership.has_da_stake(&self.public_key, epoch_number),
                     debug!(
-                        "We were not chosen for consensus committee on {:?}",
-                        self.cur_view
+                        "We were not chosen for consensus committee for view {:?} in epoch {:?}",
+                        view_number, epoch_number
                     )
                 );
 
                 let txns = Arc::clone(&proposal.data.encoded_transactions);
-                let num_nodes = self.membership.total_nodes(self.cur_epoch);
+                let num_nodes = self.membership.total_nodes(epoch_number);
                 let payload_commitment =
                     spawn_blocking(move || vid_commitment(&txns, num_nodes)).await;
                 let payload_commitment = payload_commitment.unwrap();
+
                 self.storage
                     .write()
                     .await
-                    .append_da(proposal, payload_commitment)
+                    .append_da2(proposal, payload_commitment)
                     .await
                     .wrap()
                     .context(error!("Failed to append DA proposal to storage"))?;
-                let view_number = proposal.data.view_number();
                 // Generate and send vote
-                let vote = DaVote::create_signed_vote(
-                    DaData {
+                let vote = DaVote2::create_signed_vote(
+                    DaData2 {
                         payload_commit: payload_commitment,
+                        epoch: epoch_number,
                     },
                     view_number,
                     &self.public_key,
@@ -225,14 +228,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     let pk = self.private_key.clone();
                     let public_key = self.public_key.clone();
                     let chan = event_stream.clone();
-                    let current_epoch = self.cur_epoch;
                     spawn(async move {
                         Consensus::calculate_and_update_vid(
                             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
                             view_number,
                             membership,
                             &pk,
-                            current_epoch,
+                            epoch_number,
                         )
                         .await;
                         if let Some(Some(vid_share)) = consensus
@@ -303,6 +305,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     encoded_transactions,
                     metadata,
                     view_number,
+                    epoch_number,
                     ..
                 } = packed_bundle;
                 let view_number = *view_number;
@@ -315,11 +318,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> DaTaskState<TYP
                     TYPES::SignatureKey::sign(&self.private_key, &encoded_transactions_hash)
                         .wrap()?;
 
-                let data: DaProposal<TYPES> = DaProposal {
+                let data: DaProposal2<TYPES> = DaProposal2 {
                     encoded_transactions: Arc::clone(encoded_transactions),
                     metadata: metadata.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
                     view_number,
+                    epoch_number: *epoch_number,
                 };
 
                 let message = Proposal {

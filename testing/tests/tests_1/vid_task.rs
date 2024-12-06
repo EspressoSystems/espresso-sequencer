@@ -108,6 +108,7 @@ async fn test_vid_task() {
                     num_transactions: transactions.len() as u64
                 },
                 ViewNumber::new(2),
+                EpochNumber::new(0),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,

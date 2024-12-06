@@ -127,6 +127,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
+        block_epoch: TYPES::Epoch,
     ) -> Option<HotShotTaskCompleted> {
         let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
@@ -137,10 +138,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         };
 
         if version < V::Marketplace::VERSION {
-            self.handle_view_change_legacy(event_stream, block_view)
+            self.handle_view_change_legacy(event_stream, block_view, block_epoch)
                 .await
         } else {
-            self.handle_view_change_marketplace(event_stream, block_view)
+            self.handle_view_change_marketplace(event_stream, block_view, block_epoch)
                 .await
         }
     }
@@ -151,6 +152,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
+        block_epoch: TYPES::Epoch,
     ) -> Option<HotShotTaskCompleted> {
         let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
@@ -188,6 +190,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     block_payload.encode(),
                     metadata,
                     block_view,
+                    block_epoch,
                     vec1::vec1![fee],
                     precompute_data,
                     None,
@@ -231,6 +234,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     vec![].into(),
                     metadata,
                     block_view,
+                    block_epoch,
                     vec1::vec1![null_fee],
                     Some(precompute_data),
                     None,
@@ -251,6 +255,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     async fn produce_block_marketplace(
         &mut self,
         block_view: TYPES::View,
+        block_epoch: TYPES::Epoch,
         task_start_time: Instant,
     ) -> Result<PackedBundle<TYPES>> {
         ensure!(
@@ -343,6 +348,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             block_payload.encode(),
             metadata,
             block_view,
+            block_epoch,
             sequencing_fees,
             None,
             Some(auction_result),
@@ -353,6 +359,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     pub fn null_block(
         &self,
         block_view: TYPES::View,
+        block_epoch: TYPES::Epoch,
         version: Version,
     ) -> Option<PackedBundle<TYPES>> {
         let membership_total_nodes = self.membership.total_nodes(self.cur_epoch);
@@ -374,6 +381,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
             vec![].into(),
             metadata,
             block_view,
+            block_epoch,
             vec1::vec1![null_fee],
             Some(precompute_data),
             Some(TYPES::AuctionResult::default()),
@@ -386,6 +394,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
+        block_epoch: TYPES::Epoch,
     ) -> Option<HotShotTaskCompleted> {
         let task_start_time = Instant::now();
 
@@ -398,7 +407,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         };
 
         let packed_bundle = match self
-            .produce_block_marketplace(block_view, task_start_time)
+            .produce_block_marketplace(block_view, block_epoch, task_start_time)
             .await
         {
             Ok(b) => b,
@@ -409,7 +418,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                     e
                 );
 
-                let null_block = self.null_block(block_view, version)?;
+                let null_block = self.null_block(block_view, block_epoch, version)?;
 
                 // Increment the metric for number of empty blocks proposed
                 self.consensus
@@ -438,12 +447,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::View,
+        block_epoch: TYPES::Epoch,
     ) -> Option<HotShotTaskCompleted> {
         if self.consensus.read().await.is_high_qc_forming_eqc() {
             tracing::info!("Reached end of epoch. Not getting a new block until we form an eQC.");
             None
         } else {
-            self.handle_view_change_marketplace(event_stream, block_view)
+            self.handle_view_change_marketplace(event_stream, block_view, block_epoch)
                 .await
         }
     }
@@ -481,7 +491,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
                 );
                 self.cur_view = view;
                 if self.membership.leader(view, self.cur_epoch)? == self.public_key {
-                    self.handle_view_change(&event_stream, view).await;
+                    self.handle_view_change(&event_stream, view, *epoch).await;
                     return Ok(());
                 }
             }

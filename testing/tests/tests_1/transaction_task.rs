@@ -52,6 +52,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
             num_transactions: 0,
         },
         current_view,
+        EpochNumber::new(1),
         vec1::vec1![
             null_block::builder_fee::<TestConsecutiveLeaderTypes, TestVersions>(
                 handle.hotshot.memberships.total_nodes(EpochNumber::new(0)),

@@ -23,7 +23,7 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     data::{null_block, EpochNumber, PackedBundle, ViewNumber},
-    simple_vote::DaData,
+    simple_vote::DaData2,
     traits::{
         block_contents::precompute_vid_commitment,
         election::Membership,
@@ -63,8 +63,14 @@ async fn test_da_task() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData2 {
+                    payload_commit,
+                    epoch: EpochNumber::new(0),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -76,8 +82,14 @@ async fn test_da_task() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData2 {
+                    payload_commit,
+                    epoch: EpochNumber::new(0),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -85,14 +97,15 @@ async fn test_da_task() {
 
     let inputs = vec![
         serial![
-            ViewChange(ViewNumber::new(1), EpochNumber::new(1)),
-            ViewChange(ViewNumber::new(2), EpochNumber::new(1)),
+            ViewChange(ViewNumber::new(1), EpochNumber::new(0)),
+            ViewChange(ViewNumber::new(2), EpochNumber::new(0)),
             BlockRecv(PackedBundle::new(
                 encoded_transactions.clone(),
                 TestMetadata {
                     num_transactions: transactions.len() as u64
                 },
                 ViewNumber::new(2),
+                EpochNumber::new(0),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,
@@ -158,8 +171,14 @@ async fn test_da_task_storage_failure() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData2 {
+                    payload_commit,
+                    epoch: EpochNumber::new(0),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -171,8 +190,14 @@ async fn test_da_task_storage_failure() {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(
-            view.create_da_vote(DaData { payload_commit }, &handle)
-                .await,
+            view.create_da_vote(
+                DaData2 {
+                    payload_commit,
+                    epoch: EpochNumber::new(0),
+                },
+                &handle,
+            )
+            .await,
         );
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -180,14 +205,15 @@ async fn test_da_task_storage_failure() {
 
     let inputs = vec![
         serial![
-            ViewChange(ViewNumber::new(1), EpochNumber::new(1)),
-            ViewChange(ViewNumber::new(2), EpochNumber::new(1)),
+            ViewChange(ViewNumber::new(1), EpochNumber::new(0)),
+            ViewChange(ViewNumber::new(2), EpochNumber::new(0)),
             BlockRecv(PackedBundle::new(
                 encoded_transactions.clone(),
                 TestMetadata {
                     num_transactions: transactions.len() as u64
                 },
                 ViewNumber::new(2),
+                EpochNumber::new(0),
                 vec1::vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     membership.total_nodes(EpochNumber::new(0)),
                     <TestVersions as Versions>::Base::VERSION,

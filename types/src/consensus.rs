@@ -25,7 +25,7 @@ use crate::{
     error::HotShotError,
     event::{HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::{DaCertificate, QuorumCertificate2},
+    simple_certificate::{DaCertificate2, QuorumCertificate2},
     traits::{
         block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
@@ -281,7 +281,7 @@ pub struct Consensus<TYPES: NodeType> {
 
     /// All the DA certs we've received for current and future views.
     /// view -> DA cert
-    saved_da_certs: HashMap<TYPES::View, DaCertificate<TYPES>>,
+    saved_da_certs: HashMap<TYPES::View, DaCertificate2<TYPES>>,
 
     /// View number that is currently on.
     cur_view: TYPES::View,
@@ -479,7 +479,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Get the saved DA certs.
-    pub fn saved_da_certs(&self) -> &HashMap<TYPES::View, DaCertificate<TYPES>> {
+    pub fn saved_da_certs(&self) -> &HashMap<TYPES::View, DaCertificate2<TYPES>> {
         &self.saved_da_certs
     }
 
@@ -747,7 +747,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Add a new entry to the da_certs map.
-    pub fn update_saved_da_certs(&mut self, view_number: TYPES::View, cert: DaCertificate<TYPES>) {
+    pub fn update_saved_da_certs(&mut self, view_number: TYPES::View, cert: DaCertificate2<TYPES>) {
         self.saved_da_certs.insert(view_number, cert);
     }
 
