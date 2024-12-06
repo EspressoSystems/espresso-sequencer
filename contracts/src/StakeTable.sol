@@ -45,7 +45,10 @@ contract StakeTable is AbstractStakeTable {
     error InsufficientAllowance(uint256, uint256);
 
     // Error raised when the staker does not have the sufficient balance on the stake ERC20 token
-    error InsufficientBalance(uint256, uint256);
+    error InsufficientBalance(uint256);
+
+    // Error raised when the staker does not have the sufficient stake balance to withdraw
+    error InsufficientStakeBalance(uint256);
 
     // Error raised when the staker does not register with the correct stakeAmount
     error InsufficientStakeAmount(uint256);
@@ -259,7 +262,7 @@ contract StakeTable is AbstractStakeTable {
         // Verify that the validator has the balance for this stake token.
         uint256 balance = ERC20(tokenAddress).balanceOf(msg.sender);
         if (balance < fixedStakeAmount) {
-            revert InsufficientBalance(balance, fixedStakeAmount);
+            revert InsufficientBalance(balance);
         }
 
         // Verify that the validator can sign for that blsVK
@@ -391,7 +394,7 @@ contract StakeTable is AbstractStakeTable {
         // Verify that the balance is greater than zero
         uint256 balance = node.balance;
         if (balance == 0) {
-            revert InsufficientBalance(0, 0);
+            revert InsufficientStakeBalance(0);
         }
 
         // Verify that the validator can sign for that blsVK

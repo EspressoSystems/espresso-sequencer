@@ -197,7 +197,7 @@ contract StakeTable_register_Test is Test {
         vm.startPrank(newUser);
         // Prepare for the token transfer by giving the StakeTable contract the required allowance
         token.approve(address(stakeTable), depositAmount);
-        vm.expectRevert(abi.encodeWithSelector(S.InsufficientBalance.selector, 0, depositAmount));
+        vm.expectRevert(abi.encodeWithSelector(S.InsufficientBalance.selector, 0));
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
         vm.stopPrank();
     }
