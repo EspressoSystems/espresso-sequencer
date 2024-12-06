@@ -792,6 +792,7 @@ impl L1Client {
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
         // TODO we either need address from configuration or contract-bindings.
         // TODO epoch size may need to be passed in as well
+        // TODO here or in memberships check if we have fetched table this epoch
         unimplemented!();
     }
 }
