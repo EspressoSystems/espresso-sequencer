@@ -1,38 +1,49 @@
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use anyhow::Context;
-use async_std::{
-    sync::{Arc, RwLock},
-    task::{spawn, JoinHandle},
-};
+use async_broadcast::{broadcast, Receiver, Sender};
+use async_lock::RwLock;
+use clap::Parser;
+use committable::Commitment;
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+    parse_duration,
+    v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
+    NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::GeneralStaticCommittee,
+    traits::election::static_committee::StaticCommittee,
     types::{Event, EventType, SystemContextHandle},
-    MarketplaceConfig, Memberships, SystemContext,
+    MarketplaceConfig, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
+use parking_lot::Mutex;
+use tokio::{
+    spawn,
+    task::JoinHandle,
+    time::{sleep, timeout},
+};
 
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
-use hotshot_query_service::Leaf;
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    data::ViewNumber,
+    data::{EpochNumber, Leaf2, ViewNumber},
+    network::NetworkConfig,
     traits::{
-        election::Membership,
         metrics::Metrics,
-        network::{ConnectedNetwork, Topic},
-        node_implementation::Versions,
+        network::ConnectedNetwork,
+        node_implementation::{ConsensusTime, NodeType, Versions},
+        ValidatedState as _,
     },
-    PeerConfig,
+    utils::{View, ViewInner},
+    PeerConfig, ValidatorConfig,
 };
+use std::time::Duration;
+use tracing::{Instrument, Level};
 use url::Url;
 
 use crate::{
@@ -40,11 +51,43 @@ use crate::{
     state_signature::StateSigner,
     static_stake_table_commitment, Node, SeqTypes, SequencerApiVersion,
 };
+
 /// The consensus handle
 pub type Consensus<N, P, V> = SystemContextHandle<SeqTypes, Node<N, P>, V>;
 
+#[derive(Clone, Copy, Debug, Parser)]
+pub struct ProposalFetcherConfig {
+    #[clap(
+        long = "proposal-fetcher-num-workers",
+        env = "ESPRESSO_SEQUENCER_PROPOSAL_FETCHER_NUM_WORKERS",
+        default_value = "2"
+    )]
+    pub num_workers: usize,
+
+    #[clap(
+        long = "proposal-fetcher-channel-capacity",
+        env = "ESPRESSO_SEQUENCER_PROPOSAL_FETCHER_CHANNEL_CAPACITY",
+        default_value = "100"
+    )]
+    pub channel_capacity: usize,
+
+    #[clap(
+        long = "proposal-fetcher-fetch-timeout",
+        env = "ESPRESSO_SEQUENCER_PROPOSAL_FETCHER_FETCH_TIMEOUT",
+        default_value = "2s",
+        value_parser = parse_duration,
+    )]
+    pub fetch_timeout: Duration,
+}
+
+impl Default for ProposalFetcherConfig {
+    fn default() -> Self {
+        Self::parse_from(std::iter::empty::<String>())
+    }
+}
+
 /// The sequencer context contains a consensus handle and other sequencer specific information.
-#[derive(Derivative)]
+#[derive(Derivative, Clone)]
 #[derivative(Debug(bound = ""))]
 pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> {
     /// The consensus handle
@@ -68,7 +111,10 @@ pub struct SequencerContext<N: ConnectedNetwork<PubKey>, P: SequencerPersistence
 
     node_state: NodeState,
 
-    config: NetworkConfig<PubKey>,
+    network_config: NetworkConfig<PubKey>,
+
+    #[derivative(Debug = "ignore")]
+    validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
 }
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> SequencerContext<N, P, V> {
@@ -76,6 +122,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         network_config: NetworkConfig<PubKey>,
+        validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
+        membership: StaticCommittee<SeqTypes>,
         instance_state: NodeState,
         persistence: P,
         network: Arc<N>,
@@ -83,11 +131,13 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
         public_api_url: Option<Url>,
+        event_consumer: impl PersistenceEventConsumer + 'static,
         _: V,
         marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
+        proposal_fetcher_cfg: ProposalFetcherConfig,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
-        let pub_key = config.my_own_validator_config.public_key;
+        let pub_key = validator_config.public_key;
         tracing::info!(%pub_key, "initializing consensus");
 
         // Stick our node ID in `metrics` so it is easily accessible via the status API.
@@ -95,31 +145,13 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             .create_gauge("node_index".into(), None)
             .set(instance_state.node_id as usize);
 
+        // Start L1 client if it isn't already.
+        instance_state.l1_client.spawn_tasks().await;
+
         // Load saved consensus state from storage.
-        let initializer = persistence
-            .load_consensus_state(instance_state.clone())
+        let (initializer, anchor_view) = persistence
+            .load_consensus_state::<V>(instance_state.clone())
             .await?;
-
-        let committee_membership = GeneralStaticCommittee::create_election(
-            config.known_nodes_with_stake.clone(),
-            config.known_nodes_with_stake.clone(),
-            Topic::Global,
-            0,
-        );
-
-        let da_membership = GeneralStaticCommittee::create_election(
-            config.known_nodes_with_stake.clone(),
-            config.known_da_nodes.clone(),
-            Topic::Da,
-            0,
-        );
-
-        let memberships = Memberships {
-            quorum_membership: committee_membership.clone(),
-            da_membership,
-            vid_membership: committee_membership.clone(),
-            view_sync_membership: committee_membership.clone(),
-        };
 
         let stake_table_commit = static_stake_table_commitment(
             &config.known_nodes_with_stake,
@@ -127,21 +159,21 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
                 .try_into()
                 .context("stake table capacity out of range")?,
         );
-        let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
+        let state_key_pair = validator_config.state_key_pair.clone();
 
         let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(
             config.known_nodes_with_stake.clone(),
-            config.num_nodes_without_stake,
+            0,
         )));
 
         let persistence = Arc::new(persistence);
 
         let handle = SystemContext::init(
-            config.my_own_validator_config.public_key,
-            config.my_own_validator_config.private_key.clone(),
+            validator_config.public_key,
+            validator_config.private_key.clone(),
             instance_state.node_id,
             config.clone(),
-            memberships,
+            membership,
             network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),
@@ -160,9 +192,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         let roll_call_info = external_event_handler::RollCallInfo { public_api_url };
 
         // Create the external event handler
-        let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
-            .await
-            .with_context(|| "Failed to create external event handler")?;
+        let mut tasks = TaskList::default();
+        let external_event_handler =
+            ExternalEventHandler::new(&mut tasks, network, roll_call_info, pub_key)
+                .await
+                .with_context(|| "Failed to create external event handler")?;
 
         Ok(Self::new(
             handle,
@@ -172,10 +206,16 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             event_streamer,
             instance_state,
             network_config,
-        ))
+            validator_config,
+            event_consumer,
+            anchor_view,
+            proposal_fetcher_cfg,
+        )
+        .with_task_list(tasks))
     }
 
     /// Constructor
+    #[allow(clippy::too_many_arguments)]
     fn new(
         handle: Consensus<N, P, V>,
         persistence: Arc<P>,
@@ -183,10 +223,15 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         external_event_handler: ExternalEventHandler<V>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
-        config: NetworkConfig<PubKey>,
+        network_config: NetworkConfig<PubKey>,
+        validator_config: ValidatorConfig<<SeqTypes as NodeType>::SignatureKey>,
+        event_consumer: impl PersistenceEventConsumer + 'static,
+        anchor_view: Option<ViewNumber>,
+        proposal_fetcher_cfg: ProposalFetcherConfig,
     ) -> Self {
         let events = handle.event_stream();
 
+        let node_id = node_state.node_id;
         let mut ctx = Self {
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
@@ -195,16 +240,37 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
             wait_for_orchestrator: None,
             events_streamer: event_streamer.clone(),
             node_state,
-            config,
+            network_config,
+            validator_config,
         };
+
+        // Spawn proposal fetching tasks.
+        let (send, recv) = broadcast(proposal_fetcher_cfg.channel_capacity);
+        ctx.spawn("proposal scanner", scan_proposals(ctx.handle.clone(), send));
+        for i in 0..proposal_fetcher_cfg.num_workers {
+            ctx.spawn(
+                format!("proposal fetcher {i}"),
+                fetch_proposals(
+                    ctx.handle.clone(),
+                    persistence.clone(),
+                    recv.clone(),
+                    proposal_fetcher_cfg.fetch_timeout,
+                ),
+            );
+        }
+
+        // Spawn event handling loop.
         ctx.spawn(
-            "main event handler",
+            "event handler",
             handle_events(
+                node_id,
                 events,
                 persistence,
                 ctx.state_signer.clone(),
                 external_event_handler,
                 Some(event_streamer.clone()),
+                event_consumer,
+                anchor_view,
             ),
         );
 
@@ -252,7 +318,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.handle.write().await.shut_down().await
     }
 
-    pub async fn decided_leaf(&self) -> Leaf<SeqTypes> {
+    pub async fn decided_leaf(&self) -> Leaf2<SeqTypes> {
         self.handle.read().await.decided_leaf().await
     }
 
@@ -264,6 +330,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.handle.read().await.decided_state().await
     }
 
+    pub fn node_id(&self) -> u64 {
+        self.node_state.node_id
+    }
+
     pub fn node_state(&self) -> NodeState {
         self.node_state.clone()
     }
@@ -272,9 +342,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
     pub async fn start_consensus(&self) {
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
-            let peer_config =
-                PeerConfig::to_bytes(&self.config.config.my_own_validator_config.public_config())
-                    .clone();
+            let peer_config = PeerConfig::to_bytes(&self.validator_config.public_config()).clone();
             orchestrator_client
                 .wait_for_all_nodes_ready(peer_config)
                 .await;
@@ -293,11 +361,27 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.tasks.spawn(name, task);
     }
 
+    /// Spawn a short-lived background task attached to this context.
+    ///
+    /// When this context is dropped or [`shut_down`](Self::shut_down), background tasks will be
+    /// cancelled in the reverse order that they were spawned.
+    ///
+    /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
+    /// one is how urgently logging related to the task is treated.
+    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        self.tasks.spawn_short_lived(name, task);
+    }
+
     /// Stop participating in consensus.
     pub async fn shut_down(&mut self) {
         tracing::info!("shutting down SequencerContext");
         self.handle.write().await.shut_down().await;
-        self.tasks.shut_down().await;
+        self.tasks.shut_down();
+        self.node_state.l1_client.shut_down_tasks().await;
+
+        // Since we've already shut down, we can set `detached` so the drop
+        // handler doesn't call `shut_down` again.
+        self.detached = true;
     }
 
     /// Wait for consensus to complete.
@@ -314,8 +398,9 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         self.detached = true;
     }
 
-    pub fn config(&self) -> NetworkConfig<PubKey> {
-        self.config.clone()
+    /// Get the network config
+    pub fn network_config(&self) -> NetworkConfig<PubKey> {
+        self.network_config.clone()
     }
 }
 
@@ -324,33 +409,61 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Drop
 {
     fn drop(&mut self) {
         if !self.detached {
-            async_std::task::block_on(self.shut_down());
+            // Spawn a task to shut down the context
+            let handle_clone = self.handle.clone();
+            let tasks_clone = self.tasks.clone();
+            let node_state_clone = self.node_state.clone();
+
+            spawn(async move {
+                tracing::info!("shutting down SequencerContext");
+                handle_clone.write().await.shut_down().await;
+                tasks_clone.shut_down();
+                node_state_clone.l1_client.shut_down_tasks().await;
+            });
+
+            // Set `detached` so the drop handler doesn't call `shut_down` again.
+            self.detached = true;
         }
     }
 }
 
+#[tracing::instrument(skip_all, fields(node_id))]
+#[allow(clippy::too_many_arguments)]
 async fn handle_events<V: Versions>(
+    node_id: u64,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<impl SequencerPersistence>,
     state_signer: Arc<StateSigner<SequencerApiVersion>>,
     external_event_handler: ExternalEventHandler<V>,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+    event_consumer: impl PersistenceEventConsumer + 'static,
+    anchor_view: Option<ViewNumber>,
 ) {
+    if let Some(view) = anchor_view {
+        // Process and clean up any leaves that we may have persisted last time we were running but
+        // failed to handle due to a shutdown.
+        if let Err(err) = persistence
+            .append_decided_leaves(view, vec![], &event_consumer)
+            .await
+        {
+            tracing::warn!(
+                "failed to process decided leaves, chain may not be up to date: {err:#}"
+            );
+        }
+    }
+
     while let Some(event) = events.next().await {
-        tracing::debug!(?event, "consensus event");
+        tracing::debug!(node_id, ?event, "consensus event");
 
         // Store latest consensus state.
-        persistence.handle_event(&event).await;
+        persistence.handle_event(&event, &event_consumer).await;
 
         // Generate state signature.
         state_signer.handle_event(&event).await;
 
         // Handle external messages
-        if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
-            if let Err(err) = external_event_handler
-                .handle_event(external_message_bytes)
-                .await
-            {
+        if let EventType::ExternalMessageReceived { data, .. } = &event.event {
+            if let Err(err) = external_event_handler.handle_event(data).await {
                 tracing::warn!("Failed to handle external message: {:?}", err);
             };
         }
@@ -362,8 +475,149 @@ async fn handle_events<V: Versions>(
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct TaskList(Vec<(String, JoinHandle<()>)>);
+#[tracing::instrument(skip_all)]
+async fn scan_proposals<N, P, V>(
+    consensus: Arc<RwLock<Consensus<N, P, V>>>,
+    fetcher: Sender<(ViewNumber, Commitment<Leaf2<SeqTypes>>)>,
+) where
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    V: Versions,
+{
+    let mut events = consensus.read().await.event_stream();
+    while let Some(event) = events.next().await {
+        let EventType::QuorumProposal { proposal, .. } = event.event else {
+            continue;
+        };
+        // Whenever we see a quorum proposal, ensure we have the chain of proposals stretching back
+        // to the anchor. This allows state replay from the decided state.
+        let parent_view = proposal.data.justify_qc.view_number;
+        let parent_leaf = proposal.data.justify_qc.data.leaf_commit;
+        fetcher
+            .broadcast_direct((parent_view, parent_leaf))
+            .await
+            .ok();
+    }
+}
+
+#[tracing::instrument(skip_all)]
+async fn fetch_proposals<N, P, V>(
+    consensus: Arc<RwLock<Consensus<N, P, V>>>,
+    persistence: Arc<impl SequencerPersistence>,
+    mut scanner: Receiver<(ViewNumber, Commitment<Leaf2<SeqTypes>>)>,
+    fetch_timeout: Duration,
+) where
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    V: Versions,
+{
+    let sender = scanner.new_sender();
+    while let Some((view, leaf)) = scanner.next().await {
+        let span = tracing::warn_span!("fetch proposal", ?view, %leaf);
+        let res: anyhow::Result<()> = async {
+            let anchor_view = load_anchor_view(&*persistence).await;
+            if view <= anchor_view {
+                tracing::debug!(?anchor_view, "skipping already-decided proposal");
+                return Ok(());
+            }
+
+            match persistence.load_quorum_proposal(view).await {
+                Ok(proposal) => {
+                    // If we already have the proposal in storage, keep traversing the chain to its
+                    // parent.
+                    let view = proposal.data.justify_qc.view_number;
+                    let leaf = proposal.data.justify_qc.data.leaf_commit;
+                    sender.broadcast_direct((view, leaf)).await.ok();
+                    return Ok(());
+                }
+                Err(err) => {
+                    tracing::info!("proposal missing from storage; fetching from network: {err:#}");
+                }
+            }
+
+            let future =
+                consensus
+                    .read()
+                    .await
+                    .request_proposal(view, EpochNumber::genesis(), leaf)?;
+            let proposal = timeout(fetch_timeout, future)
+                .await
+                .context("timed out fetching proposal")?
+                .context("error fetching proposal")?;
+            persistence
+                .append_quorum_proposal(&proposal)
+                .await
+                .context("error saving fetched proposal")?;
+
+            // Add the fetched leaf to HotShot state, so consensus can make use of it.
+            let leaf = Leaf2::from_quorum_proposal(&proposal.data);
+            let handle = consensus.read().await;
+            let consensus = handle.consensus();
+            let mut consensus = consensus.write().await;
+            if matches!(
+                consensus.validated_state_map().get(&view),
+                None | Some(View {
+                    // Replace a Da-only view with a Leaf view, which has strictly more information.
+                    view_inner: ViewInner::Da { .. }
+                })
+            ) {
+                let state = Arc::new(ValidatedState::from_header(leaf.block_header()));
+                if let Err(err) = consensus.update_leaf(leaf, state, None) {
+                    tracing::warn!("unable to update leaf: {err:#}");
+                }
+            }
+
+            Ok(())
+        }
+        .instrument(span)
+        .await;
+        if let Err(err) = res {
+            tracing::warn!("failed to fetch proposal: {err:#}");
+
+            // Avoid busy loop when operations are failing.
+            sleep(Duration::from_secs(1)).await;
+
+            // If we fail fetching the proposal, don't let it clog up the fetching task. Just push
+            // it back onto the queue and move onto the next proposal.
+            sender.broadcast_direct((view, leaf)).await.ok();
+        }
+    }
+}
+
+async fn load_anchor_view(persistence: &impl SequencerPersistence) -> ViewNumber {
+    loop {
+        match persistence.load_anchor_view().await {
+            Ok(view) => break view,
+            Err(err) => {
+                tracing::warn!("error loading anchor view: {err:#}");
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+#[allow(clippy::type_complexity)]
+pub(crate) struct TaskList(Arc<Mutex<Vec<(String, JoinHandle<()>)>>>);
+
+macro_rules! spawn_with_log_level {
+    ($this:expr, $lvl:expr, $name:expr, $task: expr) => {
+        let name = $name.to_string();
+        let task = {
+            let name = name.clone();
+            let span = tracing::span!($lvl, "background task", name);
+            spawn(
+                async move {
+                    tracing::event!($lvl, "spawning background task");
+                    $task.await;
+                    tracing::event!($lvl, "background task exited");
+                }
+                .instrument(span),
+            )
+        };
+        $this.0.lock().push((name, task));
+    };
+}
 
 impl TaskList {
     /// Spawn a background task attached to this [`TaskList`].
@@ -371,37 +625,48 @@ impl TaskList {
     /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
     /// be cancelled in the reverse order that they were spawned.
     pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
-        let name = name.to_string();
-        let task = {
-            let name = name.clone();
-            spawn(async move {
-                task.await;
-                tracing::info!(name, "background task exited");
-            })
-        };
-        self.0.push((name, task));
+        spawn_with_log_level!(self, Level::INFO, name, task);
+    }
+
+    /// Spawn a short-lived background task attached to this [`TaskList`].
+    ///
+    /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
+    /// be cancelled in the reverse order that they were spawned.
+    ///
+    /// The only difference between a short-lived background task and a [long-lived](Self::spawn)
+    /// one is how urgently logging related to the task is treated.
+    pub fn spawn_short_lived(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        spawn_with_log_level!(self, Level::DEBUG, name, task);
     }
 
     /// Stop all background tasks.
-    pub async fn shut_down(&mut self) {
-        for (name, task) in self.0.drain(..).rev() {
+    pub fn shut_down(&self) {
+        let tasks: Vec<(String, JoinHandle<()>)> = self.0.lock().drain(..).collect();
+        for (name, task) in tasks.into_iter().rev() {
             tracing::info!(name, "cancelling background task");
-            task.cancel().await;
+            task.abort();
         }
     }
 
     /// Wait for all background tasks to complete.
     pub async fn join(&mut self) {
-        join_all(self.0.drain(..).map(|(_, task)| task)).await;
+        let tasks: Vec<(String, JoinHandle<()>)> = self.0.lock().drain(..).collect();
+        join_all(tasks.into_iter().map(|(_, task)| task)).await;
     }
 
-    pub fn extend(&mut self, mut tasks: TaskList) {
-        self.0.extend(std::mem::take(&mut tasks.0));
+    pub fn extend(&mut self, tasks: TaskList) {
+        self.0.lock().extend(
+            tasks
+                .0
+                .lock()
+                .drain(..)
+                .collect::<Vec<(String, JoinHandle<()>)>>(),
+        );
     }
 }
 
 impl Drop for TaskList {
     fn drop(&mut self) {
-        async_std::task::block_on(self.shut_down());
+        self.shut_down()
     }
 }

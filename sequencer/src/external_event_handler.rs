@@ -2,7 +2,6 @@
 
 use crate::context::TaskList;
 use anyhow::{Context, Result};
-use async_compatibility_layer::channel::{Receiver, Sender};
 use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
@@ -14,6 +13,8 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, sync::Arc};
+use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::{Receiver, Sender};
 use url::Url;
 
 /// An external message that can be sent to or received from a node
@@ -43,9 +44,6 @@ pub struct ExternalEventHandler<V: Versions> {
     // The public key of the node
     pub public_key: BLSPubKey,
 
-    // The tasks that are running
-    pub _tasks: TaskList,
-
     // The outbound message queue
     pub outbound_message_sender: Sender<OutboundMessage>,
 
@@ -62,15 +60,13 @@ pub enum OutboundMessage {
 impl<V: Versions> ExternalEventHandler<V> {
     /// Creates a new `ExternalEventHandler` with the given network and roll call info
     pub async fn new<N: ConnectedNetwork<PubKey>>(
+        tasks: &mut TaskList,
         network: Arc<N>,
         roll_call_info: RollCallInfo,
         public_key: BLSPubKey,
     ) -> Result<Self> {
         // Create the outbound message queue
-        let (outbound_message_sender, outbound_message_receiver) =
-            async_compatibility_layer::channel::bounded(10);
-
-        let mut tasks: TaskList = Default::default();
+        let (outbound_message_sender, outbound_message_receiver) = channel(10);
 
         // Spawn the outbound message handling loop
         tasks.spawn(
@@ -93,7 +89,6 @@ impl<V: Versions> ExternalEventHandler<V> {
         Ok(Self {
             roll_call_info,
             public_key,
-            _tasks: tasks,
             outbound_message_sender,
             _pd: Default::default(),
         })
@@ -163,7 +158,7 @@ impl<V: Versions> ExternalEventHandler<V> {
         mut receiver: Receiver<OutboundMessage>,
         network: Arc<N>,
     ) {
-        while let Ok(message) = receiver.recv().await {
+        while let Some(message) = receiver.recv().await {
             // Match the message type
             match message {
                 OutboundMessage::Direct(message, recipient) => {

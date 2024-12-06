@@ -9,11 +9,11 @@ use rand::RngCore;
 use sequencer_utils::test_utils::setup_test;
 
 use crate::{
-    v0_3::ChainConfig, BlockSize, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
+    v0_99::ChainConfig, BlockSize, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
     ValidatedState,
 };
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn basic_correctness() {
     // play with this
     let test_cases = vec![
@@ -103,7 +103,7 @@ async fn basic_correctness() {
     }
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn enforce_max_block_size() {
     setup_test();
     let test_case = vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]];

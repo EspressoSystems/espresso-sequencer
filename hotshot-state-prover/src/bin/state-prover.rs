@@ -82,7 +82,7 @@ struct Args {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let args = Args::parse();
     args.logging.init();
@@ -110,6 +110,9 @@ async fn main() {
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
     };
+
+    // validate that the light client contract is a proxy, panics otherwise
+    config.validate_light_client_contract().await.unwrap();
 
     if args.daemon {
         // Launching the prover service daemon

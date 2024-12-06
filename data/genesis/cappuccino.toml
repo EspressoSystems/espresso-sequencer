@@ -26,3 +26,6 @@ base_fee = '1 wei'
 max_block_size = '30mb'
 fee_recipient = '0x0000000000000000000000000000000000000000'
 fee_contract = '0x9d08cb3361b071ec1e2f3c206ac9c08d67385547'
+
+[l1_finalized]
+number = 0

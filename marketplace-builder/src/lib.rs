@@ -9,16 +9,12 @@ use std::{
     thread::Builder,
 };
 
-use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_std::{
-    sync::{Arc, RwLock},
-    task::{spawn, JoinHandle},
-};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    v0_3::BidTxBody,
+    v0_99::BidTxBody,
     FeeVersion, MarketplaceVersion, SeqTypes, SequencerVersions,
 };
 use ethers::{
@@ -31,18 +27,18 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::GeneralStaticCommittee,
+    traits::election::static_committee::StaticCommittee,
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, SystemContext,
+    HotShotInitializer, SystemContext,
 };
-use hotshot_builder_api::v0_3::builder::{
+use hotshot_builder_api::v0_99::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
-use hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::NetworkConfig,
-};
-use marketplace_builder_core::service::{BuilderHooks, GlobalState, ProxyGlobalState};
+use hotshot_orchestrator::client::{OrchestratorClient, ValidatorArgs};
+use hotshot_types::network::NetworkConfig;
+use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
+use std::sync::Arc;
+use tokio::{spawn, task::JoinHandle};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{

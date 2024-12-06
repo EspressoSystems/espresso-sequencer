@@ -11,6 +11,8 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
+    "@ethers-ext/signer-ledger": "^6.0.0-beta.1",
+    "@ledgerhq/hw-transport-node-hid": "^6.29.4",
     "@safe-global/api-kit": "^2.3.1",
     "@safe-global/protocol-kit": "^3.1.0",
     "dotenv": "^16.4.5",

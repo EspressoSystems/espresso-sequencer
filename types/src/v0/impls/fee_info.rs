@@ -1,7 +1,3 @@
-// use crate::SeqTypes;
-
-use std::str::FromStr;
-
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -24,10 +20,11 @@ use num_traits::CheckedSub;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
+use std::str::FromStr;
 use thiserror::Error;
 
 use crate::{
-    eth_signature_key::EthKeyPair, v0_3::IterableFeeInfo, AccountQueryData, FeeAccount,
+    eth_signature_key::EthKeyPair, v0_99::IterableFeeInfo, AccountQueryData, FeeAccount,
     FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
     SeqTypes,
 };
@@ -418,6 +415,34 @@ impl From<(FeeAccountProof, U256)> for AccountQueryData {
     fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
         Self { balance, proof }
     }
+}
+
+/// Get a partial snapshot of the given fee state, which contains only the specified accounts.
+///
+/// Fails if one of the requested accounts is not represented in the original `state`.
+pub fn retain_accounts(
+    state: &FeeMerkleTree,
+    accounts: impl IntoIterator<Item = FeeAccount>,
+) -> anyhow::Result<FeeMerkleTree> {
+    let mut snapshot = FeeMerkleTree::from_commitment(state.commitment());
+    for account in accounts {
+        match state.universal_lookup(account) {
+            LookupResult::Ok(elem, proof) => {
+                // This remember cannot fail, since we just constructed a valid proof, and are
+                // remembering into a tree with the same commitment.
+                snapshot.remember(account, *elem, proof).unwrap();
+            }
+            LookupResult::NotFound(proof) => {
+                // Likewise this cannot fail.
+                snapshot.non_membership_remember(account, proof).unwrap()
+            }
+            LookupResult::NotInMemory => {
+                bail!("missing account {account}");
+            }
+        }
+    }
+
+    Ok(snapshot)
 }
 
 #[cfg(test)]

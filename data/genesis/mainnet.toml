@@ -9,8 +9,12 @@ chain_id = 1
 base_fee = '1 wei'
 max_block_size = '1mb'
 fee_recipient = '0x0000000000000000000000000000000000000000'
-# TODO update this after contract is deployed
-fee_contract = '0x0000000000000000000000000000000000000000'
+# Deployed
+fee_contract = '0x9fce21c3f7600aa63392a5f5713986b39bb98884'
 
 [header]
 timestamp = "1970-01-01T00:00:00Z"
+
+[l1_finalized]
+# 21087503 (deployed block) + (28800) (~4 days of blocks)
+number = 21116303

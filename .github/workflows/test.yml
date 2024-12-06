@@ -18,11 +18,138 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
+  CARGO_TERM_COLOR: always
+  # Save the process compose logs
+  PC_LOGS: /tmp/pc.log
 
 jobs:
-  test:
+  build-test-artifacts-postgres:
+    name: Build test artifacts (postgres)
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - uses: rui314/setup-mold@v1
+
+      - uses: actions/checkout@v4
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          cache-provider: buildjet
+
+      - name: Build and archive tests
+        run: cargo nextest archive --locked --workspace --archive-file nextest-archive-postgres.tar.zst
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive-postgres
+          path: nextest-archive-postgres.tar.zst
+
+  build-test-artifacts-sqlite:
+    name: Build test artifacts (sqlite)
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - uses: rui314/setup-mold@v1
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          cache-provider: buildjet
+
+      - name: Build and archive tests
+        run: cargo nextest archive --locked --features "embedded-db testing" --workspace --archive-file nextest-archive-sqlite.tar.zst
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive-sqlite
+          path: nextest-archive-sqlite.tar.zst
+
+  build-test-bins:
+    name: Build test binaries
+    runs-on: buildjet-8vcpu-ubuntu-2204
+    steps:
+      - uses: rui314/setup-mold@v1
+
+      - uses: actions/checkout@v4
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+          cache-provider: buildjet
+
+      - name: Build Bins
+        run: |
+          cargo build --locked --profile test --bins
+          cargo build --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
+        timeout-minutes: 30
+
+      - name: Upload archive to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-binaries
+          path: |
+            target/debug/orchestrator
+            target/debug/cdn-broker
+            target/debug/cdn-marshal
+            target/debug/cdn-whitelist
+            target/debug/state-relay-server
+            target/debug/state-prover
+            target/debug/sequencer
+            target/debug/cli
+            target/debug/submit-transactions
+            target/debug/reset-storage
+            target/debug/utils
+            target/debug/deploy
+            target/debug/keygen
+            target/debug/permissionless-builder
+            target/debug/nasty-client
+            target/debug/espresso-dev-node
+            target/debug/pub-key
+            target/debug/espresso-bridge
+            target/debug/marketplace-solver
+            target/debug/marketplace-builder
+            target/debug/node-metrics
+            target/debug/dev-rollup
+            target/debug/sequencer-sqlite
+
+  test-postgres:
+    needs: build-test-artifacts-postgres
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - uses: actions/checkout@v4
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+      - name: Download archive
+        uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive-postgres
+
+      - name: Test
+        run: |
+          cargo nextest run --archive-file nextest-archive-postgres.tar.zst  --verbose --no-fail-fast \
+          --workspace-remap $PWD
+        timeout-minutes: 20
+
+  test-sqlite:
+    needs: build-test-artifacts-sqlite
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
@@ -34,31 +161,103 @@ jobs:
         with:
           version: nightly
 
-      - uses: taiki-e/install-action@nextest
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Enable Rust Caching
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
-          cargo build --locked --bin diff-test --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
-        timeout-minutes: 90
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+      - name: Download archive
+        uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive-sqlite
 
       - name: Test
-        env:
-          CARGO_TERM_COLOR: always
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
-        timeout-minutes: 5
+          cargo nextest run --archive-file nextest-archive-sqlite.tar.zst  --verbose --no-fail-fast \
+          --workspace-remap $PWD
+        timeout-minutes: 20
+
+  test-integration:
+    needs: [build-test-bins, build-test-artifacts-postgres]
+    strategy:
+      matrix:
+        version: [02,99]
+        include:
+          - version: 02
+            compose: "-f process-compose.yaml -D"
+            
+          - version: 99
+            compose: "-f process-compose.yaml -f process-compose-mp.yml -D"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+
+      - name: Configure PATH
+        run: PATH="$PWD/target/debug:$PATH"
+
+      - uses: actions/checkout@v4
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: Download archive
+        uses: actions/download-artifact@v4
+
+      - name: Move files
+        run: |
+          mv nextest-archive-postgres/* .
+          mkdir -p target/debug
+          mv test-binaries/* target/debug
+          chmod -c +x target/debug/*
+
+      - name: Install process-compose
+        run: nix profile install nixpkgs#process-compose
+
+      - name: Run Demo-Native ${{matrix.version}}
+        run: bash -x scripts/demo-native ${{matrix.compose}} --tui=false > ${{ env.PC_LOGS }} 2>&1 &
+
+      - name: Test Integration
+        env:
+          RUST_LOG: debug
+          NEXTEST_PROFILE: integration
+          INTEGRATION_TEST_SEQUENCER_VERSION: ${{ matrix.version }}
+        run: |
+          cargo nextest run --archive-file nextest-archive-postgres.tar.zst --verbose --no-fail-fast --nocapture \
+          --workspace-remap $PWD $(if [ "${{ matrix.version }}" == "2" ]; then echo " smoke"; fi)
+        timeout-minutes: 10
+
+      - name: Upload process compose logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: process-compose-logs-integration-v${{ matrix.version  }}
+          path: ${{ env.PC_LOGS }}
+
+  demo-native:
+    needs: build-test-bins
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+
+      - uses: actions/checkout@v4
+
+      - name: Download archive
+        uses: actions/download-artifact@v4
+        with:
+          name: test-binaries
+          path: target/debug
+
+      - name: chmod +x
+        run: chmod -c +x target/debug/*
+
+      - name: Install process-compose
+        run: nix profile install nixpkgs#process-compose
+
+      - name: Test Demo
+        run: |
+          export PATH="$PWD/target/debug:$PATH"
+          set -o pipefail
+          scripts/demo-native --tui=false &
+          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'

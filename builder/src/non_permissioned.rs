@@ -1,54 +1,35 @@
 use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use anyhow::Context;
-use async_broadcast::{
-    broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
-};
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
-};
-use async_std::sync::{Arc, RwLock};
+use async_broadcast::broadcast;
+use async_lock::RwLock;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
-    NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
-};
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
-    types::{Address, U256},
+    eth_signature_key::EthKeyPair, v0_99::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
+    ValidatedState,
 };
 use hotshot::traits::BlockPayload;
-use hotshot_builder_api::v0_1::builder::{
-    BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
-};
 use hotshot_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
+    builder_state::{BuilderState, MessageType},
     service::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
         ReceivedTransaction,
     },
 };
-use hotshot_events_service::{
-    events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-    events_source::{EventConsumer, EventsStreamer},
-};
 use hotshot_types::{
-    data::{fake_commitment, Leaf, ViewNumber},
+    data::{fake_commitment, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::Versions,
         EncodeBytes,
     },
-    utils::BuilderCommitment,
 };
-use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
-use surf::http::headers::ACCEPT;
-use surf_disco::Client;
-use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::{StaticVersionType, Version};
+use marketplace_builder_shared::block::ParentBlockReferences;
+use marketplace_builder_shared::utils::EventServiceStream;
+use sequencer::{catchup::StatePeers, L1Params, SequencerApiVersion};
+use std::sync::Arc;
+use tide_disco::Url;
+use tokio::spawn;
+use vbs::version::StaticVersionType;
 
 use crate::run_builder_api_service;
 
@@ -59,12 +40,12 @@ pub struct BuilderConfig {
     pub hotshot_builder_apis_url: Url,
 }
 
-pub fn build_instance_state<V: Versions>(
+pub async fn build_instance_state<V: Versions>(
     chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
 ) -> anyhow::Result<NodeState> {
-    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_client = l1_params.options.connect(l1_params.url).await?;
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
@@ -80,7 +61,7 @@ pub fn build_instance_state<V: Versions>(
 
 impl BuilderConfig {
     #[allow(clippy::too_many_arguments)]
-    pub async fn init(
+    pub async fn init<V: Versions>(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -91,9 +72,10 @@ impl BuilderConfig {
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
-        buffered_view_num_count: usize,
+        max_block_size_increment_period: Duration,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
+        tx_status_cache_size: usize,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -101,7 +83,7 @@ impl BuilderConfig {
             %tx_channel_capacity,
             %event_channel_capacity,
             ?max_api_timeout_duration,
-            buffered_view_num_count,
+            ?instance_state.chain_config.max_block_size,
             ?maximize_txns_count_timeout_duration,
             "initializing builder",
         );
@@ -146,14 +128,17 @@ impl BuilderConfig {
             vid_commitment,
             bootstrapped_view,
             bootstrapped_view,
-            buffered_view_num_count as u64,
+            max_block_size_increment_period,
+            instance_state.chain_config.max_block_size.into(),
+            node_count.into(),
+            tx_status_cache_size,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
+            ParentBlockReferences {
                 view_number: bootstrapped_view,
                 vid_commitment,
                 leaf_commit: fake_commitment(),
@@ -166,7 +151,6 @@ impl BuilderConfig {
             tx_receiver,
             VecDeque::new() /* tx_queue */,
             global_state_clone,
-            node_count,
             maximize_txns_count_timeout_duration,
             base_fee
                 .as_u64()
@@ -177,7 +161,7 @@ impl BuilderConfig {
         );
 
         // spawn the builder event loop
-        async_spawn(async move {
+        spawn(async move {
             builder_state.event_loop();
         });
 
@@ -195,12 +179,16 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
-        async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion>(
+
+        let event_stream =
+            EventServiceStream::<SeqTypes, SequencerApiVersion>::connect(events_url).await?;
+
+        spawn(async move {
+            let res = run_non_permissioned_standalone_builder_service::<_, SequencerApiVersion, _>(
                 da_sender,
                 qc_sender,
                 decide_sender,
-                events_url,
+                event_stream,
                 global_state_clone,
             )
             .await;
@@ -221,38 +209,9 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use std::time::{Duration, Instant};
-
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        logging::{setup_backtrace, setup_logging},
-    };
-    use async_lock::RwLock;
-    use async_std::{stream::StreamExt, task};
-    use espresso_types::{Event, FeeAccount, NamespaceId, Transaction};
+    use espresso_types::MockSequencerVersions;
     use ethers::utils::Anvil;
-    use futures::Stream;
-    use hotshot::types::EventType;
-    use hotshot_builder_api::v0_1::{
-        block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-        builder::BuildError,
-    };
-    use hotshot_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
-    };
-    use hotshot_events_service::{
-        events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-        events_source::{EventConsumer, EventsStreamer},
-    };
-    use hotshot_types::{
-        signature_key::BLSPubKey,
-        traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
-            signature_key::SignatureKey,
-        },
-    };
+    use futures::StreamExt;
     use portpicker::pick_unused_port;
     use sequencer::{
         api::{
@@ -260,26 +219,20 @@ mod test {
             test_helpers::{TestNetwork, TestNetworkConfigBuilder},
             Options,
         },
-        persistence::{
-            self,
-            no_storage::{self, NoStorage},
-        },
+        persistence::{self},
         testing::TestConfigBuilder,
     };
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use tempfile::TempDir;
-    use vbs::version::StaticVersion;
 
     use super::*;
-    use crate::testing::{
-        hotshot_builder_url, test_builder_impl, HotShotTestConfig, NonPermissionedBuilderTestConfig,
-    };
+    use crate::testing::{test_builder_impl, NonPermissionedBuilderTestConfig};
 
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api
     /// Builder subscrived to this api, and server the hotshot client request and the private mempool tx submission
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_non_permissioned_builder() {
         setup_test();
 

@@ -111,4 +111,8 @@ contract LightClientV2 is LightClient {
             revert InvalidProof();
         }
     }
+
+    function setNewField(uint256 _newField) public onlyOwner {
+        newField = _newField;
+    }
 }

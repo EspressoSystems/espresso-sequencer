@@ -1,5 +1,5 @@
 base_version = "0.2"
-upgrade_version = "0.3"
+upgrade_version = "0.99"
 
 [stake_table]
 capacity = 10
@@ -14,10 +14,13 @@ fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 [header]
 timestamp = "1970-01-01T00:00:00Z"
 
+[l1_finalized]
+number = 0
+
 [[upgrade]]
-version = "0.3"
-start_proposing_view = 5
-stop_proposing_view = 15
+version = "0.99"
+start_proposing_view = 10
+stop_proposing_view = 60
 
 [upgrade.marketplace]
 [upgrade.marketplace.chain_config]

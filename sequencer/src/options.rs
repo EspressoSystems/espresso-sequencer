@@ -1,4 +1,7 @@
+#![allow(clippy::needless_lifetimes)]
+
 use core::fmt::Display;
+use jf_signature::{bls_over_bn254, schnorr};
 use sequencer_utils::logging;
 use std::{
     cmp::Ordering,
@@ -6,17 +9,19 @@ use std::{
     fmt::{self, Formatter},
     iter::once,
     path::PathBuf,
+    time::Duration,
 };
+use tagged_base64::TaggedBase64;
 
 use anyhow::{bail, Context};
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use derivative::Derivative;
-use espresso_types::BackoffParams;
+use espresso_types::{parse_duration, BackoffParams, L1ClientOptions};
 use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use url::Url;
 
-use crate::{api, persistence};
+use crate::{api, context::ProposalFetcherConfig, persistence};
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
 // can be added, in any combination, to the service. These include, for example, the API server.
@@ -37,7 +42,6 @@ use crate::{api, persistence};
 // BEST NOT TO ADD REQUIRED ARGUMENTS TO THIS TYPE, since the required arguments will be required
 // even if the user is only asking for help on a module. Try to give every argument on this type a
 // default value, even if it is a bit arbitrary.
-
 #[derive(Parser, Clone, Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Options {
@@ -68,6 +72,146 @@ pub struct Options {
         default_value = "0.0.0.0:1769"
     )]
     pub libp2p_bind_address: String,
+
+    /// Time between each Libp2p heartbeat
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INTERVAL", default_value = "1s", value_parser = parse_duration)]
+    pub libp2p_heartbeat_interval: Duration,
+
+    /// Number of past heartbeats to gossip about on Libp2p
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_GOSSIP",
+        default_value = "3"
+    )]
+    pub libp2p_history_gossip: usize,
+
+    /// Number of heartbeats to keep in the Libp2p `memcache`
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_HISTORY_LENGTH",
+        default_value = "5"
+    )]
+    pub libp2p_history_length: usize,
+
+    /// Target number of peers for the Libp2p mesh network
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N", default_value = "8")]
+    pub libp2p_mesh_n: usize,
+
+    /// Maximum number of peers in the Libp2p mesh network before removing some
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_HIGH",
+        default_value = "12"
+    )]
+    pub libp2p_mesh_n_high: usize,
+
+    /// Minimum number of peers in the Libp2p mesh network before adding more
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_N_LOW",
+        default_value = "6"
+    )]
+    pub libp2p_mesh_n_low: usize,
+
+    /// Minimum number of outbound Libp2p peers in the mesh network before adding more
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MESH_OUTBOUND_MIN",
+        default_value = "2"
+    )]
+    pub libp2p_mesh_outbound_min: usize,
+
+    /// The maximum number of messages to include in a Libp2p IHAVE message
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_LENGTH",
+        default_value = "5000"
+    )]
+    pub libp2p_max_ihave_length: usize,
+
+    /// The maximum number of IHAVE messages to accept from a Libp2p peer within a heartbeat
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IHAVE_MESSAGES",
+        default_value = "10"
+    )]
+    pub libp2p_max_ihave_messages: usize,
+
+    /// Libp2p published message ids time cache duration
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_PUBLISHED_MESSAGE_IDS_CACHE_TIME", default_value = "10s", value_parser = parse_duration)]
+    pub libp2p_published_message_ids_cache_time: Duration,
+
+    /// Time to wait for a Libp2p message requested through IWANT following an IHAVE advertisement
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_IWANT_FOLLOWUP_TIME",
+        default_value = "3s", value_parser = parse_duration
+    )]
+    pub libp2p_iwant_followup_time: Duration,
+
+    /// The maximum number of Libp2p messages we will process in a given RPC
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_MESSAGES_PER_RPC")]
+    pub libp2p_max_messages_per_rpc: Option<usize>,
+
+    /// How many times we will allow a Libp2p peer to request the same message id through IWANT gossip before we start ignoring them
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_RETRANSMISSION",
+        default_value = "3"
+    )]
+    pub libp2p_gossip_retransmission: u32,
+
+    /// If enabled newly created messages will always be sent to all peers that are subscribed to the topic and have a good enough score
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_FLOOD_PUBLISH",
+        default_value = "true"
+    )]
+    pub libp2p_flood_publish: bool,
+
+    /// The time period that Libp2p message hashes are stored in the cache
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_DUPLICATE_CACHE_TIME", default_value = "20m", value_parser = parse_duration)]
+    pub libp2p_duplicate_cache_time: Duration,
+
+    /// Time to live for Libp2p fanout peers
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_FANOUT_TTL", default_value = "60s", value_parser = parse_duration)]
+    pub libp2p_fanout_ttl: Duration,
+
+    /// Initial delay in each Libp2p heartbeat
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_HEARTBEAT_INITIAL_DELAY", default_value = "5s", value_parser = parse_duration)]
+    pub libp2p_heartbeat_initial_delay: Duration,
+
+    /// How many Libp2p peers we will emit gossip to at each heartbeat
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_FACTOR",
+        default_value = "0.25"
+    )]
+    pub libp2p_gossip_factor: f64,
+
+    /// Minimum number of Libp2p peers to emit gossip to during a heartbeat
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_GOSSIP_LAZY",
+        default_value = "6"
+    )]
+    pub libp2p_gossip_lazy: usize,
+
+    /// The maximum number of bytes we will send in a single Libp2p gossip message
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_GOSSIP_TRANSMIT_SIZE",
+        default_value = "2000000"
+    )]
+    pub libp2p_max_gossip_transmit_size: usize,
+
+    /// The maximum number of bytes we will send in a single Libp2p direct message
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_MAX_DIRECT_TRANSMIT_SIZE",
+        default_value = "20000000"
+    )]
+    pub libp2p_max_direct_transmit_size: u64,
 
     /// The URL we advertise to other nodes as being for our public API.
     /// Should be supplied in `http://host:port` form.
@@ -163,7 +307,7 @@ pub struct Options {
         conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
-    pub private_staking_key: Option<BLSPrivKey>,
+    pub private_staking_key: Option<TaggedBase64>,
 
     /// Private state signing key.
     ///
@@ -174,7 +318,7 @@ pub struct Options {
         conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
-    pub private_state_key: Option<StateSignKey>,
+    pub private_state_key: Option<TaggedBase64>,
 
     /// Add optional modules to the service.
     ///
@@ -201,13 +345,9 @@ pub struct Options {
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
 
-    /// Maximum number of L1 blocks that can be scanned for events in a single query.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE",
-        default_value = "10000"
-    )]
-    pub l1_events_max_block_range: u64,
+    /// Configuration for the L1 client.
+    #[clap(flatten)]
+    pub l1_options: L1ClientOptions,
 
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
@@ -237,6 +377,9 @@ pub struct Options {
 
     #[clap(flatten)]
     pub identity: Identity,
+
+    #[clap(flatten)]
+    pub proposal_fetcher_config: ProposalFetcherConfig,
 }
 
 impl Options {
@@ -247,19 +390,26 @@ impl Options {
     pub fn private_keys(&self) -> anyhow::Result<(BLSPrivKey, StateSignKey)> {
         if let Some(path) = &self.key_file {
             let vars = dotenvy::from_path_iter(path)?.collect::<Result<HashMap<_, _>, _>>()?;
-            let staking = vars
-                .get("ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")
-                .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")?
-                .parse()?;
-            let state = vars
-                .get("ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")
-                .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")?
-                .parse()?;
+            let staking = TaggedBase64::parse(
+                vars.get("ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")
+                    .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY")?,
+            )?
+            .try_into()?;
+
+            let state = TaggedBase64::parse(
+                vars.get("ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")
+                    .context("key file missing ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY")?,
+            )?
+            .try_into()?;
+
             Ok((staking, state))
         } else if let (Some(staking), Some(state)) = (
             self.private_staking_key.clone(),
             self.private_state_key.clone(),
         ) {
+            let staking = bls_over_bn254::SignKey::try_from(staking)?;
+            let state = schnorr::SignKey::try_from(state)?;
+
             Ok((staking, state))
         } else {
             bail!("neither key file nor full set of private keys was provided")

@@ -1,39 +1,47 @@
 use std::pin::Pin;
 
 use anyhow::{bail, Context};
+use async_lock::RwLock;
 use async_once_cell::Lazy;
-use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use committable::Commitment;
-use data_source::{CatchupDataSource, SubmitDataSource};
+use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, MockSequencerVersions, NodeState, PubKey, Transaction,
+    retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
+    ValidatedState,
 };
-use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
-    stream::{BoxStream, Stream},
+    stream::BoxStream,
 };
-use hotshot::types::Event;
 use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
-use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
+    event::Event,
     light_client::StateSignatureRequestBody,
-    traits::{network::ConnectedNetwork, node_implementation::Versions},
+    network::NetworkConfig,
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{NodeType, Versions},
+        ValidatedState as _,
+    },
+    utils::{View, ViewInner},
 };
+use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
+use std::sync::Arc;
 
-use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
+use self::data_source::{
+    HotShotConfigDataSource, NodeStateDataSource, PublicNetworkConfig, StateSignatureDataSource,
+};
 use crate::{
-    context::Consensus, network, state_signature::StateSigner, SeqTypes, SequencerApiVersion,
-    SequencerContext,
+    catchup::CatchupStorage, context::Consensus, state_signature::StateSigner, SeqTypes,
+    SequencerApiVersion, SequencerContext,
 };
 
 pub mod data_source;
@@ -55,7 +63,7 @@ struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: V
     state_signer: Arc<StateSigner<SequencerApiVersion>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
-    config: NetworkConfig<PubKey>,
+    network_config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
     handle: Arc<RwLock<Consensus<N, P, V>>>,
@@ -69,7 +77,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions>
             state_signer: ctx.state_signer(),
             event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
-            config: ctx.config(),
+            network_config: ctx.network_config(),
             handle: ctx.consensus(),
         }
     }
@@ -93,13 +101,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
         }
     }
 
-    fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
-        let state = self.clone();
-        async move { state.consensus().await.read().await.event_stream() }
-            .boxed()
-            .flatten_stream()
-    }
-
     async fn state_signer(&self) -> &StateSigner<SequencerApiVersion> {
         &self.consensus.as_ref().get().await.get_ref().state_signer
     }
@@ -112,12 +113,14 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
         Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
     }
 
-    async fn node_state(&self) -> &NodeState {
-        &self.consensus.as_ref().get().await.get_ref().node_state
-    }
-
     async fn network_config(&self) -> NetworkConfig<PubKey> {
-        self.consensus.as_ref().get().await.get_ref().config.clone()
+        self.consensus
+            .as_ref()
+            .get()
+            .await
+            .get_ref()
+            .network_config
+            .clone()
     }
 }
 
@@ -155,6 +158,42 @@ impl<N: ConnectedNetwork<PubKey>, D: Send + Sync, V: Versions, P: SequencerPersi
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         self.as_ref().submit(tx).await
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, D: Sync, V: Versions, P: SequencerPersistence>
+    StakeTableDataSource<SeqTypes> for StorageState<N, P, D, V>
+{
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    async fn get_stake_table(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        self.as_ref().get_stake_table(epoch).await
+    }
+}
+
+impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
+    StakeTableDataSource<SeqTypes> for ApiState<N, P, V>
+{
+    /// Get the stake table for a given epoch or the current epoch if not provided
+    async fn get_stake_table(
+        &self,
+        epoch: Option<<SeqTypes as NodeType>::Epoch>,
+    ) -> Vec<StakeTableEntry<<SeqTypes as NodeType>::SignatureKey>> {
+        // Get the epoch from the argument or the current epoch if not provided
+        let epoch = if let Some(epoch) = epoch {
+            epoch
+        } else {
+            self.consensus().await.read().await.cur_epoch().await
+        };
+
+        self.consensus()
+            .await
+            .read()
+            .await
+            .memberships
+            .stake_table(epoch)
     }
 }
 
@@ -196,36 +235,107 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> SubmitDa
     }
 }
 
+impl<N, P, D, V> NodeStateDataSource for StorageState<N, P, D, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+    D: Sync,
+{
+    async fn node_state(&self) -> &NodeState {
+        self.as_ref().node_state().await
+    }
+}
+
 impl<
         N: ConnectedNetwork<PubKey>,
         V: Versions,
         P: SequencerPersistence,
-        D: CatchupDataSource + Send + Sync,
+        D: CatchupStorage + Send + Sync,
     > CatchupDataSource for StorageState<N, P, D, V>
 {
-    #[tracing::instrument(skip(self))]
-    async fn get_account(
+    #[tracing::instrument(skip(self, instance))]
+    async fn get_accounts(
         &self,
+        instance: &NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_account(height, view, account).await {
-            Ok(account) => return Ok(account),
+        match self
+            .as_ref()
+            .get_accounts(instance, height, view, accounts)
+            .await
+        {
+            Ok(accounts) => return Ok(accounts),
             Err(err) => {
-                tracing::info!("account is not in memory, trying storage: {err:#}");
+                tracing::info!("accounts not in memory, trying storage: {err:#}");
             }
         }
 
         // Try storage.
-        self.inner().get_account(height, view, account).await
+        let (tree, leaf) = self
+            .inner()
+            .get_accounts(instance, height, view, accounts)
+            .await
+            .context("accounts not in memory, and could not fetch from storage")?;
+        // If we successfully fetched accounts from storage, try to add them back into the in-memory
+        // state.
+        let handle = self.as_ref().consensus().await;
+        let handle = handle.read().await;
+        let consensus = handle.consensus();
+        let mut consensus = consensus.write().await;
+        let (state, delta) = match consensus.validated_state_map().get(&view) {
+            Some(View {
+                view_inner: ViewInner::Leaf { state, delta, .. },
+            }) => {
+                let mut state = (**state).clone();
+
+                // Add the fetched accounts to the state.
+                for account in accounts {
+                    if let Some((proof, _)) = FeeAccountProof::prove(&tree, (*account).into()) {
+                        if let Err(err) = proof.remember(&mut state.fee_merkle_tree) {
+                            tracing::warn!(
+                                ?view,
+                                %account,
+                                "cannot update fetched account state: {err:#}"
+                            );
+                        }
+                    } else {
+                        tracing::warn!(?view, %account, "cannot update fetched account state because account is not in the merkle tree");
+                    };
+                }
+
+                (Arc::new(state), delta.clone())
+            }
+            _ => {
+                // If we don't already have a leaf for this view, or if we don't have the view
+                // at all, we can create a new view based on the recovered leaf and add it to
+                // our state map. In this case, we must also add the leaf to the saved leaves
+                // map to ensure consistency.
+                let mut state = ValidatedState::from_header(leaf.block_header());
+                state.fee_merkle_tree = tree.clone();
+                (Arc::new(state), None)
+            }
+        };
+        if let Err(err) = consensus.update_leaf(leaf, Arc::clone(&state), delta) {
+            tracing::warn!(?view, "cannot update fetched account state: {err:#}");
+        }
+        tracing::info!(?view, "updated with fetched account state");
+
+        Ok(tree)
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+    #[tracing::instrument(skip(self, instance))]
+    async fn get_frontier(
+        &self,
+        instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
         // Check if we have the desired state in memory.
-        match self.as_ref().get_frontier(height, view).await {
+        match self.as_ref().get_frontier(instance, height, view).await {
             Ok(frontier) => return Ok(frontier),
             Err(err) => {
                 tracing::info!("frontier is not in memory, trying storage: {err:#}");
@@ -233,7 +343,7 @@ impl<
         }
 
         // Try storage.
-        self.inner().get_frontier(height, view).await
+        self.inner().get_frontier(instance, height, view).await
     }
 
     async fn get_chain_config(
@@ -272,16 +382,28 @@ impl<
 //     }
 // }
 
+impl<N, V, P> NodeStateDataSource for ApiState<N, P, V>
+where
+    N: ConnectedNetwork<PubKey>,
+    V: Versions,
+    P: SequencerPersistence,
+{
+    async fn node_state(&self) -> &NodeState {
+        &self.consensus.as_ref().get().await.get_ref().node_state
+    }
+}
+
 impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupDataSource
     for ApiState<N, P, V>
 {
-    #[tracing::instrument(skip(self))]
-    async fn get_account(
+    #[tracing::instrument(skip(self, _instance))]
+    async fn get_accounts(
         &self,
+        _instance: &NodeState,
         height: u64,
         view: ViewNumber,
-        account: Address,
-    ) -> anyhow::Result<AccountQueryData> {
+        accounts: &[FeeAccount],
+    ) -> anyhow::Result<FeeMerkleTree> {
         let state = self
             .consensus()
             .await
@@ -292,14 +414,16 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> CatchupD
             .context(format!(
                 "state not available for height {height}, view {view:?}"
             ))?;
-        let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
-            format!("account {account} not available for height {height}, view {view:?}"),
-        )?;
-        Ok(AccountQueryData { balance, proof })
+        retain_accounts(&state.fee_merkle_tree, accounts.iter().copied())
     }
 
-    #[tracing::instrument(skip(self))]
-    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+    #[tracing::instrument(skip(self, _instance))]
+    async fn get_frontier(
+        &self,
+        _instance: &NodeState,
+        height: u64,
+        view: ViewNumber,
+    ) -> anyhow::Result<BlocksFrontier> {
         let state = self
             .consensus()
             .await
@@ -366,14 +490,15 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence> StateSig
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use std::time::Duration;
-
-    use async_std::task::sleep;
     use committable::Committable;
+    use hotshot_state_prover::service::light_client_genesis_from_stake_table;
+    use std::time::Duration;
+    use tokio::{spawn, time::sleep};
 
+    use crate::network;
+    use espresso_types::MockSequencerVersions;
     use espresso_types::{
-        mock::MockStateCatchup,
-        v0::traits::{PersistenceOptions, StateCatchup},
+        v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         MarketplaceVersion, NamespaceId, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
@@ -393,11 +518,14 @@ pub mod test_helpers {
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-    use vbs::version::StaticVersion;
-    use vbs::version::StaticVersionType;
+    use tide_disco::{Api, App, Error, StatusCode};
+    use tokio::task::JoinHandle;
+    use url::Url;
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     use super::*;
     use crate::{
+        catchup::NullStateCatchup,
         persistence::no_storage,
         testing::{
             run_marketplace_builder, run_test_builder, wait_for_decide_on_handle, TestConfig,
@@ -437,12 +565,12 @@ pub mod test_helpers {
         network_config: Option<TestConfig<{ NUM_NODES }>>,
     }
 
-    impl Default for TestNetworkConfigBuilder<5, no_storage::Options, MockStateCatchup> {
+    impl Default for TestNetworkConfigBuilder<5, no_storage::Options, NullStateCatchup> {
         fn default() -> Self {
             TestNetworkConfigBuilder {
                 state: std::array::from_fn(|_| ValidatedState::default()),
                 persistence: Some([no_storage::Options; 5]),
-                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                catchup: Some(std::array::from_fn(|_| NullStateCatchup::default())),
                 network_config: None,
                 api_config: None,
             }
@@ -450,15 +578,15 @@ pub mod test_helpers {
     }
 
     impl<const NUM_NODES: usize>
-        TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, NullStateCatchup>
     {
         pub fn with_num_nodes(
-        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, NullStateCatchup>
         {
             TestNetworkConfigBuilder {
                 state: std::array::from_fn(|_| ValidatedState::default()),
                 persistence: Some([no_storage::Options; { NUM_NODES }]),
-                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                catchup: Some(std::array::from_fn(|_| NullStateCatchup::default())),
                 network_config: None,
                 api_config: None,
             }
@@ -529,14 +657,13 @@ pub mod test_helpers {
         ) -> Self {
             let mut cfg = cfg;
             let mut builder_tasks = Vec::new();
-            let mut legacy_builder_url = "http://example.com".parse().unwrap();
             let mut marketplace_builder_url = "http://example.com".parse().unwrap();
 
             if <V as Versions>::Base::VERSION < MarketplaceVersion::VERSION {
                 let (task, url) =
                     run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
                 builder_tasks.push(task);
-                legacy_builder_url = url;
+                cfg.network_config.set_builder_urls(vec1::vec1![url]);
             };
 
             if <V as Versions>::Upgrade::VERSION >= MarketplaceVersion::VERSION
@@ -544,16 +671,13 @@ pub mod test_helpers {
             {
                 let (task, url) = run_marketplace_builder::<{ NUM_NODES }>(
                     cfg.network_config.marketplace_builder_port(),
-                    NodeState::default(),
-                    cfg.state[0].clone(),
                 )
                 .await;
                 builder_tasks.push(task);
+                cfg.network_config
+                    .set_builder_urls(vec1::vec1![url.clone()]);
                 marketplace_builder_url = url;
             }
-
-            cfg.network_config
-                .set_builder_urls(vec1::vec1![legacy_builder_url]);
 
             let mut nodes = join_all(
                 izip!(cfg.state, cfg.persistence, cfg.catchup)
@@ -565,21 +689,23 @@ pub mod test_helpers {
                         let marketplace_builder_url = marketplace_builder_url.clone();
                         async move {
                             if i == 0 {
-                                opt.serve(|metrics| {
+                                opt.serve(|metrics, consumer| {
                                     let cfg = cfg.clone();
                                     async move {
-                                        cfg.init_node(
-                                            0,
-                                            state,
-                                            persistence,
-                                            catchup,
-                                            &*metrics,
-                                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                                            bind_version,
-                                            upgrades_map,
-                                            marketplace_builder_url,
-                                        )
-                                        .await
+                                        Ok(cfg
+                                            .init_node(
+                                                0,
+                                                state,
+                                                persistence,
+                                                catchup,
+                                                &*metrics,
+                                                STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                consumer,
+                                                bind_version,
+                                                upgrades_map,
+                                                marketplace_builder_url,
+                                            )
+                                            .await)
                                     }
                                     .boxed()
                                 })
@@ -593,6 +719,7 @@ pub mod test_helpers {
                                     catchup,
                                     &NoMetrics,
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    NullEventConsumer,
                                     bind_version,
                                     upgrades_map,
                                     marketplace_builder_url,
@@ -863,6 +990,61 @@ pub mod test_helpers {
             .unwrap()
             .unwrap();
     }
+
+    pub async fn spawn_dishonest_peer_catchup_api() -> anyhow::Result<(Url, JoinHandle<()>)> {
+        let toml = toml::from_str::<toml::Value>(include_str!("../api/catchup.toml")).unwrap();
+        let mut api =
+            Api::<(), hotshot_query_service::Error, SequencerApiVersion>::new(toml).unwrap();
+
+        api.get("account", |_req, _state: &()| {
+            async move {
+                Result::<AccountQueryData, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no account found".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("blocks", |_req, _state| {
+            async move {
+                Result::<BlocksFrontier, _>::Err(hotshot_query_service::Error::catch_all(
+                    StatusCode::BAD_REQUEST,
+                    "no block found".to_string(),
+                ))
+            }
+            .boxed()
+        })?
+        .get("chainconfig", |_req, _state| {
+            async move {
+                Result::<ChainConfig, _>::Ok(ChainConfig {
+                    max_block_size: 300.into(),
+                    base_fee: 1.into(),
+                    fee_recipient: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                        .parse()
+                        .unwrap(),
+                    ..Default::default()
+                })
+            }
+            .boxed()
+        })?;
+
+        let mut app = App::<_, hotshot_query_service::Error>::with_state(());
+        app.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
+
+        app.register_module::<_, _>("catchup", api).unwrap();
+
+        let port = pick_unused_port().expect("no free port");
+        let url: Url = Url::parse(&format!("http://localhost:{port}")).unwrap();
+
+        let handle = spawn({
+            let url = url.clone();
+            async move {
+                let _ = app.serve(url, SequencerApiVersion::instance()).await;
+            }
+        });
+
+        Ok((url, handle))
+    }
 }
 
 #[cfg(test)]
@@ -872,12 +1054,25 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
 
-    use espresso_types::{Header, NamespaceId};
+    use espresso_types::MockSequencerVersions;
+    use espresso_types::{
+        traits::{EventConsumer, PersistenceOptions},
+        Header, Leaf, Leaf2, NamespaceId,
+    };
     use ethers::utils::Anvil;
-    use futures::stream::StreamExt;
-    use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
+    use futures::{future, stream::StreamExt};
+    use hotshot_query_service::availability::{
+        AvailabilityDataSource, BlockQueryData, VidCommonQueryData,
+    };
+    use hotshot_types::drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT};
+    use hotshot_types::{
+        data::QuorumProposal2, event::LeafInfo, simple_certificate::QuorumCertificate,
+        traits::node_implementation::ConsensusTime,
+    };
+
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
+    use std::fmt::Debug;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -886,29 +1081,32 @@ mod api_tests {
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
 
-    use self::options::HotshotEvents;
-    use super::*;
-    use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
+    use super::{update::ApiEventConsumer, *};
+    use crate::network;
+    use crate::{
+        persistence::no_storage::NoStorage,
+        testing::{wait_for_decide_on_handle, TestConfigBuilder},
+    };
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         submit_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn status_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         status_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn state_signature_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         state_signature_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>() {
         setup_test();
 
@@ -934,17 +1132,6 @@ mod api_tests {
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
-        // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        client
-            .socket("availability/stream/leaves/0")
-            .subscribe::<LeafQueryData<SeqTypes>>()
-            .await
-            .unwrap()
-            .next()
-            .await
-            .unwrap()
-            .unwrap();
-
         let hash = client
             .post("submit/submit")
             .body_json(&txn)
@@ -957,6 +1144,18 @@ mod api_tests {
         // Wait for a Decide event containing transaction matching the one we sent
         let block_height = wait_for_decide_on_handle(&mut events, &txn).await as usize;
         tracing::info!(block_height, "transaction sequenced");
+
+        // Wait for the query service to update to this block height.
+        client
+            .socket(&format!("availability/stream/blocks/{block_height}"))
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
         let mut found_txn = false;
         let mut found_empty_block = false;
         for block_num in 0..=block_height {
@@ -1005,80 +1204,147 @@ mod api_tests {
         assert!(found_empty_block);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn catchup_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
     }
 
-    #[async_std::test]
-    pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
-        use HotshotEvents;
+    #[tokio::test(flavor = "multi_thread")]
+    pub async fn test_non_consecutive_decide_with_failing_event_consumer<D>()
+    where
+        D: TestableSequencerDataSource + Debug + 'static,
+    {
+        #[derive(Clone, Copy, Debug)]
+        struct FailConsumer;
+
+        #[async_trait]
+        impl EventConsumer for FailConsumer {
+            async fn handle_event(&self, _: &Event<SeqTypes>) -> anyhow::Result<()> {
+                bail!("mock error injection");
+            }
+        }
 
         setup_test();
 
-        let hotshot_event_streaming_port =
-            pick_unused_port().expect("No ports free for hotshot event streaming");
-        let query_service_port = pick_unused_port().expect("No ports free for query service");
+        let storage = D::create_storage().await;
+        let persistence = D::persistence_options(&storage).create().await.unwrap();
+        let data_source: Arc<StorageState<network::Memory, NoStorage, _, MockSequencerVersions>> =
+            Arc::new(StorageState::new(
+                D::create(D::persistence_options(&storage), Default::default(), false)
+                    .await
+                    .unwrap(),
+                ApiState::new(future::pending()),
+            ));
 
-        let url = format!("http://localhost:{hotshot_event_streaming_port}")
-            .parse()
-            .unwrap();
+        // Create two non-consecutive leaf chains.
+        let mut chain1 = vec![];
 
-        let hotshot_events = HotshotEvents {
-            events_service_port: hotshot_event_streaming_port,
+        let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
+            block_header: Leaf::genesis(&Default::default(), &NodeState::mock())
+                .await
+                .block_header()
+                .clone(),
+            view_number: ViewNumber::genesis(),
+            justify_qc: QuorumCertificate::genesis::<MockSequencerVersions>(
+                &ValidatedState::default(),
+                &NodeState::mock(),
+            )
+            .await
+            .to_qc2(),
+            upgrade_certificate: None,
+            view_change_evidence: None,
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
         };
+        let mut qc = QuorumCertificate::genesis::<MockSequencerVersions>(
+            &ValidatedState::default(),
+            &NodeState::mock(),
+        )
+        .await
+        .to_qc2();
 
-        let client: Client<ServerError, StaticVersion<0, 1>> = Client::new(url);
+        let mut justify_qc = qc.clone();
+        for i in 0..5 {
+            *quorum_proposal.block_header.height_mut() = i;
+            quorum_proposal.view_number = ViewNumber::new(i);
+            quorum_proposal.justify_qc = justify_qc;
+            let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
+            qc.view_number = leaf.view_number();
+            qc.data.leaf_commit = Committable::commit(&leaf);
+            justify_qc = qc.clone();
+            chain1.push((leaf.clone(), qc.clone()));
+        }
+        // Split into two chains.
+        let mut chain2 = chain1.split_off(2);
+        // Make non-consecutive (i.e. we skip a leaf).
+        chain2.remove(0);
 
-        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
-
-        let anvil = Anvil::new().spawn();
-        let l1 = anvil.endpoint().parse().unwrap();
-        let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::default()
-            .api_config(options)
-            .network_config(network_config)
-            .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
-
-        let mut subscribed_events = client
-            .socket("hotshot-events/events")
-            .subscribe::<Event<SeqTypes>>()
+        // Decide 2 leaves, but fail in event processing.
+        let leaf_chain = chain1
+            .iter()
+            .map(|(leaf, qc)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide with event handling failure");
+        persistence
+            .append_decided_leaves(
+                ViewNumber::new(1),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &FailConsumer,
+            )
             .await
             .unwrap();
 
-        let total_count = 5;
-        // wait for these events to receive on client 1
-        let mut receive_count = 0;
-        loop {
-            let event = subscribed_events.next().await.unwrap();
-            tracing::info!(
-                "Received event in hotshot event streaming Client 1: {:?}",
-                event
-            );
-            receive_count += 1;
-            if receive_count > total_count {
-                tracing::info!("Client Received atleast desired events, exiting loop");
-                break;
-            }
+        // Now decide remaining leaves successfully. We should now process a decide event for all
+        // the leaves.
+        let consumer = ApiEventConsumer::from(data_source.clone());
+        let leaf_chain = chain2
+            .iter()
+            .map(|(leaf, qc)| (leaf_info(leaf.clone()), qc.clone()))
+            .collect::<Vec<_>>();
+        tracing::info!("decide successfully");
+        persistence
+            .append_decided_leaves(
+                ViewNumber::new(4),
+                leaf_chain.iter().map(|(leaf, qc)| (leaf, qc.clone())),
+                &consumer,
+            )
+            .await
+            .unwrap();
+
+        // Check that the leaves were moved to archive storage.
+        for (leaf, qc) in chain1.iter().chain(&chain2) {
+            tracing::info!(height = leaf.height(), "check archive");
+            let qd = data_source.get_leaf(leaf.height() as usize).await.await;
+            let stored_leaf: Leaf2 = qd.leaf().clone().into();
+            let stored_qc = qd.qc().clone().to_qc2();
+            assert_eq!(&stored_leaf, leaf);
+            assert_eq!(&stored_qc, qc);
         }
-        assert_eq!(receive_count, total_count + 1);
+    }
+
+    fn leaf_info(leaf: Leaf2) -> LeafInfo<SeqTypes> {
+        LeafInfo {
+            leaf,
+            vid_share: None,
+            state: Default::default(),
+            delta: None,
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::{collections::BTreeMap, time::Duration};
-
-    use async_std::task::sleep;
     use committable::{Commitment, Committable};
+    use std::{collections::BTreeMap, time::Duration};
+    use tokio::time::sleep;
 
     use espresso_types::{
-        mock::MockStateCatchup,
+        traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, MockSequencerVersions, SequencerVersions, TimeBasedUpgrade,
-        Timestamp, Upgrade, UpgradeType, ValidatedState,
+        BackoffParams, FeeAccount, FeeAmount, FeeVersion, Header, MarketplaceVersion,
+        MockSequencerVersions, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1100,8 +1366,8 @@ mod test {
     use sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
     use surf_disco::Client;
     use test_helpers::{
-        catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkConfigBuilder,
+        catchup_test_helper, spawn_dishonest_peer_catchup_api, state_signature_test_helper,
+        status_test_helper, submit_test_helper, TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use time::OffsetDateTime;
@@ -1109,16 +1375,17 @@ mod test {
 
     use self::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
+        options::HotshotEvents,
         sql::DataSource as SqlDataSource,
     };
     use super::*;
     use crate::{
-        catchup::StatePeers,
+        catchup::{NullStateCatchup, StatePeers},
         persistence::no_storage,
         testing::{TestConfig, TestConfigBuilder},
     };
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_healthcheck() {
         setup_test();
 
@@ -1129,7 +1396,7 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
+        let config = TestNetworkConfigBuilder::<5, _, NullStateCatchup>::default()
             .api_config(options)
             .network_config(network_config)
             .build();
@@ -1140,27 +1407,27 @@ mod test {
         assert_eq!(health.status, HealthStatus::Available);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn status_test_without_query_module() {
         status_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn submit_test_without_query_module() {
         submit_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn state_signature_test_without_query_module() {
         state_signature_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn catchup_test_without_query_module() {
         catchup_test_helper(|opt| opt).await
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_test_merklized_state_api() {
         setup_test();
 
@@ -1231,9 +1498,20 @@ mod test {
             assert_eq!(*path.index(), account);
             assert!(*path.elem().unwrap() > 0.into(), "{:?}", path.elem());
         }
+
+        // testing fee_balance api
+        let account = TestConfig::<5>::builder_key().fee_account();
+        let amount = client
+            .get::<Option<FeeAmount>>(&format!("fee-state/fee-balance/latest/{}", account))
+            .send()
+            .await
+            .unwrap()
+            .unwrap();
+        let expected = ethers::types::U256::max_value();
+        assert_eq!(expected, amount.0);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_catchup() {
         setup_test();
 
@@ -1296,6 +1574,7 @@ mod test {
                 ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
                 MockSequencerVersions::new(),
                 Default::default(),
                 "http://localhost".parse().unwrap(),
@@ -1330,7 +1609,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_from_instance() {
         // This test uses a ValidatedState which only has the default chain config commitment.
         // The NodeState has the full chain config.
@@ -1384,7 +1663,7 @@ mod test {
         drop(network);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_chain_config_catchup() {
         // This test uses a ValidatedState with a non-default chain config
         // so it will be different from the NodeState chain config used by the TestNetwork.
@@ -1461,7 +1740,80 @@ mod test {
         drop(network);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_chain_config_catchup_dishonest_peer() {
+        // This test sets up a network of three nodes, each with the full chain config.
+        // One of the nodes is connected to a dishonest peer.
+        // When this node makes a chain config catchup request, it will result in an error due to the peer's malicious response.
+        // The test also makes a catchup request for another node with an honest peer, which succeeds.
+        // The requested chain config is based on the commitment from the validated state's chain config.
+        // The dishonest peer responds with an invalid (malicious) chain config
+        setup_test();
+
+        const NUM_NODES: usize = 3;
+
+        let (url, handle) = spawn_dishonest_peer_catchup_api().await.unwrap();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let cf = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+
+        let state = ValidatedState {
+            chain_config: cf.into(),
+            ..Default::default()
+        };
+
+        let mut peers = std::array::from_fn(|_| {
+            StatePeers::<SequencerApiVersion>::from_urls(
+                vec![format!("http://localhost:{port}").parse().unwrap()],
+                BackoffParams::default(),
+            )
+        });
+
+        // one of the node has dishonest peer. This list of peers is for node#1
+        peers[2] = StatePeers::<SequencerApiVersion>::from_urls(
+            vec![url.clone()],
+            BackoffParams::default(),
+        );
+
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: None,
+                })
+                .catchup(Default::default()),
+            )
+            .states(std::array::from_fn(|_| state.clone()))
+            .catchups(peers)
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        // Test a catchup request for node #0, which is connected to an honest peer.
+        // The catchup should successfully retrieve the correct chain config.
+        let node = &network.peers[0];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap();
+
+        // Test a catchup request for node #1, which is connected to a dishonest peer.
+        // This request will result in an error due to the malicious chain config provided by the peer.
+        let node = &network.peers[1];
+        let peers = node.node_state().peers;
+        peers.try_fetch_chain_config(cf.commit()).await.unwrap_err();
+
+        network.server.shut_down().await;
+        handle.abort();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fee_upgrade_view_based() {
         setup_test();
 
@@ -1490,7 +1842,7 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fee_upgrade_time_based() {
         setup_test();
 
@@ -1521,12 +1873,12 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_upgrade_view_based() {
         setup_test();
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: None,
@@ -1551,14 +1903,14 @@ mod test {
         test_upgrade_helper::<MySequencerVersions>(upgrades, MySequencerVersions::new()).await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_marketplace_upgrade_time_based() {
         setup_test();
 
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
 
         let mut upgrades = std::collections::BTreeMap::new();
-        type MySequencerVersions = SequencerVersions<StaticVersion<0, 2>, StaticVersion<0, 3>>;
+        type MySequencerVersions = SequencerVersions<FeeVersion, MarketplaceVersion>;
 
         let mode = UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
@@ -1567,7 +1919,7 @@ mod test {
             stop_voting_time: None,
         });
 
-        let upgrade_type = UpgradeType::Fee {
+        let upgrade_type = UpgradeType::Marketplace {
             chain_config: ChainConfig {
                 max_block_size: 400.into(),
                 base_fee: 2.into(),
@@ -1634,13 +1986,13 @@ mod test {
                 EventType::UpgradeProposal { proposal, .. } => {
                     let upgrade = proposal.data.upgrade_proposal;
                     let new_version = upgrade.new_version;
-                    dbg!(&new_version);
                     assert_eq!(new_version, <MockSeqVersions as Versions>::Upgrade::VERSION);
                     break upgrade.new_version_first_view;
                 }
                 _ => continue,
             }
         };
+        tracing::info!(?new_version_first_view, "seen upgrade proposal");
 
         let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
@@ -1672,9 +2024,11 @@ mod test {
                 .map(|state| state.chain_config.resolve())
                 .collect();
 
+            tracing::info!(?height, ?new_version_first_view, "checking config");
+
             // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
-                dbg!(height, new_version_first_view);
+                tracing::info!(?configs, "configs");
                 if height > new_version_first_view {
                     for config in configs {
                         assert_eq!(config, chain_config_upgrade);
@@ -1688,7 +2042,7 @@ mod test {
         network.server.shut_down().await;
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     pub(crate) async fn test_restart() {
         setup_test();
 
@@ -1711,7 +2065,7 @@ mod test {
                     .state(Default::default())
                     .status(Default::default()),
             )
-            .persistences(persistence)
+            .persistences(persistence.clone())
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
         let mut network = TestNetwork::new(config, MockSequencerVersions::new()).await;
@@ -1768,12 +2122,7 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let persistence: [_; NUM_NODES] = storage
-            .iter()
-            .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
+
         let config = TestNetworkConfigBuilder::default()
             .api_config(
                 SqlDataSource::options(&storage[0], Options::with_port(port))
@@ -1827,7 +2176,7 @@ mod test {
         assert_eq!(chain, new_chain);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_fetch_config() {
         setup_test();
 
@@ -1855,23 +2204,13 @@ mod test {
 
         // Fetch the config from node 1, a different node than the one running the service.
         let validator = ValidatorConfig::generated_from_seed_indexed([0; 32], 1, 1, false);
-        let mut config = peers.fetch_config(validator.clone()).await;
+        let config = peers.fetch_config(validator.clone()).await.unwrap();
 
         // Check the node-specific information in the recovered config is correct.
         assert_eq!(config.node_index, 1);
-        assert_eq!(
-            config.config.my_own_validator_config.public_key,
-            validator.public_key
-        );
-        assert_eq!(
-            config.config.my_own_validator_config.private_key,
-            validator.private_key
-        );
 
         // Check the public information is also correct (with respect to the node that actually
         // served the config, for public keys).
-        config.config.my_own_validator_config =
-            ValidatorConfig::generated_from_seed_indexed([0; 32], 0, 1, true);
         pretty_assertions::assert_eq!(
             serde_json::to_value(PublicHotShotConfig::from(config.config)).unwrap(),
             serde_json::to_value(PublicHotShotConfig::from(
@@ -1879,5 +2218,58 @@ mod test {
             ))
             .unwrap()
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_hotshot_event_streaming() {
+        setup_test();
+
+        let hotshot_event_streaming_port =
+            pick_unused_port().expect("No ports free for hotshot event streaming");
+        let query_service_port = pick_unused_port().expect("No ports free for query service");
+
+        let url = format!("http://localhost:{hotshot_event_streaming_port}")
+            .parse()
+            .unwrap();
+
+        let hotshot_events = HotshotEvents {
+            events_service_port: hotshot_event_streaming_port,
+        };
+
+        let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
+
+        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
+
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+
+        let mut subscribed_events = client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let total_count = 5;
+        // wait for these events to receive on client 1
+        let mut receive_count = 0;
+        loop {
+            let event = subscribed_events.next().await.unwrap();
+            tracing::info!(
+                "Received event in hotshot event streaming Client 1: {:?}",
+                event
+            );
+            receive_count += 1;
+            if receive_count > total_count {
+                tracing::info!("Client Received atleast desired events, exiting loop");
+                break;
+            }
+        }
+        assert_eq!(receive_count, total_count + 1);
     }
 }

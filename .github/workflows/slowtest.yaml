@@ -1,4 +1,4 @@
-name: Slow Tests
+name: Slow Test
 
 on:
   push:
@@ -17,12 +17,44 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !contains(github.ref, 'main')}}
 
+# Build test binary with `testing` feature, which requires `hotshot_example` config
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  CARGO_TERM_COLOR: always
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  slow-tests:
+  slow-tests-sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      # These tests need the `anvil` binary provided by foundry
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure Environment
+        run: PATH="$PWD/target/release:$PATH"
+
+      - name: Enable Rust Caching
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+
+      - name: Build
+        run: |
+          cargo build --locked --bin diff-test --release
+          cargo nextest run --locked --release --workspace --features embedded-db --no-run
+        timeout-minutes: 90
+
+      - name: Slow Test
+        env:
+          NEXTEST_PROFILE: slow
+        run: cargo nextest run --locked --release --workspace --features embedded-db --verbose --no-fail-fast --nocapture
+        timeout-minutes: 40
+  slow-tests-postgres:
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
@@ -41,25 +73,22 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Configure Environment
+        run: PATH="$PWD/target/release:$PATH"
+
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
 
       - name: Build
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
           cargo build --locked --bin diff-test --release
-          cargo nextest run --locked --release --workspace --all-features --no-run
+          cargo nextest run --locked --release --workspace --no-run
         timeout-minutes: 90
 
-      - name: Slow Tests
+      - name: Slow Test
         env:
-          CARGO_TERM_COLOR: always
           NEXTEST_PROFILE: slow
-        # Build test binary with `testing` feature, which requires `hotshot_example` config
-        run: |
-          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
-          export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --verbose --no-fail-fast
-        timeout-minutes: 25
+        run: cargo nextest run --locked --release --workspace --verbose --no-fail-fast --nocapture
+        timeout-minutes: 40

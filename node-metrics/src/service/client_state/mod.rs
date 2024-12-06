@@ -4,10 +4,6 @@ use super::{
     data_state::{DataState, NodeIdentity},
     server_message::ServerMessage,
 };
-use async_std::{
-    sync::{RwLock, RwLockWriteGuard},
-    task::JoinHandle,
-};
 use bitvec::vec::BitVec;
 use espresso_types::SeqTypes;
 use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
@@ -16,6 +12,9 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use tokio::{spawn, task::JoinHandle};
+
+use async_lock::{RwLock, RwLockWriteGuard};
 
 /// ClientState represents the service state of the connected clients.
 /// It maintains and represents the connected clients, and their subscriptions.
@@ -406,14 +405,14 @@ where
         block_size: data_state_read_lock_guard
             .latest_blocks()
             .skip(1)
-            .map(|block| block.size)
+            .map(|block| Some(block.size))
             .collect(),
         block_time: data_state_read_lock_guard
             .latest_blocks()
             .skip(1)
             .zip(data_state_read_lock_guard.latest_blocks())
             .map(|(block_i, block_i_sub_1)| {
-                (block_i.time.0 - block_i_sub_1.time.0).whole_seconds() as u64
+                Some((block_i.time.0 - block_i_sub_1.time.0).whole_seconds() as u64)
             })
             .collect(),
         block_transactions: data_state_read_lock_guard
@@ -915,7 +914,7 @@ impl InternalClientMessageProcessingTask {
         S: Stream<Item = InternalClientMessage<K>> + Send + Sync + Unpin + 'static,
         K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle = async_std::task::spawn(Self::process_internal_client_message_stream(
+        let task_handle = spawn(Self::process_internal_client_message_stream(
             internal_client_message_receiver,
             data_state.clone(),
             client_thread_state.clone(),
@@ -966,7 +965,7 @@ impl Drop for InternalClientMessageProcessingTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -993,11 +992,10 @@ impl ProcessDistributeBlockDetailHandlingTask {
         S: Stream<Item = BlockDetail<SeqTypes>> + Send + Sync + Unpin + 'static,
         K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle =
-            async_std::task::spawn(Self::process_distribute_block_detail_handling_stream(
-                client_thread_state.clone(),
-                block_detail_receiver,
-            ));
+        let task_handle = spawn(Self::process_distribute_block_detail_handling_stream(
+            client_thread_state.clone(),
+            block_detail_receiver,
+        ));
 
         Self {
             task_handle: Some(task_handle),
@@ -1037,7 +1035,7 @@ impl Drop for ProcessDistributeBlockDetailHandlingTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -1064,11 +1062,10 @@ impl ProcessDistributeNodeIdentityHandlingTask {
         S: Stream<Item = NodeIdentity> + Send + Sync + Unpin + 'static,
         K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle =
-            async_std::task::spawn(Self::process_distribute_node_identity_handling_stream(
-                client_thread_state.clone(),
-                node_identity_receiver,
-            ));
+        let task_handle = spawn(Self::process_distribute_node_identity_handling_stream(
+            client_thread_state.clone(),
+            node_identity_receiver,
+        ));
 
         Self {
             task_handle: Some(task_handle),
@@ -1108,7 +1105,7 @@ impl Drop for ProcessDistributeNodeIdentityHandlingTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -1135,7 +1132,7 @@ impl ProcessDistributeVotersHandlingTask {
         S: Stream<Item = BitVec<u16>> + Send + Sync + Unpin + 'static,
         K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle = async_std::task::spawn(Self::process_distribute_voters_handling_stream(
+        let task_handle = spawn(Self::process_distribute_voters_handling_stream(
             client_thread_state.clone(),
             voters_receiver,
         ));
@@ -1176,7 +1173,7 @@ impl Drop for ProcessDistributeVotersHandlingTask {
     fn drop(&mut self) {
         let task_handle = self.task_handle.take();
         if let Some(task_handle) = task_handle {
-            async_std::task::block_on(task_handle.cancel());
+            task_handle.abort();
         }
     }
 }
@@ -1197,7 +1194,7 @@ pub mod tests {
         },
         server_message::ServerMessage,
     };
-    use async_std::{prelude::FutureExt, sync::RwLock};
+    use async_lock::RwLock;
     use bitvec::vec::BitVec;
     use espresso_types::{Leaf, NodeState, ValidatedState};
     use futures::{
@@ -1206,6 +1203,10 @@ pub mod tests {
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use std::{sync::Arc, time::Duration};
+    use tokio::{
+        spawn,
+        time::{sleep, timeout},
+    };
 
     pub fn create_test_client_thread_state() -> ClientThreadState<Sender<ServerMessage>> {
         ClientThreadState {
@@ -1280,7 +1281,7 @@ pub mod tests {
         (node_1, node_2, node_3, data_state)
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_client_handling_stream_task_shutdown() {
         let (_, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1294,7 +1295,7 @@ pub mod tests {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_request_latest_voters_snapshot() {
         let (_, _, _, mut data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1361,11 +1362,11 @@ pub mod tests {
         );
 
         if let Some(task_handle) = process_internal_client_message_handle.task_handle.take() {
-            assert_eq!(task_handle.cancel().await, None);
+            task_handle.abort();
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     #[cfg(feature = "testing")]
     async fn test_process_client_handling_stream_request_latest_blocks_snapshot() {
         use super::clone_block_detail;
@@ -1435,11 +1436,11 @@ pub mod tests {
         if let Some(process_internal_client_message_handle) =
             process_internal_client_message_handle.task_handle.take()
         {
-            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+            process_internal_client_message_handle.abort();
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_request_node_identity_snapshot() {
         let (node_1, node_2, node_3, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1506,11 +1507,11 @@ pub mod tests {
         if let Some(process_internal_client_message_handle) =
             process_internal_client_message_handle.task_handle.take()
         {
-            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+            process_internal_client_message_handle.abort();
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_subscribe_latest_block() {
         let (_, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1629,9 +1630,7 @@ pub mod tests {
             Some(ServerMessage::LatestBlock(arc_expected_block.clone()))
         );
 
-        if server_message_receiver_3
-            .next()
-            .timeout(Duration::from_millis(10))
+        if timeout(Duration::from_millis(10), server_message_receiver_3.next())
             .await
             .is_ok()
         {
@@ -1641,24 +1640,24 @@ pub mod tests {
         if let Some(process_internal_client_message_handle) =
             process_internal_client_message_handle.task_handle.take()
         {
-            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+            process_internal_client_message_handle.abort();
         }
         if let Some(process_distribute_block_detail_handle) =
             process_distribute_block_detail_handle.task_handle.take()
         {
-            assert_eq!(process_distribute_block_detail_handle.cancel().await, None);
+            process_distribute_block_detail_handle.abort();
         }
         if let Some(process_distribute_voters_handle) =
             process_distribute_voters_handle.task_handle.take()
         {
-            assert_eq!(process_distribute_voters_handle.cancel().await, None);
+            process_distribute_voters_handle.abort();
         }
         if let Some(process_leaf_stream_handle) = process_leaf_stream_handle.task_handle.take() {
-            assert_eq!(process_leaf_stream_handle.cancel().await, None);
+            process_leaf_stream_handle.abort();
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_subscribe_node_identity() {
         let (node_1, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1770,17 +1769,17 @@ pub mod tests {
         if let Some(process_internal_client_message_handle) =
             process_internal_client_message_handle.task_handle.take()
         {
-            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+            process_internal_client_message_handle.abort();
         }
 
         if let Some(process_distribute_node_identity_handle) =
             process_distribute_node_identity_handle.task_handle.take()
         {
-            assert_eq!(process_distribute_node_identity_handle.cancel().await, None);
+            process_distribute_node_identity_handle.abort();
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_process_client_handling_stream_subscribe_voters() {
         let (_, _, _, data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
@@ -1884,12 +1883,12 @@ pub mod tests {
         if let Some(process_internal_client_message_handle) =
             process_internal_client_message_handle.task_handle.take()
         {
-            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+            process_internal_client_message_handle.abort();
         }
         if let Some(process_distribute_voters_handle) =
             process_distribute_voters_handle.task_handle.take()
         {
-            assert_eq!(process_distribute_voters_handle.cancel().await, None);
+            process_distribute_voters_handle.abort();
         }
     }
 
@@ -1906,7 +1905,7 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_sender_before_receiver_polled_closes_receiver() {
         let (sender, mut receiver) = mpsc::channel::<u64>(1);
 
@@ -1921,15 +1920,15 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_sender_after_receiver_polled_closes_receiver() {
         let (sender, mut receiver) = mpsc::channel::<u64>(1);
 
-        let join_handle = async_std::task::spawn(async move { receiver.next().await });
-        async_std::task::sleep(Duration::from_millis(100)).await;
+        let join_handle = spawn(async move { receiver.next().await });
+        sleep(Duration::from_millis(100)).await;
         drop(sender);
 
-        assert_eq!(join_handle.await, None);
+        assert!(join_handle.await.unwrap().is_none());
     }
 
     /// Tests the behavior of the sender and receiver when the receiver is
@@ -1938,7 +1937,7 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_receiver_before_sender_sends() {
         let (mut sender, receiver) = mpsc::channel(1);
 
@@ -1953,53 +1952,51 @@ pub mod tests {
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would
     /// make this library no longer operate correctly.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sender_receiver_behavior_drop_receiver_after_sender_sends() {
         let (mut sender, mut receiver) = mpsc::channel(1);
 
-        let join_handle = async_std::task::spawn(async move {
+        let join_handle = spawn(async move {
             _ = sender.send(1).await;
-            async_std::task::sleep(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
             sender.send(2).await
         });
-        async_std::task::sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(50)).await;
         receiver.close();
 
         assert_eq!(receiver.next().await, Some(1));
         assert_eq!(receiver.next().await, None);
-        assert_ne!(join_handle.await, Ok(()));
+        assert!(join_handle.await.unwrap().is_err());
     }
 
     /// Tests to ensure that time timeout on an already ready future does not
     /// cause the future to be dropped.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_timeout_on_already_ready_future() {
         assert_eq!(
-            futures::future::ready(1u64).timeout(Duration::ZERO).await,
+            timeout(Duration::ZERO, futures::future::ready(1u64)).await,
             Ok(1u64)
         );
     }
 
     /// Tests to ensure that time timeout on a pending future does not cause the
     /// future to be dropped.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_timeout_on_async_block_resolves_when_polled() {
-        assert_eq!(async move { 1u64 }.timeout(Duration::ZERO).await, Ok(1u64),);
+        assert_eq!(timeout(Duration::ZERO, async move { 1u64 }).await, Ok(1u64),);
 
         assert_eq!(
-            async move { 1u64 }
-                .timeout(Duration::from_millis(100))
-                .await,
+            timeout(Duration::from_millis(100), async move { 1u64 }).await,
             Ok(1u64),
         );
     }
 
     /// Tests to ensure that time timeout on a pending future does not cause the
     /// future to be dropped.
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_timeout_on_pending_future_times_out() {
         assert_ne!(
-            async_std::future::timeout(Duration::ZERO, futures::future::pending::<u64>()).await,
+            timeout(Duration::ZERO, futures::future::pending::<u64>()).await,
             Ok(1u64)
         );
     }

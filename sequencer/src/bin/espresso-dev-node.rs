@@ -1,15 +1,14 @@
 use std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
-use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, MockSequencerVersions};
+use espresso_types::{parse_duration, MarketplaceVersion, SequencerVersions, V0_1};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
-    types::{Address, U256},
+    types::{Address, H160, U256},
 };
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_state_prover::service::{
@@ -28,11 +27,12 @@ use sequencer::{
     SequencerApiVersion,
 };
 use sequencer_utils::{
-    deployer::{deploy, Contract, Contracts},
+    deployer::{deploy, is_proxy_contract, Contract, Contracts},
     logging, AnvilOptions,
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::{error::ServerError, method::ReadState, Api, Error as _, StatusCode};
+use tokio::spawn;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -62,6 +62,16 @@ struct Args {
     )]
     account_index: u32,
 
+    /// Address for the multisig wallet that will be the admin
+    ///
+    /// This the multisig wallet that will be upgrade contracts and execute admin only functions on contracts
+    #[clap(
+        long,
+        name = "MULTISIG_ADDRESS",
+        env = "ESPRESSO_SEQUENCER_ETH_MULTISIG_ADDRESS"
+    )]
+    multisig_address: Option<H160>,
+
     /// The frequency of updating the light client state, expressed in update interval
     #[clap( long, value_parser = parse_duration, default_value = "20s", env = "ESPRESSO_STATE_PROVER_UPDATE_INTERVAL")]
     update_interval: Duration,
@@ -86,6 +96,11 @@ struct Args {
     /// If there are fewer indices provided than chains, the base ACCOUNT_INDEX will be used.
     #[clap(long, env = "ESPRESSO_SEQUENCER_DEPLOYER_ALT_INDICES")]
     alt_account_indices: Vec<u32>,
+
+    /// Optional list of multisig addresses for the alternate chains.
+    /// If there are fewer multisig addresses provided than chains, the base MULTISIG_ADDRESS will be used.
+    #[arg(long, env = "ESPRESSO_DEPLOYER_ALT_MULTISIG_ADDRESSES", num_args = 1.., value_delimiter = ',')]
+    alt_multisig_addresses: Vec<H160>,
 
     /// The frequency of updating the light client state for alt chains.
     /// If there are fewer intervals provided than chains, the base update interval will be used.
@@ -126,7 +141,7 @@ struct Args {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli_params = Args::parse();
 
@@ -134,9 +149,11 @@ async fn main() -> anyhow::Result<()> {
         rpc_url,
         mnemonic,
         account_index,
+        multisig_address,
         alt_chain_providers,
         alt_mnemonics,
         alt_account_indices,
+        alt_multisig_addresses,
         sequencer_api_port,
         sequencer_api_max_connections,
         builder_port,
@@ -177,7 +194,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let network_config = TestConfigBuilder::default()
-        .builder_port(builder_port)
+        .marketplace_builder_port(builder_port)
         .state_relay_url(relay_server_url.clone())
         .l1_url(l1_url.clone())
         .build();
@@ -188,7 +205,8 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+    let network =
+        TestNetwork::new(config, SequencerVersions::<MarketplaceVersion, V0_1>::new()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
@@ -203,10 +221,11 @@ async fn main() -> anyhow::Result<()> {
     let mut mock_contracts = BTreeMap::new();
     let mut handles = FuturesUnordered::new();
     // deploy contract for L1 and each alt chain
-    for (url, mnemonic, account_index, update_interval, retry_interval) in once((
+    for (url, mnemonic, account_index, multisig_address, update_interval, retry_interval) in once((
         l1_url.clone(),
         mnemonic.clone(),
         account_index,
+        multisig_address,
         update_interval,
         retry_interval,
     ))
@@ -220,6 +239,12 @@ async fn main() -> anyhow::Result<()> {
                     .chain(std::iter::repeat(account_index)),
             )
             .zip(
+                alt_multisig_addresses
+                    .into_iter()
+                    .map(Some)
+                    .chain(std::iter::repeat(multisig_address)),
+            )
+            .zip(
                 alt_prover_update_intervals
                     .into_iter()
                     .chain(std::iter::repeat(update_interval)),
@@ -229,7 +254,9 @@ async fn main() -> anyhow::Result<()> {
                     .into_iter()
                     .chain(std::iter::repeat(retry_interval)),
             )
-            .map(|((((url, mnc), idx), update), retry)| (url.clone(), mnc, idx, update, retry)),
+            .map(|(((((url, mnc), idx), mlts), update), retry)| {
+                (url.clone(), mnc, idx, mlts, update, retry)
+            }),
     ) {
         tracing::info!("deploying the contract for provider: {url:?}");
 
@@ -237,9 +264,11 @@ async fn main() -> anyhow::Result<()> {
             url.clone(),
             mnemonic.clone(),
             account_index,
+            multisig_address,
             true,
             None,
             async { Ok(lc_genesis.clone()) }.boxed(),
+            None,
             contracts.clone(),
         )
         .await?;
@@ -258,6 +287,13 @@ async fn main() -> anyhow::Result<()> {
         let light_client_address = contracts
             .get_contract_address(Contract::LightClientProxy)
             .unwrap();
+
+        if !is_proxy_contract(&provider, light_client_address)
+            .await
+            .expect("Failed to determine if light client contract is a proxy")
+        {
+            panic!("Light Client contract's address is not a proxy");
+        }
 
         mock_contracts.insert(
             chain_id,
@@ -316,6 +352,7 @@ async fn main() -> anyhow::Result<()> {
 
     let dev_info = DevInfo {
         builder_url: network.cfg.hotshot_config().builder_urls[0].clone(),
+        sequencer_api_port,
         l1_prover_port,
         l1_url,
         l1_light_client_address: l1_lc,
@@ -466,6 +503,7 @@ async fn run_dev_node_server<ApiVer: StaticVersionType + 'static, S: Signer + Cl
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DevInfo {
     pub builder_url: Url,
+    pub sequencer_api_port: u16,
     pub l1_prover_port: u16,
     pub l1_url: Url,
     pub l1_light_client_address: Address,
@@ -497,16 +535,14 @@ mod tests {
     use std::{process::Child, sync::Arc, time::Duration};
 
     use crate::AltChainInfo;
-    use async_std::{stream::StreamExt, task::sleep};
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};
-    use futures::TryStreamExt;
-    use hotshot_query_service::{
-        availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
-        data_source::sql::testing::TmpDb,
+    use futures::{StreamExt, TryStreamExt};
+    use hotshot_query_service::availability::{
+        BlockQueryData, TransactionQueryData, VidCommonQueryData,
     };
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
@@ -515,6 +551,7 @@ mod tests {
     use sequencer_utils::{init_signer, test_utils::setup_test, Anvil, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+    use tokio::time::sleep;
 
     use url::Url;
     use vbs::version::StaticVersion;
@@ -537,25 +574,21 @@ mod tests {
     // and open a PR.
     // - APIs update
     // - Types (like `Header`) update
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_dev_node_test() {
         setup_test();
 
         let builder_port = pick_unused_port().unwrap();
-
         let api_port = pick_unused_port().unwrap();
-
         let dev_node_port = pick_unused_port().unwrap();
-
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
 
-        let db = TmpDb::init().await;
-        let postgres_port = db.port();
+        let tmp_dir = tempfile::tempdir().unwrap();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
-            .features("testing")
+            .features("testing embedded-db")
             .current_target()
             .run()
             .unwrap()
@@ -563,16 +596,14 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
-            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
             .env(
-                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
-                postgres_port.to_string(),
+                "ESPRESSO_SEQUENCER_STORAGE_PATH",
+                tmp_dir.path().as_os_str(),
             )
-            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
-            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
+            .env("ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS", "25")
             .spawn()
             .unwrap();
 
@@ -597,18 +628,10 @@ mod tests {
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
 
-        let builder_address = builder_api_client
-            .get::<String>("block_info/builderaddress")
-            .send()
-            .await
-            .unwrap();
-
-        assert!(!builder_address.is_empty());
-
         let tx = Transaction::new(100_u32.into(), vec![1, 2, 3]);
 
-        let hash: Commitment<Transaction> = api_client
-            .post("submit/submit")
+        let hash: Commitment<Transaction> = builder_api_client
+            .post("txn_submit/submit")
             .body_json(&tx)
             .unwrap()
             .send()
@@ -626,6 +649,7 @@ mod tests {
             .await;
         while tx_result.is_err() {
             sleep(Duration::from_secs(1)).await;
+            tracing::warn!("waiting for tx");
 
             tx_result = api_client
                 .get::<TransactionQueryData<SeqTypes>>(&format!(
@@ -822,7 +846,6 @@ mod tests {
         }
 
         drop(process);
-        drop(db);
     }
 
     async fn alt_chain_providers() -> (Vec<Anvil>, Vec<Url>) {
@@ -845,7 +868,7 @@ mod tests {
         (providers, urls)
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_dev_node_multiple_lc_providers_test() {
         setup_test();
 
@@ -864,12 +887,11 @@ mod tests {
             .collect::<Vec<&str>>()
             .join(",");
 
-        let db = TmpDb::init().await;
-        let postgres_port = db.port();
+        let tmp_dir = tempfile::tempdir().unwrap();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
-            .features("testing")
+            .features("testing embedded-db")
             .current_target()
             .run()
             .unwrap()
@@ -877,20 +899,18 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
-            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
             .env(
-                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
-                postgres_port.to_string(),
-            )
-            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
-            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
-            .env(
                 "ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS",
                 alt_chains_env_value,
             )
+            .env(
+                "ESPRESSO_SEQUENCER_STORAGE_PATH",
+                tmp_dir.path().as_os_str(),
+            )
+            .env("ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS", "25")
             .spawn()
             .unwrap();
 
@@ -1005,6 +1025,5 @@ mod tests {
 
         drop(process);
         drop(alt_providers);
-        drop(db);
     }
 }

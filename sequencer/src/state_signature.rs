@@ -4,8 +4,8 @@ use std::collections::{HashMap, VecDeque};
 
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
-use async_std::sync::RwLock;
-use espresso_types::Leaf;
+use async_lock::RwLock;
+use espresso_types::Leaf2;
 use hotshot::types::{Event, EventType};
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::{
@@ -147,7 +147,7 @@ fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, RescueError> {
     Ok(VariableLengthRescueCRHF::<_, 1>::evaluate(elem)?[0])
 }
 
-fn form_light_client_state(leaf: &Leaf) -> anyhow::Result<LightClientState> {
+fn form_light_client_state(leaf: &Leaf2) -> anyhow::Result<LightClientState> {
     let header = leaf.block_header();
     let mut block_comm_root_bytes = vec![];
     header

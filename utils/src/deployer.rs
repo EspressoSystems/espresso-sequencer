@@ -1,32 +1,30 @@
 use anyhow::{ensure, Context};
-use async_std::sync::Arc;
 use clap::{builder::OsStr, Parser, ValueEnum};
 use contract_bindings::{
     erc1967_proxy::ERC1967Proxy,
     fee_contract::FeeContract,
-    hot_shot::HotShot,
     light_client::{LightClient, LIGHTCLIENT_ABI},
     light_client_mock::LIGHTCLIENTMOCK_ABI,
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
-    plonk_verifier_2::PlonkVerifier2,
+    plonk_verifier::PlonkVerifier,
 };
 use derive_more::Display;
-use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
+use ethers::{
+    prelude::*, signers::coins_bip39::English, signers::Signer, solc::artifacts::BytecodeObject,
+    utils::hex,
+};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
 };
+use std::sync::Arc;
 use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
 
 /// Set of predeployed contracts.
 #[derive(Clone, Debug, Parser)]
 pub struct DeployedContracts {
-    /// Use an already-deployed HotShot.sol instead of deploying a new one.
-    #[clap(long, env = Contract::HotShot)]
-    hotshot: Option<Address>,
-
     /// Use an already-deployed PlonkVerifier.sol instead of deploying a new one.
     #[clap(long, env = Contract::PlonkVerifier)]
     plonk_verifier: Option<Address>,
@@ -55,19 +53,17 @@ pub struct DeployedContracts {
 /// An identifier for a particular contract.
 #[derive(Clone, Copy, Debug, Display, PartialEq, Eq, Hash)]
 pub enum Contract {
-    #[display(fmt = "ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS")]
-    HotShot,
-    #[display(fmt = "ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_PLONK_VERIFIER_ADDRESS")]
     PlonkVerifier,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_STATE_UPDATE_VK_ADDRESS")]
     StateUpdateVK,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_ADDRESS")]
     LightClient,
-    #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
     LightClientProxy,
-    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
     FeeContract,
-    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
+    #[display("ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
     FeeContractProxy,
 }
 
@@ -84,9 +80,6 @@ pub struct Contracts(HashMap<Contract, Address>);
 impl From<DeployedContracts> for Contracts {
     fn from(deployed: DeployedContracts) -> Self {
         let mut m = HashMap::new();
-        if let Some(addr) = deployed.hotshot {
-            m.insert(Contract::HotShot, addr);
-        }
         if let Some(addr) = deployed.plonk_verifier {
             m.insert(Contract::PlonkVerifier, addr);
         }
@@ -188,7 +181,7 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
     let plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier2::deploy(l1.clone(), ())?,
+            PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
     let vk = contracts
@@ -251,7 +244,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     let plonk_verifier = contracts
         .deploy_tx(
             Contract::PlonkVerifier,
-            PlonkVerifier2::deploy(l1.clone(), ())?,
+            PlonkVerifier::deploy(l1.clone(), ())?,
         )
         .await?;
     let vk = contracts
@@ -300,6 +293,7 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
         .deploy(constructor_args)?
         .send()
         .await?;
+
     Ok(contract.address())
 }
 
@@ -308,9 +302,11 @@ pub async fn deploy(
     l1url: Url,
     mnemonic: String,
     account_index: u32,
+    multisig_address: Option<H160>,
     use_mock_contract: bool,
     only: Option<Vec<ContractGroup>>,
     genesis: BoxFuture<'_, anyhow::Result<(ParsedLightClientState, ParsedStakeTableState)>>,
+    permissioned_prover: Option<Address>,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
     let provider = Provider::<Http>::try_from(l1url.to_string())?;
@@ -320,24 +316,17 @@ pub async fn deploy(
         .index(account_index)?
         .build()?
         .with_chain_id(chain_id);
-    let owner = wallet.address();
-    let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
+    let deployer = wallet.address();
+    let l1 = Arc::new(SignerMiddleware::new(provider.clone(), wallet));
 
     // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
     // gas.
-    let balance = l1.get_balance(owner, None).await?;
+    let balance = l1.get_balance(deployer, None).await?;
     ensure!(
         balance > 0.into(),
-        "deployer account {owner:#x} is not funded!"
+        "deployer account {deployer:#x} is not funded!"
     );
-    tracing::info!(%balance, "deploying from address {owner:#x}");
-
-    // `HotShot.sol`
-    if should_deploy(ContractGroup::HotShot, &only) {
-        contracts
-            .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
-            .await?;
-    }
+    tracing::info!(%balance, "deploying from address {deployer:#x}");
 
     // `LightClient.sol`
     if should_deploy(ContractGroup::LightClient, &only) {
@@ -360,15 +349,42 @@ pub async fn deploy(
         let (genesis_lc, genesis_stake) = genesis.await?.clone();
 
         let data = light_client
-            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, owner)
+            .initialize(genesis_lc.into(), genesis_stake.into(), 864000, deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
-        contracts
+        let light_client_proxy_address = contracts
             .deploy_tx(
                 Contract::LightClientProxy,
                 ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
             )
             .await?;
+
+        // confirm that the implementation address is the address of the light client contract deployed above
+        if !is_proxy_contract(&provider, light_client_proxy_address)
+            .await
+            .expect("Failed to determine if light contract is a proxy")
+        {
+            panic!("Light Client contract's address is not a proxy");
+        }
+
+        // Instantiate a wrapper with the proxy address and light client ABI.
+        let proxy = LightClient::new(light_client_proxy_address, l1.clone());
+
+        // Perission the light client prover.
+        if let Some(prover) = permissioned_prover {
+            tracing::info!(%light_client_proxy_address, %prover, "setting permissioned prover");
+            proxy.set_permissioned_prover(prover).send().await?.await?;
+        }
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %light_client_proxy_address,
+                %owner,
+                "transferring light client proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?.await?;
+        }
     }
 
     // `FeeContract.sol`
@@ -378,15 +394,36 @@ pub async fn deploy(
             .await?;
         let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
         let data = fee_contract
-            .initialize(owner)
+            .initialize(deployer)
             .calldata()
             .context("calldata for initialize transaction not available")?;
-        contracts
+        let fee_contract_proxy_address = contracts
             .deploy_tx(
                 Contract::FeeContractProxy,
                 ERC1967Proxy::deploy(l1.clone(), (fee_contract_address, data))?,
             )
             .await?;
+
+        // confirm that the implementation address is the address of the fee contract deployed above
+        if !is_proxy_contract(&provider, fee_contract_proxy_address)
+            .await
+            .expect("Failed to determine if fee contract is a proxy")
+        {
+            panic!("Fee contract's address is not a proxy");
+        }
+
+        // Instantiate a wrapper with the proxy address and fee contract ABI.
+        let proxy = FeeContract::new(fee_contract_proxy_address, l1.clone());
+
+        // Transfer ownership to the multisig wallet if provided.
+        if let Some(owner) = multisig_address {
+            tracing::info!(
+                %fee_contract_proxy_address,
+                %owner,
+                "transferring fee contract proxy ownership to multisig",
+            );
+            proxy.transfer_ownership(owner).send().await?.await?;
+        }
     }
 
     Ok(contracts)
@@ -399,10 +436,184 @@ fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> boo
     }
 }
 
+pub async fn is_proxy_contract(
+    provider: &impl Middleware<Error: 'static>,
+    proxy_address: H160,
+) -> anyhow::Result<bool> {
+    // confirm that the proxy_address is a proxy
+    // using the implementation slot, 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, which is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
+    let hex_bytes = hex::decode("360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc")
+        .expect("Failed to decode hex string");
+    let implementation_slot = ethers::types::H256::from_slice(&hex_bytes);
+    let storage = provider
+        .get_storage_at(proxy_address, implementation_slot, None)
+        .await?;
+
+    let implementation_address = H160::from_slice(&storage[12..]);
+
+    // when the implementation address is not equal to zero, it's a proxy
+    Ok(implementation_address != H160::zero())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ContractGroup {
-    #[clap(name = "hotshot")]
-    HotShot,
     FeeContract,
     LightClient,
+}
+
+#[cfg(any(test, feature = "testing"))]
+pub mod test_helpers {
+
+    use anyhow::{ensure, Context};
+    use contract_bindings::{
+        erc1967_proxy::ERC1967Proxy,
+        fee_contract::{FeeContract, FEECONTRACT_ABI, FEECONTRACT_BYTECODE},
+        light_client::{LightClient, LIGHTCLIENT_ABI},
+        light_client_state_update_vk::LightClientStateUpdateVK,
+        plonk_verifier::PlonkVerifier,
+    };
+    use ethers::{prelude::*, solc::artifacts::BytecodeObject};
+    use hotshot_contract_adapter::light_client::LightClientConstructorArgs;
+    use std::sync::Arc;
+
+    use super::{Contract, Contracts};
+
+    /// Deployment `LightClientMock.sol` as proxy for testing
+    pub async fn deploy_light_client_contract_as_proxy_for_test<M: Middleware + 'static>(
+        l1: Arc<M>,
+        contracts: &mut Contracts,
+        constructor_args: Option<LightClientConstructorArgs>,
+    ) -> anyhow::Result<Address> {
+        // Deploy library contracts.
+        let plonk_verifier = contracts
+            .deploy_tx(
+                Contract::PlonkVerifier,
+                PlonkVerifier::deploy(l1.clone(), ())?,
+            )
+            .await?;
+        let vk = contracts
+            .deploy_tx(
+                Contract::StateUpdateVK,
+                LightClientStateUpdateVK::deploy(l1.clone(), ())?,
+            )
+            .await?;
+
+        // Link with LightClient's bytecode artifacts. We include the unlinked bytecode for the contract
+        // in this binary so that the contract artifacts do not have to be distributed with the binary.
+        // This should be fine because if the bindings we are importing are up to date, so should be the
+        // contract artifacts: this is no different than foundry inlining bytecode objects in generated
+        // bindings, except that foundry doesn't provide the bytecode for contracts that link with
+        // libraries, so we have to do it ourselves.
+        let mut bytecode: BytecodeObject = serde_json::from_str(include_str!(
+            "../../contract-bindings/artifacts/LightClient_bytecode.json",
+        ))?;
+        bytecode
+            .link_fully_qualified(
+                "contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier",
+                plonk_verifier,
+            )
+            .resolve()
+            .context("error linking PlonkVerifier lib")?;
+        bytecode
+            .link_fully_qualified(
+                "contracts/src/libraries/LightClientStateUpdateVK.sol:LightClientStateUpdateVK",
+                vk,
+            )
+            .resolve()
+            .context("error linking LightClientStateUpdateVK lib")?;
+        ensure!(!bytecode.is_unlinked(), "failed to link LightClient.sol");
+
+        // Deploy light client.
+        let light_client_factory = ContractFactory::new(
+            LIGHTCLIENT_ABI.clone(),
+            bytecode
+                .as_bytes()
+                .context("error parsing bytecode for linked LightClient contract")?
+                .clone(),
+            l1.clone(),
+        );
+        let contract = light_client_factory.deploy(())?.send().await?;
+
+        let light_client_address = contract.address();
+
+        let light_client = LightClient::new(light_client_address, l1.clone());
+
+        let constructor_args: LightClientConstructorArgs = match constructor_args {
+            Some(args) => args,
+            None => LightClientConstructorArgs::dummy_genesis(),
+        };
+
+        let deployer = *(l1.clone().get_accounts().await?.first()).expect("Address not found");
+
+        let data = light_client
+            .initialize(
+                constructor_args.light_client_state.into(),
+                constructor_args.stake_table_state.into(),
+                constructor_args.max_history_seconds,
+                deployer,
+            )
+            .calldata()
+            .context("calldata for initialize transaction not available")?;
+        let light_client_proxy_address = contracts
+            .deploy_tx(
+                Contract::LightClientProxy,
+                ERC1967Proxy::deploy(l1, (light_client_address, data))?,
+            )
+            .await?;
+
+        Ok(light_client_proxy_address)
+    }
+
+    /// Default deployment function `FeeContract.sol` for testing
+    ///
+    pub async fn deploy_fee_contract<M: Middleware + 'static>(
+        l1: Arc<M>,
+    ) -> anyhow::Result<Address> {
+        // Deploy fee contract
+        let fee_contract_factory = ContractFactory::new(
+            FEECONTRACT_ABI.clone(),
+            FEECONTRACT_BYTECODE.clone(),
+            l1.clone(),
+        );
+        let contract = fee_contract_factory.deploy(())?.send().await?;
+
+        let fee_contract_address = contract.address();
+
+        Ok(fee_contract_address)
+    }
+
+    /// Default deployment function `FeeContract.sol` (as proxy) for testing
+    ///
+    pub async fn deploy_fee_contract_as_proxy<M: Middleware + 'static>(
+        l1: Arc<M>,
+        contracts: &mut Contracts,
+    ) -> anyhow::Result<Address> {
+        // Deploy fee contract
+        let fee_contract_factory = ContractFactory::new(
+            FEECONTRACT_ABI.clone(),
+            FEECONTRACT_BYTECODE.clone(),
+            l1.clone(),
+        );
+        let contract = fee_contract_factory.deploy(())?.send().await?;
+
+        let fee_contract_address = contract.address();
+
+        let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
+
+        let deployer = *(l1.clone().get_accounts().await?.first()).expect("Address not found");
+
+        let data = fee_contract
+            .initialize(deployer)
+            .calldata()
+            .context("calldata for initialize transaction not available")?;
+
+        let fee_contract_proxy_address = contracts
+            .deploy_tx(
+                Contract::FeeContractProxy,
+                ERC1967Proxy::deploy(l1.clone(), (fee_contract_address, data))?,
+            )
+            .await?;
+
+        Ok(fee_contract_proxy_address)
+    }
 }

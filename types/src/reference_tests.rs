@@ -48,6 +48,7 @@ use crate::{
 type V1Serializer = vbs::Serializer<StaticVersion<0, 1>>;
 type V2Serializer = vbs::Serializer<StaticVersion<0, 2>>;
 type V3Serializer = vbs::Serializer<StaticVersion<0, 3>>;
+type V99Serializer = vbs::Serializer<StaticVersion<0, 99>>;
 
 async fn reference_payload() -> Payload {
     const NUM_NS_IDS: usize = 3;
@@ -92,8 +93,8 @@ fn reference_l1_block() -> L1BlockInfo {
 
 const REFERENCE_L1_BLOCK_COMMITMENT: &str = "L1BLOCK~4HpzluLK2Isz3RdPNvNrDAyQcWOF2c9JeLZzVNLmfpQ9";
 
-fn reference_chain_config() -> crate::v0_3::ChainConfig {
-    crate::v0_3::ChainConfig {
+fn reference_chain_config() -> crate::v0_99::ChainConfig {
+    crate::v0_99::ChainConfig {
         chain_id: 0x8a19.into(),
         max_block_size: 10240.into(),
         base_fee: 0.into(),
@@ -106,7 +107,7 @@ fn reference_chain_config() -> crate::v0_3::ChainConfig {
 const REFERENCE_V1_CHAIN_CONFIG_COMMITMENT: &str =
     "CHAIN_CONFIG~L6HmMktJbvnEGgpmRrsiYvQmIBstSj9UtDM7eNFFqYFO";
 
-const REFERENCE_V3_CHAIN_CONFIG_COMMITMENT: &str =
+const REFERENCE_V99_CHAIN_CONFIG_COMMITMENT: &str =
     "CHAIN_CONFIG~1mJTBiaJ0Nyuu4Ir5IZTamyI8CjexbktPkRr6R1rtnGh";
 
 fn reference_fee_info() -> FeeInfo {
@@ -154,7 +155,7 @@ async fn reference_header(version: Version) -> Header {
 
 const REFERENCE_V1_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
 const REFERENCE_V2_HEADER_COMMITMENT: &str = "BLOCK~V0GJjL19nCrlm9n1zZ6gaOKEekSMCT6uR5P-h7Gi6UJR";
-const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~oqbUzqJdG4JfWCDpCQWsLDjb47Rx_OH6KVsKQFOl4S2n";
+const REFERENCE_V99_HEADER_COMMITMENT: &str = "BLOCK~BGlAadiwOlxmhQxdp2HS7mHpG-ifDOx9ocBkTEJXx05_";
 
 fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
 where
@@ -180,7 +181,7 @@ fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Deb
     setup_test();
 
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let data_dir = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("../data")
         .join(version);
 
@@ -232,6 +233,7 @@ change in the serialization of this data structure.
         "v1" => V1Serializer::serialize(&reference).unwrap(),
         "v2" => V2Serializer::serialize(&reference).unwrap(),
         "v3" => V3Serializer::serialize(&reference).unwrap(),
+        "v99" => V99Serializer::serialize(&reference).unwrap(),
         _ => panic!("invalid version"),
     };
     if actual != expected {
@@ -261,6 +263,7 @@ change in the serialization of this data structure.
         "v1" => V1Serializer::deserialize(&expected).unwrap(),
         "v2" => V2Serializer::deserialize(&expected).unwrap(),
         "v3" => V3Serializer::deserialize(&expected).unwrap(),
+        "v99" => V99Serializer::deserialize(&expected).unwrap(),
         _ => panic!("invalid version"),
     };
 
@@ -306,17 +309,17 @@ Actual: {actual}
     );
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_payload() {
     reference_test_without_committable("v1", "payload", &reference_payload().await);
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_tx_index() {
     reference_test_without_committable("v1", "tx_index", &reference_tx_index().await);
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_ns_table() {
     reference_test(
         "v1",
@@ -347,12 +350,12 @@ fn test_reference_v1_chain_config() {
 }
 
 #[test]
-fn test_reference_v3_chain_config() {
+fn test_reference_v99_chain_config() {
     reference_test(
-        "v3",
+        "v99",
         "chain_config",
         reference_chain_config(),
-        REFERENCE_V3_CHAIN_CONFIG_COMMITMENT,
+        REFERENCE_V99_CHAIN_CONFIG_COMMITMENT,
     );
 }
 
@@ -366,7 +369,7 @@ fn test_reference_fee_info() {
     );
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_header_v1() {
     reference_test(
         "v1",
@@ -376,7 +379,7 @@ async fn test_reference_header_v1() {
     );
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_reference_header_v2() {
     reference_test(
         "v2",
@@ -386,13 +389,13 @@ async fn test_reference_header_v2() {
     );
 }
 
-#[async_std::test]
-async fn test_reference_header_v3() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_reference_header_v99() {
     reference_test(
-        "v3",
+        "v99",
         "header",
-        reference_header(StaticVersion::<0, 3>::version()).await,
-        REFERENCE_V3_HEADER_COMMITMENT,
+        reference_header(StaticVersion::<0, 99>::version()).await,
+        REFERENCE_V99_HEADER_COMMITMENT,
     );
 }
 #[test]

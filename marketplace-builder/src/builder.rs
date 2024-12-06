@@ -4,15 +4,11 @@ use anyhow::Context;
 use async_broadcast::{
     broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
 };
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
-};
+
 use async_lock::RwLock;
-use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair,
-    v0_3::{ChainConfig, RollupRegistration},
+    v0_99::{ChainConfig, RollupRegistration},
     FeeAmount, L1Client, MarketplaceVersion, MockSequencerVersions, NamespaceId, NodeState,
     Payload, SeqTypes, SequencerVersions, ValidatedState, V0_1,
 };
@@ -21,8 +17,9 @@ use ethers::{
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
     types::{Address, U256},
 };
+use futures::FutureExt;
 use hotshot::traits::BlockPayload;
-use hotshot_builder_api::v0_3::builder::{
+use hotshot_builder_api::v0_99::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_events_service::{
@@ -32,45 +29,43 @@ use hotshot_events_service::{
 use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+        block_contents::{vid_commitment, Transaction as _, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
 };
-use marketplace_builder_core::{
-    builder_state::{
-        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
-    },
-    service::{
-        run_builder_service, BroadcastSenders, BuilderHooks, GlobalState, ProxyGlobalState,
-        ReceivedTransaction,
-    },
-};
+use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
+use marketplace_builder_core::{hooks::BuilderHooks, service::EventServiceStream};
+use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_solver::SolverError;
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
+use std::sync::Arc;
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
+use tokio::{spawn, time::sleep};
 use vbs::version::{StaticVersion, StaticVersionType};
 
 use crate::hooks::{
     self, fetch_namespaces_to_skip, BidConfig, EspressoFallbackHooks, EspressoReserveHooks,
 };
 
-#[derive(Clone, Debug)]
+type DynamicHooks = Box<dyn BuilderHooks<SeqTypes>>;
+
+#[derive(Clone)]
 pub struct BuilderConfig {
-    pub global_state: Arc<RwLock<GlobalState<SeqTypes>>>,
+    pub global_state: Arc<GlobalState<SeqTypes, DynamicHooks>>,
     pub hotshot_events_api_url: Url,
     pub hotshot_builder_apis_url: Url,
 }
 
-pub fn build_instance_state<V: Versions>(
+pub async fn build_instance_state<V: Versions>(
     chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
 ) -> anyhow::Result<NodeState> {
-    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_client = l1_params.options.connect(l1_params.url).await?;
 
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
@@ -86,32 +81,21 @@ pub fn build_instance_state<V: Versions>(
 }
 
 impl BuilderConfig {
-    async fn start_service<H>(
-        global_state: Arc<RwLock<GlobalState<SeqTypes>>>,
-        senders: BroadcastSenders<SeqTypes>,
-        hooks: Arc<H>,
-        builder_key_pair: EthKeyPair,
+    async fn start_service(
+        global_state: Arc<GlobalState<SeqTypes, DynamicHooks>>,
         events_api_url: Url,
         builder_api_url: Url,
-        api_timeout: Duration,
-    ) -> anyhow::Result<()>
-    where
-        H: BuilderHooks<SeqTypes>,
-    {
+    ) -> anyhow::Result<()> {
         // create the proxy global state it will server the builder apis
-        let app = ProxyGlobalState::new(
-            global_state.clone(),
-            Arc::clone(&hooks),
-            (builder_key_pair.fee_account(), builder_key_pair.clone()),
-            api_timeout,
-        )
-        .into_app()
-        .context("Failed to construct builder API app")?;
+        let app = Arc::clone(&global_state)
+            .into_app()
+            .context("Failed to construct builder API app")?;
 
-        async_spawn(async move {
+        spawn(async move {
             tracing::info!("Starting builder API app at {builder_api_url}");
             let res = app
                 .serve(builder_api_url, MarketplaceVersion::instance())
+                .boxed() // https://github.com/rust-lang/rust/issues/102211
                 .await;
             tracing::error!(?res, "Builder API app exited");
         });
@@ -119,14 +103,14 @@ impl BuilderConfig {
         // spawn the builder service
         tracing::info!("Running builder against hotshot events API at {events_api_url}",);
 
-        let stream = marketplace_builder_core::utils::EventServiceStream::<
+        let stream = marketplace_builder_core::service::EventServiceStream::<
             SeqTypes,
             SequencerApiVersion,
         >::connect(events_api_url)
         .await?;
 
-        async_spawn(async move {
-            let res = run_builder_service::<SeqTypes>(hooks, senders, stream).await;
+        spawn(async move {
+            let res = global_state.start_event_loop(stream).await;
             tracing::error!(?res, "Builder service exited");
             if res.is_err() {
                 panic!("Builder should restart.");
@@ -144,11 +128,9 @@ impl BuilderConfig {
         tx_channel_capacity: NonZeroUsize,
         event_channel_capacity: NonZeroUsize,
         instance_state: NodeState,
-        validated_state: ValidatedState,
         events_api_url: Url,
         builder_api_url: Url,
         api_timeout: Duration,
-        buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
         bid_config: Option<BidConfig>,
@@ -160,103 +142,47 @@ impl BuilderConfig {
             %tx_channel_capacity,
             %event_channel_capacity,
             ?api_timeout,
-            buffered_view_num_count,
+            ?instance_state.chain_config.max_block_size,
             ?maximize_txns_count_timeout_duration,
             "initializing builder",
         );
 
-        let (mut senders, receivers) =
-            marketplace_builder_core::service::broadcast_channels(event_channel_capacity.get());
-
-        senders.transactions.set_capacity(tx_channel_capacity.get());
-
-        // builder api request channel
-        let (req_sender, req_receiver) =
-            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
-
-        let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], &validated_state, &instance_state)
-                .await
-                .expect("genesis payload construction failed");
-
-        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
-
-        let vid_commitment = {
-            let payload_bytes = genesis_payload.encode();
-            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
-        };
-
-        // create the global state
-        let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            req_sender,
-            senders.transactions.clone(),
-            vid_commitment,
-            bootstrapped_view,
-        );
-
-        let global_state = Arc::new(RwLock::new(global_state));
-
-        let builder_state = BuilderState::<SeqTypes>::new(
-            BuiltFromProposedBlock {
-                view_number: bootstrapped_view,
-                vid_commitment,
-                leaf_commit: fake_commitment(),
-                builder_commitment,
-            },
-            &receivers,
-            req_receiver,
-            Vec::new() /* tx_queue */,
-            Arc::clone(&global_state),
-            maximize_txns_count_timeout_duration,
-            base_fee
-                .as_u64()
-                .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state),
-            Duration::from_secs(60),
-            Arc::new(validated_state),
-        );
-
-        // Start builder event loop
-        builder_state.event_loop();
-
-        if is_reserve {
+        let hooks: DynamicHooks = if is_reserve {
             let bid_config = bid_config.expect("Missing bid config for the reserve builder.");
-            let hooks = Arc::new(hooks::EspressoReserveHooks {
+            Box::new(hooks::EspressoReserveHooks {
                 namespaces: bid_config.namespaces.into_iter().collect(),
                 solver_base_url,
                 builder_api_base_url: builder_api_url.clone(),
                 bid_key_pair: builder_key_pair.clone(),
                 bid_amount: bid_config.amount,
-            });
-            Self::start_service(
-                Arc::clone(&global_state),
-                senders,
-                hooks,
-                builder_key_pair,
-                events_api_url.clone(),
-                builder_api_url.clone(),
-                api_timeout,
-            )
-            .await?;
+            })
         } else {
             // Fetch the namespaces upon initialization. It will be fetched every 20 views when
             // handling events.
             let namespaces_to_skip = fetch_namespaces_to_skip(solver_base_url.clone()).await;
-            let hooks = Arc::new(hooks::EspressoFallbackHooks {
+            Box::new(hooks::EspressoFallbackHooks {
                 solver_base_url,
-                namespaces_to_skip: RwLock::new(namespaces_to_skip),
-            });
-            Self::start_service(
-                Arc::clone(&global_state),
-                senders,
-                hooks,
-                builder_key_pair,
-                events_api_url.clone(),
-                builder_api_url.clone(),
-                api_timeout,
-            )
-            .await?;
-        }
+                namespaces_to_skip: RwLock::new(namespaces_to_skip).into(),
+            })
+        };
+
+        // create the global state
+        let global_state: Arc<GlobalState<SeqTypes, DynamicHooks>> = GlobalState::new(
+            (builder_key_pair.fee_account(), builder_key_pair),
+            api_timeout,
+            maximize_txns_count_timeout_duration,
+            Duration::from_secs(60),
+            tx_channel_capacity.get(),
+            base_fee.as_u64().expect("Base fee too high"),
+            hooks,
+        );
+
+        Self::start_service(
+            Arc::clone(&global_state),
+            events_api_url.clone(),
+            builder_api_url.clone(),
+        )
+        .await?;
 
         tracing::info!("Builder init finished");
 
@@ -268,7 +194,7 @@ impl BuilderConfig {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "embedded-db")))]
 mod test {
     use std::{
         str::FromStr,
@@ -276,25 +202,25 @@ mod test {
     };
 
     use anyhow::Error;
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        logging::{setup_backtrace, setup_logging},
-    };
     use async_lock::RwLock;
-    use async_std::{prelude::FutureExt, stream::StreamExt, task};
     use committable::Commitment;
     use committable::Committable;
     use espresso_types::{
         mock::MockStateCatchup,
-        v0_3::{RollupRegistration, RollupRegistrationBody},
-        FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, SequencerVersions,
-        Transaction,
+        v0_99::{RollupRegistration, RollupRegistrationBody},
+        Event, FeeAccount, Leaf2, MarketplaceVersion, NamespaceId, PubKey, SeqTypes,
+        SequencerVersions, Transaction,
     };
-    use ethers::utils::Anvil;
+    use ethers::{core::k256::elliptic_curve::rand_core::block, utils::Anvil};
+    use futures::{Stream, StreamExt};
     use hooks::connect_to_solver;
-    use hotshot::rand;
-    use hotshot::types::{BLSPrivKey, Event, EventType};
-    use hotshot_builder_api::v0_3::builder::BuildError;
+    use hotshot::helpers::initialize_logging;
+    use hotshot::types::{
+        BLSPrivKey,
+        EventType::{Decide, *},
+    };
+    use hotshot::{rand, types::EventType};
+    use hotshot_builder_api::v0_99::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
@@ -302,19 +228,16 @@ mod test {
     use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
+        event::LeafInfo,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            block_contents::{BlockPayload, BuilderFee, GENESIS_VID_NUM_STORAGE_NODES},
             node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
     };
-    use marketplace_builder_core::{
-        builder_state::{self, RequestMessage, TransactionSource},
-        service::run_builder_service,
-        utils::BuilderStateId,
-    };
+    use marketplace_builder_shared::block::BuilderStateId;
     use marketplace_solver::{testing::MockSolver, SolverError};
     use portpicker::pick_unused_port;
     use sequencer::{
@@ -334,6 +257,7 @@ mod test {
     };
     use tempfile::TempDir;
     use tide_disco::error::ServerError;
+    use tokio::{task::spawn, time::sleep};
     use vbs::version::StaticVersion;
 
     use super::*;
@@ -353,6 +277,11 @@ mod test {
         query: Url,
         event: Url,
         builder: Url,
+    }
+
+    enum Mempool {
+        Public,
+        Private,
     }
 
     /// Pick unused ports for URLs, then set up and start the network.
@@ -464,23 +393,94 @@ mod test {
         builder_client
     }
 
-    /// Submit transactions.
-    ///
-    /// Returns the subscribed events.
-    async fn submit_transactions(
+    /// Get the view number and commitment if given a `QuorumProposal` event.
+    async fn proposal_view_number_and_commitment(event: Event) -> Option<(u64, VidCommitment)> {
+        if let EventType::QuorumProposal { proposal, .. } = event.event {
+            let view_number = *proposal.data.view_number;
+            let commitment = Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
+            return Some((view_number, commitment));
+        }
+        None
+    }
+
+    /// Wait for a quorum proposal event and get its view number and commitment.
+    async fn wait_for_proposal_view_number_and_commitment(
+        events: &mut (impl Stream<Item = Event> + Unpin),
+    ) -> (u64, VidCommitment) {
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Didn't get a quorum proposal in 5 seconds");
+            }
+            let event = events.next().await.unwrap();
+            if let Some((view_number, commitment)) =
+                proposal_view_number_and_commitment(event).await
+            {
+                return (view_number, commitment);
+            }
+        }
+    }
+
+    /// Wait for a transaction event.
+    async fn wait_for_transaction(
+        events: &mut (impl Stream<Item = Event> + Unpin),
+        transaction: Transaction,
+    ) {
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Didn't get the transaction in 5 seconds");
+            }
+            let event = events.next().await.unwrap();
+            if let EventType::Transactions { transactions: txns } = event.event {
+                if txns == vec![transaction.clone()] {
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Fetch the bundle associated with the provided parent information.
+    async fn get_bundle(
+        builder_client: Client<ServerError, MarketplaceVersion>,
+        parent_view_number: u64,
+        parent_commitment: VidCommitment,
+    ) -> Bundle<SeqTypes> {
+        builder_client
+            .get::<Bundle<SeqTypes>>(
+                format!(
+                    "bundle_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                    parent_view_number + 1
+                )
+                .as_str(),
+            )
+            .send()
+            .await
+            .unwrap()
+    }
+
+    /// Submit transactions via the private mempool and fetch the bundle.
+    async fn submit_and_get_bundle_with_private_mempool(
+        builder_client: Client<ServerError, MarketplaceVersion>,
         transactions: Vec<Transaction>,
         urls: Urls,
-    ) -> Connection<
-        Event<SeqTypes>,
-        Unsupported,
-        hotshot_events_service::events::Error,
-        SequencerApiVersion,
-    > {
+    ) -> (Bundle<SeqTypes>, u64) {
+        // Subscribe to events.
+        let events_service_client = Client::<
+            hotshot_events_service::events::Error,
+            SequencerApiVersion,
+        >::new(urls.event.clone());
+        events_service_client.connect(None).await;
+        let mut events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<Event>()
+            .await
+            .unwrap();
+
+        // Submit transactions via the private mempool.
         let txn_submission_client: Client<ServerError, SequencerApiVersion> =
             Client::new(urls.builder.clone());
         txn_submission_client.connect(None).await;
-
-        // Test submitting transactions
         txn_submission_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
@@ -489,21 +489,32 @@ mod test {
             .await
             .unwrap();
 
-        let events_service_client = Client::<
-            hotshot_events_service::events::Error,
-            SequencerApiVersion,
-        >::new(urls.event.clone());
-        events_service_client.connect(None).await;
+        // Get the parent view number and commitment.
+        let parent_view_number;
+        let parent_commitment;
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Didn't get a quorum proposal in 5 seconds");
+            }
+            let event = events.next().await.unwrap().unwrap();
+            if let Some((view_number, commitment)) =
+                proposal_view_number_and_commitment(event).await
+            {
+                parent_view_number = view_number;
+                parent_commitment = commitment;
+                break;
+            }
+        }
 
-        events_service_client
-            .socket("hotshot-events/events")
-            .subscribe::<Event<SeqTypes>>()
-            .await
-            .unwrap()
+        // Fetch the bundle.
+        (
+            get_bundle(builder_client, parent_view_number, parent_commitment).await,
+            parent_view_number,
+        )
     }
 
-    #[async_std::test]
-    async fn test_marketplace_reserve_builder() {
+    async fn test_marketplace_reserve_builder(mempool: Mempool) {
         setup_test();
 
         let (ports, urls) = pick_urls_and_start_network().await;
@@ -527,27 +538,28 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Register a rollup using the mock solver.
         // Use `_mock_solver` here to avoid it being dropped.
         let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
 
+        let keypair = FeeAccount::test_key_pair();
+        let address = keypair.address();
+        let base_fee = FeeAmount::from(10);
         // Start and connect to a reserve builder.
         let init = BuilderConfig::init(
             true,
-            FeeAccount::test_key_pair(),
+            keypair.clone(),
             ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
             NonZeroUsize::new(1024).unwrap(),
             NodeState::default(),
-            ValidatedState::default(),
             urls.event.clone(),
             urls.builder.clone(),
             Duration::from_secs(2),
-            5,
             Duration::from_secs(2),
-            FeeAmount::from(10),
+            base_fee,
             Some(BidConfig {
                 namespaces: vec![NamespaceId::from(REGISTERED_NAMESPACE)],
                 amount: FeeAmount::from(10),
@@ -557,46 +569,74 @@ mod test {
         let _ = init.await.unwrap();
         let builder_client = connect_to_builder(urls.clone()).await;
 
-        // Submit transactions.
+        // Construct transactions.
         let registered_transaction =
             Transaction::new(REGISTERED_NAMESPACE.into(), vec![1, 1, 1, 1]);
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
-        let transactions = vec![registered_transaction.clone(), unregistered_transaction];
-        let mut subscribed_events = submit_transactions(transactions, urls).await;
-        task::sleep(std::time::Duration::from_millis(1000)).await;
 
-        // Verify the bundle.
-        let start = Instant::now();
-        loop {
-            if start.elapsed() > Duration::from_secs(10) {
-                panic!("Didn't get a quorum proposal in 10 seconds");
-            }
+        let (bundle, parent_view_number) = match mempool {
+            Mempool::Public => {
+                let server = &network.server;
+                let mut events = server.event_stream().await;
 
-            let event = subscribed_events.next().await.unwrap().unwrap();
-            if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
-                let parent_commitment =
-                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
-                let bundle = builder_client
-                    .get::<Bundle<SeqTypes>>(
-                        format!(
-                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
-                            parent_view_number + 1
-                        )
-                        .as_str(),
-                    )
-                    .send()
+                // Get the parent information before submitting transactions.
+                let (parent_view_number, parent_commitment) =
+                    wait_for_proposal_view_number_and_commitment(&mut events).await;
+
+                // Submit transactions and wait until they are received.
+                server
+                    .submit_transaction(registered_transaction.clone())
                     .await
                     .unwrap();
-                assert_eq!(bundle.transactions, vec![registered_transaction]);
-                break;
+                wait_for_transaction(&mut events, registered_transaction.clone()).await;
+                server
+                    .submit_transaction(unregistered_transaction.clone())
+                    .await
+                    .unwrap();
+                wait_for_transaction(&mut events, unregistered_transaction).await;
+
+                // Return the retrieved bundle and parent view number
+                (
+                    get_bundle(builder_client, parent_view_number, parent_commitment).await,
+                    parent_view_number,
+                )
             }
-        }
+            Mempool::Private => {
+                submit_and_get_bundle_with_private_mempool(
+                    builder_client,
+                    vec![registered_transaction.clone(), unregistered_transaction],
+                    urls,
+                )
+                .await
+            }
+        };
+
+        assert_eq!(bundle.transactions, vec![registered_transaction.clone()]);
+
+        let txn_commit = <[u8; 32]>::from(registered_transaction.commit()).to_vec();
+        let signature = bundle.signature;
+        assert!(signature.verify(txn_commit, address).is_ok());
+
+        let fee = base_fee * registered_transaction.minimum_block_size();
+
+        let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+            &keypair,
+            fee.as_u64().unwrap(),
+            parent_view_number + 1,
+        )
+        .unwrap();
+
+        let sequencing_fee = BuilderFee {
+            fee_amount: fee.as_u64().unwrap(),
+            fee_account: FeeAccount::from(address),
+            fee_signature,
+        };
+
+        assert_eq!(bundle.sequencing_fee, sequencing_fee);
     }
 
-    #[async_std::test]
-    async fn test_marketplace_fallback_builder() {
+    async fn test_marketplace_fallback_builder(mempool: Mempool) {
         setup_test();
 
         let (ports, urls) = pick_urls_and_start_network().await;
@@ -620,11 +660,15 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, MockSequencerVersions::new()).await;
+        let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
 
         // Register a rollup using the mock solver.
         // Use `_mock_solver` here to avoid it being dropped.
         let (_mock_solver, solver_base_url) = init_mock_solver_and_register_rollup().await;
+
+        let keypair = FeeAccount::test_key_pair();
+        let address = keypair.address();
+        let base_fee = FeeAmount::from(10);
 
         // Start and connect to a fallback builder.
         let init = BuilderConfig::init(
@@ -634,54 +678,101 @@ mod test {
             NonZeroUsize::new(1024).unwrap(),
             NonZeroUsize::new(1024).unwrap(),
             NodeState::default(),
-            ValidatedState::default(),
             urls.event.clone(),
             urls.builder.clone(),
             Duration::from_secs(2),
-            5,
             Duration::from_secs(2),
-            FeeAmount::from(10),
+            base_fee,
             None,
             solver_base_url,
         );
         let _ = init.await.unwrap();
         let builder_client = connect_to_builder(urls.clone()).await;
 
-        // Submit transactions.
+        // Construct transactions.
         let registered_transaction =
             Transaction::new(REGISTERED_NAMESPACE.into(), vec![1, 1, 1, 1]);
         let unregistered_transaction =
             Transaction::new(UNREGISTERED_NAMESPACE.into(), vec![1, 1, 1, 2]);
-        let transactions = vec![registered_transaction, unregistered_transaction.clone()];
-        let mut subscribed_events = submit_transactions(transactions, urls).await;
-        task::sleep(std::time::Duration::from_millis(2000)).await;
 
-        // Verify the bundle.
-        let start = Instant::now();
-        loop {
-            if start.elapsed() > Duration::from_secs(10) {
-                panic!("Didn't get a quorum proposal in 10 seconds");
-            }
+        let (bundle, parent_view_number) = match mempool {
+            Mempool::Public => {
+                let server = &network.server;
+                let mut events = server.event_stream().await;
 
-            let event = subscribed_events.next().await.unwrap().unwrap();
-            if let EventType::QuorumProposal { proposal, .. } = event.event {
-                let parent_view_number = *proposal.data.view_number;
-                let parent_commitment =
-                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
-                let bundle = builder_client
-                    .get::<Bundle<SeqTypes>>(
-                        format!(
-                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
-                            parent_view_number + 1
-                        )
-                        .as_str(),
-                    )
-                    .send()
+                // Get the parent information before submitting transactions.
+                let (parent_view_number, parent_commitment) =
+                    wait_for_proposal_view_number_and_commitment(&mut events).await;
+
+                // Submit transactions and wait until they are received.
+                server
+                    .submit_transaction(registered_transaction.clone())
                     .await
                     .unwrap();
-                assert_eq!(bundle.transactions, vec![unregistered_transaction]);
-                break;
+                wait_for_transaction(&mut events, registered_transaction).await;
+                server
+                    .submit_transaction(unregistered_transaction.clone())
+                    .await
+                    .unwrap();
+                wait_for_transaction(&mut events, unregistered_transaction.clone()).await;
+
+                // Get the bundle.
+                (
+                    get_bundle(builder_client, parent_view_number, parent_commitment).await,
+                    parent_view_number,
+                )
             }
-        }
+            Mempool::Private => {
+                submit_and_get_bundle_with_private_mempool(
+                    builder_client,
+                    vec![registered_transaction, unregistered_transaction.clone()],
+                    urls,
+                )
+                .await
+            }
+        };
+
+        assert_eq!(bundle.transactions, vec![unregistered_transaction.clone()]);
+
+        let txn_commit = <[u8; 32]>::from(unregistered_transaction.clone().commit()).to_vec();
+        let signature = bundle.signature;
+        assert!(signature.verify(txn_commit, address).is_ok());
+
+        let fee = base_fee * unregistered_transaction.minimum_block_size();
+
+        let fee_signature = <<SeqTypes  as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::sign_sequencing_fee_marketplace(
+                    &keypair,
+                    fee.as_u64().unwrap(),
+                    parent_view_number + 1,
+                )
+                .unwrap();
+
+        let sequencing_fee = BuilderFee {
+            fee_amount: fee.as_u64().unwrap(),
+            fee_account: FeeAccount::from(address),
+            fee_signature,
+        };
+
+        assert_eq!(bundle.sequencing_fee, sequencing_fee);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_marketplace_reserve_builder_with_public_mempool() {
+        test_marketplace_reserve_builder(Mempool::Public).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_marketplace_reserve_builder_with_private_mempool() {
+        test_marketplace_reserve_builder(Mempool::Private).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_marketplace_fallback_builder_with_public_mempool() {
+        test_marketplace_fallback_builder(Mempool::Public).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_marketplace_fallback_builder_with_private_mempool() {
+        test_marketplace_fallback_builder(Mempool::Private).await;
     }
 }

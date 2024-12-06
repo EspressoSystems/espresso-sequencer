@@ -158,13 +158,22 @@ pub mod light_client {
                                 ::std::borrow::ToOwned::to_owned("uint256"),
                             ),
                         },],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned("hotShotBlockCommRoot",),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
-                            ),
-                        },],
+                        outputs: ::std::vec![
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("hotShotBlockCommRoot",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("BN254.ScalarField"),
+                                ),
+                            },
+                            ::ethers::core::abi::ethabi::Param {
+                                name: ::std::borrow::ToOwned::to_owned("hotshotBlockHeight",),
+                                kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
+                                internal_type: ::core::option::Option::Some(
+                                    ::std::borrow::ToOwned::to_owned("uint64"),
+                                ),
+                            },
+                        ],
                         constant: ::core::option::Option::None,
                         state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
                     },],
@@ -300,7 +309,7 @@ pub mod light_client {
                                 ),
                             },
                             ::ethers::core::abi::ethabi::Param {
-                                name: ::std::borrow::ToOwned::to_owned("threshold"),
+                                name: ::std::borrow::ToOwned::to_owned("blockThreshold"),
                                 kind: ::ethers::core::abi::ethabi::ParamType::Uint(256usize,),
                                 internal_type: ::core::option::Option::Some(
                                     ::std::borrow::ToOwned::to_owned("uint256"),
@@ -996,7 +1005,8 @@ pub mod light_client {
         pub fn get_hot_shot_commitment(
             &self,
             hot_shot_block_height: ::ethers::core::types::U256,
-        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+        ) -> ::ethers::contract::builders::ContractCall<M, (::ethers::core::types::U256, u64)>
+        {
             self.0
                 .method_hash([133, 132, 210, 63], hot_shot_block_height)
                 .expect("method not found (this should never happen)")
@@ -1047,10 +1057,10 @@ pub mod light_client {
         pub fn lag_over_escape_hatch_threshold(
             &self,
             block_number: ::ethers::core::types::U256,
-            threshold: ::ethers::core::types::U256,
+            block_threshold: ::ethers::core::types::U256,
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
-                .method_hash([224, 48, 51, 1], (block_number, threshold))
+                .method_hash([224, 48, 51, 1], (block_number, block_threshold))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `newFinalizedState` (0x2063d4f7) function
@@ -2374,7 +2384,7 @@ pub mod light_client {
     )]
     pub struct LagOverEscapeHatchThresholdCall {
         pub block_number: ::ethers::core::types::U256,
-        pub threshold: ::ethers::core::types::U256,
+        pub block_threshold: ::ethers::core::types::U256,
     }
     ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x2063d4f7`
     #[derive(
@@ -3004,6 +3014,7 @@ pub mod light_client {
     )]
     pub struct GetHotShotCommitmentReturn {
         pub hot_shot_block_comm_root: ::ethers::core::types::U256,
+        pub hotshot_block_height: u64,
     }
     ///Container type for all return fields from the `getStateHistoryCount` function with signature `getStateHistoryCount()` and selector `0xf9e50d19`
     #[derive(

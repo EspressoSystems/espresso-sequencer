@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use committable::Committable;
 use espresso_types::{
-    v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
+    v0_99::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
     MarketplaceVersion, SeqTypes, Update,
 };
 use hotshot::types::BLSPubKey;
@@ -12,6 +12,7 @@ use hotshot_types::traits::{node_implementation::NodeType, signature_key::Signat
 use marketplace_solver::{SolverError, SOLVER_API_PATH};
 
 use sequencer_utils::logging;
+use tagged_base64::TaggedBase64;
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -103,7 +104,7 @@ fn parse_update_option<T: FromStr>(s: &str) -> Result<Update<Option<T>>, T::Err>
     })
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     opt.logging.init();
@@ -130,7 +131,8 @@ async fn register(opt: RegisterArgs) -> Result<()> {
     );
 
     let (pubkey, privkey) = if let Some(privkey) = private_key {
-        let privkey = <BLSPubKey as SignatureKey>::PrivateKey::from_str(&privkey)
+        let privkey = TaggedBase64::parse(&privkey)?
+            .try_into()
             .expect("invalid private key provided");
         let pubkey = BLSPubKey::from_private(&privkey);
 
@@ -188,7 +190,8 @@ async fn update(opt: UpdateArgs) -> Result<()> {
         solver_url.join(SOLVER_API_PATH).unwrap(),
     );
     let (pubkey, privkey) = if let Some(privkey) = private_key {
-        let privkey = <BLSPubKey as SignatureKey>::PrivateKey::from_str(&privkey)
+        let privkey = TaggedBase64::parse(&privkey)?
+            .try_into()
             .expect("invalid private key provided");
         let pubkey = BLSPubKey::from_private(&privkey);
 

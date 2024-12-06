@@ -4,8 +4,9 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
-    SequencerVersions, V0_1,
+    SequencerVersions, V0_0,
 };
+use futures::future::pending;
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
     data::ViewNumber,
@@ -76,13 +77,23 @@ struct NonPermissionedBuilderOptions {
     )]
     max_api_timeout_duration: Duration,
 
-    /// The number of views to buffer before a builder garbage collects its state
+    /// The amount of time a builder can wait before incrementing the max block size.
+    #[clap(
+        short = 'M',
+        long,
+        env = "ESPRESSO_BUILDER_MAX_BLOCK_SIZE_INCREMENT_PERIOD",
+        default_value = "3600s",
+        value_parser = parse_duration
+    )]
+    max_block_size_increment_period: Duration,
+
+    /// The amount of time a builder can wait before incrementing the max block size.
     #[clap(
         long,
-        env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
-        default_value = "15"
+        env = "ESPRESSO_BUILDER_TX_STATUS_CACHE_SIZE",
+        default_value = "819200"
     )]
-    buffer_view_num_count: usize,
+    tx_status_cache_size: usize,
 
     /// Path to TOML file containing genesis state.
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
@@ -92,7 +103,7 @@ struct NonPermissionedBuilderOptions {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = NonPermissionedBuilderOptions::parse();
     opt.logging.init();
@@ -104,11 +115,12 @@ async fn main() -> anyhow::Result<()> {
     let upgrade = genesis.upgrade_version;
 
     match (base, upgrade) {
-        (V0_1::VERSION, FeeVersion::VERSION) => {
-            run::<SequencerVersions<V0_1, FeeVersion>>(genesis, opt).await
-        }
         (FeeVersion::VERSION, MarketplaceVersion::VERSION) => {
             run::<SequencerVersions<FeeVersion, MarketplaceVersion>>(genesis, opt).await
+        }
+        (FeeVersion::VERSION, _) => run::<SequencerVersions<FeeVersion, V0_0>>(genesis, opt).await,
+        (MarketplaceVersion::VERSION, _) => {
+            run::<SequencerVersions<MarketplaceVersion, V0_0>>(genesis, opt).await
         }
         _ => panic!(
             "Invalid base ({base}) and upgrade ({upgrade}) versions specified in the toml file."
@@ -122,7 +134,7 @@ async fn run<V: Versions>(
 ) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        events_max_block_range: 10000,
+        options: Default::default(),
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -131,7 +143,9 @@ async fn run<V: Versions>(
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
     let instance_state =
-        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers)
+            .await
+            .unwrap();
 
     let base_fee = genesis.max_base_fee();
     tracing::info!(?base_fee, "base_fee");
@@ -143,27 +157,26 @@ async fn run<V: Versions>(
     // make the txn timeout as 1/4 of the api_response_timeout_duration
     let txn_timeout_duration = api_response_timeout_duration / 4;
 
-    let buffer_view_num_count = opt.buffer_view_num_count;
-
-    let _builder_config = BuilderConfig::init(
+    let _builder_config = BuilderConfig::init::<V>(
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
         opt.node_count,
-        instance_state,
+        instance_state.clone(),
         validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
-        buffer_view_num_count,
+        opt.max_block_size_increment_period,
         txn_timeout_duration,
         base_fee,
+        opt.tx_status_cache_size,
     )
     .await?;
 
     // Sleep forever
-    async_std::future::pending::<()>().await;
+    pending::<()>().await;
 
     Ok(())
 }

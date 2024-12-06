@@ -19,11 +19,11 @@ use tracing::info_span;
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
 enum Scheme {
     #[default]
-    #[display(fmt = "all")]
+    #[display("all")]
     All,
-    #[display(fmt = "bls")]
+    #[display("bls")]
     Bls,
-    #[display(fmt = "schnorr")]
+    #[display("schnorr")]
     Schnorr,
 }
 
@@ -36,6 +36,7 @@ impl Scheme {
             }
             Self::Bls => {
                 let (pub_key, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index);
+                let priv_key = priv_key.to_tagged_base64()?;
                 writeln!(env_file, "ESPRESSO_SEQUENCER_PUBLIC_STAKING_KEY={pub_key}")?;
                 writeln!(
                     env_file,
@@ -45,16 +46,13 @@ impl Scheme {
             }
             Self::Schnorr => {
                 let key_pair = StateKeyPair::generate_from_seed_indexed(seed, index);
+                let priv_key = key_pair.sign_key_ref().to_tagged_base64()?;
                 writeln!(
                     env_file,
                     "ESPRESSO_SEQUENCER_PUBLIC_STATE_KEY={}",
                     key_pair.ver_key()
                 )?;
-                writeln!(
-                    env_file,
-                    "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY={}",
-                    key_pair.sign_key_ref()
-                )?;
+                writeln!(env_file, "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY={priv_key}")?;
                 tracing::info!(pub_key = %key_pair.ver_key(), "generated state key");
             }
         }

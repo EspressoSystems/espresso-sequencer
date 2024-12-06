@@ -17,11 +17,11 @@
 use std::path::Path;
 
 use committable::Committable;
-use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
-use hotshot::traits::election::static_committee::GeneralStaticCommittee;
+use espresso_types::{NodeState, PubKey, ValidatedState};
+use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{
-        DaProposal, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
+        DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
         ViewChangeEvidence, ViewNumber,
     },
     message::{
@@ -38,7 +38,8 @@ use hotshot_types::{
         ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
     },
     traits::{
-        node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
+        election::Membership, node_implementation::ConsensusTime, signature_key::SignatureKey,
+        BlockPayload, EncodeBytes,
     },
     vid::vid_scheme,
 };
@@ -52,18 +53,14 @@ use vbs::{
 
 #[cfg(feature = "testing")]
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
-    use espresso_types::{Payload, SeqTypes, Transaction};
-    use hotshot_types::traits::network::Topic;
+    use espresso_types::{Leaf, Payload, SeqTypes, Transaction};
+    use hotshot_example_types::node_types::TestVersions;
+    use hotshot_types::PeerConfig;
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
-    let membership = GeneralStaticCommittee::new(
-        &[],
-        vec![sender.stake_table_entry(1)],
-        vec![],
-        0,
-        Topic::Global,
-    );
+    let committee = vec![PeerConfig::default()]; /* one committee member, necessary to generate a VID share */
+    let membership = StaticCommittee::new(committee.clone(), committee);
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },
@@ -110,7 +107,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
             data: QuorumProposal {
                 block_header,
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(
+                justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
@@ -136,7 +133,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
         GeneralConsensusMessage::Vote(QuorumVote {
             signature: (sender, signature.clone()),
             data: QuorumData {
-                leaf_commit: leaf.commit(),
+                leaf_commit: <Leaf as Committable>::commit(&leaf),
             },
             view_number: ViewNumber::genesis(),
         }),
@@ -222,6 +219,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
                 ViewNumber::genesis(),
                 vid_scheme(1).disperse(payload.encode()).unwrap(),
                 &membership,
+                EpochNumber::genesis(),
             ))
             .remove(0),
             signature: signature.clone(),
@@ -245,7 +243,7 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
 
     let version_sub_dir = format!("v{}", Ver::VERSION.minor);
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let data_dir = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("../data")
         .join(version_sub_dir);
     let expected_bytes = std::fs::read(data_dir.join("messages.json")).unwrap();
@@ -311,16 +309,16 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     assert_eq!(parsed, messages);
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_v1_message_compat() {
     test_message_compat(StaticVersion::<0, 1> {}).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_v2_message_compat() {
     test_message_compat(StaticVersion::<0, 2> {}).await;
 }
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_v3_message_compat() {
     test_message_compat(StaticVersion::<0, 3> {}).await;
 }

@@ -7,34 +7,35 @@ use std::{
 
 use anyhow::Result;
 use committable::Committable;
-use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
+use espresso_types::{FeeAccount, FeeMerkleTree, NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
-    data_source::storage::ExplorerStorage,
-    explorer::{self},
+    explorer::{self, ExplorerDataSource},
     merklized_state::{
         self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
     },
     node, ApiState, Error,
 };
+use hotshot_query_service::{merklized_state::Snapshot, node::NodeDataSource};
 use hotshot_types::{
-    data::ViewNumber,
+    data::{EpochNumber, ViewNumber},
     traits::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, Versions},
     },
 };
+use jf_merkle_tree::MerkleTreeScheme;
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
 use tide_disco::{method::ReadState, Api, Error as _, StatusCode};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 use super::{
     data_source::{
-        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
-        SubmitDataSource,
+        CatchupDataSource, HotShotConfigDataSource, NodeStateDataSource, SequencerDataSource,
+        StakeTableDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     StorageState,
 };
@@ -44,6 +45,41 @@ use crate::{SeqTypes, SequencerApiVersion, SequencerPersistence};
 pub struct NamespaceProofQueryData {
     pub proof: Option<NsProof>,
     pub transactions: Vec<Transaction>,
+}
+
+pub(super) fn get_balance<State, Ver>() -> Result<Api<State, merklized_state::Error, Ver>>
+where
+    State: 'static + Send + Sync + ReadState,
+    Ver: 'static + StaticVersionType,
+    <State as ReadState>::State: Send
+        + Sync
+        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
+        + MerklizedStateHeightPersistence,
+{
+    let mut options = merklized_state::Options::default();
+    let extension = toml::from_str(include_str!("../../api/merklized_state.toml"))?;
+    options.extensions.push(extension);
+
+    let mut api =
+        merklized_state::define_api::<State, SeqTypes, FeeMerkleTree, Ver, 256>(&options)?;
+
+    api.get("getfeebalance", move |req, state| {
+        async move {
+            let address = req.string_param("address")?;
+            let height = state.get_last_state_height().await?;
+            let snapshot = Snapshot::Index(height as u64);
+            let key = address
+                .parse()
+                .map_err(|_| merklized_state::Error::Custom {
+                    message: "failed to parse address".to_string(),
+                    status: StatusCode::BAD_REQUEST,
+                })?;
+            let path = state.get_path(snapshot, key).await?;
+            Ok(path.elem().copied())
+        }
+        .boxed()
+    })?;
+    Ok(api)
 }
 
 pub(super) type AvailState<N, P, D, ApiVer> = ApiState<StorageState<N, P, D, ApiVer>>;
@@ -129,7 +165,7 @@ pub(super) fn explorer<N, P, D, V: Versions>(
 ) -> Result<ExplorerApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
-    D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
+    D: ExplorerDataSource<SeqTypes> + Send + Sync + 'static,
     P: SequencerPersistence,
 {
     let api = explorer::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(
@@ -138,18 +174,47 @@ where
     Ok(api)
 }
 
-type NodeApi<N, P, D, V, ApiVer> = Api<AvailState<N, P, D, V>, node::Error, ApiVer>;
-
-pub(super) fn node<N, P, D, V: Versions>() -> Result<NodeApi<N, P, D, V, SequencerApiVersion>>
+pub(super) fn node<S>() -> Result<Api<S, node::Error, StaticVersion<0, 1>>>
 where
-    N: ConnectedNetwork<PubKey>,
-    D: SequencerDataSource + Send + Sync + 'static,
-    P: SequencerPersistence,
+    S: 'static + Send + Sync + ReadState,
+    <S as ReadState>::State:
+        Send + Sync + StakeTableDataSource<SeqTypes> + NodeDataSource<SeqTypes>,
 {
-    let api = node::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(
-        &Default::default(),
-        SequencerApiVersion::instance(),
-    )?;
+    // Extend the base API
+    let mut options = node::Options::default();
+    let extension = toml::from_str(include_str!("../../api/node.toml"))?;
+    options.extensions.push(extension);
+
+    // Create the base API with our extensions
+    let mut api = node::define_api::<S, SeqTypes, _>(&options, SequencerApiVersion::instance())?;
+
+    // Tack on the application logic
+    api.at("stake_table", |req, state| {
+        async move {
+            // Try to get the epoch from the request. If this fails, error
+            // as it was probably a mistake
+            let epoch = EpochNumber::new(req.integer_param("epoch_number").map_err(|_| {
+                hotshot_query_service::node::Error::Custom {
+                    message: "Epoch number is required".to_string(),
+                    status: StatusCode::BAD_REQUEST,
+                }
+            })?);
+
+            Ok(state
+                .read(|state| state.get_stake_table(Some(epoch)).boxed())
+                .await)
+        }
+        .boxed()
+    })?
+    .at("stake_table_current", |_, state| {
+        async move {
+            Ok(state
+                .read(|state| state.get_stake_table(None).boxed())
+                .await)
+        }
+        .boxed()
+    })?;
+
     Ok(api)
 }
 pub(super) fn submit<N, P, S, ApiVer: StaticVersionType + 'static>() -> Result<Api<S, Error, ApiVer>>
@@ -216,7 +281,7 @@ pub(super) fn catchup<S, ApiVer: StaticVersionType + 'static>(
 ) -> Result<Api<S, Error, ApiVer>>
 where
     S: 'static + Send + Sync + ReadState,
-    S::State: Send + Sync + CatchupDataSource,
+    S::State: Send + Sync + NodeStateDataSource + CatchupDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/catchup.toml"))?;
     let mut api = Api::<S, Error, ApiVer>::new(toml)?;
@@ -240,9 +305,47 @@ where
             })?;
 
             state
-                .get_account(height, ViewNumber::new(view), account)
+                .get_account(
+                    state.node_state().await,
+                    height,
+                    ViewNumber::new(view),
+                    account,
+                )
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+        }
+        .boxed()
+    })?
+    .at("accounts", |req, state| {
+        async move {
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
+            let accounts = req
+                .body_auto::<Vec<FeeAccount>, ApiVer>(ApiVer::instance())
+                .map_err(Error::from_request_error)?;
+
+            state
+                .read(|state| {
+                    async move {
+                        state
+                            .get_accounts(
+                                state.node_state().await,
+                                height,
+                                ViewNumber::new(view),
+                                &accounts,
+                            )
+                            .await
+                            .map_err(|err| {
+                                Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}"))
+                            })
+                    }
+                    .boxed()
+                })
+                .await
         }
         .boxed()
     })?
@@ -256,7 +359,7 @@ where
                 .map_err(Error::from_request_error)?;
 
             state
-                .get_frontier(height, ViewNumber::new(view))
+                .get_frontier(state.node_state().await, height, ViewNumber::new(view))
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }

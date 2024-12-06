@@ -6,24 +6,34 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["libp2p"]
-testing = ["hotshot-testing", "marketplace-builder-core", "hotshot-builder-api"]
-libp2p = []
+testing = [
+  "hotshot-testing",
+  "marketplace-builder-core",
+  "marketplace-builder-shared",
+  "espresso-types/testing",
+  "sequencer-utils/testing",
+  "hotshot-query-service/testing",
+]
 benchmarking = []
+embedded-db = ["hotshot-query-service/embedded-db"]
 
 [[bin]]
 name = "espresso-dev-node"
-required-features = ["testing"]
+required-features = ["testing", "embedded-db"]
 
 [dev-dependencies]
 escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
-hotshot-query-service = { workspace = true, features = ["testing"] }
+hotshot-example-types = { workspace = true }
+hotshot-query-service = { workspace = true }
 hotshot-testing = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
-tempfile = "3.9.0"
+
+# Enable "testing" feature when running tests
+sequencer = { path = ".", features = [ "testing" ] }
+tempfile = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -34,40 +44,39 @@ anyhow = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
 async-broadcast = { workspace = true }
-async-compatibility-layer = { workspace = true }
+async-lock = { workspace = true }
 async-once-cell = { workspace = true }
-async-std = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
+todo_by = "0.3"
 
 # CDN imports
 cdn-broker = { workspace = true }
 cdn-marshal = { workspace = true }
 
 clap = { workspace = true }
+client = { path = "../client" }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
 csv = "1"
 derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
-espresso-types = { path = "../types", features = ["testing"] }
+dyn-clone = { workspace = true }
+espresso-types = { path = "../types" }
 ethers = { workspace = true }
 futures = { workspace = true }
 
 hotshot = { workspace = true }
-hotshot-builder-api = { workspace = true, optional = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { workspace = true }
-libp2p-networking = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
-marketplace-builder-core = { workspace = true, optional = true }
 
 hotshot-types = { workspace = true }
 include_dir = "0.7"
@@ -79,8 +88,12 @@ jf-rescue = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
 libp2p = { workspace = true }
+libp2p-networking = { workspace = true }
+marketplace-builder-core = { workspace = true, optional = true }
+marketplace-builder-shared = { workspace = true, optional = true }
 marketplace-solver = { path = "../marketplace-solver" }
 num_enum = "0.7"
+parking_lot = "0.12"
 portpicker = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
@@ -90,25 +103,30 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"                                                      # TODO temporary, used only for VID, should be set in hotshot
 snafu = "0.8"
+sqlx = { workspace = true, features = [
+	"bit-vec",
+	"postgres",
+	"runtime-tokio",
+	"sqlite",
+	"tls-native-tls",
+] }
 static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
+tempfile = { workspace = true, optional = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
+tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.18"
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
+
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(async_executor_impl, values("tokio", "async-std"))',
-] }
 
 [package.metadata.cargo-machete]
 ignored = ["vergen", "include_dir", "hotshot_builder_api"]
