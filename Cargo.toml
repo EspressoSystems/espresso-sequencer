@@ -24,6 +24,10 @@ members = [
   "utils",
 ]
 
+exclude = [
+  "sequencer-sqlite"
+]
+
 [workspace.dependencies]
 anyhow = "^1.0"
 ark-std = "0.4"
@@ -68,7 +72,7 @@ marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketpla
 marketplace-builder-shared = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.1.56" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.54" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.81" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.72" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.74" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.81" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.81" }
@@ -80,8 +84,8 @@ hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" 
 hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.81" }
 
 # Push CDN imports
-cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.4.5", package = "cdn-broker" }
-cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.4.5", package = "cdn-marshal" }
+cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.5.1-upgrade", package = "cdn-broker" }
+cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", tag = "0.5.1-upgrade", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.1", features = [
   "test-apis",

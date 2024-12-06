@@ -19,6 +19,7 @@ use futures::{
     future::Future,
     stream::{self, StreamExt},
 };
+use hotshot_types::traits::metrics::Metrics;
 use lru::LruCache;
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
@@ -29,7 +30,7 @@ use tokio::{
 use tracing::Instrument;
 use url::Url;
 
-use super::{L1BlockInfo, L1State, L1UpdateTask, RpcClient};
+use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, RpcClient};
 use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1ReconnectTask, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
@@ -79,22 +80,37 @@ impl L1BlockInfo {
 }
 
 impl RpcClient {
-    fn http(url: Url) -> Self {
-        Self::Http(Http::new(url))
+    fn http(url: Url, metrics: Arc<L1ClientMetrics>) -> Self {
+        Self::Http {
+            conn: Http::new(url),
+            metrics,
+        }
     }
 
-    async fn ws(url: Url, retry_delay: Duration) -> anyhow::Result<Self> {
+    async fn ws(
+        url: Url,
+        metrics: Arc<L1ClientMetrics>,
+        retry_delay: Duration,
+    ) -> anyhow::Result<Self> {
         Ok(Self::Ws {
             conn: Arc::new(RwLock::new(Ws::connect(url.clone()).await?)),
             reconnect: Default::default(),
             retry_delay,
             url,
+            metrics,
         })
     }
 
     async fn shut_down(&self) {
         if let Self::Ws { reconnect, .. } = self {
             *reconnect.lock().await = L1ReconnectTask::Cancelled;
+        }
+    }
+
+    fn metrics(&self) -> &Arc<L1ClientMetrics> {
+        match self {
+            Self::Http { metrics, .. } => metrics,
+            Self::Ws { metrics, .. } => metrics,
         }
     }
 }
@@ -109,12 +125,16 @@ impl JsonRpcClient for RpcClient {
         R: DeserializeOwned + Send,
     {
         let res = match self {
-            Self::Http(client) => client.request(method, params).await?,
+            Self::Http { conn, .. } => conn
+                .request(method, params)
+                .await
+                .inspect_err(|err| tracing::warn!(method, "L1 RPC error: {err:#}"))?,
             Self::Ws {
                 conn,
                 reconnect,
                 url,
                 retry_delay,
+                metrics,
             } => {
                 let conn_guard = conn
                     .try_read()
@@ -131,6 +151,7 @@ impl JsonRpcClient for RpcClient {
                         if let Ok(mut reconnect_guard) = reconnect.try_lock() {
                             if matches!(*reconnect_guard, L1ReconnectTask::Idle) {
                                 // No one is currently resetting this connection, so it's up to us.
+                                metrics.ws_reconnects.add(1);
                                 let conn = conn.clone();
                                 let reconnect = reconnect.clone();
                                 let url = url.clone();
@@ -174,7 +195,10 @@ impl JsonRpcClient for RpcClient {
                         }
                         Err(err)?
                     }
-                    Err(err) => Err(err)?,
+                    Err(err) => {
+                        tracing::warn!(method, "L1 RPC error: {err:#}");
+                        Err(err)?
+                    }
                 }
             }
         };
@@ -190,7 +214,7 @@ impl PubsubClient for RpcClient {
         T: Into<U256>,
     {
         match self {
-            Self::Http(_) => Err(ProviderError::CustomError(
+            Self::Http { .. } => Err(ProviderError::CustomError(
                 "subscriptions not supported with HTTP client".into(),
             )),
             Self::Ws { conn, .. } => Ok(conn
@@ -210,7 +234,7 @@ impl PubsubClient for RpcClient {
         T: Into<U256>,
     {
         match self {
-            Self::Http(_) => Err(ProviderError::CustomError(
+            Self::Http { .. } => Err(ProviderError::CustomError(
                 "subscriptions not supported with HTTP client".into(),
             )),
             Self::Ws { conn, .. } => Ok(conn
@@ -250,6 +274,12 @@ impl Default for L1ClientOptions {
 }
 
 impl L1ClientOptions {
+    /// Use the given metrics collector to publish metrics related to the L1 client.
+    pub fn with_metrics(mut self, metrics: &(impl Metrics + ?Sized)) -> Self {
+        self.metrics = Arc::new(metrics.subgroup("l1".into()));
+        self
+    }
+
     /// Instantiate an `L1Client` for a given `Url`.
     ///
     /// The type of the JSON-RPC client is inferred from the scheme of the URL. Supported schemes
@@ -266,18 +296,35 @@ impl L1ClientOptions {
     ///
     /// `url` must have a scheme `http` or `https`.
     pub fn http(self, url: Url) -> L1Client {
-        L1Client::with_provider(self, Provider::new(RpcClient::http(url)))
+        let metrics = self.create_metrics();
+        L1Client::with_provider(self, Provider::new(RpcClient::http(url, metrics)))
     }
 
     /// Construct a new WebSockets client.
     ///
     /// `url` must have a scheme `ws` or `wss`.
     pub async fn ws(self, url: Url) -> anyhow::Result<L1Client> {
+        let metrics = self.create_metrics();
         let retry_delay = self.l1_retry_delay;
         Ok(L1Client::with_provider(
             self,
-            Provider::new(RpcClient::ws(url, retry_delay).await?),
+            Provider::new(RpcClient::ws(url, metrics, retry_delay).await?),
         ))
+    }
+
+    fn create_metrics(&self) -> Arc<L1ClientMetrics> {
+        Arc::new(L1ClientMetrics::new(&**self.metrics))
+    }
+}
+
+impl L1ClientMetrics {
+    fn new(metrics: &(impl Metrics + ?Sized)) -> Self {
+        Self {
+            head: metrics.create_gauge("head".into(), None),
+            finalized: metrics.create_gauge("finalized".into(), None),
+            ws_reconnects: metrics.create_counter("ws_reconnects".into(), None),
+            stream_reconnects: metrics.create_counter("stream_reconnects".into(), None),
+        }
     }
 }
 
@@ -346,6 +393,7 @@ impl L1Client {
         let retry_delay = self.retry_delay;
         let state = self.state.clone();
         let sender = self.sender.clone();
+        let metrics = (*rpc).as_ref().metrics().clone();
 
         let span = tracing::warn_span!("L1 client update");
         async move {
@@ -354,7 +402,7 @@ impl L1Client {
                 let mut block_stream = loop {
                     let res = match (*rpc).as_ref() {
                         RpcClient::Ws { .. } => rpc.subscribe_blocks().await.map(StreamExt::boxed),
-                        RpcClient::Http(_) => rpc
+                        RpcClient::Http { .. } => rpc
                             .watch_blocks()
                             .await
                             .map(|stream| {
@@ -394,59 +442,81 @@ impl L1Client {
                 };
 
                 tracing::info!("established L1 block stream");
-                while let Some(head) = block_stream.next().await {
-                    let Some(head) = head.number else {
-                        // This shouldn't happen, but if it does, it means the block stream has
-                        // erroneously given us a pending block. We are only interested in committed
-                        // blocks, so just skip this one.
-                        tracing::warn!("got block from L1 block stream with no number");
-                        continue;
-                    };
-                    let head = head.as_u64();
-                    tracing::debug!(head, "received L1 block");
+                loop {
+                    // Wait for a block, timing out if we don't get one within 60 seconds
+                    let block_timeout = tokio::time::timeout(Duration::from_secs(60), block_stream.next()).await;
 
-                    // A new block has been produced. This happens fairly rarely, so it is now ok to
-                    // poll to see if a new block has been finalized.
-                    let finalized = loop {
-                        match get_finalized_block(&rpc).await {
-                            Ok(finalized) => break finalized,
-                            Err(err) => {
-                                tracing::warn!("error getting finalized block: {err:#}");
-                                sleep(retry_delay).await;
+                    match block_timeout {
+                        // We got a block
+                        Ok(Some(head)) => {
+                            let Some(head_number) = head.number else {
+                                // This shouldn't happen, but if it does, it means the block stream has
+                                // erroneously given us a pending block. We are only interested in committed
+                                // blocks, so just skip this one.
+                                tracing::warn!("got block from L1 block stream with no number");
+                                continue;
+                            };
+                            let head = head_number.as_u64();
+                            tracing::debug!(head, "received L1 block");
+
+                            // A new block has been produced. This happens fairly rarely, so it is now ok to
+                            // poll to see if a new block has been finalized.
+                            let finalized = loop {
+                                match get_finalized_block(&rpc).await {
+                                    Ok(finalized) => break finalized,
+                                    Err(err) => {
+                                        tracing::warn!("error getting finalized block: {err:#}");
+                                        sleep(retry_delay).await;
+                                    }
+                                }
+                            };
+
+                            // Update the state snapshot;
+                            let mut state = state.lock().await;
+                            if head > state.snapshot.head {
+                                tracing::debug!(head, old_head = state.snapshot.head, "L1 head updated");
+                                metrics.head.set(head as usize);
+                                state.snapshot.head = head;
+                                // Emit an event about the new L1 head. Ignore send errors; it just means no
+                                // one is listening to events right now.
+                                sender
+                                    .broadcast_direct(L1Event::NewHead { head })
+                                    .await
+                                    .ok();
                             }
+                            if finalized > state.snapshot.finalized {
+                                tracing::info!(
+                                    ?finalized,
+                                    old_finalized = ?state.snapshot.finalized,
+                                    "L1 finalized updated",
+                                );
+                                if let Some(finalized) = finalized {
+                                    metrics.finalized.set(finalized.number as usize);
+                                }
+                                state.snapshot.finalized = finalized;
+                                if let Some(finalized) = finalized {
+                                    sender
+                                        .broadcast_direct(L1Event::NewFinalized { finalized })
+                                        .await
+                                        .ok();
+                                }
+                            }
+                            tracing::debug!("updated L1 snapshot to {:?}", state.snapshot);
                         }
-                    };
-
-                    // Update the state snapshot;
-                    let mut state = state.lock().await;
-                    if head > state.snapshot.head {
-                        tracing::debug!(head, old_head = state.snapshot.head, "L1 head updated");
-                        state.snapshot.head = head;
-                        // Emit an event about the new L1 head. Ignore send errors; it just means no
-                        // one is listening to events right now.
-                        sender
-                            .broadcast_direct(L1Event::NewHead { head })
-                            .await
-                            .ok();
-                    }
-                    if finalized > state.snapshot.finalized {
-                        tracing::info!(
-                            ?finalized,
-                            old_finalized = ?state.snapshot.finalized,
-                            "L1 finalized updated",
-                        );
-                        state.snapshot.finalized = finalized;
-                        if let Some(finalized) = finalized {
-                            sender
-                                .broadcast_direct(L1Event::NewFinalized { finalized })
-                                .await
-                                .ok();
+                        // The stream ended
+                        Ok(None) => {
+                            tracing::error!("L1 block stream ended unexpectedly, trying to re-establish block stream");
+                            break;
+                        }
+                        // We timed out waiting for a block
+                        Err(_) => {
+                            tracing::error!("No block received for 60 seconds, trying to re-establish block stream");
+                            break;
                         }
                     }
-                    tracing::debug!("updated L1 snapshot to {:?}", state.snapshot);
                 }
 
-                tracing::error!("L1 block stream ended unexpectedly, trying to re-establish");
+                metrics.stream_reconnects.add(1);
             }
         }.instrument(span)
     }
@@ -525,13 +595,13 @@ impl L1Client {
                     continue;
                 };
                 if finalized.number >= number {
-                    tracing::info!(number, ?finalized, "got finalized block");
+                    tracing::info!(number, ?finalized, "got finalized L1 block");
                     return self
                         .get_finalized_block(self.state.lock().await, number)
                         .await
                         .1;
                 }
-                tracing::debug!(number, ?finalized, "waiting for L1 finalized block");
+                tracing::debug!(number, ?finalized, "waiting for finalized L1 block");
             }
 
             // This should not happen: the event stream ended. All we can do is try again.
@@ -771,6 +841,7 @@ mod test {
         prelude::{LocalWallet, Signer, SignerMiddleware, H160, U64},
         utils::{hex, parse_ether, Anvil, AnvilInstance},
     };
+    use hotshot_types::traits::metrics::NoMetrics;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use std::time::Duration;
@@ -1072,9 +1143,13 @@ mod test {
         let port = pick_unused_port().unwrap();
         let mut anvil = Anvil::new().block_time(1u32).port(port).spawn();
         let provider = Provider::new(
-            RpcClient::ws(anvil.ws_endpoint().parse().unwrap(), Duration::from_secs(1))
-                .await
-                .unwrap(),
+            RpcClient::ws(
+                anvil.ws_endpoint().parse().unwrap(),
+                Arc::new(L1ClientMetrics::new(&NoMetrics)),
+                Duration::from_secs(1),
+            )
+            .await
+            .unwrap(),
         );
 
         // Check the provider is working.

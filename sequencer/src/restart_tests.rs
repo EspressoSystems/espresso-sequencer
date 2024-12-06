@@ -1,9 +1,20 @@
 #![cfg(test)]
 
 use super::*;
+use crate::{
+    api::{self, data_source::testing::TestableSequencerDataSource, options::Query},
+    genesis::{L1Finalized, StakeTableConfig},
+    network::cdn::{TestingDef, WrappedSignatureKey},
+    testing::wait_for_decide_on_handle,
+    SequencerApiVersion,
+};
 use anyhow::bail;
-use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as BrokerConfig};
+use cdn_broker::{
+    reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
+    Broker, Config as BrokerConfig,
+};
 use cdn_marshal::{Config as MarshalConfig, Marshal};
+use clap::Parser;
 use derivative::Derivative;
 use espresso_types::{
     eth_signature_key::EthKeyPair, traits::PersistenceOptions, v0_3::ChainConfig, FeeAccount,
@@ -27,18 +38,9 @@ use hotshot_types::{
     traits::{node_implementation::ConsensusTime, signature_key::SignatureKey},
 };
 use itertools::Itertools;
+use options::Modules;
 use portpicker::pick_unused_port;
-use sequencer::{
-    api::{
-        self,
-        data_source::testing::TestableSequencerDataSource,
-        options::{Http, Query},
-    },
-    genesis::{L1Finalized, StakeTableConfig},
-    network::cdn::{TestingDef, WrappedSignatureKey},
-    testing::wait_for_decide_on_handle,
-    SequencerApiVersion,
-};
+use run::init_with_storage;
 use sequencer_utils::test_utils::setup_test;
 use std::{collections::HashSet, path::Path, time::Duration};
 use surf_disco::{error::ClientError, Url};
@@ -247,7 +249,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
 
         let storage = S::create_storage().await;
         let mut modules = Modules {
-            http: Some(Http::with_port(node.api_port)),
+            http: Some(api::options::Http::with_port(node.api_port)),
             status: Some(Default::default()),
             catchup: Some(Default::default()),
             ..Default::default()
@@ -860,6 +862,9 @@ async fn start_broker(ports: &mut PortPicker, dir: &Path) -> JoinHandle<()> {
             public_key: WrappedSignatureKey(public_key),
             private_key,
         },
+
+        user_message_hook: NoMessageHook,
+        broker_message_hook: NoMessageHook,
 
         ca_cert_path: None,
         ca_key_path: None,

@@ -84,7 +84,7 @@ processes:
       success_threshold: 1
       failure_threshold: 100
     availability:
-      restart: "exit_on_failure"
+      restart: exit_on_failure
 
   state-relay-server:
     command: state-relay-server
@@ -155,6 +155,7 @@ processes:
         condition: process_completed
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
     readiness_probe:
       http_get:
@@ -170,7 +171,7 @@ processes:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
       - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
-      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER2_API_PORT
       - ESPRESSO_SEQUENCER_POSTGRES_HOST=localhost
       - ESPRESSO_SEQUENCER_POSTGRES_PORT=$ESPRESSO_SEQUENCER1_DB_PORT
@@ -216,7 +217,7 @@ processes:
         path: /healthcheck
       failure_threshold: 100
     availability:
-      exit_on_skipped: true
+      restart: exit_on_failure
 
   sequencer2:
     command: sequencer -- http -- catchup -- status
@@ -263,6 +264,7 @@ processes:
       failure_threshold: 100
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
   sequencer3:
     command: sequencer -- http -- catchup -- status
@@ -310,12 +312,14 @@ processes:
       failure_threshold: 100
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
   sequencer4:
-    command: sequencer -- http -- catchup -- status
+    command: sequencer-sqlite -- storage-sql -- http -- query -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq4
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_4
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_4
@@ -329,6 +333,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=-25.2744
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=133.7751
       - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT/
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -353,6 +358,7 @@ processes:
       failure_threshold: 100
     availability:
       exit_on_skipped: true
+      restart: exit_on_failure
 
   node_validator:
     command: RUST_LOG=debug node-metrics --

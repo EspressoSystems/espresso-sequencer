@@ -5,14 +5,15 @@ ARG TARGETARCH
 RUN apt-get update \
     &&  apt-get install -y curl libcurl4 wait-for-it tini \
     &&  rm -rf /var/lib/apt/lists/*
-ENTRYPOINT ["tini", "--"]
-
 # Download an SRS file to avoid download at runtime
 ENV AZTEC_SRS_PATH=/kzg10-aztec20-srs-1048584.bin
 RUN curl -LO https://github.com/EspressoSystems/ark-srs/releases/download/v0.2.0/$AZTEC_SRS_PATH
 
-COPY target/$TARGETARCH/release/sequencer /bin/sequencer
-RUN chmod +x /bin/sequencer
+COPY target/$TARGETARCH/release/sequencer /bin/sequencer-postgres
+RUN chmod +x /bin/sequencer-postgres
+
+COPY target/$TARGETARCH/release/sequencer-sqlite /bin/sequencer-sqlite
+RUN chmod +x /bin/sequencer-sqlite
 
 COPY target/$TARGETARCH/release/utils /bin/utils
 RUN chmod +x /bin/utils
@@ -33,6 +34,10 @@ COPY data/genesis /genesis
 # Allow injecting a genesis file with aws secretsmanager
 # Set `ESPRESSO_SEQUENCER_GENESIS_SECRET`
 COPY docker/scripts/sequencer-awssecretsmanager.sh /bin/sequencer-awssecretsmanager.sh
+
+# Copy entrypoint script
+COPY scripts/sequencer-entrypoint /bin/sequencer
+RUN chmod +x /bin/sequencer
 
 # Set a path to save the consensus config on startup.
 #

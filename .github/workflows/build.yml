@@ -46,11 +46,14 @@ jobs:
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
           cargo build --locked --release --workspace
+      
+      - name: Build sequencer-sqlite 
+        run: cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+          cargo build --locked --release --features "testing embedded-db" --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -79,6 +82,7 @@ jobs:
             target/release/marketplace-builder
             target/release/node-metrics
             target/release/dev-rollup
+            target/release/sequencer-sqlite
 
   build-arm:
     if: github.event_name != 'pull_request'
@@ -100,10 +104,13 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
+      - name: Build sequencer-sqlite 
+        run: cargo build --locked --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
+
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+          cargo build --locked --release --features "embedded-db testing" --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -132,6 +139,7 @@ jobs:
             target/release/marketplace-builder
             target/release/node-metrics
             target/release/dev-rollup
+            target/release/sequencer-sqlite
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -285,7 +293,6 @@ jobs:
         id: dev-rollup
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/dev-rollup
-
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v6

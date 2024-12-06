@@ -7,12 +7,10 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
-contract-bindings = { path = "../contract-bindings" }
 espresso-types = { path = "../types" }
 ethers = { workspace = true }
 futures = { workspace = true }
 jf-merkle-tree = { workspace = true }
-sequencer-utils = { path = "../utils" }
 surf-disco = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
