@@ -1283,12 +1283,12 @@ mod test {
         let client = Arc::new(client);
 
         // Initialize a contract with some deposits
-
+        let v: Vec<u8> = Vec::new();
         // deploy the stake_table contract
         let stake_table_contract =
             contract_bindings::permissioned_stake_table::PermissionedStakeTable::deploy(
                 client.clone(),
-                (),
+                v,
             )
             .unwrap()
             .send()
