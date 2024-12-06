@@ -1263,7 +1263,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_stake_table() -> anyhow::Result<()> {
+    async fn test_fetch_stake_table() -> anyhow::Result<()> {
         setup_test();
 
         // how many deposits will we make
@@ -1284,7 +1284,7 @@ mod test {
 
         // Initialize a contract with some deposits
 
-        // deploy the fee contract
+        // deploy the stake_table contract
         let stake_table_contract =
             contract_bindings::permissioned_stake_table::PermissionedStakeTable::deploy(
                 client.clone(),
