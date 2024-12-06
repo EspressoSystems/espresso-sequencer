@@ -5,9 +5,9 @@ use committable::Committable;
 use derivative::Derivative;
 use derive_more::derive::{From, Into};
 use espresso_types::{
-    parse_duration,
+    downgrade_commitment_map, downgrade_leaf, parse_duration, upgrade_commitment_map,
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, NetworkConfig, Payload,
+    BackoffParams, Leaf, Leaf2, NetworkConfig, Payload,
 };
 use futures::stream::StreamExt;
 use hotshot_query_service::data_source::storage::sql::{syntax_helpers::MAX_FN, Db};
@@ -20,10 +20,10 @@ use hotshot_query_service::data_source::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
-    message::Proposal,
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    message::{convert_proposal, Proposal},
+    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
     traits::{node_implementation::ConsensusTime, BlockPayload},
     utils::View,
     vid::VidSchemeType,
@@ -543,18 +543,20 @@ impl SequencerPersistence for Persistence {
     async fn append_decided_leaves(
         &self,
         view: ViewNumber,
-        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
+        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
         consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<()> {
         let values = leaf_chain
             .into_iter()
-            .map(|(info, qc)| {
+            .map(|(info, qc2)| {
                 // The leaf may come with a large payload attached. We don't care about this payload
                 // because we already store it separately, as part of the DA proposal. Storing it
                 // here contributes to load on the DB for no reason, so we remove it before
                 // serializing the leaf.
-                let mut leaf = info.leaf.clone();
+                let mut leaf = downgrade_leaf(info.leaf.clone());
                 leaf.unfill_block_payload();
+
+                let qc = qc2.to_qc();
 
                 let view = qc.view_number.u64() as i64;
                 let leaf_bytes = bincode::serialize(&leaf)?;
@@ -600,7 +602,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_anchor_leaf(
         &self,
-    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
         let Some(row) = self
             .db
             .read()
@@ -612,12 +614,14 @@ impl SequencerPersistence for Persistence {
         };
 
         let leaf_bytes: Vec<u8> = row.get("leaf");
-        let leaf = bincode::deserialize(&leaf_bytes)?;
+        let leaf: Leaf = bincode::deserialize(&leaf_bytes)?;
+        let leaf2: Leaf2 = leaf.into();
 
         let qc_bytes: Vec<u8> = row.get("qc");
-        let qc = bincode::deserialize(&qc_bytes)?;
+        let qc: QuorumCertificate<SeqTypes> = bincode::deserialize(&qc_bytes)?;
+        let qc2 = qc.to_qc2();
 
-        Ok(Some((leaf, qc)))
+        Ok(Some((leaf2, qc2)))
     }
 
     async fn load_anchor_view(&self) -> anyhow::Result<ViewNumber> {
@@ -630,7 +634,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_undecided_state(
         &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
         let Some(row) = self
             .db
             .read()
@@ -642,12 +646,13 @@ impl SequencerPersistence for Persistence {
         };
 
         let leaves_bytes: Vec<u8> = row.get("leaves");
-        let leaves = bincode::deserialize(&leaves_bytes)?;
+        let leaves: CommitmentMap<Leaf> = bincode::deserialize(&leaves_bytes)?;
+        let leaves2 = upgrade_commitment_map(leaves);
 
         let state_bytes: Vec<u8> = row.get("state");
         let state = bincode::deserialize(&state_bytes)?;
 
-        Ok(Some((leaves, state)))
+        Ok(Some((leaves2, state)))
     }
 
     async fn load_da_proposal(
@@ -694,7 +699,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
         let rows = self
             .db
             .read()
@@ -710,7 +715,7 @@ impl SequencerPersistence for Persistence {
                     let bytes: Vec<u8> = row.get("data");
                     let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                         bincode::deserialize(&bytes)?;
-                    Ok((view_number, proposal))
+                    Ok((view_number, convert_proposal(proposal)))
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?,
         ))
@@ -719,14 +724,15 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
         let mut tx = self.db.read().await?;
         let (data,) =
             query_as::<(Vec<u8>,)>("SELECT data FROM quorum_proposals WHERE view = $1 LIMIT 1")
                 .bind(view.u64() as i64)
                 .fetch_one(tx.as_mut())
                 .await?;
-        let proposal = bincode::deserialize(&data)?;
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&data)?;
+        let proposal = convert_proposal(proposal);
         Ok(proposal)
     }
 
@@ -774,7 +780,7 @@ impl SequencerPersistence for Persistence {
         }
 
         let stmt = format!(
-            "INSERT INTO highest_voted_view (id, view) VALUES (0, $1) 
+            "INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
             ON CONFLICT (id) DO UPDATE SET view = {MAX_FN}(highest_voted_view.view, excluded.view)"
         );
 
@@ -784,9 +790,11 @@ impl SequencerPersistence for Persistence {
     }
     async fn update_undecided_state(
         &self,
-        leaves: CommitmentMap<Leaf>,
+        leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let leaves = downgrade_commitment_map(leaves);
+
         if !self.store_undecided_state {
             return Ok(());
         }
@@ -806,8 +814,10 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(proposal.clone());
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
         let leaf_hash = Committable::commit(&Leaf::from_quorum_proposal(&proposal.data));
@@ -859,6 +869,17 @@ impl SequencerPersistence for Persistence {
         )
         .await?;
         tx.commit().await
+    }
+
+    async fn migrate_consensus(
+        &self,
+        _migrate_leaf: fn(Leaf) -> Leaf2,
+        _migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/2357
+        Ok(())
     }
 }
 
@@ -981,7 +1002,7 @@ async fn collect_garbage(
         }
 
         let leaf_info = LeafInfo {
-            leaf,
+            leaf: leaf.into(),
             vid_share,
 
             // Note: the following fields are not used in Decide event processing, and
@@ -995,7 +1016,7 @@ async fn collect_garbage(
                 view_number: ViewNumber::new(view),
                 event: EventType::Decide {
                     leaf_chain: Arc::new(vec![leaf_info]),
-                    qc: Arc::new(qc),
+                    qc: Arc::new(qc.to_qc2()),
                     block_size: None,
                 },
             })
@@ -1084,40 +1105,52 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
+
     use super::*;
     use crate::{persistence::testing::TestablePersistence, BLSPubKey, PubKey};
-    use espresso_types::{NodeState, ValidatedState};
+    use espresso_types::{Leaf, NodeState, ValidatedState};
     use futures::stream::TryStreamExt;
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::traits::signature_key::SignatureKey;
+    use hotshot_types::{
+        drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
+        simple_certificate::QuorumCertificate,
+        traits::signature_key::SignatureKey,
+    };
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_quorum_proposals_leaf_hash_migration() {
         // Create some quorum proposals to test with.
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
+            .await
+            .into();
         let privkey = BLSPubKey::generated_from_seed_indexed([0; 32], 1).1;
         let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut quorum_proposal = Proposal {
-            data: QuorumProposal::<SeqTypes> {
+            data: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
-                .await,
+                .await
+                .to_qc2(),
                 upgrade_certificate: None,
-                proposal_certificate: None,
+                view_change_evidence: None,
+                drb_seed: INITIAL_DRB_SEED_INPUT,
+                drb_result: INITIAL_DRB_RESULT,
             },
             signature,
             _pd: Default::default(),
         };
 
-        let qp1 = quorum_proposal.clone();
+        let qp1: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(quorum_proposal.clone());
 
         quorum_proposal.data.view_number = ViewNumber::new(1);
-        let qp2 = quorum_proposal.clone();
 
+        let qp2: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(quorum_proposal.clone());
         let qps = [qp1, qp2];
 
         // Create persistence and add the quorum proposals with NULL leaf hash.

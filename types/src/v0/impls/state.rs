@@ -31,8 +31,8 @@ use super::{
 };
 use crate::{
     traits::StateCatchup,
-    v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
-    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
+    v0_99::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
+    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf2,
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,
 };
@@ -225,7 +225,7 @@ impl ValidatedState {
     pub fn apply_proposal(
         &mut self,
         delta: &mut Delta,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         l1_deposits: Vec<FeeInfo>,
     ) {
         // pushing a block into merkle tree shouldn't fail
@@ -704,7 +704,7 @@ impl ValidatedState {
         &self,
         instance: &NodeState,
         peers: &impl StateCatchup,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         proposed_header: &Header,
         version: Version,
     ) -> anyhow::Result<(Self, Delta)> {
@@ -860,7 +860,7 @@ fn _apply_full_transactions(
 pub async fn get_l1_deposits(
     instance: &NodeState,
     header: &Header,
-    parent_leaf: &Leaf,
+    parent_leaf: &Leaf2,
     fee_contract_address: Option<Address>,
 ) -> Vec<FeeInfo> {
     if let (Some(addr), Some(block_info)) = (fee_contract_address, header.l1_finalized()) {
@@ -901,7 +901,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
     async fn validate_and_apply_header(
         &self,
         instance: &Self::Instance,
-        parent_leaf: &Leaf,
+        parent_leaf: &Leaf2,
         proposed_header: &Header,
         vid_common: VidCommon,
         version: Version,
@@ -1073,9 +1073,9 @@ mod test {
     use super::*;
     use crate::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
-        v0_1, v0_2,
-        v0_3::{self, BidTx},
-        BlockSize, FeeAccountProof, FeeMerkleProof, Payload, Transaction,
+        v0_1, v0_2, v0_3,
+        v0_99::{self, BidTx},
+        BlockSize, FeeAccountProof, FeeMerkleProof, Leaf, Payload, Transaction,
     };
 
     impl Transaction {
@@ -1109,7 +1109,14 @@ mod test {
                     timestamp: OffsetDateTime::now_utc().unix_timestamp() as u64,
                     ..parent.clone()
                 }),
-                Header::V3(_) => panic!("You called `Header.next()` on unimplemented version (v3)"),
+                Header::V3(parent) => Header::V3(v0_3::Header {
+                    height: parent.height + 1,
+                    timestamp: OffsetDateTime::now_utc().unix_timestamp() as u64,
+                    ..parent.clone()
+                }),
+                Header::V99(_) => {
+                    panic!("You called `Header.next()` on unimplemented version (v3)")
+                }
             }
         }
         /// Replaces builder signature w/ invalid one.
@@ -1132,7 +1139,14 @@ mod test {
                     builder_signature: Some(sig),
                     ..header.clone()
                 }),
-                Header::V3(_) => panic!("You called `Header.sign()` on unimplemented version (v3)"),
+                Header::V3(header) => Header::V3(v0_3::Header {
+                    fee_info,
+                    builder_signature: Some(sig),
+                    ..header.clone()
+                }),
+                Header::V99(_) => {
+                    panic!("You called `Header.sign()` on unimplemented version (v3)")
+                }
             }
         }
 
@@ -1159,7 +1173,12 @@ mod test {
                     builder_signature: Some(sig),
                     ..parent.clone()
                 }),
-                Header::V3(_) => panic!(
+                Header::V3(parent) => Header::V3(v0_3::Header {
+                    fee_info,
+                    builder_signature: Some(sig),
+                    ..parent.clone()
+                }),
+                Header::V99(_) => panic!(
                     "You called `Header.invalid_builder_signature()` on unimplemented version (v3)"
                 ),
             }
@@ -1732,7 +1751,9 @@ mod test {
             ..validated_state.chain_config.resolve().unwrap()
         });
 
-        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let parent: Leaf2 = Leaf::genesis(&instance_state.genesis_state, &instance_state)
+            .await
+            .into();
         let header = parent.block_header().clone();
         let metadata = parent.block_header().metadata();
         let vid_commitment = parent.payload_commitment();
@@ -1766,6 +1787,11 @@ mod test {
                 ..header
             }),
             Header::V3(header) => Header::V3(v0_3::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V99(header) => Header::V99(v0_99::Header {
                 builder_signature: vec![sig],
                 fee_info: vec![FeeInfo::new(account, data)],
                 ..header
@@ -1781,13 +1807,15 @@ mod test {
         let max_block_size = 10;
 
         let validated_state = ValidatedState::default();
-        let instance_state = NodeState::mock_v3().with_chain_config(ChainConfig {
+        let instance_state = NodeState::mock_v99().with_chain_config(ChainConfig {
             base_fee: 1000.into(), // High base fee
             max_block_size: max_block_size.into(),
             ..validated_state.chain_config.resolve().unwrap()
         });
 
-        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let parent: Leaf2 = Leaf::genesis(&instance_state.genesis_state, &instance_state)
+            .await
+            .into();
         let header = parent.block_header().clone();
 
         debug!("{:?}", header.version());
@@ -1819,6 +1847,11 @@ mod test {
                 ..header
             }),
             Header::V3(header) => Header::V3(v0_3::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V99(header) => Header::V99(v0_99::Header {
                 builder_signature: vec![sig],
                 fee_info: vec![FeeInfo::new(account, data)],
                 ..header

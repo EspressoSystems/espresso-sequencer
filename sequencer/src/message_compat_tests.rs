@@ -17,7 +17,7 @@
 use std::path::Path;
 
 use committable::Committable;
-use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
+use espresso_types::{NodeState, PubKey, ValidatedState};
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{
@@ -53,17 +53,14 @@ use vbs::{
 
 #[cfg(feature = "testing")]
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
-    use espresso_types::{Payload, SeqTypes, Transaction};
+    use espresso_types::{Leaf, Payload, SeqTypes, Transaction};
     use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::{traits::network::Topic, PeerConfig};
+    use hotshot_types::PeerConfig;
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
-    let membership = StaticCommittee::new(
-        vec![],                      /* no eligible leaders */
-        vec![PeerConfig::default()], /* one committee member, necessary to generate a VID share */
-        Topic::Global,
-    );
+    let committee = vec![PeerConfig::default()]; /* one committee member, necessary to generate a VID share */
+    let membership = StaticCommittee::new(committee.clone(), committee);
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },

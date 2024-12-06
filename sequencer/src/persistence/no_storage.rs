@@ -5,14 +5,14 @@ use anyhow::bail;
 use async_trait::async_trait;
 use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
-    Leaf, NetworkConfig,
+    Leaf, Leaf2, NetworkConfig,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    simple_certificate::{QuorumCertificate2, UpgradeCertificate},
     utils::View,
     vid::VidSchemeType,
 };
@@ -54,31 +54,26 @@ impl SequencerPersistence for NoStorage {
     async fn append_decided_leaves(
         &self,
         view_number: ViewNumber,
-        leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
+        leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
         consumer: &impl EventConsumer,
     ) -> anyhow::Result<()> {
-        let (mut leaf_chain, mut qcs): (Vec<_>, Vec<_>) = leaves
+        let leaves = leaves
             .into_iter()
-            .map(|(info, qc)| (info.clone(), qc))
-            .unzip();
-
-        // Put in reverse chronological order, as expected from Decide events.
-        leaf_chain.reverse();
-        qcs.reverse();
-
-        // Generate decide event for the consumer.
-        let final_qc = qcs.pop().unwrap();
-
-        consumer
-            .handle_event(&Event {
-                view_number,
-                event: EventType::Decide {
-                    leaf_chain: Arc::new(leaf_chain),
-                    qc: Arc::new(final_qc),
-                    block_size: None,
-                },
-            })
-            .await
+            .map(|(info_ref, qc)| (info_ref.clone(), qc))
+            .collect::<Vec<_>>();
+        for (leaf_info, qc) in leaves {
+            consumer
+                .handle_event(&Event {
+                    view_number,
+                    event: EventType::Decide {
+                        leaf_chain: Arc::new(vec![leaf_info.clone()]),
+                        qc: Arc::new(qc),
+                        block_size: None,
+                    },
+                })
+                .await?;
+        }
+        Ok(())
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
@@ -87,13 +82,13 @@ impl SequencerPersistence for NoStorage {
 
     async fn load_anchor_leaf(
         &self,
-    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
         Ok(None)
     }
 
     async fn load_undecided_state(
         &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
         Ok(None)
     }
 
@@ -113,13 +108,13 @@ impl SequencerPersistence for NoStorage {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
         Ok(Default::default())
     }
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
         bail!("proposal {view:?} not available");
     }
     async fn load_upgrade_certificate(
@@ -146,20 +141,30 @@ impl SequencerPersistence for NoStorage {
     }
     async fn update_undecided_state(
         &self,
-        _leaves: CommitmentMap<Leaf>,
+        _leaves: CommitmentMap<Leaf2>,
         _state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn append_quorum_proposal(
         &self,
-        _proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn store_upgrade_certificate(
         &self,
         _decided_upgrade_certificate: Option<UpgradeCertificate<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn migrate_consensus(
+        &self,
+        _: fn(Leaf) -> Leaf2,
+        _: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
