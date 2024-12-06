@@ -3,8 +3,8 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{bail, ensure, Context};
 use espresso_types::{
-    traits::StateCatchup, v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
-    Leaf, ValidatedState,
+    traits::StateCatchup, v0_99::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree,
+    Leaf2, ValidatedState,
 };
 use futures::future::Future;
 use futures::StreamExt;
@@ -29,8 +29,8 @@ pub(crate) async fn compute_state_update(
     state: &ValidatedState,
     instance: &NodeState,
     peers: &impl StateCatchup,
-    parent_leaf: &Leaf,
-    proposed_leaf: &Leaf,
+    parent_leaf: &Leaf2,
+    proposed_leaf: &Leaf2,
 ) -> anyhow::Result<(ValidatedState, Delta)> {
     let header = proposed_leaf.block_header();
 
@@ -155,8 +155,8 @@ where
         parent_state,
         instance,
         peers,
-        parent_leaf.leaf(),
-        proposed_leaf.leaf(),
+        &parent_leaf.leaf().clone().into(),
+        &proposed_leaf.leaf().clone().into(),
     )
     .await
     .context("computing state update")?;

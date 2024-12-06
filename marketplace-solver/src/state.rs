@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use committable::Committable;
 use espresso_types::{
-    v0_3::{
+    v0_99::{
         BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody,
         SolverAuctionResults,
     },

@@ -7,7 +7,6 @@ use espresso_types::{
 };
 use futures::future::pending;
 use hotshot::helpers::initialize_logging;
-use hotshot::traits::ValidatedState;
 use hotshot_types::{
     data::ViewNumber,
     traits::node_implementation::{ConsensusTime, Versions},
@@ -168,8 +167,6 @@ async fn run<V: Versions>(
     let base_fee = genesis.max_base_fee();
     tracing::info!(?base_fee, "base_fee");
 
-    let validated_state = ValidatedState::genesis(&instance_state).0;
-
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 
     // make the txn timeout as 1/4 of the api_response_timeout_duration
@@ -182,7 +179,6 @@ async fn run<V: Versions>(
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
         instance_state.clone(),
-        validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,

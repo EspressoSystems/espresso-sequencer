@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{EpochNumber, ViewNumber},
@@ -10,6 +8,7 @@ use hotshot_types::{
     },
 };
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 
 mod header;
 mod impls;
@@ -36,7 +35,7 @@ pub use impls::mock;
 // instead we write `with_minor_versions!(some_macro!(args))`.
 macro_rules! with_minor_versions {
     ($m:ident!($($arg:tt),*)) => {
-        $m!($($arg,)* v0_1, v0_2, v0_3);
+        $m!($($arg,)* v0_1, v0_2, v0_3, v0_99);
     };
 }
 
@@ -123,6 +122,7 @@ reexport_unchanged_types!(
     ViewBasedUpgrade,
     BlockSize,
 );
+
 pub(crate) use v0_3::{
     L1ClientMetrics, L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient,
 };
@@ -145,6 +145,7 @@ impl NodeType for SeqTypes {
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
+
 #[derive(Clone, Default, Debug, Copy)]
 pub struct SequencerVersions<Base: StaticVersionType, Upgrade: StaticVersionType> {
     _pd: PhantomData<(Base, Upgrade)>,
@@ -177,10 +178,12 @@ pub type MockSequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVe
 pub type V0_0 = StaticVersion<0, 0>;
 pub type V0_1 = StaticVersion<0, 1>;
 pub type FeeVersion = StaticVersion<0, 2>;
-pub type MarketplaceVersion = StaticVersion<0, 3>;
-pub type EpochVersion = StaticVersion<0, 4>;
+pub type MarketplaceVersion = StaticVersion<0, 99>;
+pub type EpochVersion = StaticVersion<0, 100>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
+pub type Leaf2 = hotshot_types::data::Leaf2<SeqTypes>;
+
 pub type Event = hotshot::types::Event<SeqTypes>;
 
 pub type PubKey = BLSPubKey;
@@ -193,4 +196,4 @@ pub use crate::v0_1::{
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
-use crate::v0_3::SolverAuctionResults;
+use crate::v0_99::SolverAuctionResults;

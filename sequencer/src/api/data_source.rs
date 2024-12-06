@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
-    v0_3::ChainConfig,
+    v0_99::ChainConfig,
     FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
 };
 use futures::future::Future;
