@@ -59,7 +59,9 @@ abstract contract AbstractStakeTable {
     /// @param balance The amount of token staked.
     /// @param registerEpoch The starting epoch for the validator.
     /// @param exitEpoch The ending epoch for the validator.
-    /// @param schnorrVK The Schnorr verification key associated.
+    /// @param schnorrVK The Schnorr verification key associated. Used for signing the light client
+    /// state.
+    /// @param blsVK The BLS verification key associated. Used for consensus voting.
     struct Node {
         address account;
         StakeType stakeType;
@@ -67,6 +69,7 @@ abstract contract AbstractStakeTable {
         uint64 registerEpoch;
         uint64 exitEpoch;
         EdOnBN254.EdOnBN254Point schnorrVK;
+        BN254.G2Point blsVK;
     }
 
     // === Table State & Stats ===

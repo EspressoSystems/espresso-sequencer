@@ -260,6 +260,7 @@ contract StakeTable is AbstractStakeTable {
         node.balance = amount;
         node.stakeType = stakeType;
         node.schnorrVK = schnorrVK;
+        node.blsVK = blsVK;
         node.registerEpoch = registerEpoch;
 
         nodes[key] = node;
