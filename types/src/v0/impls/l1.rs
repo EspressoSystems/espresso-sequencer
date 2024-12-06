@@ -1266,10 +1266,6 @@ mod test {
     async fn test_fetch_stake_table() -> anyhow::Result<()> {
         setup_test();
 
-        // how many deposits will we make
-        let deposits = 5;
-        let deploy_txn_count = 2;
-
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
         let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
