@@ -1,7 +1,7 @@
 @startuml
 
-package "Espresso Sequencer Network" as Network #MistyRose {
-    component "Other\nSequencer\nNodes" as Nodes
+package "Espresso Network" as Network #MistyRose {
+    component "Other\nEspresso\nNodes" as Nodes
     package CDN {
         component Broker
         component Marshal
@@ -12,7 +12,7 @@ package "Espresso Sequencer Network" as Network #MistyRose {
     Broker -> KeyDB: state
     KeyDB -> Marshal: state
 
-    component "Sequencer Node" as Seq #Bisque {
+    component "Espresso Node" as Seq #Bisque {
         database "Postgres" as DB
         package APIs #LightCyan {
             component "Submit" as Submit
@@ -110,7 +110,7 @@ note top of link
 end note
 User --> OR_RPC
 
-ZK_RPC --> Submit : "transaction" " "
+ZK_RPC --> Submit : "transaction (L2 block)" " "
 Submit -> Events: transaction
 Query -up-> ZK_Exec : " " "Espresso\nheader,\nnamespace\ntransactions"
 note top of link

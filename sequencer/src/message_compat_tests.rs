@@ -312,16 +312,16 @@ async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
     assert_eq!(parsed, messages);
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_v1_message_compat() {
     test_message_compat(StaticVersion::<0, 1> {}).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_v2_message_compat() {
     test_message_compat(StaticVersion::<0, 2> {}).await;
 }
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_v3_message_compat() {
     test_message_compat(StaticVersion::<0, 3> {}).await;
 }

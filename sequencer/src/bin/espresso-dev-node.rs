@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
-use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
@@ -33,6 +32,7 @@ use sequencer_utils::{
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::{error::ServerError, method::ReadState, Api, Error as _, StatusCode};
+use tokio::spawn;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -141,7 +141,7 @@ struct Args {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli_params = Args::parse();
 
@@ -535,16 +535,14 @@ mod tests {
     use std::{process::Child, sync::Arc, time::Duration};
 
     use crate::AltChainInfo;
-    use async_std::{stream::StreamExt, task::sleep};
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};
-    use futures::TryStreamExt;
-    use hotshot_query_service::{
-        availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
-        data_source::sql::testing::TmpDb,
+    use futures::{StreamExt, TryStreamExt};
+    use hotshot_query_service::availability::{
+        BlockQueryData, TransactionQueryData, VidCommonQueryData,
     };
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
@@ -553,6 +551,7 @@ mod tests {
     use sequencer_utils::{init_signer, test_utils::setup_test, Anvil, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+    use tokio::time::sleep;
 
     use url::Url;
     use vbs::version::StaticVersion;
@@ -575,25 +574,21 @@ mod tests {
     // and open a PR.
     // - APIs update
     // - Types (like `Header`) update
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_dev_node_test() {
         setup_test();
 
         let builder_port = pick_unused_port().unwrap();
-
         let api_port = pick_unused_port().unwrap();
-
         let dev_node_port = pick_unused_port().unwrap();
-
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
 
-        let db = TmpDb::init().await;
-        let postgres_port = db.port();
+        let tmp_dir = tempfile::tempdir().unwrap();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
-            .features("testing")
+            .features("testing embedded-db")
             .current_target()
             .run()
             .unwrap()
@@ -601,16 +596,13 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
-            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
             .env(
-                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
-                postgres_port.to_string(),
+                "ESPRESSO_SEQUENCER_STORAGE_PATH",
+                tmp_dir.path().as_os_str(),
             )
-            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
-            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
             .spawn()
             .unwrap();
 
@@ -853,7 +845,6 @@ mod tests {
         }
 
         drop(process);
-        drop(db);
     }
 
     async fn alt_chain_providers() -> (Vec<Anvil>, Vec<Url>) {
@@ -876,7 +867,7 @@ mod tests {
         (providers, urls)
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn slow_dev_node_multiple_lc_providers_test() {
         setup_test();
 
@@ -895,12 +886,11 @@ mod tests {
             .collect::<Vec<&str>>()
             .join(",");
 
-        let db = TmpDb::init().await;
-        let postgres_port = db.port();
+        let tmp_dir = tempfile::tempdir().unwrap();
 
         let process = CargoBuild::new()
             .bin("espresso-dev-node")
-            .features("testing")
+            .features("testing embedded-db")
             .current_target()
             .run()
             .unwrap()
@@ -908,19 +898,16 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
-            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
             .env(
-                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
-                postgres_port.to_string(),
-            )
-            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
-            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
-            .env(
                 "ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS",
                 alt_chains_env_value,
+            )
+            .env(
+                "ESPRESSO_SEQUENCER_STORAGE_PATH",
+                tmp_dir.path().as_os_str(),
             )
             .spawn()
             .unwrap();
@@ -1036,6 +1023,5 @@ mod tests {
 
         drop(process);
         drop(alt_providers);
-        drop(db);
     }
 }

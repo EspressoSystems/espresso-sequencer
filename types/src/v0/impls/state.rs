@@ -102,7 +102,7 @@ pub enum ProposalValidationError {
         proposal_timestamp: u64,
         parent_timestamp: u64,
     },
-    #[error("Timestamp drift too high: proposed:={proposal}, system={proposal}, diff={diff}")]
+    #[error("Timestamp drift too high: proposed:={proposal}, system={system}, diff={diff}")]
     InvalidTimestampDrift {
         proposal: u64,
         system: u64,
@@ -393,10 +393,16 @@ pub(crate) struct ValidatedTransition<'a> {
     expected_chain_config: ChainConfig,
     parent: &'a Header,
     proposal: Proposal<'a>,
+    view_number: u64,
 }
 
 impl<'a> ValidatedTransition<'a> {
-    pub(crate) fn new(state: ValidatedState, parent: &'a Header, proposal: Proposal<'a>) -> Self {
+    pub(crate) fn new(
+        state: ValidatedState,
+        parent: &'a Header,
+        proposal: Proposal<'a>,
+        view_number: u64,
+    ) -> Self {
         let expected_chain_config = state
             .chain_config
             .resolve()
@@ -406,6 +412,7 @@ impl<'a> ValidatedTransition<'a> {
             expected_chain_config,
             parent,
             proposal,
+            view_number,
         }
     }
 
@@ -504,7 +511,7 @@ impl<'a> ValidatedTransition<'a> {
     /// verifying signatures. Signatures are identified by index of fee `Vec`.
     fn validate_builder_fee(&self) -> Result<(), ProposalValidationError> {
         // TODO move logic from stand alone fn to here.
-        if let Err(err) = validate_builder_fee(self.proposal.header) {
+        if let Err(err) = validate_builder_fee(self.proposal.header, self.view_number) {
             return Err(ProposalValidationError::BuilderValidationError(err));
         }
         Ok(())
@@ -637,7 +644,10 @@ impl From<MerkleTreeError> for FeeError {
 
 /// Validate builder accounts by verifying signatures. All fees are
 /// verified against signature by index.
-fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
+fn validate_builder_fee(
+    proposed_header: &Header,
+    view_number: u64,
+) -> Result<(), BuilderValidationError> {
     let version = proposed_header.version();
 
     // TODO since we are iterating, should we include account/amount in errors?
@@ -663,6 +673,7 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
                 .validate_sequencing_fee_signature_marketplace(
                     &signature,
                     fee_info.amount().as_u64().unwrap(),
+                    view_number,
                 )
                 .then_some(())
                 .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
@@ -894,6 +905,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         proposed_header: &Header,
         vid_common: VidCommon,
         version: Version,
+        view_number: u64,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
@@ -917,6 +929,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
                 proposed_header,
                 VidSchemeType::get_payload_byte_len(&vid_common),
             ),
+            view_number,
         )
         .validate()?
         .wait_for_l1(&instance.l1_client)
@@ -1046,10 +1059,8 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 
 #[cfg(test)]
 mod test {
-
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
-    use hotshot::traits::BlockPayload;
+    use hotshot::{helpers::initialize_logging, traits::BlockPayload};
     use hotshot_query_service::Resolvable;
     use hotshot_types::traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -1164,6 +1175,7 @@ mod test {
                 expected_chain_config,
                 parent,
                 proposal,
+                view_number: 1,
             }
         }
     }
@@ -1198,8 +1210,7 @@ mod test {
 
     #[test]
     fn test_fee_proofs() {
-        setup_logging();
-        setup_backtrace();
+        initialize_logging();
 
         let mut tree = ValidatedState::default().fee_merkle_tree;
         let account1 = Address::random();
@@ -1235,10 +1246,9 @@ mod test {
         FeeAccountProof::prove(&tree, account2).unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_l1_head() {
-        setup_logging();
-        setup_backtrace();
+        initialize_logging();
 
         // Setup.
         let tx = Transaction::of_size(10);
@@ -1258,10 +1268,9 @@ mod test {
         assert_eq!(ProposalValidationError::DecrementingL1Head, err);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_builder_fee() {
-        setup_logging();
-        setup_backtrace();
+        initialize_logging();
 
         // Setup.
         let instance = NodeState::mock();
@@ -1290,10 +1299,9 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_chain_config() {
-        setup_logging();
-        setup_backtrace();
+        initialize_logging();
 
         // Setup.
         let instance = NodeState::mock();
@@ -1327,11 +1335,9 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_max_block_size() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         const MAX_BLOCK_SIZE: usize = 10;
 
         // Setup.
@@ -1366,11 +1372,9 @@ mod test {
             .unwrap()
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_base_fee() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         // Setup
         let tx = Transaction::of_size(20);
         let (header, block_size) = tx.into_mock_header().await;
@@ -1397,11 +1401,9 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_height() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         // Setup
         let instance = NodeState::mock_v2();
         let tx = Transaction::of_size(10);
@@ -1432,11 +1434,9 @@ mod test {
             .unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_timestamp_non_dec() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         let tx = Transaction::of_size(10);
         let (parent, block_size) = tx.into_mock_header().await;
 
@@ -1460,11 +1460,9 @@ mod test {
         proposal.validate_timestamp_non_dec(0).unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_timestamp_drift() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         // Setup
         let instance = NodeState::mock_v2();
         let (parent, block_size) = Transaction::of_size(10).into_mock_header().await;
@@ -1521,11 +1519,9 @@ mod test {
         proposal.validate_timestamp_drift(mock_time).unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_fee_root() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         // Setup
         let instance = NodeState::mock_v2();
         let (header, block_size) = Transaction::of_size(10).into_mock_header().await;
@@ -1558,11 +1554,9 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_block_root() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         // Setup.
         let instance = NodeState::mock_v2();
         let (header, block_size) = Transaction::of_size(10).into_mock_header().await;
@@ -1595,13 +1589,11 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validation_ns_table() {
         use NsTableValidationError::InvalidFinalOffset;
 
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         // Setup.
         let tx = Transaction::of_size(10);
         let (header, block_size) = tx.into_mock_header().await;
@@ -1628,9 +1620,7 @@ mod test {
 
     #[test]
     fn test_charge_fee() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         let src = FeeAccount::generated_from_seed_indexed([0; 32], 0).0;
         let dst = FeeAccount::generated_from_seed_indexed([0; 32], 1).0;
         let amt = FeeAmount::from(1);
@@ -1730,11 +1720,9 @@ mod test {
         );
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validate_builder_fee() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         let max_block_size = 10;
 
         let validated_state = ValidatedState::default();
@@ -1784,14 +1772,12 @@ mod test {
             }),
         };
 
-        validate_builder_fee(&header).unwrap();
+        validate_builder_fee(&header, *parent.view_number() + 1).unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_validate_builder_fee_marketplace() {
-        setup_logging();
-        setup_backtrace();
-
+        initialize_logging();
         let max_block_size = 10;
 
         let validated_state = ValidatedState::default();
@@ -1812,10 +1798,12 @@ mod test {
         let data = header.fee_info()[0].amount().as_u64().unwrap();
 
         // test v3 sig
-        let sig = FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data).unwrap();
+        let sig =
+            FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data, *parent.view_number() + 1)
+                .unwrap();
         // test dedicated marketplace validation function
         account
-            .validate_sequencing_fee_signature_marketplace(&sig, data)
+            .validate_sequencing_fee_signature_marketplace(&sig, data, *parent.view_number() + 1)
             .then_some(())
             .unwrap();
 
@@ -1842,10 +1830,10 @@ mod test {
 
         // assert expectations
         account
-            .validate_sequencing_fee_signature_marketplace(&sig[0], fee)
+            .validate_sequencing_fee_signature_marketplace(&sig[0], fee, *parent.view_number() + 1)
             .then_some(())
             .unwrap();
 
-        validate_builder_fee(&header).unwrap();
+        validate_builder_fee(&header, *parent.view_number() + 1).unwrap();
     }
 }

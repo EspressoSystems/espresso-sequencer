@@ -13,10 +13,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ (github.ref == 'refs/heads/main' && github.run_number) || github.ref }}
   cancel-in-progress: true
 
-env:
-  RUSTFLAGS: --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
-  RUSTDOCFLAGS: --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
-
 jobs:
   doc-rust:
     runs-on: ubuntu-24.04

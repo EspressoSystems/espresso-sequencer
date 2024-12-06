@@ -17,11 +17,14 @@ pub mod traits;
 mod utils;
 pub use header::Header;
 pub use impls::{
-    get_l1_deposits, mock, retain_accounts, BuilderValidationError, FeeError,
-    ProposalValidationError, StateValidationError,
+    get_l1_deposits, retain_accounts, BuilderValidationError, FeeError, ProposalValidationError,
+    StateValidationError,
 };
 pub use utils::*;
 use vbs::version::{StaticVersion, StaticVersionType};
+
+#[cfg(any(test, feature = "testing"))]
+pub use impls::mock;
 
 // This is the single source of truth for minor versions supported by this major version.
 //
@@ -120,7 +123,9 @@ reexport_unchanged_types!(
     ViewBasedUpgrade,
     BlockSize,
 );
-pub(crate) use v0_3::{L1Event, L1State, L1UpdateTask, RpcClient};
+pub(crate) use v0_3::{
+    L1ClientMetrics, L1Event, L1ReconnectTask, L1State, L1UpdateTask, RpcClient,
+};
 
 #[derive(
     Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
@@ -164,6 +169,7 @@ impl<Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static> Ve
     ];
 
     type Marketplace = MarketplaceVersion;
+    type Epochs = EpochVersion;
 }
 
 pub type MockSequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
@@ -172,6 +178,7 @@ pub type V0_0 = StaticVersion<0, 0>;
 pub type V0_1 = StaticVersion<0, 1>;
 pub type FeeVersion = StaticVersion<0, 2>;
 pub type MarketplaceVersion = StaticVersion<0, 3>;
+pub type EpochVersion = StaticVersion<0, 4>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Event = hotshot::types::Event<SeqTypes>;

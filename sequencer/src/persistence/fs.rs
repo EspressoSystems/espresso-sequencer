@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context};
-use async_std::sync::{Arc, RwLock};
+use async_lock::RwLock;
 use async_trait::async_trait;
 use clap::Parser;
 use espresso_types::{
@@ -14,8 +14,11 @@ use hotshot_types::{
     simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{block_contents::BlockPayload, node_implementation::ConsensusTime},
     utils::View,
+    vid::VidSchemeType,
     vote::HasViewNumber,
 };
+use jf_vid::VidScheme;
+use std::sync::Arc;
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
@@ -59,10 +62,13 @@ impl Options {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
-    async fn create(self) -> anyhow::Result<Persistence> {
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
+        let path = self.path.clone();
+        let store_undecided_state = self.store_undecided_state;
+
         Ok(Persistence {
-            store_undecided_state: self.store_undecided_state,
-            inner: Arc::new(RwLock::new(Inner { path: self.path })),
+            store_undecided_state,
+            inner: Arc::new(RwLock::new(Inner { path })),
         })
     }
 
@@ -543,6 +549,7 @@ impl SequencerPersistence for Persistence {
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        _vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();

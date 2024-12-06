@@ -100,6 +100,13 @@ impl NsTable {
         self.len().in_bounds(index)
     }
 
+    /// Instantiate an `NsTable` from a byte slice.
+    pub fn from_bytes_unchecked(bytes: &[u8]) -> NsTable {
+        NsTable {
+            bytes: bytes.to_vec(),
+        }
+    }
+
     /// Are the bytes of this [`NsTable`] uncorrupted?
     ///
     /// # Checks

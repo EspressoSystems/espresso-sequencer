@@ -20,8 +20,10 @@ use hotshot_types::{
         ValidatedState as HotShotState,
     },
     utils::View,
+    vid::VidSchemeType,
 };
 use itertools::Itertools;
+use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
@@ -369,19 +371,12 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
 
-    async fn create(self) -> anyhow::Result<Self::Persistence>;
+    async fn create(&mut self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
-
-    async fn create_catchup_provider(
-        self,
-        backoff: BackoffParams,
-    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        self.create().await?.into_catchup_provider(backoff)
-    }
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Sized + Send + Sync + 'static {
+pub trait SequencerPersistence: Sized + Send + Sync + Clone + 'static {
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(
         self,
@@ -612,6 +607,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()>;
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()>;
     async fn update_undecided_state(
@@ -676,8 +672,9 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<P> {
     async fn append_da(
         &self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        vid_commit: <VidSchemeType as VidScheme>::Commit,
     ) -> anyhow::Result<()> {
-        (**self).append_da(proposal).await
+        (**self).append_da(proposal, vid_commit).await
     }
     async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
         (**self).record_action(view, action).await

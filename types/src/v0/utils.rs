@@ -1,5 +1,4 @@
 use anyhow::Context;
-use async_std::task::sleep;
 use bytesize::ByteSize;
 use clap::Parser;
 use derive_more::{From, Into};
@@ -18,6 +17,7 @@ use thiserror::Error;
 use time::{
     format_description::well_known::Rfc3339 as TimestampFormat, macros::time, Date, OffsetDateTime,
 };
+use tokio::time::sleep;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Update<T> {

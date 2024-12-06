@@ -1,22 +1,22 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::{sync::RwLock, task::spawn};
+use async_lock::RwLock;
 use clap::Parser;
 use espresso_types::MarketplaceVersion;
+use hotshot::helpers::initialize_logging;
 use marketplace_solver::{
     define_api, handle_events,
     state::{GlobalState, SolverState, StakeTable},
     EventsServiceClient, Options, SolverError,
 };
 use tide_disco::App;
+use tokio::task::spawn;
 use vbs::version::StaticVersionType;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
+    initialize_logging();
 
     let args = Options::parse();
     let Options {
@@ -69,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     .await
     .unwrap();
 
-    event_handler.cancel().await;
+    event_handler.abort();
 
     Ok(())
 }

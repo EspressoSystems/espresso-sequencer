@@ -6,6 +6,7 @@ use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeVersion, MarketplaceVersion,
     SequencerVersions, V0_0,
 };
+use futures::future::pending;
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
     data::ViewNumber,
@@ -94,7 +95,7 @@ struct NonPermissionedBuilderOptions {
     logging: logging::Config,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = NonPermissionedBuilderOptions::parse();
     opt.logging.init();
@@ -166,7 +167,7 @@ async fn run<V: Versions>(
     .await?;
 
     // Sleep forever
-    async_std::future::pending::<()>().await;
+    pending::<()>().await;
 
     Ok(())
 }

@@ -1,11 +1,20 @@
 #![cfg(test)]
 
 use super::*;
+use crate::{
+    api::{self, data_source::testing::TestableSequencerDataSource, options::Query},
+    genesis::{L1Finalized, StakeTableConfig},
+    network::cdn::{TestingDef, WrappedSignatureKey},
+    testing::wait_for_decide_on_handle,
+    SequencerApiVersion,
+};
 use anyhow::bail;
-use async_compatibility_layer::art::async_timeout;
-use async_std::task::{sleep, spawn, JoinHandle};
-use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as BrokerConfig};
+use cdn_broker::{
+    reexports::{crypto::signature::KeyPair, def::hook::NoMessageHook},
+    Broker, Config as BrokerConfig,
+};
 use cdn_marshal::{Config as MarshalConfig, Marshal};
+use clap::Parser;
 use derivative::Derivative;
 use espresso_types::{
     eth_signature_key::EthKeyPair, traits::PersistenceOptions, v0_3::ChainConfig, FeeAccount,
@@ -29,22 +38,18 @@ use hotshot_types::{
     traits::{node_implementation::ConsensusTime, signature_key::SignatureKey},
 };
 use itertools::Itertools;
+use options::Modules;
 use portpicker::pick_unused_port;
-use sequencer::{
-    api::{
-        self,
-        data_source::testing::TestableSequencerDataSource,
-        options::{Http, Query},
-    },
-    genesis::{L1Finalized, StakeTableConfig},
-    network::cdn::{TestingDef, WrappedSignatureKey},
-    testing::wait_for_decide_on_handle,
-    SequencerApiVersion,
-};
+use run::init_with_storage;
 use sequencer_utils::test_utils::setup_test;
 use std::{collections::HashSet, path::Path, time::Duration};
 use surf_disco::{error::ClientError, Url};
 use tempfile::TempDir;
+use tokio::time::timeout;
+use tokio::{
+    task::{spawn, JoinHandle},
+    time::sleep,
+};
 use vbs::version::Version;
 use vec1::vec1;
 
@@ -61,110 +66,110 @@ async fn test_restart_helper(network: (usize, usize), restart: (usize, usize), c
     network.shut_down().await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_1_da_with_cdn() {
     test_restart_helper((2, 3), (1, 0), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_1_regular_with_cdn() {
     test_restart_helper((2, 3), (0, 1), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_f_with_cdn() {
     test_restart_helper((4, 6), (1, 2), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_f_minus_1_with_cdn() {
     test_restart_helper((4, 6), (1, 1), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_f_plus_1_with_cdn() {
     test_restart_helper((4, 6), (1, 3), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_2f_with_cdn() {
     test_restart_helper((4, 6), (1, 5), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_2f_minus_1_with_cdn() {
     test_restart_helper((4, 6), (1, 4), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_2f_plus_1_with_cdn() {
     test_restart_helper((4, 6), (2, 5), true).await;
 }
 
 #[ignore]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_all_with_cdn() {
     test_restart_helper((2, 8), (2, 8), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_all_da_with_cdn() {
     test_restart_helper((2, 8), (2, 0), true).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_1_da_without_cdn() {
     test_restart_helper((2, 3), (1, 0), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_1_regular_without_cdn() {
     test_restart_helper((2, 3), (0, 1), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_f_without_cdn() {
     test_restart_helper((4, 6), (1, 2), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_f_minus_1_without_cdn() {
     test_restart_helper((4, 6), (1, 1), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_f_plus_1_without_cdn() {
     test_restart_helper((4, 6), (1, 3), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_2f_without_cdn() {
     test_restart_helper((4, 6), (1, 5), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_2f_minus_1_without_cdn() {
     test_restart_helper((4, 6), (1, 4), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_2f_plus_1_without_cdn() {
     test_restart_helper((4, 6), (2, 5), false).await;
 }
 
 #[ignore]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_all_without_cdn() {
     test_restart_helper((2, 8), (2, 8), false).await;
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_all_da_without_cdn() {
     test_restart_helper((2, 8), (2, 0), false).await;
 }
 
 #[ignore]
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn slow_test_restart_staggered() {
     setup_test();
 
@@ -244,7 +249,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
 
         let storage = S::create_storage().await;
         let mut modules = Modules {
-            http: Some(Http::with_port(node.api_port)),
+            http: Some(api::options::Http::with_port(node.api_port)),
             status: Some(Default::default()),
             catchup: Some(Default::default()),
             ..Default::default()
@@ -263,9 +268,18 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
         let mut opt = Options::parse_from([
             "sequencer",
             "--private-staking-key",
-            &node.staking_key.to_string(),
+            &node
+                .staking_key
+                .to_tagged_base64()
+                .expect("valid tagged-base64")
+                .to_string(),
             "--private-state-key",
-            &node.state_key.sign_key_ref().to_string(),
+            &node
+                .state_key
+                .sign_key_ref()
+                .to_tagged_base64()
+                .expect("valid tagged-base64")
+                .to_string(),
             "--genesis-file",
             &network.genesis_file.display().to_string(),
             "--orchestrator-url",
@@ -379,8 +393,9 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
             // Give enough time for every node to propose, with every view timing out. This is
             // conservative: of course if we actually make progress, not every view will time out,
             // and we will take less than this amount of time.
-            let timeout = 2 * Duration::from_millis(next_view_timeout) * (self.num_nodes as u32);
-            match async_timeout(timeout, self.check_progress()).await {
+            let timeout_duration =
+                2 * Duration::from_millis(next_view_timeout) * (self.num_nodes as u32);
+            match timeout(timeout_duration, self.check_progress()).await {
                 Ok(res) => res,
                 Err(_) => bail!("timed out waiting for progress on node {node_id}"),
             }
@@ -465,7 +480,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
         let mut events = ctx.event_stream().await;
         let tx = Transaction::random(&mut rand::thread_rng());
         ctx.submit_transaction(tx.clone()).await.unwrap();
-        let block = async_timeout(
+        let block = timeout(
             Duration::from_secs(60),
             wait_for_decide_on_handle(&mut events, &tx),
         )
@@ -497,13 +512,13 @@ struct TestNetwork {
 impl Drop for TestNetwork {
     fn drop(&mut self) {
         if let Some(task) = self.orchestrator_task.take() {
-            async_std::task::block_on(task.cancel());
+            task.abort();
         }
         if let Some(task) = self.broker_task.take() {
-            async_std::task::block_on(task.cancel());
+            task.abort();
         }
         if let Some(task) = self.marshal_task.take() {
-            async_std::task::block_on(task.cancel());
+            task.abort();
         }
     }
 }
@@ -658,8 +673,8 @@ impl TestNetwork {
         // quickly.
         tracing::info!("waiting for progress after restart");
         let mut events = self.da_nodes[0].event_stream().await.unwrap();
-        let timeout = Duration::from_secs((2 * self.num_nodes()) as u64);
-        async_timeout(timeout, async {
+        let timeout_duration = Duration::from_secs((2 * self.num_nodes()) as u64);
+        timeout(timeout_duration, async {
             loop {
                 let event = events
                     .next()
@@ -729,8 +744,8 @@ impl TestNetwork {
 
             // Wait for a few decides, the first couple may be from before the restart.
             for _ in 0..5 {
-                let timeout = Duration::from_secs((2 * self.num_nodes()) as u64);
-                async_timeout(timeout, async {
+                let timeout_duration = Duration::from_secs((2 * self.num_nodes()) as u64);
+                timeout(timeout_duration, async {
                     loop {
                         let event = events
                             .next()
@@ -847,6 +862,9 @@ async fn start_broker(ports: &mut PortPicker, dir: &Path) -> JoinHandle<()> {
             public_key: WrappedSignatureKey(public_key),
             private_key,
         },
+
+        user_message_hook: NoMessageHook,
+        broker_message_hook: NoMessageHook,
 
         ca_cert_path: None,
         ca_key_path: None,

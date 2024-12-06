@@ -2,7 +2,6 @@
 
 use std::{cmp::max, process::exit, time::Duration};
 
-use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
 use espresso_types::{Header, L1BlockInfo};
 use ethers::prelude::*;
@@ -10,7 +9,9 @@ use futures::future::join_all;
 use itertools::Itertools;
 use sequencer::SequencerApiVersion;
 use sequencer_utils::logging;
+use std::sync::Arc;
 use surf_disco::Url;
+use tokio::time::sleep;
 use vbs::version::StaticVersionType;
 
 /// Utility program to verify properties of headers sequenced by HotShot.
@@ -168,7 +169,7 @@ async fn get_l1_block(l1: &Provider<Http>, height: u64) -> L1BlockInfo {
     }
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let opt = Arc::new(Options::parse());
     opt.logging.init();

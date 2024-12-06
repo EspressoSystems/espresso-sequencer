@@ -61,7 +61,7 @@ fn ns_table_byte_len() {
     }
 }
 
-#[async_std::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn payload_byte_len() {
     setup_logging();
     setup_backtrace();

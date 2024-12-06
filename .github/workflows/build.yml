@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
   RUST_LOG: info,libp2p=off,node=error
   CARGO_TERM_COLOR: always
   DOCKER_PLATFORMS: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
@@ -29,13 +28,6 @@ jobs:
     steps:
       - uses: rui314/setup-mold@v1
 
-      - name: Fix submodule permissions check
-        run: |
-          git config --global --add safe.directory '*'
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
       - name: Install just command runner
         run: |
           sudo snap install --edge --classic just
@@ -43,8 +35,6 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
@@ -56,11 +46,14 @@ jobs:
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
         run: |
           cargo build --locked --release --workspace
+      
+      - name: Build sequencer-sqlite 
+        run: cargo build --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
 
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+          cargo build --locked --release --features "testing embedded-db" --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -89,6 +82,7 @@ jobs:
             target/release/marketplace-builder
             target/release/node-metrics
             target/release/dev-rollup
+            target/release/sequencer-sqlite
 
   build-arm:
     if: github.event_name != 'pull_request'
@@ -98,17 +92,8 @@ jobs:
     steps:
       - uses: rui314/setup-mold@v1
 
-      - name: Fix submodule permissions check
-        run: |
-          git config --global --add safe.directory '*'
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Enable Rust Caching
         uses: Swatinem/rust-cache@v2
@@ -119,10 +104,13 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
+      - name: Build sequencer-sqlite 
+        run: cargo build --locked --release --manifest-path ./sequencer-sqlite/Cargo.toml --target-dir ./target
+
       - name: Build Espresso Dev Node
         # Espresso Dev Node currently requires testing feature, so it is built separately.
         run: |
-          cargo build --locked --release --features testing --bin espresso-dev-node
+          cargo build --locked --release --features "embedded-db testing" --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -151,6 +139,7 @@ jobs:
             target/release/marketplace-builder
             target/release/node-metrics
             target/release/dev-rollup
+            target/release/sequencer-sqlite
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -178,8 +167,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Download executables AMD
         uses: actions/download-artifact@v4
@@ -306,7 +293,6 @@ jobs:
         id: dev-rollup
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/dev-rollup
-
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v6

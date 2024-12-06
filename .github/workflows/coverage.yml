@@ -16,8 +16,7 @@ concurrency:
 env:
   COVERAGE_RUSTFLAGS: >
     -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
-    -Zpanic_abort_tests -Cdebuginfo=2 --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" --cfg
-    hotshot_example
+    -Zpanic_abort_tests -Cdebuginfo=2 --cfg hotshot_example
   COVERAGE_RUSTDOCFLAGS: >
     -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort
     -Zpanic_abort_tests
@@ -31,11 +30,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
 
       - uses: dtolnay/rust-toolchain@nightly
 

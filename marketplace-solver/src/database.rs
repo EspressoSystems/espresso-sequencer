@@ -106,7 +106,11 @@ impl From<sqlx::Error> for SolverError {
     }
 }
 
-#[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+#[cfg(all(
+    any(test, feature = "testing"),
+    not(target_os = "windows"),
+    not(feature = "embedded-db")
+))]
 pub mod mock {
     use hotshot_query_service::data_source::sql::testing::TmpDb;
 
@@ -143,15 +147,14 @@ pub mod mock {
     }
 }
 
-#[cfg(all(test, not(target_os = "windows")))]
+#[cfg(all(test, not(target_os = "windows"), not(feature = "embedded-db")))]
 mod test {
-    use async_compatibility_layer::logging::setup_logging;
-
     use crate::database::mock::setup_mock_database;
+    use hotshot::helpers::initialize_logging;
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_database_connection() {
-        setup_logging();
+        initialize_logging();
 
         let (tmpdb, client) = setup_mock_database().await;
         let pool = client.pool();

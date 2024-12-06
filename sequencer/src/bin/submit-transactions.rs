@@ -5,7 +5,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
 use espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
@@ -22,6 +21,7 @@ use sequencer::SequencerApiVersion;
 use sequencer_utils::logging;
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
+use tokio::{task::spawn, time::sleep};
 use vbs::version::StaticVersionType;
 
 #[cfg(feature = "benchmarking")]
@@ -160,7 +160,7 @@ impl Options {
     }
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     let opt = Options::parse();
     opt.logging.init();

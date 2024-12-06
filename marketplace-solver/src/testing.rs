@@ -1,13 +1,17 @@
-#![cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
+#![cfg(all(
+    any(test, feature = "testing"),
+    not(target_os = "windows"),
+    not(feature = "embedded-db")
+))]
 #![allow(dead_code)]
 use std::sync::Arc;
 
-use async_compatibility_layer::art::async_spawn;
-use async_std::{sync::RwLock, task::JoinHandle};
+use async_lock::RwLock;
 use espresso_types::MarketplaceVersion;
 use hotshot_query_service::data_source::sql::testing::TmpDb;
 use portpicker::pick_unused_port;
 use tide_disco::{App, Url};
+use tokio::{spawn, task::JoinHandle};
 use vbs::version::StaticVersionType;
 
 use crate::{
@@ -43,7 +47,7 @@ impl Drop for MockSolver {
         println!("canceling handles");
 
         while let Some(handle) = self.handles.pop() {
-            async_std::task::block_on(handle.cancel());
+            handle.abort();
         }
     }
 }
@@ -72,7 +76,7 @@ impl MockSolver {
             GlobalState::new(database.clone(), solver_state).unwrap(),
         ));
 
-        let event_handler_handle = async_spawn({
+        let event_handler_handle = spawn({
             let state = state.clone();
             async move {
                 let _ = handle_events(stream, state).await;
@@ -91,7 +95,7 @@ impl MockSolver {
         let solver_api_port = pick_unused_port().expect("no free port");
         let solver_url: Url = Url::parse(&format!("http://localhost:{solver_api_port}")).unwrap();
 
-        let solver_api_handle = async_spawn({
+        let solver_api_handle = spawn({
             let solver_url = solver_url.clone();
             async move {
                 let _ = app.serve(solver_url, MarketplaceVersion::instance()).await;
@@ -116,7 +120,7 @@ impl MockSolver {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "embedded-db")))]
 mod test {
 
     use committable::Committable;
@@ -180,7 +184,7 @@ mod test {
         (reg, private_key, signature_keys)
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_duplicate_rollup_registration() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -218,7 +222,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_rollup_registration_invalid_signature() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -268,7 +272,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_update_registration() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -332,7 +336,7 @@ mod test {
         assert_eq!(result[0], reg_ns_1);
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_update_rollup_not_registered() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -375,7 +379,7 @@ mod test {
         }
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_update_signature_mismatch() {
         // In this test, a rollup is registered.
         // Next, we attempt to update the rollup with different conditions:
@@ -494,7 +498,7 @@ mod test {
             .unwrap_err();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_bid_submission() {
         let mock_solver = MockSolver::init().await;
 
@@ -515,7 +519,7 @@ mod test {
             .unwrap();
     }
 
-    #[async_std::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_database_state() {
         // Initialize a mock solver and register two rollups
         // Drop the first solver tasks handles,
@@ -557,7 +561,7 @@ mod test {
 
         // Crash solver by cancelling all handles of the mock solver
         while let Some(handle) = mock_solver.handles.pop() {
-            handle.cancel().await;
+            handle.abort();
         }
 
         let db = mock_solver.database.clone();

@@ -1,9 +1,14 @@
 use crate::common::TestConfig;
 use anyhow::Result;
-use async_std::task::sleep;
-use std::time::{Duration, Instant};
+use futures::StreamExt;
+use std::time::Instant;
 
-#[async_std::test]
+/// We allow for no change in state across this many consecutive iterations.
+const MAX_STATE_NOT_INCREMENTING: u8 = 1;
+/// We allow for no new transactions across this many consecutive iterations.
+const MAX_TXNS_NOT_INCREMENTING: u8 = 3;
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_smoke() -> Result<()> {
     let start = Instant::now();
     dotenvy::dotenv()?;
@@ -13,13 +18,18 @@ async fn test_smoke() -> Result<()> {
     println!("Waiting on readiness");
     let _ = testing.readiness().await?;
 
-    let mut initial = testing.test_state().await;
+    let initial = testing.test_state().await;
     println!("Initial State:{}", initial);
 
-    let mut i = 1;
-    loop {
-        sleep(Duration::from_secs(1)).await;
+    let mut sub = testing
+        .espresso
+        .subscribe_blocks(initial.block_height.unwrap())
+        .await?;
 
+    let mut last = initial.clone();
+    let mut state_retries = 0;
+    let mut txn_retries = 0;
+    while (sub.next().await).is_some() {
         let new = testing.test_state().await;
         println!("New State:{}", new);
 
@@ -37,20 +47,35 @@ async fn test_smoke() -> Result<()> {
         // test that we progress EXPECTED_BLOCK_HEIGHT blocks from where we started
         if new.block_height.unwrap() >= testing.expected_block_height() + testing.initial_height {
             println!("Reached {} block(s)!", testing.expected_block_height());
+            if new.txn_count - initial.txn_count < 1 {
+                panic!("Did not receive transactions");
+            }
             break;
         }
 
-        if i % 5 == 0 {
-            if new <= initial {
-                panic!("Chain state not incrementing");
+        if new <= last {
+            if state_retries > MAX_STATE_NOT_INCREMENTING {
+                panic!("Chain state did not increment.");
             }
-
-            if new.txn_count <= initial.txn_count {
-                panic!("Transactions not incrementing");
-            }
-            initial = new;
+            state_retries += 1;
+            println!("Chain state did not increment, trying again.");
+        } else {
+            // If state is incrementing reset the counter.
+            state_retries = 0;
         }
-        i += 1;
+
+        if new.txn_count <= last.txn_count {
+            if txn_retries >= MAX_TXNS_NOT_INCREMENTING {
+                panic!("No new transactions.");
+            }
+            txn_retries += 1;
+            println!("Transactions did not increment, trying again.");
+        } else {
+            // If transactions are incrementing reset the counter.
+            txn_retries = 0;
+        }
+
+        last = new;
     }
     Ok(())
 }
