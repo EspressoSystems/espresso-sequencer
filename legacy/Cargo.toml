@@ -12,6 +12,7 @@ async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
 committable = { workspace = true }
+derive_more = { workspace = true, features = ["deref", "deref_mut"] }
 futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-builder-api = { workspace = true }
@@ -23,9 +24,8 @@ tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-vbs = { workspace = true }
 tracing-subscriber = { workspace = true }
-derive_more = { workspace = true, features = ["deref", "deref_mut"] }
+vbs = { workspace = true }
 
 [dev-dependencies]
 hotshot-example-types = { workspace = true }

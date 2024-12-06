@@ -180,9 +180,9 @@ pub struct BuilderState<Types: NodeType> {
 /// itself.
 ///
 /// In an ideal circumstance the best [`BuilderState`] to extend from is going to
-/// be the one that is immediately preceding the [`QuorumProposal`] that we are
+/// be the one that is immediately preceding the [`QuorumProposal2`] that we are
 /// attempting to extend from. However, if all we know is the view number of
-/// the [`QuorumProposal`] that we are attempting to extend from, then we may end
+/// the [`QuorumProposal2`] that we are attempting to extend from, then we may end
 /// up in a scenario where we have multiple [`BuilderState`]s that are all equally
 /// valid to extend from.  When this happens, we have the potential for a data
 /// race.
@@ -193,7 +193,7 @@ pub struct BuilderState<Types: NodeType> {
 /// [`BuilderState`] via the [`BuilderStateId`].  The [`BuilderStateId`] only
 /// references a [`ViewNumber`](hotshot_types::data::ViewNumber) and a
 /// [`VidCommitment`](hotshot_types::vid::VidCommitment). While this information
-/// is available in the [`QuorumProposal`], it only helps us to rule out
+/// is available in the [`QuorumProposal2`], it only helps us to rule out
 /// [`BuilderState`]s that already exist.  It does **NOT** help us to pick a
 /// [`BuilderState`] that is the best fit to extend from.
 ///
@@ -207,7 +207,7 @@ pub struct BuilderState<Types: NodeType> {
 /// This function determines the best [`BuilderState`] in the following steps:
 ///
 /// 1. If we have a [`BuilderState`] that is already spawned for the current
-///    [`QuorumProposal`], then we should should return no states, as one already
+///    [`QuorumProposal2`], then we should should return no states, as one already
 ///    exists.  This will prevent us from attempting to spawn duplicate
 ///    [`BuilderState`]s.
 /// 2. Attempt to find all [`BuilderState`]s that are recorded within
@@ -215,7 +215,7 @@ pub struct BuilderState<Types: NodeType> {
 ///    *should* only be one of these.  But all would be valid extension points.
 /// 3. If we can't find any [`BuilderState`]s that match the view number
 ///    and leaf commitment, then we should return for the maximum stored view
-///    number that is smaller than the current [`QuorumProposal`].
+///    number that is smaller than the current [`QuorumProposal2`].
 /// 4. If there is is only one [`BuilderState`] stored in the [`GlobalState`], then
 ///    we should return that [`BuilderState`] as the best fit.
 /// 5. If none of the other criteria match, we return an empty result as it is
@@ -521,7 +521,7 @@ impl<Types: NodeType> BuilderState<Types> {
     ///
     /// This helper function also adds additional checks in order to ensure
     /// that the [`BuilderState`] that is being spawned is the best fit for the
-    /// [`QuorumProposal`] that is being extended from.
+    /// [`QuorumProposal2`] that is being extended from.
     async fn spawn_clone_that_extends_self(
         &mut self,
         da_proposal_info: Arc<DaProposalMessage<Types>>,

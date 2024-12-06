@@ -8,7 +8,7 @@ use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
 };
 use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal},
+    data::{DaProposal, Leaf2, QuorumProposal2},
     event::EventType,
     message::Proposal,
     traits::{
@@ -24,14 +24,11 @@ use vbs::version::StaticVersionType;
 
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
-use crate::builder_state::{MessageType, RequestMessage, ResponseMessage};
-use crate::{
-    builder_state::{
-        BuildBlockInfo, DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
-        TriggerStatus,
-    },
-    LegacyCommit as _,
+use crate::builder_state::{
+    BuildBlockInfo, DaProposalMessage, DecideMessage, QuorumProposalMessage, TransactionSource,
+    TriggerStatus,
 };
+use crate::builder_state::{MessageType, RequestMessage, ResponseMessage};
 use crate::{WaitAndKeep, WaitAndKeepGetError};
 pub use async_broadcast::{broadcast, RecvError, TryRecvError};
 use async_broadcast::{Sender as BroadcastSender, TrySendError};
@@ -1376,7 +1373,7 @@ enum HandleQuorumEventError<Types: NodeType> {
 /// still open.
 async fn handle_quorum_event<Types: NodeType>(
     quorum_channel_sender: &BroadcastSender<MessageType<Types>>,
-    quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+    quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
 ) {
     // We're explicitly not inspecting this error, as this function is not
@@ -1398,7 +1395,7 @@ async fn handle_quorum_event<Types: NodeType>(
 /// This function is the implementation for [`handle_quorum_event`].
 async fn handle_quorum_event_implementation<Types: NodeType>(
     quorum_channel_sender: &BroadcastSender<MessageType<Types>>,
-    quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+    quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
     sender: <Types as NodeType>::SignatureKey,
 ) -> Result<(), HandleQuorumEventError<Types>> {
     tracing::debug!(
@@ -1407,9 +1404,9 @@ async fn handle_quorum_event_implementation<Types: NodeType>(
         quorum_proposal.data.view_number
     );
 
-    let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
+    let leaf = Leaf2::from_quorum_proposal(&quorum_proposal.data);
 
-    if !sender.validate(&quorum_proposal.signature, leaf.legacy_commit().as_ref()) {
+    if !sender.validate(&quorum_proposal.signature, leaf.commit().as_ref()) {
         tracing::error!(
             "Validation Failure on QuorumProposal for view {:?}: Leader for the current view: {:?}",
             quorum_proposal.data.view_number,
@@ -1645,9 +1642,13 @@ mod test {
         node_types::{TestTypes, TestVersions},
         state_types::{TestInstanceState, TestValidatedState},
     };
+    use hotshot_types::data::Leaf2;
+    use hotshot_types::data::QuorumProposal2;
+    use hotshot_types::drb::INITIAL_DRB_RESULT;
+    use hotshot_types::drb::INITIAL_DRB_SEED_INPUT;
     use hotshot_types::traits::block_contents::Transaction;
     use hotshot_types::{
-        data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
+        data::{DaProposal, Leaf, ViewNumber},
         message::Proposal,
         simple_certificate::QuorumCertificate,
         traits::{
@@ -1680,7 +1681,6 @@ mod test {
             process_available_blocks_round, progress_round_with_available_block_info,
             progress_round_without_available_block_info, setup_builder_for_test,
         },
-        LegacyCommit,
     };
 
     use super::{
@@ -4271,30 +4271,33 @@ mod test {
         let view_number = ViewNumber::new(10);
 
         let quorum_proposal = {
-            let leaf = Leaf::<TestTypes>::genesis(
+            let leaf: Leaf2<_> = Leaf::<TestTypes>::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await;
+            .await
+            .into();
 
-            QuorumProposal::<TestTypes> {
+            QuorumProposal2::<TestTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number,
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &TestValidatedState::default(),
                     &TestInstanceState::default(),
                 )
-                .await,
+                .await
+                .to_qc2(),
                 upgrade_certificate: None,
-                proposal_certificate: None,
+                view_change_evidence: None,
+                drb_seed: INITIAL_DRB_SEED_INPUT,
+                drb_result: INITIAL_DRB_RESULT,
             }
         };
 
-        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+        let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
 
         let signature =
-            <BLSPubKey as SignatureKey>::sign(&leader_private_key, leaf.legacy_commit().as_ref())
-                .unwrap();
+            <BLSPubKey as SignatureKey>::sign(&leader_private_key, leaf.commit().as_ref()).unwrap();
 
         let signed_quorum_proposal = Arc::new(Proposal {
             data: quorum_proposal,
@@ -4341,30 +4344,33 @@ mod test {
         let view_number = ViewNumber::new(10);
 
         let quorum_proposal = {
-            let leaf = Leaf::<TestTypes>::genesis(
+            let leaf: Leaf2<_> = Leaf::<TestTypes>::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await;
+            .await
+            .into();
 
-            QuorumProposal::<TestTypes> {
+            QuorumProposal2::<TestTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number,
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &TestValidatedState::default(),
                     &TestInstanceState::default(),
                 )
-                .await,
+                .await
+                .to_qc2(),
                 upgrade_certificate: None,
-                proposal_certificate: None,
+                view_change_evidence: None,
+                drb_seed: INITIAL_DRB_SEED_INPUT,
+                drb_result: INITIAL_DRB_RESULT,
             }
         };
 
-        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+        let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
 
         let signature =
-            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.legacy_commit().as_ref())
-                .unwrap();
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.commit().as_ref()).unwrap();
 
         let signed_quorum_proposal = Arc::new(Proposal {
             data: quorum_proposal,
@@ -4402,30 +4408,33 @@ mod test {
         let view_number = ViewNumber::new(10);
 
         let quorum_proposal = {
-            let leaf = Leaf::<TestTypes>::genesis(
+            let leaf: Leaf2<_> = Leaf::<TestTypes>::genesis(
                 &TestValidatedState::default(),
                 &TestInstanceState::default(),
             )
-            .await;
+            .await
+            .into();
 
-            QuorumProposal::<TestTypes> {
+            QuorumProposal2::<TestTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number,
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &TestValidatedState::default(),
                     &TestInstanceState::default(),
                 )
-                .await,
+                .await
+                .to_qc2(),
                 upgrade_certificate: None,
-                proposal_certificate: None,
+                view_change_evidence: None,
+                drb_seed: INITIAL_DRB_SEED_INPUT,
+                drb_result: INITIAL_DRB_RESULT,
             }
         };
 
-        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+        let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
 
         let signature =
-            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.legacy_commit().as_ref())
-                .unwrap();
+            <BLSPubKey as SignatureKey>::sign(&sender_private_key, leaf.commit().as_ref()).unwrap();
 
         let signed_quorum_proposal = Arc::new(Proposal {
             data: quorum_proposal,

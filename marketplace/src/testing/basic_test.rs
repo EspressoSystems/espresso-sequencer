@@ -1,6 +1,6 @@
 use async_broadcast::broadcast;
 use hotshot::types::{BLSPubKey, SignatureKey};
-use hotshot_builder_api::v0_3::data_source::{AcceptsTxnSubmits, BuilderDataSource};
+use hotshot_builder_api::v0_99::data_source::{AcceptsTxnSubmits, BuilderDataSource};
 
 use hotshot_example_types::block_types::TestTransaction;
 use marketplace_builder_shared::testing::constants::{

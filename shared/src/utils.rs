@@ -14,7 +14,7 @@ use futures::{Stream, StreamExt};
 use hotshot::traits::BlockPayload;
 use hotshot::types::Event;
 use hotshot_events_service::events::Error as EventStreamError;
-use hotshot_types::data::{DaProposal, QuorumProposal};
+use hotshot_types::data::{DaProposal, QuorumProposal2};
 use hotshot_types::traits::block_contents::BlockHeader;
 use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::utils::BuilderCommitment;
@@ -403,7 +403,7 @@ impl<Types> ProposalId<Types>
 where
     Types: NodeType,
 {
-    pub fn from_quorum_proposal(proposal: &QuorumProposal<Types>) -> Self {
+    pub fn from_quorum_proposal(proposal: &QuorumProposal2<Types>) -> Self {
         Self {
             builder_commitment: proposal.block_header.builder_commitment(),
             view_number: proposal.view_number,

@@ -13,7 +13,7 @@ use async_lock::{Mutex, RwLock};
 use committable::{Commitment, Committable};
 use hotshot::traits::{BlockPayload, ValidatedState};
 use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal},
+    data::{DaProposal, Leaf2, QuorumProposal2},
     traits::{block_contents::BlockHeader, node_implementation::NodeType},
 };
 
@@ -142,10 +142,10 @@ where
 
     pub(crate) async fn new_child(
         self: Arc<Self>,
-        quorum_proposal: QuorumProposal<Types>,
+        quorum_proposal: QuorumProposal2<Types>,
         da_proposal: DaProposal<Types>,
     ) -> Arc<Self> {
-        let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+        let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
 
         let validated_state = Types::ValidatedState::from_header(leaf.block_header());
 

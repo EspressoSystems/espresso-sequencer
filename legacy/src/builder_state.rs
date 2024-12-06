@@ -1,9 +1,8 @@
 use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal},
+    data::{DaProposal, Leaf2, QuorumProposal2},
     message::Proposal,
-    traits::block_contents::{BlockHeader, BlockPayload},
     traits::{
-        block_contents::precompute_vid_commitment,
+        block_contents::{precompute_vid_commitment, BlockHeader, BlockPayload},
         node_implementation::{ConsensusTime, NodeType},
         EncodeBytes,
     },
@@ -12,12 +11,9 @@ use hotshot_types::{
 };
 use marketplace_builder_shared::block::{BlockId, BuilderStateId, ParentBlockReferences};
 
-use committable::Commitment;
+use committable::{Commitment, Committable};
 
-use crate::{
-    service::{GlobalState, ReceivedTransaction},
-    LegacyCommit,
-};
+use crate::service::{GlobalState, ReceivedTransaction};
 use async_broadcast::broadcast;
 use async_broadcast::Receiver as BroadcastReceiver;
 use async_broadcast::Sender as BroadcastSender;
@@ -65,7 +61,7 @@ pub struct DaProposalMessage<Types: NodeType> {
 /// Quorum proposal message to be put on the quorum proposal channel
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuorumProposalMessage<Types: NodeType> {
-    pub proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+    pub proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
     pub sender: Types::SignatureKey,
 }
 /// Request Message to be put on the request channel
@@ -148,7 +144,7 @@ pub struct BuilderState<Types: NodeType> {
     /// `quorum_proposal_payload_commit` to `quorum_proposal`
     #[allow(clippy::type_complexity)]
     pub quorum_proposal_payload_commit_to_quorum_proposal:
-        HashMap<(BuilderCommitment, Types::View), Arc<Proposal<Types, QuorumProposal<Types>>>>,
+        HashMap<(BuilderCommitment, Types::View), Arc<Proposal<Types, QuorumProposal2<Types>>>>,
 
     /// Spawned-from references to the parent block.
     pub parent_block_references: ParentBlockReferences<Types>,
@@ -214,9 +210,9 @@ pub struct BuilderState<Types: NodeType> {
 /// itself.
 ///
 /// In an ideal circumstance the best [`BuilderState`] to extend from is going to
-/// be the one that is immediately preceding the [`QuorumProposal`] that we are
+/// be the one that is immediately preceding the [`QuorumProposal2`] that we are
 /// attempting to extend from. However, if all we know is the view number of
-/// the [`QuorumProposal`] that we are attempting to extend from, then we may end
+/// the [`QuorumProposal2`] that we are attempting to extend from, then we may end
 /// up in a scenario where we have multiple [`BuilderState`]s that are all equally
 /// valid to extend from.  When this happens, we have the potential for a data
 /// race.
@@ -225,7 +221,7 @@ pub struct BuilderState<Types: NodeType> {
 /// [`ProxyGlobalState`](crate::service::ProxyGlobalState)'s API.  In general,
 /// we want to be able to retrieve a [`BuilderState`] via the [`BuilderStateId`].
 /// The [`BuilderStateId`] only references a [`ViewNumber`](hotshot_types::data::ViewNumber)
-/// and a [`VidCommitment`] While this information is available in the [`QuorumProposal`],
+/// and a [`VidCommitment`] While this information is available in the [`QuorumProposal2`],
 /// it only helps us to rule out [`BuilderState`]s that already exist.
 /// It does **NOT** help us to pick a [`BuilderState`] that is the best fit to extend from.
 ///
@@ -239,7 +235,7 @@ pub struct BuilderState<Types: NodeType> {
 /// This function determines the best [`BuilderState`] in the following steps:
 ///
 /// 1. If we have a [`BuilderState`] that is already spawned for the current
-///    [`QuorumProposal`], then we should should return no states, as one already
+///    [`QuorumProposal2`], then we should should return no states, as one already
 ///    exists.  This will prevent us from attempting to spawn duplicate
 ///    [`BuilderState`]s.
 /// 2. Attempt to find all [`BuilderState`]s that are recorded within
@@ -247,7 +243,7 @@ pub struct BuilderState<Types: NodeType> {
 ///    *should* only be one of these.  But all would be valid extension points.
 /// 3. If we can't find any [`BuilderState`]s that match the view number
 ///    and leaf commitment, then we should return for the maximum stored view
-///    number that is smaller than the current [`QuorumProposal`].
+///    number that is smaller than the current [`QuorumProposal2`].
 /// 4. If there is is only one [`BuilderState`] stored in the [`GlobalState`], then
 ///    we should return that [`BuilderState`] as the best fit.
 /// 5. If none of the other criteria match, we return an empty result as it is
@@ -260,7 +256,7 @@ pub struct BuilderState<Types: NodeType> {
 /// > entries in the resulting [HashSet], but this is not done here in order
 /// > to allow us to highlight the possibility of the race.
 async fn best_builder_states_to_extend<Types: NodeType>(
-    quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+    quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
     global_state: Arc<RwLock<GlobalState<Types>>>,
 ) -> HashSet<BuilderStateId<Types>> {
     let current_view_number = quorum_proposal.data.view_number;
@@ -371,7 +367,7 @@ impl<Types: NodeType> BuilderState<Types> {
     /// we are among the best [`BuilderState`]s to extend from.
     async fn am_i_the_best_builder_state_to_extend(
         &self,
-        quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+        quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
     ) -> bool {
         let best_builder_states_to_extend =
             best_builder_states_to_extend(quorum_proposal.clone(), self.global_state.clone()).await;
@@ -547,11 +543,11 @@ impl<Types: NodeType> BuilderState<Types> {
     ///
     /// This helper function also adds additional checks in order to ensure
     /// that the [`BuilderState`] that is being spawned is the best fit for the
-    /// [`QuorumProposal`] that is being extended from.
+    /// [`QuorumProposal2`] that is being extended from.
     async fn spawn_clone_that_extends_self(
         &mut self,
         da_proposal_info: DAProposalInfo<Types>,
-        quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+        quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
     ) {
         if !self
             .am_i_the_best_builder_state_to_extend(quorum_proposal.clone())
@@ -619,10 +615,10 @@ impl<Types: NodeType> BuilderState<Types> {
     async fn spawn_clone(
         mut self,
         da_proposal_info: DAProposalInfo<Types>,
-        quorum_proposal: Arc<Proposal<Types, QuorumProposal<Types>>>,
+        quorum_proposal: Arc<Proposal<Types, QuorumProposal2<Types>>>,
         req_sender: BroadcastSender<MessageType<Types>>,
     ) {
-        let leaf = Leaf::from_quorum_proposal(&quorum_proposal.data);
+        let leaf = Leaf2::from_quorum_proposal(&quorum_proposal.data);
 
         // We replace our parent_block_references with information from the
         // quorum proposal.  This is identifying the block that this specific
@@ -630,7 +626,7 @@ impl<Types: NodeType> BuilderState<Types> {
         self.parent_block_references = ParentBlockReferences {
             view_number: quorum_proposal.data.view_number,
             vid_commitment: quorum_proposal.data.block_header.payload_commitment(),
-            leaf_commit: leaf.legacy_commit(),
+            leaf_commit: leaf.commit(),
             builder_commitment: quorum_proposal.data.block_header.builder_commitment(),
         };
 
@@ -1145,8 +1141,8 @@ mod test {
     use committable::RawCommitmentBuilder;
     use hotshot_example_types::block_types::TestTransaction;
     use hotshot_example_types::node_types::TestTypes;
-    use hotshot_types::data::ViewNumber;
-    use hotshot_types::data::{Leaf, QuorumProposal};
+    use hotshot_types::data::Leaf2;
+    use hotshot_types::data::{QuorumProposal2, ViewNumber};
     use hotshot_types::traits::node_implementation::{ConsensusTime, NodeType};
     use hotshot_types::utils::BuilderCommitment;
     use marketplace_builder_shared::testing::constants::TEST_NUM_NODES_IN_VID_COMPUTATION;
@@ -1413,7 +1409,7 @@ mod test {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        let mut prev_quorum_proposal: Option<QuorumProposal<TestTypes>> = None;
+        let mut prev_quorum_proposal: Option<QuorumProposal2<TestTypes>> = None;
         // register some builder states for later decide event
         #[allow(clippy::needless_range_loop)]
         for round in 0..NUM_ROUNDS {
@@ -1423,7 +1419,7 @@ mod test {
                     .await;
             prev_quorum_proposal = Some(quorum_proposal.clone());
             let (req_sender, _req_receiver) = broadcast(CHANNEL_CAPACITY);
-            let leaf: Leaf<TestTypes> = Leaf::from_quorum_proposal(&quorum_proposal);
+            let leaf: Leaf2<TestTypes> = Leaf2::from_quorum_proposal(&quorum_proposal);
             let leaf_commit = RawCommitmentBuilder::new("leaf commitment")
                 .u64_field("view number", leaf.view_number().u64())
                 .u64_field("block number", leaf.height())

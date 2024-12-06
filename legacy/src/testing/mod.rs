@@ -5,7 +5,6 @@ use crate::{
         BuilderState, DAProposalInfo, DaProposalMessage, MessageType, QuorumProposalMessage,
     },
     service::ReceivedTransaction,
-    LegacyCommit,
 };
 use async_broadcast::broadcast;
 use async_broadcast::Sender as BroadcastSender;
@@ -14,10 +13,11 @@ use hotshot::{
     types::{BLSPubKey, SignatureKey},
 };
 use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
+    data::{DaProposal, Leaf2, QuorumProposal2, ViewNumber},
+    drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
-    simple_vote::QuorumData,
+    simple_vote::QuorumData2,
     traits::{block_contents::vid_commitment, node_implementation::ConsensusTime},
     utils::BuilderCommitment,
 };
@@ -84,7 +84,7 @@ pub async fn create_builder_state(
         ParentBlockReferences {
             view_number: ViewNumber::new(0),
             vid_commitment: genesis_vid_commitment,
-            leaf_commit: Commitment::<Leaf<TestTypes>>::default_commitment_no_preimage(),
+            leaf_commit: Commitment::<Leaf2<TestTypes>>::default_commitment_no_preimage(),
             builder_commitment: genesis_builder_commitment,
         },
         decide_receiver.clone(),
@@ -109,10 +109,10 @@ pub async fn create_builder_state(
 pub async fn calc_proposal_msg(
     num_storage_nodes: usize,
     round: usize,
-    prev_quorum_proposal: Option<QuorumProposal<TestTypes>>,
+    prev_quorum_proposal: Option<QuorumProposal2<TestTypes>>,
     transactions: Vec<TestTransaction>,
 ) -> (
-    QuorumProposal<TestTypes>,
+    QuorumProposal2<TestTypes>,
     QuorumProposalMessage<TestTypes>,
     DaProposalMessage<TestTypes>,
     BuilderStateId<TestTypes>,
@@ -171,21 +171,20 @@ pub async fn calc_proposal_msg(
     };
 
     let justify_qc = match prev_quorum_proposal.as_ref() {
-        None => {
-            QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
-                &TestValidatedState::default(),
-                &TestInstanceState::default(),
-            )
-            .await
-        }
+        None => QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+        )
+        .await
+        .to_qc2(),
         Some(prev_proposal) => {
             let prev_justify_qc = &prev_proposal.justify_qc;
-            let quorum_data = QuorumData::<TestTypes> {
-                leaf_commit: Leaf::from_quorum_proposal(prev_proposal).legacy_commit(),
+            let quorum_data = QuorumData2::<TestTypes> {
+                leaf_commit: Leaf2::from_quorum_proposal(prev_proposal).commit(),
             };
 
             // form a justify qc
-            SimpleCertificate::<TestTypes, QuorumData<TestTypes>, SuccessThreshold>::new(
+            SimpleCertificate::<TestTypes, QuorumData2<TestTypes>, SuccessThreshold>::new(
                 quorum_data.clone(),
                 quorum_data.commit(),
                 prev_proposal.view_number,
@@ -197,12 +196,14 @@ pub async fn calc_proposal_msg(
 
     tracing::debug!("Iteration: {} justify_qc: {:?}", round, justify_qc);
 
-    let quorum_proposal = QuorumProposal::<TestTypes> {
+    let quorum_proposal = QuorumProposal2::<TestTypes> {
         block_header,
         view_number: ViewNumber::new(round as u64),
         justify_qc: justify_qc.clone(),
         upgrade_certificate: None,
-        proposal_certificate: None,
+        view_change_evidence: None,
+        drb_seed: INITIAL_DRB_SEED_INPUT,
+        drb_result: INITIAL_DRB_RESULT,
     };
 
     let quorum_signature =

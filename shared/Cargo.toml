@@ -29,10 +29,10 @@ serde = { workspace = true }
 surf-disco = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 portpicker = "0.1.1"

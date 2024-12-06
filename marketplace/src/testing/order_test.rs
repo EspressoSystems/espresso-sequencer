@@ -1,5 +1,5 @@
 use async_broadcast::broadcast;
-use hotshot_builder_api::v0_3::data_source::{AcceptsTxnSubmits, BuilderDataSource};
+use hotshot_builder_api::v0_99::data_source::{AcceptsTxnSubmits, BuilderDataSource};
 use hotshot_types::{bundle::Bundle, traits::node_implementation::ConsensusTime};
 use marketplace_builder_shared::{
     block::BuilderStateId,

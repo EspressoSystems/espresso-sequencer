@@ -17,7 +17,7 @@ use futures::{
 use hotshot::types::Event;
 use hotshot_builder_api::{
     v0_2::builder::TransactionStatus,
-    v0_3::{
+    v0_99::{
         builder::{define_api, submit_api, BuildError, Error as BuilderApiError},
         data_source::{AcceptsTxnSubmits, BuilderDataSource},
     },

@@ -3,10 +3,9 @@
 use std::time::Instant;
 
 use committable::{Commitment, Committable};
-use hotshot_types::data::fake_commitment;
+use hotshot_types::data::{fake_commitment, Leaf2};
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use hotshot_types::{
-    data::Leaf,
     traits::{block_contents::Transaction, node_implementation::NodeType},
     utils::BuilderCommitment,
     vid::VidCommitment,
@@ -98,7 +97,7 @@ impl<Types: NodeType> std::fmt::Display for BuilderStateId<Types> {
 pub struct ParentBlockReferences<Types: NodeType> {
     pub view_number: Types::View,
     pub vid_commitment: VidCommitment,
-    pub leaf_commit: Commitment<Leaf<Types>>,
+    pub leaf_commit: Commitment<Leaf2<Types>>,
     pub builder_commitment: BuilderCommitment,
 }
 

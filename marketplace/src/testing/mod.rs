@@ -13,10 +13,11 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal, ViewNumber},
+    data::{DaProposal, Leaf2, QuorumProposal2, ViewNumber},
+    drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
     message::Proposal,
     simple_certificate::{QuorumCertificate, SimpleCertificate, SuccessThreshold},
-    simple_vote::QuorumData,
+    simple_vote::QuorumData2,
     traits::{block_contents::vid_commitment, node_implementation::ConsensusTime},
 };
 use marketplace_builder_shared::block::BuilderStateId;
@@ -29,7 +30,7 @@ pub mod order_test;
 
 pub(crate) struct SimulatedChainState {
     round: ViewNumber,
-    previous_quorum_proposal: Option<QuorumProposal<TestTypes>>,
+    previous_quorum_proposal: Option<QuorumProposal2<TestTypes>>,
     event_stream_sender: Sender<Event<TestTypes>>,
 }
 
@@ -92,21 +93,20 @@ impl SimulatedChainState {
         };
 
         let justify_qc = match self.previous_quorum_proposal.as_ref() {
-            None => {
-                QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
-                    &TestValidatedState::default(),
-                    &TestInstanceState::default(),
-                )
-                .await
-            }
+            None => QuorumCertificate::<TestTypes>::genesis::<TestVersions>(
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await
+            .to_qc2(),
             Some(prev_proposal) => {
                 let prev_justify_qc = &prev_proposal.justify_qc;
-                let quorum_data = QuorumData::<TestTypes> {
-                    leaf_commit: Committable::commit(&Leaf::from_quorum_proposal(prev_proposal)),
+                let quorum_data = QuorumData2::<TestTypes> {
+                    leaf_commit: Committable::commit(&Leaf2::from_quorum_proposal(prev_proposal)),
                 };
 
                 // form a justify qc
-                SimpleCertificate::<TestTypes, QuorumData<TestTypes>, SuccessThreshold>::new(
+                SimpleCertificate::<TestTypes, QuorumData2<TestTypes>, SuccessThreshold>::new(
                     quorum_data.clone(),
                     quorum_data.commit(),
                     prev_proposal.view_number,
@@ -118,12 +118,14 @@ impl SimulatedChainState {
 
         tracing::debug!("Iteration: {} justify_qc: {:?}", self.round, justify_qc);
 
-        let quorum_proposal = QuorumProposal::<TestTypes> {
+        let quorum_proposal = QuorumProposal2::<TestTypes> {
             block_header,
             view_number: self.round,
             justify_qc: justify_qc.clone(),
             upgrade_certificate: None,
-            proposal_certificate: None,
+            view_change_evidence: None,
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
         };
 
         let quorum_proposal_event = EventType::QuorumProposal {
