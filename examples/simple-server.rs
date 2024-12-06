@@ -21,7 +21,7 @@ use futures::future::{join_all, try_join_all};
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
+    HotShotInitializer, MarketplaceConfig, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
@@ -169,20 +169,10 @@ async fn init_consensus(
     // Get the number of nodes with stake
     let num_nodes_with_stake = NonZeroUsize::new(pub_keys.len()).unwrap();
 
-    let da_membership = MockMembership::new(
+    let membership = MockMembership::new(
         known_nodes_with_stake.clone(),
         known_nodes_with_stake.clone(),
-        Topic::Da,
     );
-    let non_da_membership = MockMembership::new(
-        known_nodes_with_stake.clone(),
-        known_nodes_with_stake.clone(),
-        Topic::Global,
-    );
-    let memberships = Memberships {
-        quorum_membership: non_da_membership.clone(),
-        da_membership: da_membership.clone(),
-    };
 
     // Pick a random, unused port for the builder server
     let builder_port = portpicker::pick_unused_port().expect("No ports available");
@@ -234,7 +224,7 @@ async fn init_consensus(
             let config = config.clone();
             let master_map = master_map.clone();
 
-            let memberships = memberships.clone();
+            let membership = membership.clone();
             async move {
                 let network = Arc::new(MemoryNetwork::new(
                     &pub_keys[node_id],
@@ -250,7 +240,7 @@ async fn init_consensus(
                     priv_key,
                     node_id as u64,
                     config,
-                    memberships,
+                    membership,
                     network,
                     HotShotInitializer::from_genesis::<MockVersions>(TestInstanceState::default())
                         .await

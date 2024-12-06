@@ -28,7 +28,7 @@ use futures::{
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{Event, SystemContextHandle},
-    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
+    HotShotInitializer, MarketplaceConfig, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
@@ -96,20 +96,10 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             })
             .collect::<Vec<_>>();
 
-        let da_membership = MockMembership::new(
+        let membership = MockMembership::new(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake.clone(),
-            Topic::Da,
         );
-        let non_da_membership = MockMembership::new(
-            known_nodes_with_stake.clone(),
-            known_nodes_with_stake.clone(),
-            Topic::Global,
-        );
-        let memberships = Memberships {
-            quorum_membership: non_da_membership.clone(),
-            da_membership: da_membership.clone(),
-        };
 
         // Pick a random, unused port for the builder server
         let builder_port = portpicker::pick_unused_port().expect("No ports available");
@@ -161,7 +151,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                 .into_iter()
                 .enumerate()
                 .map(|(node_id, priv_key)| {
-                    let memberships = memberships.clone();
+                    let membership = membership.clone();
                     let config = config.clone();
 
                     let pub_keys = pub_keys.clone();
@@ -186,7 +176,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             priv_key,
                             node_id as u64,
                             config,
-                            memberships,
+                            membership,
                             network,
                             HotShotInitializer::from_genesis::<MockVersions>(
                                 TestInstanceState::default(),

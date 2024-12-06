@@ -16,7 +16,7 @@ use crate::{
         BlockInfo, BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData,
         VidCommonQueryData,
     },
-    Leaf, Payload, VidShare,
+    Payload, VidShare,
 };
 use anyhow::{ensure, Context};
 use async_trait::async_trait;
@@ -24,6 +24,7 @@ use futures::future::Future;
 use hotshot::types::{Event, EventType};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::{
+    data::{Leaf, Leaf2, QuorumProposal},
     traits::{
         block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
@@ -32,6 +33,24 @@ use hotshot_types::{
 };
 use jf_vid::VidScheme;
 use std::iter::once;
+
+fn downgrade_leaf<Types: NodeType>(leaf2: Leaf2<Types>) -> Leaf<Types> {
+    if leaf2.drb_seed != [0; 32] && leaf2.drb_result != [0; 32] {
+        panic!("Downgrade of Leaf2 to Leaf will lose DRB information!");
+    }
+    let quorum_proposal = QuorumProposal {
+        block_header: leaf2.block_header().clone(),
+        view_number: leaf2.view_number(),
+        justify_qc: leaf2.justify_qc().to_qc(),
+        upgrade_certificate: leaf2.upgrade_certificate(),
+        proposal_certificate: None,
+    };
+    let mut leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+    if let Some(payload) = leaf2.block_payload() {
+        leaf.fill_block_payload_unchecked(payload);
+    }
+    leaf
+}
 
 /// An extension trait for types which implement the update trait for each API module.
 ///
@@ -84,12 +103,16 @@ where
                 // leaf in the new chain, so we don't need it.
                 .skip(1);
             for (
-                qc,
+                qc2,
                 LeafInfo {
-                    leaf, vid_share, ..
+                    leaf: leaf2,
+                    vid_share,
+                    ..
                 },
             ) in qcs.zip(leaf_chain.iter().rev())
             {
+                let leaf = downgrade_leaf(leaf2.clone());
+                let qc = qc2.to_qc();
                 let height = leaf.block_header().block_number();
                 let leaf_data = match LeafQueryData::new(leaf.clone(), qc.clone()) {
                     Ok(leaf) => leaf,
@@ -124,7 +147,7 @@ where
                     // the block payload is guaranteed to always be empty, so VID isn't really
                     // necessary. But for consistency, we will still store the VID dispersal data,
                     // computing it ourselves based on the well-known genesis VID commitment.
-                    match genesis_vid(leaf) {
+                    match genesis_vid(&leaf) {
                         Ok((common, share)) => (Some(common), Some(share)),
                         Err(err) => {
                             tracing::warn!("failed to compute genesis VID: {err:#}");
