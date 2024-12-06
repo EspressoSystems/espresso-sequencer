@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SequencerModule"],"fn":["fmt_opt_urls","fmt_urls","get_default_node_type"],"macro":["module"],"struct":["Identity","Module","ModuleArgs","Modules","Options","Ratio"],"trait":["ModuleInfo"]};
