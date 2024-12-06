@@ -63,7 +63,8 @@ impl Committable for ChainConfig {
         // fields added >= v0_3 to have the same commitment as <= v0_3
         // commitment. Therefore `None` values are simply ignored.
         let comm = if let Some(addr) = self.stake_table_contract {
-            comm.u64_field("fee_contract", 1).fixed_size_bytes(&addr.0)
+            comm.u64_field("stake_table_contract", 1)
+                .fixed_size_bytes(&addr.0)
         } else {
             comm
         };
