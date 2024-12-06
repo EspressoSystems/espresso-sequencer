@@ -1,7 +1,10 @@
-use super::{L1Client, NodeState};
+use super::{L1Client, NodeState, PubKey, SeqTypes};
+use contract_bindings::permissioned_stake_table::{NodeInfo, StakersUpdatedFilter};
 use ethers::{abi::Address, types::U256};
 use hotshot::types::SignatureKey;
+use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
+    stake_table::StakeTableEntry,
     traits::{
         election::Membership, node_implementation::NodeType, signature_key::StakeTableEntryType,
     },
@@ -54,11 +57,26 @@ impl<TYPES: NodeType> StaticCommittee<TYPES> {
     /// `Self.stake_table` only needs to be updated once in a given
     /// life-cycle but may be read from many times.
     async fn update_stake_table(&mut self, l1_block_height: u64) {
-        let table: Vec<<<TYPES as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry> = self
+        // TODO also deal w/ removed entries
+        let updates: Vec<StakersUpdatedFilter> = self
             .provider
             .get_stake_table::<TYPES>(l1_block_height, self.contract_address.unwrap())
             .await;
-        self.stake_table = HashSet::from_iter(table);
+
+        let added: Vec<NodeInfoJf> = updates
+            .into_iter()
+            .flat_map(|e: StakersUpdatedFilter| e.added.into_iter().map(NodeInfoJf::from))
+            .collect();
+        for node in added {
+            if !node.da {
+                let entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry =
+                    StakeTableEntry {
+                        stake_key: node.stake_table_key,
+                        stake_amount: U256::from(1),
+                    };
+                self.stake_table.insert(entry);
+            }
+        }
     }
     // We need a constructor to match our concrete type.
     pub fn new_stake(

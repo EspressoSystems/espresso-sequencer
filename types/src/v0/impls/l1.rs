@@ -10,7 +10,10 @@ use anyhow::{bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use contract_bindings::fee_contract::FeeContract;
+use contract_bindings::{
+    fee_contract::FeeContract,
+    permissioned_stake_table::{NodeInfo, PermissionedStakeTable, StakersUpdatedFilter},
+};
 use ethers::{
     prelude::{Address, BlockNumber, Middleware, Provider, H256, U256},
     providers::{Http, JsonRpcClient, ProviderError, PubsubClient, Ws, WsClientError},
@@ -20,6 +23,7 @@ use futures::{
     stream::{self, StreamExt},
 };
 use hotshot::types::SignatureKey;
+use hotshot_contract_adapter::stake_table::NodeInfoJf;
 use hotshot_types::{
     stake_table::StakeTableEntry,
     traits::{metrics::Metrics, node_implementation::NodeType},
@@ -34,7 +38,7 @@ use tokio::{
 use tracing::Instrument;
 use url::Url;
 
-use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, RpcClient};
+use super::{L1BlockInfo, L1ClientMetrics, L1State, L1UpdateTask, PubKey, RpcClient, SeqTypes};
 use crate::{FeeInfo, L1Client, L1ClientOptions, L1Event, L1ReconnectTask, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
@@ -788,12 +792,20 @@ impl L1Client {
     pub async fn get_stake_table<TYPES: NodeType>(
         &self,
         _block: u64,
-        _address: Address,
-    ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
-        // TODO we either need address from configuration or contract-bindings.
+        address: Address,
+    ) -> Vec<StakersUpdatedFilter> {
         // TODO epoch size may need to be passed in as well
         // TODO here or in memberships check if we have fetched table this epoch
-        unimplemented!();
+        dbg!(&address);
+        let stake_table_contract = PermissionedStakeTable::new(address, self.provider.clone());
+
+        let events = stake_table_contract
+            .stakers_updated_filter()
+            .query()
+            .await
+            .unwrap();
+        dbg!(&events);
+        events
     }
 }
 
@@ -852,7 +864,10 @@ async fn get_finalized_block(rpc: &Provider<RpcClient>) -> anyhow::Result<Option
 mod test {
     use std::ops::Add;
 
-    use contract_bindings::fee_contract::FeeContract;
+    use contract_bindings::{
+        fee_contract::FeeContract,
+        permissioned_stake_table::{G2Point, NodeInfo, PermissionedStakeTable},
+    };
     use ethers::{
         prelude::{LocalWallet, Signer, SignerMiddleware, H160, U64},
         utils::{hex, parse_ether, Anvil, AnvilInstance},
@@ -862,6 +877,8 @@ mod test {
     use sequencer_utils::test_utils::setup_test;
     use std::time::Duration;
     use time::OffsetDateTime;
+
+    use crate::SeqTypes;
 
     use super::*;
 
@@ -1269,7 +1286,7 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap());
+        let l1_client = L1Client::http(anvil.endpoint().parse().unwrap());
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -1279,17 +1296,26 @@ mod test {
             SignerMiddleware::new(provider.clone(), wallet.with_chain_id(anvil.chain_id()));
         let client = Arc::new(client);
 
-        // Initialize a contract with some deposits
-        let v: Vec<u8> = Vec::new();
+        let v: Vec<NodeInfo> = Vec::new();
         // deploy the stake_table contract
-        let stake_table_contract =
-            contract_bindings::permissioned_stake_table::PermissionedStakeTable::deploy(
-                client.clone(),
-                v,
-            )
+        let stake_table_contract = PermissionedStakeTable::deploy(client.clone(), v.clone())
             .unwrap()
             .send()
             .await?;
+        dbg!(&stake_table_contract);
+
+        let owner = stake_table_contract.owner().await;
+        dbg!(owner);
+
+        let address = stake_table_contract.address();
+        dbg!(&address);
+
+        let node = NodeInfo::default();
+        let new_nodes = vec![node];
+        let x = stake_table_contract.update(v, new_nodes);
+        x.send().await?;
+        let nodes = l1_client.get_stake_table::<SeqTypes>(0, address).await;
+        dbg!(nodes);
 
         Ok(())
     }
