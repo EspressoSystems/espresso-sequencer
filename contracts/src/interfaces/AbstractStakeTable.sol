@@ -39,6 +39,10 @@ abstract contract AbstractStakeTable {
     /// @param amount amount of the deposit
     event Deposit(bytes32 blsVKhash, uint256 amount);
 
+    /// @notice Signals a consensus key update for a validator
+    /// @param stakingAddr the address of the validator
+    event ConsensusKeysUpdated(address stakingAddr);
+
     /// @dev (sadly, Solidity doesn't support type alias on non-primitive types)
     // We avoid declaring another struct even if the type info helps with readability,
     // extra layer of struct introduces overhead and more gas cost.
@@ -130,4 +134,21 @@ abstract contract AbstractStakeTable {
     /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     function withdrawFunds(BN254.G2Point memory blsVK) external virtual returns (uint256);
+
+    /// @notice Update the consensus keys for a validator
+    /// @dev This function is used to update the consensus keys for a validator
+    /// @dev This function can only be called by the validator itself when it's not in the exit
+    /// queue
+    /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
+    /// @dev The validator will need to provide a BLS signature over the new BLS key
+    /// @param currBlsVK The current BLS verification key
+    /// @param newBlsVK The new BLS verification key
+    /// @param newSchnorrVK The new Schnorr verification key
+    /// @param newBlsSig The BLS signature that the account owns the new BLS key
+    function updateConsensusKeys(
+        BN254.G2Point memory currBlsVK,
+        BN254.G2Point memory newBlsVK,
+        EdOnBN254.EdOnBN254Point memory newSchnorrVK,
+        BN254.G1Point memory newBlsSig
+    ) external virtual;
 }
