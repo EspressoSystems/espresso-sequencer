@@ -10,8 +10,7 @@ import { EdOnBN254 } from "./libraries/EdOnBn254.sol";
  * @dev An stake table mapping with owner-only access control.
  */
 contract PermissionedStakeTable is Ownable {
-    event Added(NodeInfo[]);
-    event Removed(NodeInfo[]);
+    event StakersUpdated(NodeInfo[] removed, NodeInfo[] added);
 
     error StakerAlreadyExists(BN254.G2Point);
     error StakerNotFound(BN254.G2Point);
@@ -28,11 +27,24 @@ contract PermissionedStakeTable is Ownable {
     // State mapping from staker IDs to their staking status
     mapping(bytes32 nodeID => bool isStaker) private stakers;
 
-    constructor(address initialOwner, NodeInfo[] memory initialStakers) Ownable(initialOwner) {
+    constructor(NodeInfo[] memory initialStakers) Ownable(msg.sender) {
         insert(initialStakers);
     }
 
-    function insert(NodeInfo[] memory newStakers) public onlyOwner {
+    // public methods
+
+    function update(NodeInfo[] memory stakersToRemove, NodeInfo[] memory newStakers)
+        public
+        onlyOwner
+    {
+        remove(stakersToRemove);
+        insert(newStakers);
+        emit StakersUpdated(stakersToRemove, newStakers);
+    }
+
+    // internal methods
+
+    function insert(NodeInfo[] memory newStakers) internal {
         // TODO: revert if array empty
         for (uint256 i = 0; i < newStakers.length; i++) {
             bytes32 stakerID = _hashBlsKey(newStakers[i].blsVK);
@@ -41,10 +53,9 @@ contract PermissionedStakeTable is Ownable {
             }
             stakers[stakerID] = true;
         }
-        emit Added(newStakers);
     }
 
-    function remove(NodeInfo[] memory stakersToRemove) external onlyOwner {
+    function remove(NodeInfo[] memory stakersToRemove) internal {
         // TODO: revert if array empty
         for (uint256 i = 0; i < stakersToRemove.length; i++) {
             bytes32 stakerID = _hashBlsKey(stakersToRemove[i].blsVK);
@@ -53,8 +64,9 @@ contract PermissionedStakeTable is Ownable {
             }
             stakers[stakerID] = false;
         }
-        emit Removed(stakersToRemove);
     }
+
+    // view methods
 
     function isStaker(BN254.G2Point memory staker) external view returns (bool) {
         return stakers[_hashBlsKey(staker)];
