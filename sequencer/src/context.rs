@@ -1,5 +1,3 @@
-use std::{fmt::Display, sync::Arc};
-
 use anyhow::Context;
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLock;
@@ -9,7 +7,7 @@ use derivative::Derivative;
 use espresso_types::{
     parse_duration,
     v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
-    NodeState, PubKey, Transaction, ValidatedState,
+    NodeState, PubKey, StaticCommittee, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
@@ -20,13 +18,6 @@ use hotshot::{
     MarketplaceConfig, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
-use parking_lot::Mutex;
-use tokio::{
-    spawn,
-    task::JoinHandle,
-    time::{sleep, timeout},
-};
-
 use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -41,7 +32,14 @@ use hotshot_types::{
     utils::{View, ViewInner},
     PeerConfig, ValidatorConfig,
 };
+use parking_lot::Mutex;
 use std::time::Duration;
+use std::{fmt::Display, sync::Arc};
+use tokio::{
+    spawn,
+    task::JoinHandle,
+    time::{sleep, timeout},
+};
 use tracing::{Instrument, Level};
 use url::Url;
 
