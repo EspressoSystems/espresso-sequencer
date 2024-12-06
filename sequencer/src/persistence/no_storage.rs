@@ -57,28 +57,23 @@ impl SequencerPersistence for NoStorage {
         leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
         consumer: &impl EventConsumer,
     ) -> anyhow::Result<()> {
-        let (mut leaf_chain, mut qcs): (Vec<_>, Vec<_>) = leaves
+        let leaves = leaves
             .into_iter()
-            .map(|(info, qc)| (info.clone(), qc))
-            .unzip();
-
-        // Put in reverse chronological order, as expected from Decide events.
-        leaf_chain.reverse();
-        qcs.reverse();
-
-        // Generate decide event for the consumer.
-        let final_qc = qcs.pop().unwrap();
-
-        consumer
-            .handle_event(&Event {
-                view_number,
-                event: EventType::Decide {
-                    leaf_chain: Arc::new(leaf_chain),
-                    qc: Arc::new(final_qc),
-                    block_size: None,
-                },
-            })
-            .await
+            .map(|(info_ref, qc)| (info_ref.clone(), qc))
+            .collect::<Vec<_>>();
+        for (leaf_info, qc) in leaves {
+            consumer
+                .handle_event(&Event {
+                    view_number,
+                    event: EventType::Decide {
+                        leaf_chain: Arc::new(vec![leaf_info.clone()]),
+                        qc: Arc::new(qc),
+                        block_size: None,
+                    },
+                })
+                .await?;
+        }
+        Ok(())
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
