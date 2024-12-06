@@ -1,4 +1,4 @@
-//! This module implements interfaces necessary to run marketplace builder
+//! This module implements interfaces necessary to run legacy builder
 //! in HotShot testing harness.
 
 use std::{collections::HashMap, fmt::Display, marker::PhantomData, sync::Arc};
@@ -10,44 +10,40 @@ use hotshot_testing::{
     test_builder::BuilderChange,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::NodeType};
+use marketplace_builder_shared::testing::constants::TEST_PROTOCOL_MAX_BLOCK_SIZE;
 use tagged_base64::TaggedBase64;
 use tokio::spawn;
 use url::Url;
 use vbs::version::StaticVersion;
 
-use crate::{
-    hooks::{BuilderHooks, NoHooks},
-    service::{BuilderConfig, GlobalState},
-};
+use crate::service::{BuilderConfig, GlobalState};
 
-/// Testing configuration for marketplace builder
-/// Stores hooks that will be used in the builder in a type-erased manner,
-/// allowing for runtime configuration of hooks to use in tests.
-struct TestMarketplaceBuilderConfig<Types>
+/// Testing configuration for legacy builder
+struct TestLegacyBuilderConfig<Types>
 where
     Types: NodeType,
 {
-    hooks: Box<dyn BuilderHooks<Types>>,
+    _marker: PhantomData<Types>,
 }
 
-impl<Types> Default for TestMarketplaceBuilderConfig<Types>
+impl<Types> Default for TestLegacyBuilderConfig<Types>
 where
     Types: NodeType,
 {
     fn default() -> Self {
         Self {
-            hooks: Box::new(NoHooks(PhantomData)),
+            _marker: PhantomData,
         }
     }
 }
 
-/// [`TestBuilderImplementation`] for marketplace builder.
+/// [`TestBuilderImplementation`] for legacy builder.
 /// Passed as a generic parameter to [`TestRunner::run_test`], it is be used
 /// to instantiate builder API and builder task.
-struct MarketplaceBuilderImpl {}
+struct LegacyBuilderImpl {}
 
 #[async_trait]
-impl<Types> TestBuilderImplementation<Types> for MarketplaceBuilderImpl
+impl<Types> TestBuilderImplementation<Types> for LegacyBuilderImpl
 where
     Types: NodeType<View = ViewNumber>,
     Types::InstanceState: Default,
@@ -56,19 +52,23 @@ where
     >>::Error: Display,
     for<'a> <Types::SignatureKey as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
-    type Config = TestMarketplaceBuilderConfig<Types>;
+    type Config = TestLegacyBuilderConfig<Types>;
 
     /// This is mostly boilerplate to instantiate and start [`ProxyGlobalState`] APIs and initial [`BuilderState`]'s event loop.
     /// [`BuilderTask`] it returns will be injected into consensus runtime by HotShot testing harness and
     /// will forward transactions from hotshot event stream to the builder.
     async fn start(
-        _n_nodes: usize,
+        num_nodes: usize,
         url: Url,
-        config: Self::Config,
+        _config: <Self as TestBuilderImplementation<Types>>::Config,
         _changes: HashMap<u64, BuilderChange>,
     ) -> Box<dyn BuilderTask<Types>> {
-        // Create the global state
-        let service = GlobalState::new(BuilderConfig::test(), config.hooks);
+        let service = GlobalState::new(
+            BuilderConfig::test(),
+            Types::InstanceState::default(),
+            TEST_PROTOCOL_MAX_BLOCK_SIZE,
+            num_nodes,
+        );
 
         // Create tide-disco app based on global state
         let app = Arc::clone(&service)
@@ -81,19 +81,19 @@ where
 
         // Return the global state as a task that will be later started
         // by the test harness with event stream from one of HS nodes
-        Box::new(MarketplaceBuilderTask { service })
+        Box::new(LegacyBuilderTask { service })
     }
 }
 
-/// Marketplace builder task. Stores all the necessary information to run builder service
-struct MarketplaceBuilderTask<Types>
+/// Legacy builder task. Stores all the necessary information to run builder service
+struct LegacyBuilderTask<Types>
 where
     Types: NodeType,
 {
-    service: Arc<GlobalState<Types, Box<dyn BuilderHooks<Types>>>>,
+    service: Arc<GlobalState<Types>>,
 }
 
-impl<Types> BuilderTask<Types> for MarketplaceBuilderTask<Types>
+impl<Types> BuilderTask<Types> for LegacyBuilderTask<Types>
 where
     Types: NodeType<View = ViewNumber>,
     for<'a> <<Types::SignatureKey as SignatureKey>::PureAssembledSignatureType as TryFrom<
@@ -118,14 +118,14 @@ where
 mod tests {
     use std::time::Duration;
 
-    use crate::testing::integration::MarketplaceBuilderImpl;
+    use crate::testing::integration::LegacyBuilderImpl;
     use marketplace_builder_shared::testing::{
         generation::{self, TransactionGenerationConfig},
         run_test,
         validation::BuilderValidationConfig,
     };
 
-    use hotshot_example_types::node_types::MarketplaceTestVersions;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_macros::cross_tests;
     use hotshot_testing::{
@@ -141,8 +141,11 @@ mod tests {
         let num_successful_views = 45;
         let min_txns_per_view = 5;
 
-        run_test::<MarketplaceTestVersions, MarketplaceBuilderImpl>(
+        run_test::<TestVersions, LegacyBuilderImpl>(
             TestDescription {
+                txn_description: hotshot_testing::txn_task::TxnTaskDescription::RoundRobinTimeBased(
+                    Duration::MAX,
+                ),
                 completion_task_description:
                     CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
                         TimeBasedCompletionTaskDescription {
@@ -169,15 +172,15 @@ mod tests {
                 endpoints: vec![],
             },
         )
-        .await
+        .await;
     }
 
     cross_tests!(
         TestName: example_cross_test,
         Impls: [MemoryImpl],
-        BuilderImpls: [MarketplaceBuilderImpl],
+        BuilderImpls: [LegacyBuilderImpl],
         Types: [TestTypes],
-        Versions: [MarketplaceTestVersions],
+        Versions: [TestVersions],
         Ignore: true,
         Metadata: {
             TestDescription {

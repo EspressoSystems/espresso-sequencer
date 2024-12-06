@@ -628,6 +628,9 @@ impl<Types: NodeType> BuilderState<Types> {
             vid_commitment: quorum_proposal.data.block_header.payload_commitment(),
             leaf_commit: leaf.commit(),
             builder_commitment: quorum_proposal.data.block_header.builder_commitment(),
+            // Unused in old legacy builder:
+            last_nonempty_view: None,
+            tx_count: 0,
         };
 
         let builder_state_id = BuilderStateId {
@@ -1436,6 +1439,9 @@ mod test {
                     vid_commitment: quorum_proposal.block_header.payload_commitment,
                     leaf_commit,
                     builder_commitment: quorum_proposal.block_header.builder_commitment,
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 req_sender,
             );

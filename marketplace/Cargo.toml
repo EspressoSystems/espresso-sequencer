@@ -6,8 +6,8 @@ edition = { workspace = true }
 [dependencies]
 marketplace-builder-shared = { path = "../shared" }
 
-anyhow = "1"
-async-broadcast = "0.7"
+anyhow = { workspace = true }
+async-broadcast = { workspace = true }
 async-lock = { workspace = true }
 async-trait = { workspace = true }
 committable = { workspace = true }
@@ -16,7 +16,6 @@ futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-builder-api = { workspace = true }
 hotshot-types = { workspace = true }
-lru = { workspace = true }
 sha2 = { workspace = true }
 tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
@@ -29,8 +28,9 @@ vbs = { workspace = true }
 hotshot-example-types = { workspace = true }
 hotshot-macros = { workspace = true }
 hotshot-testing = { workspace = true }
-num_cpus = "1.16"
-url = "2.5"
+num_cpus = { workspace = true }
+tracing-test = { workspace = true }
+url = { workspace = true }
 
 [lints]
 workspace = true

@@ -7,9 +7,10 @@ use std::{
 
 use async_broadcast::Sender;
 use async_lock::{Mutex, RwLock};
-use builder_state_map::BuilderStateMap;
+use committable::Commitment;
 use either::Either;
-use hotshot_builder_api::v0_99::builder::BuildError;
+use hotshot::traits::BlockPayload;
+use hotshot_builder_api::v0_1::builder::TransactionStatus;
 use hotshot_types::{
     data::{DaProposal, QuorumProposal2},
     event::LeafInfo,
@@ -18,18 +19,23 @@ use hotshot_types::{
         node_implementation::{ConsensusTime, NodeType},
     },
 };
+use quick_cache::sync::Cache;
+use tiered_view_map::TieredViewMap;
 use tracing::{error, info, warn};
 
 use crate::{
     block::{BuilderStateId, ParentBlockReferences, ReceivedTransaction},
+    error::Error,
     state::BuilderState,
     utils::ProposalId,
 };
 
-pub mod builder_state_map;
+pub mod tiered_view_map;
 
 type ProposalMap<Types> =
     HashMap<ProposalId<Types>, Either<QuorumProposal2<Types>, DaProposal<Types>>>;
+
+type BuilderStateMap<Types> = TieredViewMap<BuilderStateId<Types>, Arc<BuilderState<Types>>>;
 
 /// Result of looking up a builder state by ID.
 ///
@@ -78,6 +84,7 @@ where
     Types: NodeType,
 {
     builder_states: RwLock<BuilderStateMap<Types>>,
+    tx_status: quick_cache::sync::Cache<Commitment<Types::Transaction>, TransactionStatus>,
     transaction_sender: Sender<Arc<ReceivedTransaction<Types>>>,
     proposals: Mutex<ProposalMap<Types>>,
 }
@@ -91,7 +98,12 @@ where
     /// `txn_garbage_collect_duration` specifies the duration for which the coordinator retains the hashes of transactions
     /// that have been marked as included by its [`BuilderState`]s. Once this duration has elapsed, new [`BuilderState`]s
     /// can include duplicates of older transactions should such be received again.
-    pub fn new(txn_channel_capacity: usize, txn_garbage_collect_duration: Duration) -> Self {
+    /// `tx_status_cache_capacity` controls the capacity of transaction status
+    pub fn new(
+        txn_channel_capacity: usize,
+        txn_garbage_collect_duration: Duration,
+        tx_status_cache_capacity: usize,
+    ) -> Self {
         let (txn_sender, txn_receiver) = async_broadcast::broadcast(txn_channel_capacity);
         let bootstrap_state = BuilderState::new(
             ParentBlockReferences::bootstrap(),
@@ -100,12 +112,13 @@ where
             Types::ValidatedState::default(),
         );
         let mut builder_states = BuilderStateMap::new();
-        builder_states.insert(bootstrap_state);
+        builder_states.insert(bootstrap_state.id(), bootstrap_state);
 
         Self {
             transaction_sender: txn_sender,
             builder_states: RwLock::new(builder_states),
             proposals: Mutex::new(ProposalMap::new()),
+            tx_status: Cache::new(tx_status_cache_capacity),
         }
     }
 
@@ -118,15 +131,45 @@ where
         leaf_chain: Arc<Vec<LeafInfo<Types>>>,
     ) -> BuilderStateMap<Types> {
         let latest_decide_view_num = leaf_chain[0].leaf.view_number();
-        let mut builder_states = self.builder_states.write().await;
-        let highest_active_view_num = builder_states
-            .highest_view()
-            .unwrap_or(Types::View::genesis());
-        let cutoff = Types::View::new(*latest_decide_view_num.min(highest_active_view_num));
-        builder_states.prune(cutoff)
+
+        for leaf_info in leaf_chain.iter() {
+            if let Some(payload) = leaf_info.leaf.block_payload() {
+                for commitment in
+                    payload.transaction_commitments(leaf_info.leaf.block_header().metadata())
+                {
+                    self.update_txn_status(
+                        &commitment,
+                        TransactionStatus::Sequenced {
+                            leaf: leaf_info.leaf.block_header().block_number(),
+                        },
+                    );
+                }
+            }
+        }
+
+        let pruned = {
+            let mut builder_states_write_guard = self.builder_states.write().await;
+            let highest_active_view_num = builder_states_write_guard
+                .highest_view()
+                .unwrap_or(Types::View::genesis());
+            let cutoff = Types::View::new(*latest_decide_view_num.min(highest_active_view_num));
+            tracing::info!(
+                lowest_view = ?builder_states_write_guard.lowest_view(),
+                ?cutoff,
+                highest_view = ?builder_states_write_guard.highest_view(),
+                "Pruning builder state map"
+            );
+            builder_states_write_guard.prune(cutoff)
+        };
+        tracing::info!(num_states_pruned = pruned.len(), "Pruned builder state map");
+        pruned
     }
 
-    /// This function should be called whenever new transactions are received from HotShot.
+    /// Enqueue new transaction in all builder states managed by this coordinator.
+    ///
+    /// Builder states will automatically filter transactions already included from
+    /// their point of view when dequeing transactions.
+    ///
     /// <div class="warning">
     ///
     ///   Important: [`BuilderState`]s do not automatically remove transactions from the channel.
@@ -138,21 +181,33 @@ where
     pub async fn handle_transaction(
         &self,
         transaction: ReceivedTransaction<Types>,
-    ) -> Result<(), BuildError> {
-        match self.transaction_sender.try_broadcast(Arc::new(transaction)) {
-            Ok(None) => Ok(()),
-            Ok(Some(evicted_txn)) => {
-                warn!(
-                    ?evicted_txn.commit,
-                    "Overflow mode enabled, transaction evicted",
-                );
-                Ok(())
-            }
+    ) -> Result<(), Error<Types>> {
+        let commit = transaction.commit;
+
+        let maybe_evicted = match self.transaction_sender.try_broadcast(Arc::new(transaction)) {
+            Ok(maybe_evicted) => maybe_evicted,
             Err(err) => {
                 warn!(?err, "Failed to broadcast txn");
-                Err(BuildError::Error(err.to_string()))
+                self.update_txn_status(
+                    &commit,
+                    TransactionStatus::Rejected {
+                        reason: "Failed to broadcast transaction".to_owned(),
+                    },
+                );
+                return Err(Error::TxnSender(err));
             }
+        };
+
+        self.update_txn_status(&commit, TransactionStatus::Pending);
+
+        if let Some(evicted) = maybe_evicted {
+            warn!(
+                ?evicted.commit,
+                "Overflow mode enabled, transaction evicted",
+            );
         }
+
+        Ok(())
     }
 
     /// This function should be called whenever new DA Proposal is recieved from HotShot.
@@ -283,7 +338,10 @@ where
             .new_child(quorum_proposal.clone(), da_proposal.clone())
             .await;
 
-        self.builder_states.write().await.insert(child_state);
+        self.builder_states
+            .write()
+            .await
+            .insert(child_state.id(), child_state);
     }
 
     /// This is an utility function that is used to determine which [`BuilderState`]s
@@ -425,18 +483,55 @@ where
         warn!("View time-travel");
         Vec::new()
     }
+
+    /// Update status of transaction.
+    pub fn update_txn_status(
+        &self,
+        txn_hash: &Commitment<<Types as NodeType>::Transaction>,
+        new_status: TransactionStatus,
+    ) {
+        if let Some(old_status) = self.tx_status.get(txn_hash) {
+            match old_status {
+                TransactionStatus::Rejected { .. } | TransactionStatus::Sequenced { .. } => {
+                    tracing::debug!(
+                        ?old_status,
+                        ?new_status,
+                        "Not changing status of rejected/sequenced transaction",
+                    );
+                    return;
+                }
+                _ => {
+                    tracing::debug!(?old_status, ?new_status, "Changing status of transaction",);
+                }
+            }
+        }
+        self.tx_status.insert(*txn_hash, new_status);
+    }
+
+    /// Get transaction status for given hash
+    pub fn tx_status(&self, txn_hash: &Commitment<Types::Transaction>) -> TransactionStatus {
+        self.tx_status
+            .get(txn_hash)
+            .unwrap_or(TransactionStatus::Unknown)
+    }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
 
+    use committable::Committable;
     use hotshot_example_types::node_types::TestTypes;
+    use hotshot_types::data::ViewNumber;
+    use tracing_test::traced_test;
 
     use crate::{
         block::TransactionSource,
         testing::{
-            constants::{TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD},
+            constants::{
+                TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD, TEST_TX_STATUS_CACHE_CAPACITY,
+            },
             mock,
         },
     };
@@ -446,9 +541,13 @@ mod tests {
     type BuilderStateCoordinator = super::BuilderStateCoordinator<TestTypes>;
 
     #[tokio::test]
+    #[traced_test]
     async fn test_coordinator_new() {
-        let coordinator =
-            BuilderStateCoordinator::new(TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD);
+        let coordinator = BuilderStateCoordinator::new(
+            TEST_CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
 
         assert_eq!(
             coordinator.builder_states.read().await.len(),
@@ -494,9 +593,13 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     async fn test_handle_proposal_matching_types_creates_builder_state() {
-        let coordinator =
-            BuilderStateCoordinator::new(TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD);
+        let coordinator = BuilderStateCoordinator::new(
+            TEST_CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
 
         let (da_proposal, quorum_proposal) = mock::proposals(7).await;
 
@@ -516,9 +619,13 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     async fn test_handle_proposal_duplicate_proposal_ignored() {
-        let coordinator =
-            BuilderStateCoordinator::new(TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD);
+        let coordinator = BuilderStateCoordinator::new(
+            TEST_CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
 
         let (proposal, _) = mock::proposals(7).await;
 
@@ -536,9 +643,13 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     async fn test_handle_proposal_stores_new_proposal_when_no_match() {
-        let coordinator =
-            BuilderStateCoordinator::new(TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD);
+        let coordinator = BuilderStateCoordinator::new(
+            TEST_CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
 
         let (proposal, _) = mock::proposals(1).await;
         let proposal_id = ProposalId::from_da_proposal(&proposal);
@@ -560,9 +671,13 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     async fn test_handle_proposal_same_view_different_proposals() {
-        let coordinator =
-            BuilderStateCoordinator::new(TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD);
+        let coordinator = BuilderStateCoordinator::new(
+            TEST_CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
 
         let view_number = 9; // arbitrary
         let (da_proposal_1, quorum_proposal_1) = mock::proposals(view_number).await;
@@ -594,9 +709,13 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     async fn test_decide_reaps_old_proposals() {
-        let coordinator =
-            BuilderStateCoordinator::new(TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD);
+        let coordinator = BuilderStateCoordinator::new(
+            TEST_CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
 
         for view in 0..100 {
             let (da_proposal, quorum_proposal) = mock::proposals(view).await;
@@ -635,12 +754,95 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
+    async fn test_transaction_status() {
+        // Lower for this test not to spend too much time here
+        const CHANNEL_BUFFER_SIZE: usize = 32;
+
+        let coordinator = BuilderStateCoordinator::new(
+            CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
+
+        let enqueued_transactions = (0..CHANNEL_BUFFER_SIZE)
+            .map(|_| mock::transaction())
+            .collect::<Vec<_>>();
+
+        // Coordinator should update transaction status when included
+        for tx in enqueued_transactions.iter() {
+            assert_eq!(
+                coordinator.tx_status(&tx.commit()),
+                TransactionStatus::Unknown
+            );
+            coordinator
+                .handle_transaction(ReceivedTransaction::new(
+                    tx.clone(),
+                    TransactionSource::Public,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(
+                coordinator.tx_status(&tx.commit()),
+                TransactionStatus::Pending
+            );
+        }
+
+        // This transaction won't be included, we're over capacity
+        let rejected_transaction = mock::transaction();
+        coordinator
+            .handle_transaction(ReceivedTransaction::new(
+                rejected_transaction.clone(),
+                TransactionSource::Public,
+            ))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            coordinator.tx_status(&rejected_transaction.commit()),
+            TransactionStatus::Rejected { .. }
+        ));
+
+        // Transaction that was never submitted to the builder but is going to be
+        // included anyway, simulating it being included by a different builder
+        let external_transaction = mock::transaction();
+
+        let decided_transactions = enqueued_transactions
+            .iter()
+            .chain(std::iter::once(&external_transaction))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        // Simulate all transactions being decided
+        let leaf_chain = mock::decide_leaf_chain_with_transactions(
+            *ViewNumber::genesis(),
+            decided_transactions.clone(),
+        )
+        .await;
+        coordinator.handle_decide(leaf_chain).await;
+
+        // All decided transactions should change status
+        for tx in decided_transactions {
+            assert!(matches!(
+                coordinator.tx_status(&tx.commit()),
+                TransactionStatus::Sequenced { .. }
+            ));
+        }
+    }
+
+    #[tokio::test]
+    #[traced_test]
     async fn test_transaction_overflow() {
-        let coordinator =
-            BuilderStateCoordinator::new(TEST_CHANNEL_BUFFER_SIZE, TEST_INCLUDED_TX_GC_PERIOD);
+        // Lower for this test not to spend too much time here
+        const CHANNEL_BUFFER_SIZE: usize = 32;
+
+        let coordinator = BuilderStateCoordinator::new(
+            CHANNEL_BUFFER_SIZE,
+            TEST_INCLUDED_TX_GC_PERIOD,
+            TEST_TX_STATUS_CACHE_CAPACITY,
+        );
 
         // Coordinator should handle transactions while there's space in the buffer
-        for _ in 0..TEST_CHANNEL_BUFFER_SIZE {
+        for _ in 0..CHANNEL_BUFFER_SIZE {
             coordinator
                 .handle_transaction(ReceivedTransaction::new(
                     mock::transaction(),
@@ -666,11 +868,11 @@ mod tests {
             .await
             .highest_view_builder()
             .unwrap()
-            .collect_txns(Instant::now() + Duration::from_millis(100))
+            .collect_txns(Instant::now() + Duration::from_secs(10)) // huge duration, we want to clear the whole buffer
             .await;
 
         // After clearing the channel, coordinator should handle transactions again
-        for _ in 0..TEST_CHANNEL_BUFFER_SIZE {
+        for _ in 0..CHANNEL_BUFFER_SIZE {
             coordinator
                 .handle_transaction(ReceivedTransaction::new(
                     mock::transaction(),

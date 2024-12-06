@@ -86,6 +86,9 @@ pub async fn create_builder_state(
             vid_commitment: genesis_vid_commitment,
             leaf_commit: Commitment::<Leaf2<TestTypes>>::default_commitment_no_preimage(),
             builder_commitment: genesis_builder_commitment,
+            // Unused in old legacy builder:
+            last_nonempty_view: None,
+            tx_count: 0,
         },
         decide_receiver.clone(),
         da_receiver.clone(),

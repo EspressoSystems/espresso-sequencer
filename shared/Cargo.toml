@@ -24,9 +24,13 @@ hotshot-testing = { workspace = true }
 hotshot-types = { workspace = true }
 jf-vid = { workspace = true }
 nonempty-collections = { workspace = true }
+once_cell = { workspace = true }
+quick_cache = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
 surf-disco = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -35,8 +39,9 @@ vbs = { workspace = true }
 vec1 = { workspace = true }
 
 [dev-dependencies]
-portpicker = "0.1.1"
+portpicker = { workspace = true }
 tide-disco = { workspace = true }
+tracing-test = { workspace = true }
 
 [lints]
 workspace = true

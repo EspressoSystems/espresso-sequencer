@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::TransactionPayload;
 
+use async_lock::RwLock;
 use hotshot::{
     traits::{BlockPayload, TestableNodeImplementation},
     types::{Event, EventType},
@@ -17,7 +18,6 @@ use hotshot_types::traits::{
 };
 
 use anyhow::bail;
-use async_lock::RwLock;
 use async_trait::async_trait;
 use chrono::{DateTime, Local};
 
@@ -102,7 +102,7 @@ where
     }
 
     async fn check(&self) -> TestResult {
-        if self.txn_history.len() <= self.config.expected_txn_num {
+        if self.txn_history.len() + self.alien_transactions.len() <= self.config.expected_txn_num {
             return TestResult::Fail(Box::new(format!(
                 "Expected at least {} transactions, got {}",
                 self.config.expected_txn_num,

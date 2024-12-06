@@ -1803,6 +1803,9 @@ mod test {
                     vid_commitment: parent_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 req_sender.clone(),
             );
@@ -1836,6 +1839,9 @@ mod test {
                     vid_commitment: parent_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 req_sender.clone(),
             );
@@ -1893,6 +1899,9 @@ mod test {
                     vid_commitment: parent_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 req_sender.clone(),
             );
@@ -1927,6 +1936,9 @@ mod test {
                     vid_commitment: parent_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 req_sender.clone(),
             );
@@ -2010,6 +2022,9 @@ mod test {
                     vid_commitment: parent_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 req_sender.clone(),
             );
@@ -2043,6 +2058,9 @@ mod test {
                     vid_commitment: parent_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 req_sender.clone(),
             );
@@ -2582,6 +2600,9 @@ mod test {
                     vid_commitment: vid_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2677,6 +2698,9 @@ mod test {
                     vid_commitment: vid_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2757,6 +2781,9 @@ mod test {
                     vid_commitment: vid_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2798,6 +2825,9 @@ mod test {
                     vid_commitment: vid_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -2857,6 +2887,9 @@ mod test {
                     vid_commitment: vid_commit,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 async_broadcast::broadcast(10).0,
             );
@@ -3254,6 +3287,9 @@ mod test {
                     vid_commitment: expected_builder_state_id.parent_commitment,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 response_sender,
             );
@@ -3377,6 +3413,9 @@ mod test {
                     vid_commitment: expected_builder_state_id.parent_commitment,
                     leaf_commit: Commitment::from_raw([0; 32]),
                     builder_commitment: BuilderCommitment::from_bytes([]),
+                    // Unused in old legacy builder:
+                    last_nonempty_view: None,
+                    tx_count: 0,
                 },
                 response_sender,
             );

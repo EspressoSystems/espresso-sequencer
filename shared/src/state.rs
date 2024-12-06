@@ -159,6 +159,13 @@ where
             <Types::BlockPayload as BlockPayload<Types>>::from_bytes(encoded_txns, metadata);
         let txn_commitments = block_payload.transaction_commitments(metadata);
 
+        let last_nonempty_view = if txn_commitments.is_empty() {
+            self.parent_block_references.last_nonempty_view
+        } else {
+            // This block is non-empty
+            Some(quorum_proposal.view_number)
+        };
+
         // We replace our parent_block_references with information from the
         // quorum proposal.  This is identifying the block that this specific
         // instance of [BuilderState] is attempting to build for.
@@ -167,6 +174,8 @@ where
             vid_commitment: quorum_proposal.block_header.payload_commitment(),
             leaf_commit: Committable::commit(&leaf),
             builder_commitment: quorum_proposal.block_header.builder_commitment(),
+            tx_count: txn_commitments.len(),
+            last_nonempty_view,
         };
 
         let mut txn_queue = self.txn_queue.read().await.clone();

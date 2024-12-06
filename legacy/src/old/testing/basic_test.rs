@@ -51,7 +51,6 @@ mod tests {
     use crate::service::{
         handle_received_txns, GlobalState, ProxyGlobalState, ReceivedTransaction,
     };
-
     use async_lock::RwLock;
     use committable::{Commitment, CommitmentBoundsArkless, Committable};
     use sha2::{Digest, Sha256};
@@ -137,6 +136,9 @@ mod tests {
                 vid_commitment: initial_commitment,
                 leaf_commit: Commitment::<Leaf2<TestTypes>>::default_commitment_no_preimage(),
                 builder_commitment: BuilderCommitment::from_bytes([]),
+                // Unused in old legacy builder:
+                last_nonempty_view: None,
+                tx_count: 0,
             },
             decide_receiver.clone(),
             da_receiver.clone(),

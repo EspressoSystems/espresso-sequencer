@@ -1,3 +1,4 @@
+//! A collection of generator functions for mock data used in tests
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use async_broadcast::broadcast;
@@ -44,8 +45,21 @@ pub fn transaction() -> TestTransaction {
 }
 
 pub async fn decide_leaf_chain(decided_view: u64) -> Arc<Vec<LeafInfo<TestTypes>>> {
-    let (_, quorum_proposal) = proposals(decided_view).await;
-    let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
+    decide_leaf_chain_with_transactions(decided_view, vec![transaction()]).await
+}
+
+pub async fn decide_leaf_chain_with_transactions(
+    decided_view: u64,
+    transactions: Vec<TestTransaction>,
+) -> Arc<Vec<LeafInfo<TestTypes>>> {
+    let (da_proposal, quorum_proposal) =
+        proposals_with_transactions(decided_view, transactions).await;
+    let mut leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
+    let payload = <TestBlockPayload as BlockPayload<TestTypes>>::from_bytes(
+        &da_proposal.encoded_transactions,
+        &da_proposal.metadata,
+    );
+    leaf.fill_block_payload_unchecked(payload);
     Arc::new(vec![LeafInfo {
         leaf,
         state: Default::default(),
@@ -56,20 +70,28 @@ pub async fn decide_leaf_chain(decided_view: u64) -> Arc<Vec<LeafInfo<TestTypes>
 
 /// Create mock pair of DA and Quorum proposals
 pub async fn proposals(view: u64) -> (DaProposal<TestTypes>, QuorumProposal2<TestTypes>) {
+    let transaction = transaction();
+    proposals_with_transactions(view, vec![transaction]).await
+}
+
+/// Create mock pair of DA and Quorum proposals with given transactions
+pub async fn proposals_with_transactions(
+    view: u64,
+    transactions: Vec<TestTransaction>,
+) -> (DaProposal<TestTypes>, QuorumProposal2<TestTypes>) {
     let view_number = <TestTypes as NodeType>::View::new(view);
     let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let validated_state = TestValidatedState::default();
     let instance_state = TestInstanceState::default();
 
-    let transaction = transaction();
     let (payload, metadata) = <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
-        vec![transaction.clone()],
+        transactions.clone(),
         &validated_state,
         &instance_state,
     )
     .await
     .unwrap();
-    let encoded_transactions = TestTransaction::encode(&[transaction]);
+    let encoded_transactions = TestTransaction::encode(&transactions);
 
     let header = TestBlockHeader::new(
         &Leaf::<TestTypes>::genesis(&Default::default(), &Default::default())
@@ -155,5 +177,7 @@ pub fn parent_references(view: u64) -> ParentBlockReferences<TestTypes> {
         builder_commitment: BuilderCommitment::from_bytes(
             rng.sample_iter(Standard).take(32).collect::<Vec<_>>(),
         ),
+        tx_count: rng.gen(),
+        last_nonempty_view: None,
     }
 }

@@ -1,45 +1,26 @@
 use async_broadcast::broadcast;
-use hotshot::types::{BLSPubKey, SignatureKey};
 use hotshot_builder_api::v0_99::data_source::{AcceptsTxnSubmits, BuilderDataSource};
 
 use hotshot_example_types::block_types::TestTransaction;
-use marketplace_builder_shared::testing::constants::{
-    TEST_API_TIMEOUT, TEST_BASE_FEE, TEST_INCLUDED_TX_GC_PERIOD, TEST_MAXIMIZE_TX_CAPTURE_TIMEOUT,
-};
-use tokio::time::sleep;
-use tracing_subscriber::EnvFilter;
+use tracing_test::traced_test;
 
 use crate::hooks::NoHooks;
-use crate::service::{GlobalState, ProxyGlobalState};
-use crate::testing::SimulatedChainState;
+use crate::service::{BuilderConfig, GlobalState, ProxyGlobalState};
+use marketplace_builder_shared::testing::consensus::SimulatedChainState;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::time::Duration;
 
 /// This test simulates multiple builder states receiving messages from the channels and processing them
 #[tokio::test]
+#[traced_test]
 async fn test_builder() {
-    // Setup logging
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
-
-    tracing::info!("Testing the builder core with multiple messages from the channels");
-
     // Number of views to simulate
     const NUM_ROUNDS: usize = 5;
     // Number of transactions to submit per round
     const NUM_TXNS_PER_ROUND: usize = 4;
-    // Capacity of broadcast channels
-    const CHANNEL_CAPACITY: usize = NUM_ROUNDS * 5;
 
     let global_state = Arc::new(GlobalState::new(
-        BLSPubKey::generated_from_seed_indexed([0; 32], 0),
-        TEST_API_TIMEOUT,
-        TEST_MAXIMIZE_TX_CAPTURE_TIMEOUT,
-        TEST_INCLUDED_TX_GC_PERIOD,
-        CHANNEL_CAPACITY,
-        TEST_BASE_FEE,
+        BuilderConfig::test(),
         NoHooks(PhantomData),
     ));
     let proxy_global_state = ProxyGlobalState(Arc::clone(&global_state));
@@ -78,9 +59,6 @@ async fn test_builder() {
         let builder_state_id = chain_state
             .simulate_consensus_round(prev_proposed_transactions)
             .await;
-
-        // give builder state time to fork
-        sleep(Duration::from_millis(100)).await;
 
         // get response
         let bundle = proxy_global_state

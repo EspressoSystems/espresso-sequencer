@@ -94,6 +94,9 @@ pub fn setup_builder_for_test() -> TestSetup {
             view_number: ViewNumber::genesis(),
             leaf_commit: Commitment::from_raw([0; 32]),
             builder_commitment: BuilderCommitment::from_bytes([0; 32]),
+            // Unused in old legacy builder:
+            last_nonempty_view: None,
+            tx_count: 0,
         },
         decide_receiver,
         da_proposal_receiver,

@@ -1,20 +1,25 @@
-//! This module contains an optimizide implementation of a
-//! [`BuilderStateId`] to [`BuilderState`] map.
+//! This module contains an optimized implementation of a
+//! composite key two-tier map, where the first key is a view
+//! number
 
 use std::{
     collections::{btree_map::Entry, BTreeMap},
+    hash::Hash,
     ops::RangeBounds,
-    sync::Arc,
 };
 
-use hotshot_types::{traits::node_implementation::NodeType, vid::VidCommitment};
+use hotshot_types::{
+    traits::node_implementation::{ConsensusTime, NodeType},
+    utils::BuilderCommitment,
+    vid::VidCommitment,
+};
 use nonempty_collections::{nem, NEMap};
 
-use crate::{block::BuilderStateId, state::BuilderState};
+use crate::block::{BlockId, BuilderStateId};
 
-/// A map from [`BuilderStateId`] to [`BuilderState`], implemented as a tiered map
-/// with the first tier being [`BTreeMap`] keyed by view number of [`BuilderStateId`]
-/// and the second [`NEMap`] keyed by VID commitment of [`BuilderStateId`].
+/// A map from [`ViewCompositeKey`] to arbitrary value, implemented as a tiered map
+/// with the first tier being [`BTreeMap`] keyed by view number of [`ViewCompositeKey`]
+/// and the second [`NEMap`] keyed by subkey of [`ViewCompositeKey`].
 ///
 /// Usage of [`BTreeMap`] means that the map has an convenient property of always being
 /// sorted by view number, which makes common operations such as pruning old views more efficient.
@@ -22,48 +27,90 @@ use crate::{block::BuilderStateId, state::BuilderState};
 /// Second tier being non-empty by construction [`NEMap`] ensures that we can't accidentally
 /// create phantom entries with empty maps in the first tier.
 #[derive(Debug)]
-pub struct BuilderStateMap<Types: NodeType>(
-    BTreeMap<<Types as NodeType>::View, NEMap<VidCommitment, Arc<BuilderState<Types>>>>,
-);
+pub struct TieredViewMap<K, V>(BTreeMap<K::View, NEMap<K::Subkey, V>>)
+where
+    K: ViewCompositeKey;
 
-impl<Types: NodeType> BuilderStateMap<Types> {
+/// A two-component key, of which one component is [`ConsensusTime`]
+///
+/// See [`TieredViewMap`] documentation for more information
+pub trait ViewCompositeKey {
+    type Subkey: Hash + Eq;
+    type View: ConsensusTime;
+    fn view(&self) -> &Self::View;
+    fn subkey(&self) -> &Self::Subkey;
+    fn into_subkey(self) -> Self::Subkey;
+}
+
+impl<Types: NodeType> ViewCompositeKey for BlockId<Types> {
+    type Subkey = BuilderCommitment;
+    type View = Types::View;
+
+    fn view(&self) -> &<Types as NodeType>::View {
+        &self.view
+    }
+
+    fn subkey(&self) -> &Self::Subkey {
+        &self.hash
+    }
+
+    fn into_subkey(self) -> Self::Subkey {
+        self.hash
+    }
+}
+
+impl<Types: NodeType> ViewCompositeKey for BuilderStateId<Types> {
+    type Subkey = VidCommitment;
+    type View = Types::View;
+
+    fn view(&self) -> &<Types as NodeType>::View {
+        &self.parent_view
+    }
+
+    fn subkey(&self) -> &Self::Subkey {
+        &self.parent_commitment
+    }
+
+    fn into_subkey(self) -> Self::Subkey {
+        self.parent_commitment
+    }
+}
+
+impl<K, V> TieredViewMap<K, V>
+where
+    K: ViewCompositeKey,
+{
     /// Create a new empty map
     pub fn new() -> Self {
         Self(BTreeMap::new())
     }
 
     /// Returns an iterator visiting all values in this map
-    pub fn values(&self) -> impl Iterator<Item = &Arc<BuilderState<Types>>> {
+    pub fn values(&self) -> impl Iterator<Item = &V> {
         self.0
             .values()
             .flat_map(|bucket| bucket.values().into_iter())
     }
 
-    /// Returns a nested iterator visiting all [`BuilderState`]s for view numbers in given range
-    pub fn range<R>(
-        &self,
-        range: R,
-    ) -> impl Iterator<Item = impl Iterator<Item = &Arc<BuilderState<Types>>>>
+    /// Returns a nested iterator visiting all values for view numbers in given range
+    pub fn range<R>(&self, range: R) -> impl Iterator<Item = impl Iterator<Item = &V>>
     where
-        R: RangeBounds<Types::View>,
+        R: RangeBounds<K::View>,
     {
         self.0
             .range(range)
             .map(|(_, bucket)| bucket.values().into_iter())
     }
 
-    /// Returns an iterator visiting all [`BuilderState`]s for given view number
-    pub fn bucket(
-        &self,
-        view_number: &Types::View,
-    ) -> impl Iterator<Item = &Arc<BuilderState<Types>>> {
+    /// Returns an iterator visiting all values for given view number
+    pub fn bucket(&self, view_number: &K::View) -> impl Iterator<Item = &V> {
         self.0
             .get(view_number)
             .into_iter()
             .flat_map(|bucket| bucket.values().into_iter())
     }
 
-    /// Returns the number of builder states stored
+    /// Returns the number of entries in this map
     pub fn len(&self) -> usize {
         self.0.values().map(|bucket| bucket.len().get()).sum()
     }
@@ -73,70 +120,82 @@ impl<Types: NodeType> BuilderStateMap<Types> {
         self.0.len() == 0
     }
 
-    /// Get builder state by ID
-    pub fn get(&self, key: &BuilderStateId<Types>) -> Option<&Arc<BuilderState<Types>>> {
-        self.0.get(&key.parent_view)?.get(&key.parent_commitment)
+    /// Get reference to a value by key
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.0.get(key.view())?.get(key.subkey())
     }
 
-    /// Get highest view builder state
+    /// Get mutable reference to a value by key
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        self.0.get_mut(key.view())?.get_mut(key.subkey())
+    }
+
+    /// Get highest view value (no guarantees as to which one exactly
+    /// if there's multiple stored)
     ///
     /// Returns `None` if the map is empty
-    pub fn highest_view_builder(&self) -> Option<&Arc<BuilderState<Types>>> {
+    pub fn highest_view_builder(&self) -> Option<&V> {
         Some(&self.0.last_key_value()?.1.head_val)
     }
 
-    /// Insert a new builder state
-    pub fn insert(&mut self, value: Arc<BuilderState<Types>>) {
-        let key = value.id();
-        match self.0.entry(key.parent_view) {
+    /// Insert a new value
+    pub fn insert(&mut self, key: K, value: V) {
+        match self.0.entry(*key.view()) {
             Entry::Vacant(entry) => {
-                entry.insert(nem![key.parent_commitment => value]);
+                entry.insert(nem![key.into_subkey() => value]);
             }
             Entry::Occupied(mut entry) => {
-                entry.get_mut().insert(key.parent_commitment, value);
+                entry.get_mut().insert(key.into_subkey(), value);
             }
         }
     }
 
-    /// Returns highest view number for which we have a builder state
-    pub fn highest_view(&self) -> Option<Types::View> {
+    /// Returns highest view number for which we have a value
+    pub fn highest_view(&self) -> Option<K::View> {
         Some(*self.0.last_key_value()?.0)
     }
 
-    /// Returns lowest view number for which we have a builder state
-    pub fn lowest_view(&self) -> Option<Types::View> {
+    /// Returns lowest view number for which we have a value
+    pub fn lowest_view(&self) -> Option<K::View> {
         Some(*self.0.first_key_value()?.0)
     }
 
     /// Removes every view lower than the `cutoff_view` (exclusive) from self and returns all removed views.
-    pub fn prune(&mut self, cutoff_view: Types::View) -> Self {
+    pub fn prune(&mut self, cutoff_view: K::View) -> Self {
         let high = self.0.split_off(&cutoff_view);
         let low = std::mem::replace(&mut self.0, high);
         Self(low)
     }
 }
 
-impl<Types: NodeType> Default for BuilderStateMap<Types> {
+impl<K, V> Default for TieredViewMap<K, V>
+where
+    K: ViewCompositeKey,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[cfg(test)]
 mod tests {
-    use std::{cmp::Ordering, ops::Bound};
+    use std::{cmp::Ordering, ops::Bound, sync::Arc};
 
-    use crate::testing::mock;
+    use crate::{state::BuilderState, testing::mock};
 
     use super::*;
     use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
     use rand::{distributions::Standard, thread_rng, Rng};
+    use tracing_test::traced_test;
 
     type View = ViewNumber;
-    type BuilderStateMap = super::BuilderStateMap<TestTypes>;
+    type BuilderStateMap =
+        super::TieredViewMap<BuilderStateId<TestTypes>, Arc<BuilderState<TestTypes>>>;
 
     #[test]
+    #[traced_test]
     fn test_new_map() {
         let new_map = BuilderStateMap::new();
         assert!(new_map.is_empty());
@@ -148,13 +207,14 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_insert_and_get() {
         let mut map = BuilderStateMap::new();
 
         let builder_state = mock::builder_state(1);
         let state_id = builder_state.id();
 
-        map.insert(builder_state.clone());
+        map.insert(state_id.clone(), Arc::clone(&builder_state));
 
         assert!(!map.is_empty());
         assert_eq!(map.len(), 1);
@@ -162,11 +222,13 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_range_iteration() {
         let mut map = BuilderStateMap::new();
 
         for i in 0..5 {
-            map.insert(mock::builder_state(i));
+            let builder_state = mock::builder_state(i);
+            map.insert(builder_state.id(), builder_state);
         }
 
         let start = View::new(1);
@@ -183,6 +245,7 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_pruning() {
         let view_count = 11;
         let states_per_view = 13;
@@ -192,7 +255,8 @@ mod tests {
 
         for view in 0..view_count {
             for _ in 0..states_per_view {
-                map.insert(mock::builder_state(view));
+                let state = mock::builder_state(view);
+                map.insert(state.id(), state);
             }
         }
 
@@ -208,13 +272,15 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_highest_and_lowest_view() {
         let mut map = BuilderStateMap::new();
         assert_eq!(map.highest_view(), None);
         assert_eq!(map.lowest_view(), None);
 
         for i in 3..13 {
-            map.insert(mock::builder_state(i));
+            let state = mock::builder_state(i);
+            map.insert(state.id(), state);
         }
 
         assert_eq!(*map.highest_view().unwrap(), 12);
@@ -222,6 +288,7 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_highest_view_builder() {
         let mut map = BuilderStateMap::new();
         assert!(map.highest_view_builder().is_none());
@@ -233,7 +300,7 @@ mod tests {
             .collect();
 
         for state in states.iter() {
-            map.insert(state.clone());
+            map.insert(state.id(), Arc::clone(state));
         }
 
         states.sort_by(|a, b| {
@@ -252,6 +319,7 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_iterator() {
         let mut map = BuilderStateMap::new();
 
@@ -263,7 +331,7 @@ mod tests {
         assert_eq!(states.len(), 100);
 
         for state in states.iter() {
-            map.insert(state.clone());
+            map.insert(state.id(), Arc::clone(state));
         }
 
         states.sort_by(compare_builders);
