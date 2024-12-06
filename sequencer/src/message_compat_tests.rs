@@ -18,7 +18,6 @@ use std::path::Path;
 
 use committable::Committable;
 use espresso_types::{NodeState, PubKey, ValidatedState};
-use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::{
     data::{
         DaProposal, EpochNumber, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare,
@@ -53,7 +52,7 @@ use vbs::{
 
 #[cfg(feature = "testing")]
 async fn test_message_compat<Ver: StaticVersionType>(_ver: Ver) {
-    use espresso_types::{Leaf, Payload, SeqTypes, Transaction};
+    use espresso_types::{Leaf, Payload, SeqTypes, StaticCommittee, Transaction};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::PeerConfig;
 
