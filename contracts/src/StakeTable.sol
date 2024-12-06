@@ -386,17 +386,11 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw past their `exitEpoch`.
     ///
     /// @param blsVK The BLS verification key to withdraw
-    /// @param blsSig The BLS signature that authenticates the ethereum account this function is
-    /// called from the caller
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
     /// TODO: This function should be tested
     /// TODO modify this according to the current spec
 
-    function withdrawFunds(BN254.G2Point memory blsVK, BN254.G1Point memory blsSig)
-        external
-        override
-        returns (uint256)
-    {
+    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint256) {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
@@ -410,10 +404,6 @@ contract StakeTable is AbstractStakeTable {
         if (balance == 0) {
             revert InsufficientStakeBalance(0);
         }
-
-        // Verify that the validator can sign for that blsVK
-        bytes memory message = abi.encode(msg.sender);
-        BLSSig.verifyBlsSig(message, blsSig, blsVK);
 
         // Verify that the exit escrow period is over.
         if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
