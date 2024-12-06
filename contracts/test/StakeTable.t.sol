@@ -246,6 +246,7 @@ contract StakeTable_register_Test is Test {
         node.account = exampleTokenCreator;
         node.balance = depositAmount;
         node.schnorrVK = schnorrVK;
+        node.blsVK = blsVK;
         node.registerEpoch = 1;
 
         // Check event is emitted after calling successfully `register`
