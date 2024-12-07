@@ -53,6 +53,9 @@ contract StakeTable is AbstractStakeTable {
     // Error raised when the staker does not register with the correct stakeAmount
     error InsufficientStakeAmount(uint256);
 
+    // Error raised when the staker does not provide a new key
+    error NoKeyChange();
+
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
     mapping(bytes32 keyHash => Node node) public nodes;
 
@@ -110,10 +113,9 @@ contract StakeTable is AbstractStakeTable {
         return 0;
     }
 
-    /// @notice Look up the balance of `blsVK`
+    /// @notice Look up the balance of `blsVK`g
     /// @param blsVK BLS public key controlled by the user.
     /// @return Current balance owned by the user.
-    /// TODO modify this according to the current spec
     function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint256) {
         Node memory node = this.lookupNode(blsVK);
         return node.balance;
@@ -129,6 +131,7 @@ contract StakeTable is AbstractStakeTable {
     }
 
     /// @notice Get the next available epoch and queue size in that epoch
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function nextRegistrationEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
@@ -152,6 +155,7 @@ contract StakeTable is AbstractStakeTable {
     // @param queueSize current size of the registration queue (after insertion of new element in
     // the queue)
     /// TODO modify this according to the current spec
+    /// TODO modify this according to the current spec
     function appendRegistrationQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableRegistrationEpoch = epoch;
         _numPendingRegistrations = queueSize + 1;
@@ -159,11 +163,13 @@ contract StakeTable is AbstractStakeTable {
 
     /// @notice Get the number of pending registration requests in the waiting queue
     /// TODO modify this according to the current spec
+    /// TODO modify this according to the current spec
     function numPendingRegistrations() external view override returns (uint64) {
         return _numPendingRegistrations;
     }
 
     /// @notice Get the next available epoch for exit and queue size in that epoch
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function nextExitEpoch() external view override returns (uint64, uint64) {
         uint64 epoch;
@@ -186,12 +192,14 @@ contract StakeTable is AbstractStakeTable {
     // @param epoch next available exit epoch
     // @param queueSize current size of the exit queue (after insertion of new element in the queue)
     /// TODO modify this according to the current spec
+    /// TODO modify this according to the current spec
     function appendExitQueue(uint64 epoch, uint64 queueSize) private {
         firstAvailableExitEpoch = epoch;
         _numPendingExits = queueSize + 1;
     }
 
     /// @notice Get the number of pending exit requests in the waiting queue
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function numPendingExits() external view override returns (uint64) {
         return _numPendingExits;
@@ -211,6 +219,7 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw.
     /// @param node node which is assigned an exit escrow period.
     /// @return Number of epochs post exit after which funds can be withdrawn.
+    /// TODO modify this according to the current spec
     /// TODO modify this according to the current spec
     function exitEscrowPeriod(Node memory node) public pure returns (uint64) {
         if (node.balance > 100) {
@@ -351,6 +360,7 @@ contract StakeTable is AbstractStakeTable {
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @dev TODO modify this according to the current spec
+    /// @dev TODO modify this according to the current spec
     /// @param blsVK The BLS verification key to exit
     function requestExit(BN254.G2Point memory blsVK) external override {
         bytes32 key = _hashBlsKey(blsVK);
@@ -385,17 +395,8 @@ contract StakeTable is AbstractStakeTable {
     /// withdraw past their `exitEpoch`.
     ///
     /// @param blsVK The BLS verification key to withdraw
-    /// @param blsSig The BLS signature that authenticates the ethereum account this function is
-    /// called from the caller
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    /// TODO: This function should be tested
-    /// TODO modify this according to the current spec
-
-    function withdrawFunds(BN254.G2Point memory blsVK, BN254.G1Point memory blsSig)
-        external
-        override
-        returns (uint256)
-    {
+    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint256) {
         bytes32 key = _hashBlsKey(blsVK);
         Node memory node = nodes[key];
 
@@ -410,14 +411,12 @@ contract StakeTable is AbstractStakeTable {
             revert InsufficientStakeBalance(0);
         }
 
-        // Verify that the validator can sign for that blsVK
-        bytes memory message = abi.encode(msg.sender);
-        BLSSig.verifyBlsSig(message, blsSig, blsVK);
-
         // Verify that the exit escrow period is over.
         if (currentEpoch() < node.exitEpoch + exitEscrowPeriod(node)) {
             revert PrematureWithdrawal();
         }
+
+        // Delete the node from the stake table.
 
         // Delete the node from the stake table.
         delete nodes[key];
@@ -426,6 +425,81 @@ contract StakeTable is AbstractStakeTable {
         SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
 
         return balance;
+    }
+
+    /// @notice Update the consensus keys for a validator
+    /// @dev This function is used to update the consensus keys for a validator
+    /// @dev This function can only be called by the validator itself when it's not in the exit
+    /// queue
+    /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
+    /// @dev The validator will need to provide a BLS signature over the new BLS key
+    /// @param currBlsVK The current BLS verification key
+    /// @param newBlsVK The new BLS verification key
+    /// @param newSchnorrVK The new Schnorr verification key
+    /// @param newBlsSig The BLS signature that the account owns the new BLS key
+    /// TODO: This function should be tested
+    function updateConsensusKeys(
+        BN254.G2Point memory currBlsVK,
+        BN254.G2Point memory newBlsVK,
+        EdOnBN254.EdOnBN254Point memory newSchnorrVK,
+        BN254.G1Point memory newBlsSig
+    ) external override {
+        bytes32 currBlsKey = _hashBlsKey(currBlsVK);
+        bytes32 newBlsKey = _hashBlsKey(newBlsVK);
+        Node memory node = nodes[currBlsKey];
+
+        // Verify that the msg.sender is the validator's staking address
+        if (msg.sender != node.account) {
+            revert Unauthenticated();
+        }
+
+        // Verify that the node is already registered.
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
+
+        // Verify that the node is not in the exit queue
+        if (node.exitEpoch != 0) {
+            revert ExitRequestInProgress();
+        }
+
+        // The staker does not provide a key change
+        if (
+            (newBlsKey == currBlsKey && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK))
+                || (
+                    newBlsKey == bytes32(0)
+                        && EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
+                )
+        ) {
+            revert NoKeyChange();
+        }
+
+        // Update the node's schnorr key once it's not the same as the old one and it's nonzero
+        if (
+            !EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK)
+                && !EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
+        ) {
+            node.schnorrVK = newSchnorrVK;
+        }
+
+        // Update the node's bls key once it's not the same as the old one and it's nonzero
+        if (newBlsKey != currBlsKey && newBlsKey != bytes32(0)) {
+            // Verify that the validator can sign for that blsVK
+            bytes memory message = abi.encode(msg.sender);
+            BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
+
+            // Update the node's bls key
+            node.blsVK = newBlsVK;
+        }
+
+        // Update the node in the stake table
+        nodes[newBlsKey] = node;
+
+        // Delete the old node from the stake table
+        delete nodes[currBlsKey];
+
+        // Emit the event
+        emit ConsensusKeysUpdated(msg.sender);
     }
 
     /// @notice Minimum stake amount
