@@ -122,7 +122,6 @@ impl BuilderConfig {
     pub async fn init(
         is_reserve: bool,
         builder_key_pair: EthKeyPair,
-        bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
         event_channel_capacity: NonZeroUsize,
         instance_state: NodeState,
@@ -136,7 +135,6 @@ impl BuilderConfig {
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
-            ?bootstrapped_view,
             %tx_channel_capacity,
             %event_channel_capacity,
             ?api_timeout,
@@ -552,7 +550,6 @@ mod test {
         let init = BuilderConfig::init(
             true,
             keypair.clone(),
-            ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
             NonZeroUsize::new(1024).unwrap(),
             NodeState::default(),
@@ -675,7 +672,6 @@ mod test {
         let init = BuilderConfig::init(
             false,
             FeeAccount::test_key_pair(),
-            ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
             NonZeroUsize::new(1024).unwrap(),
             NodeState::default(),
