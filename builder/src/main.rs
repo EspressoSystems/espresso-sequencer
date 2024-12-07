@@ -1,6 +1,6 @@
 use std::{num::NonZeroUsize, path::PathBuf, sync::Arc, time::Duration};
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, v0_99::ChainConfig, FeeVersion,
@@ -104,11 +104,14 @@ async fn start_builder(
 ) -> anyhow::Result<()> {
     let app = Arc::clone(&global_state).into_app()?;
 
-    let event_stream =
-        EventServiceStream::<SeqTypes, sequencer::SequencerApiVersion>::connect(event_service_url)
-            .await
-            .expect("Couldn't connect to event stream");
+    tracing::info!(%event_service_url, "Connecting to event service");
+    let event_stream = EventServiceStream::<SeqTypes, sequencer::SequencerApiVersion>::connect(
+        event_service_url.clone(),
+    )
+    .await
+    .context("Couldn't connect to event stream")?;
 
+    tracing::info!(%builder_api_url, "Starting builder");
     select! {
         event_loop_exit = Arc::clone(&global_state).start_event_loop(event_stream) => {
             tracing::error!(?event_loop_exit, "Builder event loop quit unexpectedly");
@@ -143,23 +146,26 @@ async fn run<V: Versions>(
     let txn_timeout_duration = opt.max_api_timeout_duration / 4;
     let protocol_max_block_size = instance_state.chain_config.max_block_size.into();
 
+    let config = BuilderConfig {
+        builder_keys: (builder_key_pair.fee_account(), builder_key_pair),
+        max_api_waiting_time: opt.max_api_timeout_duration,
+        max_block_size_increment_period: opt.max_block_size_increment_period,
+        maximize_txn_capture_timeout: txn_timeout_duration,
+        txn_garbage_collect_duration: Duration::from_secs(60),
+        txn_channel_capacity: opt.event_channel_capacity.get(),
+        tx_status_cache_capacity: opt.tx_status_cache_size,
+        base_fee: base_fee.as_u64().context(
+            "the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)",
+        )?,
+    };
+    tracing::info!(?config, "Assembled builder config");
+
     let global_state: Arc<GlobalState<SeqTypes>> = GlobalState::<SeqTypes>::new(
-                BuilderConfig {
-                    builder_keys: (builder_key_pair.fee_account(), builder_key_pair),
-                    max_api_waiting_time: opt.max_api_timeout_duration,
-                    max_block_size_increment_period: opt.max_block_size_increment_period,
-                    maximize_txn_capture_timeout: txn_timeout_duration,
-                    txn_garbage_collect_duration: Duration::from_secs(60),
-                    txn_channel_capacity: opt.event_channel_capacity.get(),
-                    tx_status_cache_capacity: opt.tx_status_cache_size,
-                    base_fee: base_fee
-                        .as_u64()
-                        .expect("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)"),
-                },
-                instance_state,
-                protocol_max_block_size,
-                opt.node_count.into(),
-            );
+        config,
+        instance_state,
+        protocol_max_block_size,
+        opt.node_count.into(),
+    );
 
     start_builder(
         global_state,
@@ -297,22 +303,29 @@ mod test {
 
         let builder_keys = FeeAccount::generated_from_seed_indexed([201_u8; 32], 2011_u64);
 
+        let config =  BuilderConfig {
+                builder_keys: builder_keys.clone(),
+                max_api_waiting_time: Duration::from_millis(2000),
+                max_block_size_increment_period: Duration::from_secs(60),
+                maximize_txn_capture_timeout: Duration::from_millis(500),
+                txn_garbage_collect_duration: Duration::from_secs(60),
+                txn_channel_capacity: 512,
+                tx_status_cache_capacity: 8192,
+                base_fee: ChainConfig::default().base_fee.as_u64()
+                    .expect("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)"),
+            };
+
         let global_state: Arc<GlobalState<SeqTypes>> = GlobalState::<SeqTypes>::new(
-                        BuilderConfig {
-                            builder_keys: builder_keys.clone(),
-                            max_api_waiting_time: Duration::from_millis(2000),
-                            max_block_size_increment_period: Duration::from_secs(60),
-                            maximize_txn_capture_timeout: Duration::from_millis(500),
-                            txn_garbage_collect_duration: Duration::from_secs(60),
-                            txn_channel_capacity: 512,
-                            tx_status_cache_capacity: 8192,
-                            base_fee: ChainConfig::default().base_fee.as_u64()
-                                .expect("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)"),
-                        },
-                        network.server.node_state(),
-                        network.server.node_state().chain_config.max_block_size.into(),
-                        network.cfg.num_nodes(),
-                    );
+            config,
+            network.server.node_state(),
+            network
+                .server
+                .node_state()
+                .chain_config
+                .max_block_size
+                .into(),
+            network.cfg.num_nodes(),
+        );
 
         tokio::spawn(start_builder(
             global_state,
@@ -396,7 +409,13 @@ mod test {
             vec![txn]
         );
 
-        builder_client.get::<AvailableBlockHeaderInput<SeqTypes>>(&format!("block_info/claimheaderinput/{builder_commitment}/{view_num}/{hotshot_client_pub_key}/{encoded_signature}")).send().await.unwrap();
+        builder_client
+            .get::<AvailableBlockHeaderInput<SeqTypes>>(
+                &format!("block_info/claimheaderinput/{builder_commitment}/{view_num}/{hotshot_client_pub_key}/{encoded_signature}")
+            ).
+            send()
+            .await
+            .unwrap();
 
         let addr = builder_client
             .get::<FeeAccount>("block_info/builderaddress")
