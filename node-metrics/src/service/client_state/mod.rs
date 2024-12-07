@@ -679,21 +679,6 @@ where
     }
 }
 
-/// [clone_block_detail] is a utility function that clones a [BlockDetail]
-/// instance.
-pub fn clone_block_detail(input: &BlockDetail<SeqTypes>) -> BlockDetail<SeqTypes> {
-    BlockDetail {
-        hash: input.hash,
-        proposer_id: input.proposer_id.clone(),
-        height: input.height,
-        size: input.size,
-        time: input.time,
-        num_transactions: input.num_transactions,
-        fee_recipient: input.fee_recipient.clone(),
-        block_reward: input.block_reward.clone(),
-    }
-}
-
 /// [drop_failed_client_sends] is a function that will drop all of the failed
 /// client sends from the client thread state.
 async fn drop_failed_client_sends<K>(
@@ -949,11 +934,12 @@ impl InternalClientMessageProcessingTask {
                 process_client_message(message, data_state.clone(), client_thread_state.clone())
                     .await
             {
+                // We log this error, but we ignore it so that other connections
+                // are not affected by a single client.
                 tracing::info!(
                     "internal client message processing encountered an error: {}",
                     err,
                 );
-                return;
             }
         }
     }
@@ -1189,8 +1175,8 @@ pub mod tests {
             ProcessDistributeVotersHandlingTask,
         },
         data_state::{
-            create_block_detail_from_leaf, DataState, LocationDetails, NodeIdentity,
-            ProcessLeafStreamTask,
+            create_block_detail_from_block, DataState, LocationDetails, NodeIdentity,
+            ProcessLeafAndBlockPairStreamTask,
         },
         server_message::ServerMessage,
     };
@@ -1201,6 +1187,7 @@ pub mod tests {
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
+    use hotshot_query_service::availability::BlockQueryData;
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use std::{sync::Arc, time::Duration};
     use tokio::{
@@ -1369,14 +1356,14 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     #[cfg(feature = "testing")]
     async fn test_process_client_handling_stream_request_latest_blocks_snapshot() {
-        use super::clone_block_detail;
-        use crate::service::data_state::create_block_detail_from_leaf;
+        use crate::service::data_state::create_block_detail_from_block;
 
         let (_, _, _, mut data_state) = create_test_data_state();
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
-        let leaf_1 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
-        let block_1 = create_block_detail_from_leaf(&leaf_1);
-        data_state.add_latest_block(clone_block_detail(&block_1));
+        let validated_state = ValidatedState::default();
+        let instance_state = NodeState::mock();
+        let block_1 = BlockQueryData::genesis(&validated_state, &instance_state).await;
+        data_state.add_latest_block(create_block_detail_from_block(&block_1));
 
         let data_state = Arc::new(RwLock::new(data_state));
 
@@ -1430,7 +1417,9 @@ pub mod tests {
 
         assert_eq!(
             server_message_receiver_1.next().await,
-            Some(ServerMessage::BlocksSnapshot(Arc::new(vec![block_1]))),
+            Some(ServerMessage::BlocksSnapshot(Arc::new(vec![
+                create_block_detail_from_block(&block_1)
+            ]))),
         );
 
         if let Some(process_internal_client_message_handle) =
@@ -1539,7 +1528,7 @@ pub mod tests {
         let mut process_distribute_voters_handle =
             ProcessDistributeVotersHandlingTask::new(client_thread_state, voters_receiver);
 
-        let mut process_leaf_stream_handle = ProcessLeafStreamTask::new(
+        let mut process_leaf_stream_handle = ProcessLeafAndBlockPairStreamTask::new(
             leaf_receiver,
             data_state,
             block_detail_sender,
@@ -1614,11 +1603,17 @@ pub mod tests {
         // No response expected from the client messages at the moment.
 
         // send a new leaf
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
-        let expected_block = create_block_detail_from_leaf(&leaf);
+        let validated_state = ValidatedState::default();
+        let instance_state = NodeState::mock();
+        let leaf = Leaf::genesis(&validated_state, &instance_state).await;
+        let block_query_data = BlockQueryData::genesis(&validated_state, &instance_state).await;
+        let expected_block = create_block_detail_from_block(&block_query_data);
         let arc_expected_block = Arc::new(expected_block);
 
-        assert_eq!(leaf_sender.send(leaf).await, Ok(()));
+        assert_eq!(
+            leaf_sender.send((leaf, block_query_data.clone())).await,
+            Ok(())
+        );
 
         // We should receive the Block Detail on each subscribed client
         assert_eq!(
