@@ -29,7 +29,7 @@ processes:
     # script will think they're already deployed.
     command:
       unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only
-      fee-contract
+      fee-contract,permissioned-stake-table
     namespace: setup
     depends_on:
       demo-l1-network:

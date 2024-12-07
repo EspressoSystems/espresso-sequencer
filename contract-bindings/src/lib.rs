@@ -10,6 +10,7 @@ pub mod light_client;
 pub mod light_client_mock;
 pub mod light_client_state_update_vk;
 pub mod light_client_state_update_vk_mock;
+pub mod permissioned_stake_table;
 pub mod plonk_verifier;
 pub mod plonk_verifier_2;
 pub mod shared_types;
