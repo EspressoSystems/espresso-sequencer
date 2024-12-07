@@ -637,7 +637,7 @@ pub mod testing {
         let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = GlobalState::new(
             BuilderConfig {
                 builder_keys: (builder_key_pair.fee_account(), builder_key_pair),
-                api_timeout: Duration::from_secs(1),
+                api_timeout: Duration::from_secs(60),
                 tx_capture_timeout: Duration::from_millis(100),
                 txn_garbage_collect_duration: Duration::from_secs(60),
                 txn_channel_capacity: BUILDER_CHANNEL_CAPACITY_FOR_TEST,
