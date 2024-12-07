@@ -12,7 +12,10 @@ use hotshot_types::{
     event::{Event, EventType, HotShotAction, LeafInfo},
     message::{convert_proposal, Proposal},
     simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
-    traits::{block_contents::BlockPayload, node_implementation::ConsensusTime},
+    traits::{
+        block_contents::{BlockHeader, BlockPayload},
+        node_implementation::ConsensusTime,
+    },
     utils::View,
     vid::VidSchemeType,
     vote::HasViewNumber,
@@ -23,6 +26,7 @@ use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
+    ops::RangeInclusive,
     path::{Path, PathBuf},
 };
 
@@ -39,6 +43,24 @@ pub struct Options {
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
     store_undecided_state: bool,
+
+    /// Number of views to retain in consensus storage before data that hasn't been archived is
+    /// garbage collected.
+    ///
+    /// The longer this is, the more certain that all data will eventually be archived, even if
+    /// there are temporary problems with archive storage or partially missing data. This can be set
+    /// very large, as most data is garbage collected as soon as it is finalized by consensus. This
+    /// setting only applies to views which never get decided (ie forks in consensus) and views for
+    /// which this node is partially offline. These should be exceptionally rare.
+    ///
+    /// The default of 130000 views equates to approximately 3 days (259200 seconds) at an average
+    /// view time of 2s.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_CONSENSUS_VIEW_RETENTION",
+        default_value = "130000"
+    )]
+    pub(crate) consensus_view_retention: u64,
 }
 
 impl Default for Options {
@@ -52,6 +74,7 @@ impl Options {
         Self {
             path,
             store_undecided_state: false,
+            consensus_view_retention: 130000,
         }
     }
 
@@ -64,13 +87,21 @@ impl Options {
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
+    fn set_view_retention(&mut self, view_retention: u64) {
+        self.consensus_view_retention = view_retention;
+    }
+
     async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
         let path = self.path.clone();
         let store_undecided_state = self.store_undecided_state;
+        let view_retention = self.consensus_view_retention;
 
         Ok(Persistence {
             store_undecided_state,
-            inner: Arc::new(RwLock::new(Inner { path })),
+            inner: Arc::new(RwLock::new(Inner {
+                path,
+                view_retention,
+            })),
         })
     }
 
@@ -93,6 +124,7 @@ pub struct Persistence {
 #[derive(Debug)]
 struct Inner {
     path: PathBuf,
+    view_retention: u64,
 }
 
 impl Inner {
@@ -178,47 +210,64 @@ impl Inner {
         Ok(())
     }
 
-    fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
+    fn collect_garbage(
+        &mut self,
+        view: ViewNumber,
+        intervals: &[RangeInclusive<u64>],
+    ) -> anyhow::Result<()> {
         let view_number = view.u64();
+        let prune_view = view.saturating_sub(self.view_retention);
 
-        let delete_files = |view_number: u64, dir_path: PathBuf| -> anyhow::Result<()> {
-            if !dir_path.is_dir() {
-                return Ok(());
-            }
+        let delete_files =
+            |intervals: &[RangeInclusive<u64>], keep, dir_path: PathBuf| -> anyhow::Result<()> {
+                if !dir_path.is_dir() {
+                    return Ok(());
+                }
 
-            for entry in fs::read_dir(dir_path)? {
-                let entry = entry?;
-                let path = entry.path();
+                for entry in fs::read_dir(dir_path)? {
+                    let entry = entry?;
+                    let path = entry.path();
 
-                if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
-                    if let Ok(v) = file.parse::<u64>() {
-                        if v <= view_number {
-                            fs::remove_file(&path)?;
+                    if let Some(file) = path.file_stem().and_then(|n| n.to_str()) {
+                        if let Ok(v) = file.parse::<u64>() {
+                            // If the view is the anchor view, keep it no matter what.
+                            if let Some(keep) = keep {
+                                if keep == v {
+                                    continue;
+                                }
+                            }
+                            // Otherwise, delete it if it is time to prune this view _or_ if the
+                            // given intervals, which we've already successfully processed, contain
+                            // the view; in this case we simply don't need it anymore.
+                            if v < prune_view || intervals.iter().any(|i| i.contains(&v)) {
+                                fs::remove_file(&path)?;
+                            }
                         }
                     }
                 }
-            }
 
-            Ok(())
-        };
+                Ok(())
+            };
 
-        delete_files(view_number, self.da_dir_path())?;
-        delete_files(view_number, self.vid_dir_path())?;
-        delete_files(view_number, self.quorum_proposals_dir_path())?;
+        delete_files(intervals, None, self.da_dir_path())?;
+        delete_files(intervals, None, self.vid_dir_path())?;
+        delete_files(intervals, None, self.quorum_proposals_dir_path())?;
 
         // Save the most recent leaf as it will be our anchor point if the node restarts.
-        if view_number > 0 {
-            delete_files(view_number - 1, self.decided_leaf_path())?;
-        }
+        delete_files(intervals, Some(view_number), self.decided_leaf_path())?;
 
         Ok(())
     }
 
+    /// Generate events based on persisted decided leaves.
+    ///
+    /// Returns a list of closed intervals of views which can be safely deleted, as all leaves
+    /// within these view ranges have been processed by the event consumer.
     async fn generate_decide_events(
         &self,
         view: ViewNumber,
         consumer: &impl EventConsumer,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Vec<RangeInclusive<u64>>> {
         // Generate a decide event for each leaf, to be processed by the event consumer. We make a
         // separate event for each leaf because it is possible we have non-consecutive leaves in our
         // storage, which would not be valid as a single decide with a single leaf chain.
@@ -286,7 +335,10 @@ impl Inner {
             }
         }
 
+        let mut intervals = vec![];
+        let mut current_interval = None;
         for (view, (leaf, qc)) in leaves {
+            let height = leaf.leaf.block_header().block_number();
             consumer
                 .handle_event(&Event {
                     view_number: ViewNumber::new(view),
@@ -297,9 +349,27 @@ impl Inner {
                     },
                 })
                 .await?;
+            if let Some((start, end, current_height)) = current_interval.as_mut() {
+                if height == *current_height + 1 {
+                    // If we have a chain of consecutive leaves, extend the current interval of
+                    // views which are safe to delete.
+                    *current_height += 1;
+                    *end = view;
+                } else {
+                    // Otherwise, end the current interval and start a new one.
+                    intervals.push(*start..=*end);
+                    current_interval = Some((view, view, height));
+                }
+            } else {
+                // Start a new interval.
+                current_interval = Some((view, view, height));
+            }
+        }
+        if let Some((start, end, _)) = current_interval {
+            intervals.push(start..=end);
         }
 
-        Ok(())
+        Ok(intervals)
     }
 
     fn load_da_proposal(
@@ -477,20 +547,21 @@ impl SequencerPersistence for Persistence {
             )?;
         }
 
-        // Event processing failure is not an error, since by this point we have at least managed to
-        // persist the decided leaves successfully, and the event processing will just run again at
-        // the next decide. If there is an error here, we just log it and return early with success
-        // to prevent GC from running before the decided leaves are processed.
-        if let Err(err) = inner.generate_decide_events(view, consumer).await {
-            tracing::warn!(?view, "event processing failed: {err:#}");
-            return Ok(());
-        }
-
-        if let Err(err) = inner.collect_garbage(view) {
-            // Similarly, garbage collection is not an error. We have done everything we strictly
-            // needed to do, and GC will run again at the next decide. Log the error but do not
-            // return it.
-            tracing::warn!(?view, "GC failed: {err:#}");
+        match inner.generate_decide_events(view, consumer).await {
+            Err(err) => {
+                // Event processing failure is not an error, since by this point we have at least
+                // managed to persist the decided leaves successfully, and the event processing will
+                // just run again at the next decide.
+                tracing::warn!(?view, "event processing failed: {err:#}");
+            }
+            Ok(intervals) => {
+                if let Err(err) = inner.collect_garbage(view, &intervals) {
+                    // Similarly, garbage collection is not an error. We have done everything we
+                    // strictly needed to do, and GC will run again at the next decide. Log the
+                    // error but do not return it.
+                    tracing::warn!(?view, "GC failed: {err:#}");
+                }
+            }
         }
 
         Ok(())
@@ -856,8 +927,8 @@ mod testing {
             TempDir::new().unwrap()
         }
 
-        async fn connect(storage: &Self::Storage) -> Self {
-            Options::new(storage.path().into()).create().await.unwrap()
+        fn options(storage: &Self::Storage) -> impl PersistenceOptions<Persistence = Self> {
+            Options::new(storage.path().into())
         }
     }
 }

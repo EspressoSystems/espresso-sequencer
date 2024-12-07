@@ -29,6 +29,8 @@ pub struct Options;
 impl PersistenceOptions for Options {
     type Persistence = NoStorage;
 
+    fn set_view_retention(&mut self, _: u64) {}
+
     async fn create(&mut self) -> anyhow::Result<Self::Persistence> {
         Ok(NoStorage)
     }
