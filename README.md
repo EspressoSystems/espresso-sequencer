@@ -182,13 +182,6 @@ Running the script will save a file with details about the deployment in `contra
 The gas consumption for verifying a plonk proof as well as updating the state of the light client contract can be seen
 by running:
 
-```
-> just gas-benchmarks
-> cat gas-benchmarks.txt
-[PASS] test_verify_succeeds() (gas: 507774)
-[PASS] testCorrectUpdateBench() (gas: 594533)
-```
-
 In order to profile the gas consumption of the light client contract do the following:
 
 1. Set the environment variables `SEPOLIA_RPC_URL`, `MNEMONIC` and `ETHERSCAN_API_KEY`.
