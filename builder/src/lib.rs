@@ -43,8 +43,8 @@ pub mod testing {
     use async_lock::RwLock;
     use committable::Committable;
     use espresso_types::{
-        traits::SequencerPersistence, v0_3::ChainConfig, Event, FeeAccount, NamespaceId, NodeState,
-        PrivKey, PubKey, Transaction, ValidatedState,
+        traits::SequencerPersistence, v0_99::ChainConfig, Event, FeeAccount, NamespaceId,
+        NodeState, PrivKey, PubKey, Transaction, ValidatedState,
     };
     use ethers::utils::{Anvil, AnvilInstance};
     use futures::stream::{Stream, StreamExt};
@@ -64,7 +64,7 @@ pub mod testing {
         events_source::{EventConsumer, EventsStreamer},
     };
     use hotshot_types::{
-        data::{Leaf, ViewNumber},
+        data::{Leaf2, ViewNumber},
         event::LeafInfo,
         light_client::StateKeyPair,
         traits::{
@@ -367,6 +367,7 @@ pub mod testing {
                 Duration::from_secs(60),
                 Duration::from_millis(500),
                 ChainConfig::default().base_fee,
+                819200,
             )
             .await
             .unwrap();
@@ -435,7 +436,7 @@ pub mod testing {
             if let EventType::QuorumProposal { proposal, .. } = event.event {
                 let parent_view_number = *proposal.data.view_number;
                 let parent_commitment =
-                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+                    Leaf2::from_quorum_proposal(&proposal.data).payload_commitment();
                 let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
                     &hotshot_client_private_key,
                     parent_commitment.as_ref(),

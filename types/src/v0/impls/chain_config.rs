@@ -75,7 +75,7 @@ impl FromStringOrInteger for BlockSize {
 
 #[cfg(test)]
 mod tests {
-    use crate::v0_3::{ChainConfig, ResolvableChainConfig};
+    use crate::v0_99::{ChainConfig, ResolvableChainConfig};
 
     use super::*;
 

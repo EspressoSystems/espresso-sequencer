@@ -18,11 +18,11 @@ use espresso_types::{
     traits::EventConsumer, BackoffParams, L1ClientOptions, NodeState, PubKey, SeqTypes,
     SolverAuctionResultsProvider, ValidatedState,
 };
-use futures::FutureExt;
 use genesis::L1Finalized;
 use hotshot::traits::election::static_committee::StaticCommittee;
 use hotshot_types::traits::election::Membership;
 use std::sync::Arc;
+use tokio::select;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
@@ -44,7 +44,7 @@ use hotshot::{
         WrappedSignatureKey,
     },
     types::SignatureKey,
-    MarketplaceConfig, Memberships,
+    MarketplaceConfig,
 };
 use hotshot_orchestrator::client::get_complete_config;
 use hotshot_orchestrator::client::OrchestratorClient;
@@ -54,7 +54,7 @@ use hotshot_types::{
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
-        network::{ConnectedNetwork, Topic},
+        network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType, Versions},
     },
     utils::BuilderCommitment,
@@ -386,23 +386,11 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         topics
     };
 
-    // Create the HotShot memberships
-    let quorum_membership = StaticCommittee::new(
+    // Create the HotShot membership
+    let membership = StaticCommittee::new(
         network_config.config.known_nodes_with_stake.clone(),
         network_config.config.known_nodes_with_stake.clone(),
-        Topic::Global,
     );
-
-    let da_membership = StaticCommittee::new(
-        network_config.config.known_nodes_with_stake.clone(),
-        network_config.config.known_da_nodes.clone(),
-        Topic::Da,
-    );
-
-    let memberships = Memberships {
-        quorum_membership,
-        da_membership,
-    };
 
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
@@ -450,7 +438,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let network = {
         let p2p_network = Libp2pNetwork::from_config(
             network_config.clone(),
-            memberships.clone().quorum_membership,
+            membership.clone(),
             gossip_config,
             request_response_config,
             libp2p_bind_address,
@@ -469,11 +457,11 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
         })?;
 
         tracing::warn!("Waiting for at least one connection to be initialized");
-        futures::select! {
-            _ = cdn_network.wait_for_ready().fuse() => {
+        select! {
+            _ = cdn_network.wait_for_ready() => {
                 tracing::warn!("CDN connection initialized");
             },
-            _ = p2p_network.wait_for_ready().fuse() => {
+            _ = p2p_network.wait_for_ready() => {
                 tracing::warn!("P2P connection initialized");
             },
         };
@@ -532,7 +520,7 @@ pub async fn init_node<P: SequencerPersistence, V: Versions>(
     let mut ctx = SequencerContext::init(
         network_config,
         validator_config,
-        memberships,
+        membership,
         instance_state,
         persistence,
         network,
@@ -563,14 +551,13 @@ pub mod testing {
         time::Duration,
     };
 
-    use async_lock::RwLock;
     use catchup::NullStateCatchup;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
         v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
-        Event, FeeAccount, L1Client, Leaf, MarketplaceVersion, NetworkConfig, Payload, PubKey,
-        SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, L1Client, MarketplaceVersion, NetworkConfig, PubKey, SeqTypes,
+        Transaction, Upgrade,
     };
     use ethers::types::U256;
     use futures::{
@@ -588,24 +575,17 @@ pub mod testing {
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
+    use hotshot_types::traits::network::Topic;
     use hotshot_types::traits::signature_key::StakeTableEntryType;
     use hotshot_types::{
         event::LeafInfo,
         light_client::{CircuitField, StateKeyPair, StateVerKey},
-        traits::{
-            block_contents::{vid_commitment, BlockHeader, EncodeBytes},
-            metrics::NoMetrics,
-            node_implementation::ConsensusTime,
-            signature_key::BuilderSignatureKey,
-            stake_table::StakeTableScheme,
-        },
+        traits::signature_key::BuilderSignatureKey,
+        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
         HotShotConfig, PeerConfig,
     };
-    use marketplace_builder_core::{
-        builder_state::BuilderState,
-        service::{run_builder_service, BroadcastSenders, GlobalState, NoHooks, ProxyGlobalState},
-    };
-    use marketplace_builder_shared::block::ParentBlockReferences;
+    use marketplace_builder_core::{hooks::NoHooks, service::GlobalState};
+
     use portpicker::pick_unused_port;
     use tokio::spawn;
     use vbs::version::Version;
@@ -617,8 +597,7 @@ pub mod testing {
     const BUILDER_CHANNEL_CAPACITY_FOR_TEST: usize = 128;
 
     struct MarketplaceBuilderImplementation {
-        hooks: Arc<NoHooks<SeqTypes>>,
-        senders: BroadcastSenders<SeqTypes>,
+        global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>>,
     }
 
     impl BuilderTask<SeqTypes> for MarketplaceBuilderImplementation {
@@ -632,8 +611,7 @@ pub mod testing {
             >,
         ) {
             spawn(async move {
-                let res =
-                    run_builder_service::<SeqTypes, _>(self.hooks, self.senders, stream).await;
+                let res = self.global_state.start_event_loop(stream).await;
                 tracing::error!(?res, "Testing marketplace builder service exited");
             });
         }
@@ -641,8 +619,6 @@ pub mod testing {
 
     pub async fn run_marketplace_builder<const NUM_NODES: usize>(
         port: Option<u16>,
-        instance_state: NodeState,
-        validated_state: ValidatedState,
     ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
         let builder_key_pair = TestConfig::<0>::builder_key();
         let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
@@ -652,69 +628,23 @@ pub mod testing {
             .parse()
             .expect("Failed to parse builder URL");
 
-        let (senders, receivers) = marketplace_builder_core::service::broadcast_channels(
-            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
-        );
-
-        // builder api request channel
-        let (req_sender, req_receiver) =
-            async_broadcast::broadcast::<_>(BUILDER_CHANNEL_CAPACITY_FOR_TEST);
-
-        let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], &validated_state, &instance_state)
-                .await
-                .expect("genesis payload construction failed");
-
-        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
-
-        let vid_commitment = {
-            let payload_bytes = genesis_payload.encode();
-            vid_commitment(&payload_bytes, NUM_NODES)
-        };
+        let hooks = NoHooks(PhantomData);
 
         // create the global state
-        let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            req_sender,
-            senders.transactions.clone(),
-            vid_commitment,
-            ViewNumber::genesis(),
-        );
-
-        let global_state = Arc::new(RwLock::new(global_state));
-
-        let leaf = Leaf::genesis(&validated_state, &instance_state).await;
-
-        let builder_state = BuilderState::<SeqTypes>::new(
-            ParentBlockReferences {
-                view_number: ViewNumber::genesis(),
-                vid_commitment,
-                leaf_commit: <Leaf as Committable>::commit(&leaf),
-                builder_commitment,
-            },
-            &receivers,
-            req_receiver,
-            Vec::new(), /* tx_queue */
-            Arc::clone(&global_state),
+        let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = GlobalState::new(
+            (builder_key_pair.fee_account(), builder_key_pair),
             Duration::from_secs(60),
+            Duration::from_millis(100),
+            Duration::from_secs(60),
+            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
             10,
-            Arc::new(instance_state),
-            Duration::from_secs(60),
-            Arc::new(validated_state),
+            hooks,
         );
-
-        builder_state.event_loop();
-
-        let hooks = Arc::new(NoHooks(PhantomData));
 
         // create the proxy global state it will server the builder apis
-        let app = ProxyGlobalState::new(
-            global_state.clone(),
-            Arc::clone(&hooks),
-            (builder_key_pair.fee_account(), builder_key_pair.clone()),
-            Duration::from_secs(60),
-        )
-        .into_app()
-        .expect("Failed to create builder tide-disco app");
+        let app = Arc::clone(&global_state)
+            .into_app()
+            .expect("Failed to create builder tide-disco app");
 
         spawn(
             app.serve(
@@ -726,7 +656,7 @@ pub mod testing {
         );
 
         (
-            Box::new(MarketplaceBuilderImplementation { hooks, senders }),
+            Box::new(MarketplaceBuilderImplementation { global_state }),
             url,
         )
     }
@@ -1023,23 +953,11 @@ pub mod testing {
             .with_genesis(state)
             .with_upgrades(upgrades);
 
-            // Create the HotShot memberships
-            let quorum_membership = StaticCommittee::new(
+            // Create the HotShot membership
+            let membership = StaticCommittee::new(
                 config.known_nodes_with_stake.clone(),
                 config.known_nodes_with_stake.clone(),
-                Topic::Global,
             );
-
-            let da_membership = StaticCommittee::new(
-                config.known_da_nodes.clone(),
-                config.known_da_nodes.clone(),
-                Topic::Da,
-            );
-
-            let memberships = Memberships {
-                quorum_membership,
-                da_membership,
-            };
 
             tracing::info!(
                 i,
@@ -1057,7 +975,7 @@ pub mod testing {
                     ..Default::default()
                 },
                 validator_config,
-                memberships,
+                membership,
                 node_state,
                 persistence,
                 network,

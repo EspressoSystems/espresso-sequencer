@@ -4,14 +4,14 @@ use async_trait::async_trait;
 use clap::Parser;
 use espresso_types::{
     v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
-    Leaf, NetworkConfig, Payload, SeqTypes,
+    Leaf, Leaf2, NetworkConfig, Payload, SeqTypes,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, QuorumProposal2, VidDisperseShare},
     event::{Event, EventType, HotShotAction, LeafInfo},
-    message::Proposal,
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    message::{convert_proposal, Proposal},
+    simple_certificate::{QuorumCertificate, QuorumCertificate2, UpgradeCertificate},
     traits::{
         block_contents::{BlockHeader, BlockPayload},
         node_implementation::ConsensusTime,
@@ -31,6 +31,8 @@ use std::{
 };
 
 use crate::ViewNumber;
+
+use espresso_types::{downgrade_commitment_map, downgrade_leaf, upgrade_commitment_map};
 
 /// Options for file system backed persistence.
 #[derive(Parser, Clone, Debug)]
@@ -310,7 +312,7 @@ impl Inner {
             }
 
             let info = LeafInfo {
-                leaf,
+                leaf: leaf.into(),
                 vid_share,
 
                 // Note: the following fields are not used in Decide event processing, and should be
@@ -341,7 +343,7 @@ impl Inner {
                 .handle_event(&Event {
                     view_number: ViewNumber::new(view),
                     event: EventType::Decide {
-                        qc: Arc::new(qc),
+                        qc: Arc::new(qc.to_qc2()),
                         leaf_chain: Arc::new(vec![leaf]),
                         block_size: None,
                     },
@@ -407,9 +409,9 @@ impl Inner {
         Ok(Some(vid_share))
     }
 
-    fn load_anchor_leaf(&self) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
+    fn load_anchor_leaf(&self) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
         if self.decided_leaf_path().is_dir() {
-            let mut anchor: Option<(Leaf, QuorumCertificate<SeqTypes>)> = None;
+            let mut anchor: Option<(Leaf2, QuorumCertificate2<SeqTypes>)> = None;
 
             // Return the latest decided leaf.
             for entry in
@@ -423,10 +425,14 @@ impl Inner {
                         .context(format!("parsing decided leaf {}", file.display()))?;
                 if let Some((anchor_leaf, _)) = &anchor {
                     if leaf.view_number() > anchor_leaf.view_number() {
-                        anchor = Some((leaf, qc));
+                        let leaf2 = leaf.into();
+                        let qc2 = qc.to_qc2();
+                        anchor = Some((leaf2, qc2));
                     }
                 } else {
-                    anchor = Some((leaf, qc));
+                    let leaf2 = leaf.into();
+                    let qc2 = qc.to_qc2();
+                    anchor = Some((leaf2, qc2));
                 }
             }
 
@@ -492,7 +498,7 @@ impl SequencerPersistence for Persistence {
     async fn append_decided_leaves(
         &self,
         view: ViewNumber,
-        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
+        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate2<SeqTypes>)> + Send,
         consumer: &impl EventConsumer,
     ) -> anyhow::Result<()> {
         let mut inner = self.inner.write().await;
@@ -520,7 +526,7 @@ impl SequencerPersistence for Persistence {
             fs::remove_file(&legacy_path).context("removing legacy anchor leaf file")?;
         }
 
-        for (info, qc) in leaf_chain {
+        for (info, qc2) in leaf_chain {
             let view = info.leaf.view_number().u64();
             let file_path = path.join(view.to_string()).with_extension("txt");
             inner.replace(
@@ -532,7 +538,9 @@ impl SequencerPersistence for Persistence {
                     Ok(false)
                 },
                 |mut file| {
-                    let bytes = bincode::serialize(&(&info.leaf, qc))?;
+                    let leaf = downgrade_leaf(info.leaf.clone());
+                    let qc = qc2.to_qc();
+                    let bytes = bincode::serialize(&(&leaf, qc))?;
                     file.write_all(&bytes)?;
                     Ok(())
                 },
@@ -561,20 +569,22 @@ impl SequencerPersistence for Persistence {
 
     async fn load_anchor_leaf(
         &self,
-    ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
+    ) -> anyhow::Result<Option<(Leaf2, QuorumCertificate2<SeqTypes>)>> {
         self.inner.read().await.load_anchor_leaf()
     }
 
     async fn load_undecided_state(
         &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf2>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
         let inner = self.inner.read().await;
         let path = inner.undecided_state_path();
         if !path.is_file() {
             return Ok(None);
         }
         let bytes = fs::read(&path).context("read")?;
-        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+        let value: (CommitmentMap<Leaf>, _) =
+            bincode::deserialize(&bytes).context("deserialize")?;
+        Ok(Some((upgrade_commitment_map(value.0), value.1)))
     }
 
     async fn load_da_proposal(
@@ -672,9 +682,11 @@ impl SequencerPersistence for Persistence {
     }
     async fn update_undecided_state(
         &self,
-        leaves: CommitmentMap<Leaf>,
+        leaves: CommitmentMap<Leaf2>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let leaves = downgrade_commitment_map(leaves);
+
         if !self.store_undecided_state {
             return Ok(());
         }
@@ -697,8 +709,10 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_quorum_proposal(
         &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+            convert_proposal(proposal.clone());
         let mut inner = self.inner.write().await;
         let view_number = proposal.data.view_number().u64();
         let dir_path = inner.quorum_proposals_dir_path();
@@ -722,7 +736,7 @@ impl SequencerPersistence for Persistence {
     }
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal2<SeqTypes>>>> {
         let inner = self.inner.read().await;
 
         // First, get the proposal directory.
@@ -765,9 +779,10 @@ impl SequencerPersistence for Persistence {
                 // Then, deserialize.
                 let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                     bincode::deserialize(&proposal_bytes)?;
+                let proposal2 = convert_proposal(proposal);
 
                 // Push to the map and we're done.
-                map.insert(view_number, proposal);
+                map.insert(view_number, proposal2);
             }
         }
 
@@ -777,13 +792,14 @@ impl SequencerPersistence for Persistence {
     async fn load_quorum_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal<SeqTypes>>> {
+    ) -> anyhow::Result<Proposal<SeqTypes, QuorumProposal2<SeqTypes>>> {
         let inner = self.inner.read().await;
         let dir_path = inner.quorum_proposals_dir_path();
         let file_path = dir_path.join(view.to_string()).with_extension("txt");
         let bytes = fs::read(file_path)?;
-        let proposal = bincode::deserialize(&bytes)?;
-        Ok(proposal)
+        let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> = bincode::deserialize(&bytes)?;
+        let proposal2 = convert_proposal(proposal);
+        Ok(proposal2)
     }
 
     async fn load_upgrade_certificate(
@@ -823,6 +839,17 @@ impl SequencerPersistence for Persistence {
                 Ok(())
             },
         )
+    }
+
+    async fn migrate_consensus(
+        &self,
+        _migrate_leaf: fn(Leaf) -> Leaf2,
+        _migrate_proposal: fn(
+            Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+        ) -> Proposal<SeqTypes, QuorumProposal2<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/2357
+        Ok(())
     }
 }
 

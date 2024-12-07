@@ -122,10 +122,11 @@ impl MockSolver {
 
 #[cfg(all(test, not(feature = "embedded-db")))]
 mod test {
-
     use committable::Committable;
     use espresso_types::{
-        v0_3::{BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
+        v0_99::{
+            BidTx, RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody,
+        },
         FeeAccount, MarketplaceVersion, SeqTypes,
         Update::{Set, Skip},
     };

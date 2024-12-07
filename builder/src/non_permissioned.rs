@@ -4,7 +4,7 @@ use anyhow::Context;
 use async_broadcast::broadcast;
 use async_lock::RwLock;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
+    eth_signature_key::EthKeyPair, v0_99::ChainConfig, FeeAmount, NodeState, Payload, SeqTypes,
     ValidatedState,
 };
 use hotshot::traits::BlockPayload;
@@ -75,6 +75,7 @@ impl BuilderConfig {
         max_block_size_increment_period: Duration,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
+        tx_status_cache_size: usize,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -130,6 +131,7 @@ impl BuilderConfig {
             max_block_size_increment_period,
             instance_state.chain_config.max_block_size.into(),
             node_count.into(),
+            tx_status_cache_size,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));

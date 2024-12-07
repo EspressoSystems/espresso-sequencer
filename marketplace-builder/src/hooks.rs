@@ -4,10 +4,10 @@ use std::time::Duration;
 
 use async_lock::RwLock;
 use async_trait::async_trait;
-use espresso_types::v0_3::BidTxBody;
+use espresso_types::v0_99::BidTxBody;
 use tokio::{spawn, time::sleep};
 
-use espresso_types::v0_3::RollupRegistration;
+use espresso_types::v0_99::RollupRegistration;
 
 use espresso_types::MarketplaceVersion;
 use espresso_types::SeqTypes;
@@ -16,7 +16,7 @@ use hotshot::types::EventType;
 use hotshot::types::Event;
 
 use hotshot_types::traits::node_implementation::Versions;
-use marketplace_builder_core::service::BuilderHooks;
+use marketplace_builder_core::hooks::BuilderHooks;
 
 use espresso_types::FeeAmount;
 

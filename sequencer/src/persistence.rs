@@ -9,7 +9,7 @@
 //! persistence which is _required_ to run a node.
 
 use async_trait::async_trait;
-use espresso_types::v0_3::ChainConfig;
+use espresso_types::v0_99::ChainConfig;
 
 pub mod fs;
 pub mod no_storage;
@@ -50,12 +50,13 @@ mod persistence_tests {
     use committable::Committable;
     use espresso_types::{
         traits::{EventConsumer, NullEventConsumer, PersistenceOptions},
-        Event, Leaf, NodeState, PubKey, SeqTypes, ValidatedState,
+        Event, Leaf, Leaf2, NodeState, PubKey, SeqTypes, ValidatedState,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::{
-        data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
+        data::{DaProposal, QuorumProposal2, VidDisperseShare, ViewNumber},
+        drb::{INITIAL_DRB_RESULT, INITIAL_DRB_SEED_INPUT},
         event::{EventType, HotShotAction, LeafInfo},
         message::Proposal,
         simple_certificate::{QuorumCertificate, UpgradeCertificate},
@@ -143,7 +144,7 @@ mod persistence_tests {
         );
     }
 
-    fn leaf_info(leaf: Leaf) -> LeafInfo<SeqTypes> {
+    fn leaf_info(leaf: Leaf2) -> LeafInfo<SeqTypes> {
         LeafInfo {
             leaf,
             vid_share: None,
@@ -165,7 +166,9 @@ mod persistence_tests {
             None
         );
 
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
+            .await
+            .into();
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
         let disperse = vid_scheme(2)
@@ -181,16 +184,19 @@ mod persistence_tests {
             recipient_key: pubkey,
         };
         let mut quorum_proposal = Proposal {
-            data: QuorumProposal::<SeqTypes> {
+            data: QuorumProposal2::<SeqTypes> {
                 block_header: leaf.block_header().clone(),
                 view_number: ViewNumber::genesis(),
                 justify_qc: QuorumCertificate::genesis::<TestVersions>(
                     &ValidatedState::default(),
                     &NodeState::mock(),
                 )
-                .await,
+                .await
+                .to_qc2(),
                 upgrade_certificate: None,
-                proposal_certificate: None,
+                view_change_evidence: None,
+                drb_seed: INITIAL_DRB_SEED_INPUT,
+                drb_result: INITIAL_DRB_RESULT,
             },
             signature,
             _pd: Default::default(),
@@ -373,10 +379,10 @@ mod persistence_tests {
         // Test decide and garbage collection. Pass in a leaf chain with no VID shares or payloads,
         // so we have to fetch the missing data from storage.
         let leaves = [
-            Leaf::from_quorum_proposal(&quorum_proposal1.data),
-            Leaf::from_quorum_proposal(&quorum_proposal2.data),
-            Leaf::from_quorum_proposal(&quorum_proposal3.data),
-            Leaf::from_quorum_proposal(&quorum_proposal4.data),
+            Leaf2::from_quorum_proposal(&quorum_proposal1.data),
+            Leaf2::from_quorum_proposal(&quorum_proposal2.data),
+            Leaf2::from_quorum_proposal(&quorum_proposal3.data),
+            Leaf2::from_quorum_proposal(&quorum_proposal4.data),
         ];
         let mut final_qc = leaves[3].justify_qc();
         final_qc.view_number += 1;
@@ -572,7 +578,9 @@ mod persistence_tests {
         // Create a short blockchain.
         let mut chain = vec![];
 
-        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let leaf: Leaf2 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock())
+            .await
+            .into();
         let leaf_payload = leaf.block_payload().unwrap();
         let leaf_payload_bytes_arc = leaf_payload.encode();
         let disperse = vid_scheme(2)
@@ -589,22 +597,26 @@ mod persistence_tests {
         .to_proposal(&privkey)
         .unwrap()
         .clone();
-        let mut quorum_proposal = QuorumProposal::<SeqTypes> {
+        let mut quorum_proposal = QuorumProposal2::<SeqTypes> {
             block_header: leaf.block_header().clone(),
             view_number: ViewNumber::genesis(),
             justify_qc: QuorumCertificate::genesis::<TestVersions>(
                 &ValidatedState::default(),
                 &NodeState::mock(),
             )
-            .await,
+            .await
+            .to_qc2(),
             upgrade_certificate: None,
-            proposal_certificate: None,
+            view_change_evidence: None,
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
         };
         let mut qc = QuorumCertificate::genesis::<TestVersions>(
             &ValidatedState::default(),
             &NodeState::mock(),
         )
-        .await;
+        .await
+        .to_qc2();
 
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
             .expect("Failed to sign block payload");
@@ -622,7 +634,7 @@ mod persistence_tests {
 
         for i in 0..4 {
             quorum_proposal.view_number = ViewNumber::new(i);
-            let leaf = Leaf::from_quorum_proposal(&quorum_proposal);
+            let leaf = Leaf2::from_quorum_proposal(&quorum_proposal);
             qc.view_number = leaf.view_number();
             qc.data.leaf_commit = Committable::commit(&leaf);
             vid.data.view_number = leaf.view_number();
@@ -771,16 +783,19 @@ mod persistence_tests {
         .unwrap()
         .clone();
 
-        let quorum_proposal = QuorumProposal::<SeqTypes> {
+        let quorum_proposal = QuorumProposal2::<SeqTypes> {
             block_header: leaf.block_header().clone(),
             view_number: ViewNumber::genesis(),
             justify_qc: QuorumCertificate::genesis::<TestVersions>(
                 &ValidatedState::default(),
                 &NodeState::mock(),
             )
-            .await,
+            .await
+            .to_qc2(),
             upgrade_certificate: None,
-            proposal_certificate: None,
+            view_change_evidence: None,
+            drb_seed: INITIAL_DRB_SEED_INPUT,
+            drb_result: INITIAL_DRB_RESULT,
         };
         let quorum_proposal_signature =
             BLSPubKey::sign(&privkey, &bincode::serialize(&quorum_proposal).unwrap())
