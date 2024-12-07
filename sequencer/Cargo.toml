@@ -120,7 +120,7 @@ time = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = "0.3.18"
+tracing-subscriber = "0.3.19"
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
