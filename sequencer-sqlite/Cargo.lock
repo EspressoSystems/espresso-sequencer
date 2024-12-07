@@ -1347,6 +1347,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "capnp"
+version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bce4e2d41c16cf9188f47ca4d59fdcdca1f33705af211bdb41f0afbd3442f8b5"
+dependencies = [
+ "embedded-io",
+]
+
+[[package]]
+name = "capnpc"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aa3d5f01e69ed11656d2c7c47bf34327ea9bfb5c85c7de787fcd7b6c5e45b61"
+dependencies = [
+ "capnp",
+]
+
+[[package]]
 name = "cargo-platform"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1397,6 +1415,163 @@ dependencies = [
  "jobserver",
  "libc",
  "shlex",
+]
+
+[[package]]
+name = "cdn-broker"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
+dependencies = [
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
+ "clap",
+ "console-subscriber",
+ "dashmap",
+ "derivative",
+ "jf-signature 0.1.0",
+ "lazy_static",
+ "local-ip-address",
+ "parking_lot",
+ "portpicker",
+ "prometheus",
+ "rand 0.8.5",
+ "rkyv",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-broker"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+dependencies = [
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "clap",
+ "console-subscriber",
+ "dashmap",
+ "derivative",
+ "jf-signature 0.2.0",
+ "lazy_static",
+ "local-ip-address",
+ "parking_lot",
+ "portpicker",
+ "prometheus",
+ "rand 0.8.5",
+ "rkyv",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-client"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+dependencies = [
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "clap",
+ "derive_more 1.0.0",
+ "jf-signature 0.2.0",
+ "parking_lot",
+ "rand 0.8.5",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-marshal"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
+dependencies = [
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
+ "clap",
+ "jf-signature 0.1.0",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-marshal"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+dependencies = [
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6)",
+ "clap",
+ "jf-signature 0.2.0",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "cdn-proto"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade#849e7edb32788e42738541ba4d5c64d3e061d86d"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-trait",
+ "capnp",
+ "capnpc",
+ "derivative",
+ "jf-signature 0.1.0",
+ "kanal",
+ "lazy_static",
+ "mnemonic",
+ "num_enum",
+ "pem 3.0.4",
+ "prometheus",
+ "quinn",
+ "rand 0.8.5",
+ "rcgen 0.13.1",
+ "redis",
+ "rkyv",
+ "rustls 0.23.19",
+ "rustls-pki-types",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-rustls 0.26.1",
+ "tracing",
+ "url",
+ "warp",
+]
+
+[[package]]
+name = "cdn-proto"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.6#9409763dbcb726e43218c3c4cfde91c7d5de6a52"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-trait",
+ "capnp",
+ "capnpc",
+ "derivative",
+ "derive_more 1.0.0",
+ "jf-signature 0.2.0",
+ "kanal",
+ "lazy_static",
+ "mnemonic",
+ "num_enum",
+ "pem 3.0.4",
+ "prometheus",
+ "quinn",
+ "rand 0.8.5",
+ "rcgen 0.13.1",
+ "redis",
+ "rkyv",
+ "rustls 0.23.19",
+ "rustls-pki-types",
+ "sqlx",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-rustls 0.26.1",
+ "tracing",
+ "url",
+ "warp",
 ]
 
 [[package]]
@@ -2737,6 +2912,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethers-contract-abigen"
+version = "2.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04ba01fbc2331a38c429eb95d4a570166781f14290ef9fdb144278a90b5a739b"
+dependencies = [
+ "Inflector",
+ "const-hex",
+ "dunce",
+ "ethers-core",
+ "ethers-etherscan",
+ "eyre",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "syn 2.0.90",
+ "toml 0.8.19",
+ "walkdir",
+]
+
+[[package]]
 name = "ethers-contract-derive"
 version = "2.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3826,6 +4025,107 @@ dependencies = [
  "tokio",
  "url",
  "vbs",
+]
+
+[[package]]
+name = "hotshot-fakeapi"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.82#ecfd22a4b3d20b7cf89282b172f178ab2ebf81a4"
+dependencies = [
+ "anyhow",
+ "async-lock 3.4.0",
+ "async-trait",
+ "futures",
+ "hotshot-example-types",
+ "hotshot-types",
+ "rand 0.8.5",
+ "tide-disco",
+ "tokio",
+ "toml 0.8.19",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-macros"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.82#ecfd22a4b3d20b7cf89282b172f178ab2ebf81a4"
+dependencies = [
+ "derive_builder",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "hotshot-orchestrator"
+version = "0.5.79"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.82#ecfd22a4b3d20b7cf89282b172f178ab2ebf81a4"
+dependencies = [
+ "anyhow",
+ "async-lock 3.4.0",
+ "blake3",
+ "clap",
+ "csv",
+ "futures",
+ "hotshot-types",
+ "libp2p-identity",
+ "multiaddr",
+ "serde",
+ "surf-disco",
+ "tide-disco",
+ "tokio",
+ "toml 0.8.19",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-query-service"
+version = "0.1.75"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.75#dffefa160f441a663723a67bc54efedb11a88b02"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-lock 3.4.0",
+ "async-trait",
+ "atomic_store",
+ "backoff",
+ "bincode",
+ "chrono",
+ "committable",
+ "custom_debug",
+ "derivative",
+ "derive_more 0.99.18",
+ "either",
+ "futures",
+ "hotshot",
+ "hotshot-testing",
+ "hotshot-types",
+ "include_dir",
+ "itertools 0.12.1",
+ "jf-merkle-tree",
+ "jf-vid",
+ "log",
+ "prometheus",
+ "refinery",
+ "refinery-core",
+ "serde",
+ "serde_json",
+ "snafu 0.8.5",
+ "sqlx",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "time 0.3.37",
+ "tokio",
+ "toml 0.8.19",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "trait-variant",
+ "typenum",
+ "url",
+ "vbs",
+ "vec1",
 ]
 
 [[package]]
@@ -7251,7 +7551,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "backon",
- "bytes 1.8.0",
+ "bytes 1.9.0",
  "combine",
  "futures",
  "futures-util",
@@ -8010,6 +8310,78 @@ name = "send_wrapper"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
+
+[[package]]
+name = "sequencer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-ff",
+ "ark-serialize",
+ "async-broadcast",
+ "async-lock 3.4.0",
+ "async-once-cell",
+ "async-trait",
+ "bincode",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.5.1-upgrade)",
+ "clap",
+ "client",
+ "committable",
+ "contract-bindings",
+ "csv",
+ "derivative",
+ "derive_more 1.0.0",
+ "dotenvy",
+ "espresso-types",
+ "ethers",
+ "futures",
+ "hotshot",
+ "hotshot-contract-adapter",
+ "hotshot-events-service",
+ "hotshot-orchestrator",
+ "hotshot-query-service",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-types",
+ "include_dir",
+ "itertools 0.12.1",
+ "jf-crhf",
+ "jf-merkle-tree",
+ "jf-rescue",
+ "jf-signature 0.2.0",
+ "jf-vid",
+ "libp2p",
+ "libp2p-networking",
+ "marketplace-solver",
+ "num_enum",
+ "parking_lot",
+ "portpicker",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_distr",
+ "sequencer-utils",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "snafu 0.8.5",
+ "sqlx",
+ "static_assertions",
+ "strum",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "time 0.3.37",
+ "todo_by",
+ "tokio",
+ "toml 0.8.19",
+ "tracing",
+ "tracing-subscriber 0.3.19",
+ "url",
+ "vbs",
+ "vec1",
+ "vergen",
+]
 
 [[package]]
 name = "sequencer-sqlite"
@@ -9383,6 +9755,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
+name = "todo_by"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e25529b77ab1841ec52a4e8356632b417698b53ea9ad62c6be7d04d5e420dc4"
+dependencies = [
+ "cargo_toml",
+ "chrono",
+ "proc-macro2",
+ "quote",
+ "semver 1.0.23",
+ "syn 2.0.90",
+]
+
+[[package]]
 name = "tokio"
 version = "1.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9547,6 +9933,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dd7358ecb8fc2f8d014bf86f6f638ce72ba252a2c3a2572f2a795f1d23efb41"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.19.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
+dependencies = [
+ "indexmap 2.7.0",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "winnow 0.5.40",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.22.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ae48d6208a266e853d946088ed816055e556cc6028c5e8e2b84d9fa5dd7c7f5"
+dependencies = [
+ "indexmap 2.7.0",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "winnow 0.6.20",
 ]
 
 [[package]]
