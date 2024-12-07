@@ -116,6 +116,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e89da841a80418a9b391ebaea17f5c112ffaaa96f621d2c285b5174da76b9011"
 dependencies = [
  "cfg-if",
+ "getrandom 0.2.15",
  "once_cell",
  "version_check",
  "zerocopy",
@@ -939,6 +940,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d818003e740b63afc82337e3160717f4f63078720a810b7b903e70a5d1d2994"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1253,40 +1263,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "builder"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-broadcast",
- "async-lock 3.4.0",
- "clap",
- "committable",
- "espresso-types",
- "ethers",
- "futures",
- "hotshot",
- "hotshot-builder-api",
- "hotshot-builder-core",
- "hotshot-events-service",
- "hotshot-state-prover",
- "hotshot-types",
- "jf-signature 0.2.0",
- "marketplace-builder-shared",
- "portpicker",
- "rand 0.8.5",
- "sequencer",
- "sequencer-utils",
- "surf-disco",
- "tempfile",
- "tide-disco",
- "tokio",
- "tracing",
- "url",
- "vbs",
- "vec1",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1318,6 +1294,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "bytemuck"
+version = "1.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b37c88a63ffd85d15b406896cc343916d7cf57838a847b3a6f2ca5d39a5695a"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcfcc3cd946cb52f0bbfdbbcfa2f4e24f75ebb6c0e1002f7c25904fada18b9ec"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -1716,6 +1712,17 @@ dependencies = [
  "tokio",
  "tracing",
  "vbs",
+]
+
+[[package]]
+name = "coarsetime"
+version = "0.1.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13b3839cf01bb7960114be3ccf2340f541b6d0c81f8690b007b2b39f750f7e5d"
+dependencies = [
+ "libc",
+ "wasix",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -4049,15 +4056,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "hotshot-builder-core"
-version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.57#cf9d2cbf154809a31bcf2dccc1218ee9c6875f1e"
+name = "hotshot-builder-core-refactored"
+version = "0.1.58"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.58#7df48a9099241c92f4946dd13a9f86d90fb23768"
 dependencies = [
  "anyhow",
  "async-broadcast",
  "async-lock 3.4.0",
  "async-trait",
+ "atomic",
  "bincode",
+ "bytemuck",
+ "coarsetime",
  "committable",
  "derive_more 1.0.0",
  "futures",
@@ -4066,6 +4076,7 @@ dependencies = [
  "hotshot-types",
  "lru 0.12.5",
  "marketplace-builder-shared",
+ "once_cell",
  "serde",
  "sha2 0.10.8",
  "tagged-base64",
@@ -6202,8 +6213,8 @@ dependencies = [
 
 [[package]]
 name = "marketplace-builder-core"
-version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.57#cf9d2cbf154809a31bcf2dccc1218ee9c6875f1e"
+version = "0.1.58"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.58#7df48a9099241c92f4946dd13a9f86d90fb23768"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6215,7 +6226,6 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-types",
- "lru 0.12.5",
  "marketplace-builder-shared",
  "sha2 0.10.8",
  "tagged-base64",
@@ -6228,8 +6238,8 @@ dependencies = [
 
 [[package]]
 name = "marketplace-builder-shared"
-version = "0.1.57"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.57#cf9d2cbf154809a31bcf2dccc1218ee9c6875f1e"
+version = "0.1.58"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.1.58#7df48a9099241c92f4946dd13a9f86d90fb23768"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6251,9 +6261,13 @@ dependencies = [
  "hotshot-types",
  "jf-vid",
  "nonempty-collections",
+ "once_cell",
+ "quick_cache",
  "rand 0.8.5",
  "serde",
+ "sha2 0.10.8",
  "surf-disco",
+ "thiserror 2.0.3",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.18",
@@ -7081,6 +7095,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
+name = "permissionless-builder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-lock 3.4.0",
+ "clap",
+ "committable",
+ "espresso-types",
+ "ethers",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-builder-core-refactored",
+ "hotshot-events-service",
+ "hotshot-state-prover",
+ "hotshot-types",
+ "jf-signature 0.2.0",
+ "marketplace-builder-shared",
+ "portpicker",
+ "rand 0.8.5",
+ "sequencer",
+ "sequencer-utils",
+ "surf-disco",
+ "tempfile",
+ "tide-disco",
+ "tokio",
+ "tracing",
+ "url",
+ "vbs",
+ "vec1",
+]
+
+[[package]]
 name = "pest"
 version = "2.7.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7543,7 +7591,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.87",
@@ -7623,6 +7671,18 @@ dependencies = [
  "quick-protobuf",
  "thiserror 1.0.69",
  "unsigned-varint 0.8.0",
+]
+
+[[package]]
+name = "quick_cache"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d7c94f8935a9df96bb6380e8592c70edf497a643f94bd23b2f76b399385dbf4"
+dependencies = [
+ "ahash 0.8.11",
+ "equivalent",
+ "hashbrown 0.14.5",
+ "parking_lot",
 ]
 
 [[package]]
@@ -9076,7 +9136,7 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c3c6b7927ffe7ecaa769ee0e3994da3b8cafc8f444578982c83ecb161af917"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.87",
@@ -10884,6 +10944,15 @@ name = "wasite"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8dad83b4f25e74f184f64c43b150b91efe7647395b42289f38e50566d82855b"
+
+[[package]]
+name = "wasix"
+version = "0.12.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1fbb4ef9bbca0c1170e0b00dd28abc9e3b68669821600cad1caaed606583c6d"
+dependencies = [
+ "wasi 0.11.0+wasi-snapshot-preview1",
+]
 
 [[package]]
 name = "wasm-bindgen"

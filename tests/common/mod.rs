@@ -1,11 +1,12 @@
 use anyhow::{anyhow, Result};
 use client::SequencerClient;
-use espresso_types::FeeAmount;
+use espresso_types::{FeeAmount, FeeVersion, MarketplaceVersion};
 use ethers::prelude::*;
 use futures::future::join_all;
 use std::{fmt, str::FromStr, time::Duration};
 use surf_disco::Url;
 use tokio::time::{sleep, timeout};
+use vbs::version::StaticVersionType;
 
 const L1_PROVIDER_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 // TODO add to .env
@@ -24,7 +25,7 @@ pub struct TestConfig {
     pub prover_url: String,
     pub expected_block_height: u64,
     pub timeout: f64,
-    pub sequencer_version: u8,
+    pub sequencer_version: u16,
     pub sequencer_clients: Vec<SequencerClient>,
     pub initial_height: u64,
     pub initial_txns: u64,
@@ -79,12 +80,12 @@ impl TestConfig {
         //
         // If no version is specified, we default to V2,
         // which is the initial mainnet version without any upgrades.
-        let sequencer_version: u8 = dotenvy::var("INTEGRATION_TEST_SEQUENCER_VERSION")
+        let sequencer_version: u16 = dotenvy::var("INTEGRATION_TEST_SEQUENCER_VERSION")
             .map(|v| v.parse().unwrap())
-            .unwrap_or(2);
+            .unwrap_or(FeeVersion::MINOR);
 
         // Varies between v0 and v3.
-        let load_generator_url = if sequencer_version >= 3 {
+        let load_generator_url = if sequencer_version >= MarketplaceVersion::MINOR {
             url_from_port(dotenvy::var(
                 "ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_RESERVE_PORT",
             )?)?
@@ -93,7 +94,7 @@ impl TestConfig {
         };
 
         // TODO test both builders (probably requires some refactoring).
-        let builder_url = if sequencer_version >= 3 {
+        let builder_url = if sequencer_version >= MarketplaceVersion::MINOR {
             let url = url_from_port(dotenvy::var("ESPRESSO_RESERVE_BUILDER_SERVER_PORT")?)?;
 
             Url::from_str(&url)?

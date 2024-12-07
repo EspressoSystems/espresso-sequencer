@@ -4083,7 +4083,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.75"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=hotshot/0.5.82#5e2c984d19da3826f4cc8d80c5cf1a84dcd377f7"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=v0.1.75#dffefa160f441a663723a67bc54efedb11a88b02"
 dependencies = [
  "anyhow",
  "ark-serialize",
