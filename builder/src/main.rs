@@ -169,8 +169,8 @@ async fn run<V: Versions>(
 
     start_builder(
         global_state,
-        builder_server_url,
         opt.hotshot_event_streaming_url,
+        builder_server_url,
     )
     .await
 }
