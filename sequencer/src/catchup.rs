@@ -12,7 +12,12 @@ use espresso_types::{
 };
 use futures::future::{Future, FutureExt, TryFuture, TryFutureExt};
 use hotshot_types::{
-    data::ViewNumber, network::NetworkConfig, traits::node_implementation::ConsensusTime as _,
+    data::ViewNumber,
+    network::NetworkConfig,
+    traits::{
+        metrics::{Counter, CounterFamily, Metrics},
+        node_implementation::ConsensusTime as _,
+    },
     ValidatorConfig,
 };
 use itertools::Itertools;
@@ -37,12 +42,20 @@ use crate::{
 struct Client<ServerError, ApiVer: StaticVersionType> {
     inner: surf_disco::Client<ServerError, ApiVer>,
     url: Url,
+    requests: Arc<Box<dyn Counter>>,
+    failures: Arc<Box<dyn Counter>>,
 }
 
 impl<ApiVer: StaticVersionType> Client<ServerError, ApiVer> {
-    pub fn new(url: Url) -> Self {
+    pub fn new(
+        url: Url,
+        requests: &(impl CounterFamily + ?Sized),
+        failures: &(impl CounterFamily + ?Sized),
+    ) -> Self {
         Self {
             inner: surf_disco::Client::new(url.clone()),
+            requests: Arc::new(requests.create(vec![url.to_string()])),
+            failures: Arc::new(failures.create(vec![url.to_string()])),
             url,
         }
     }
@@ -169,8 +182,10 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
         for (id, success) in requests {
             scores.change_priority_by(&id, |score| {
                 score.requests += 1;
+                self.clients[id].requests.add(1);
                 if !success {
                     score.failures += 1;
+                    self.clients[id].failures.add(1);
                 }
             });
         }
@@ -178,17 +193,28 @@ impl<ApiVer: StaticVersionType> StatePeers<ApiVer> {
         res
     }
 
-    pub fn from_urls(urls: Vec<Url>, backoff: BackoffParams) -> Self {
+    pub fn from_urls(
+        urls: Vec<Url>,
+        backoff: BackoffParams,
+        metrics: &(impl Metrics + ?Sized),
+    ) -> Self {
         if urls.is_empty() {
             panic!("Cannot create StatePeers with no peers");
         }
+
+        let metrics = metrics.subgroup("catchup".into());
+        let requests = metrics.counter_family("requests".into(), vec!["peer".into()]);
+        let failures = metrics.counter_family("request_failures".into(), vec!["peer".into()]);
 
         let scores = urls
             .iter()
             .enumerate()
             .map(|(i, _)| (i, PeerScore::default()))
             .collect();
-        let clients = urls.into_iter().map(Client::new).collect();
+        let clients = urls
+            .into_iter()
+            .map(|url| Client::new(url, &*requests, &*failures))
+            .collect();
 
         Self {
             clients,
