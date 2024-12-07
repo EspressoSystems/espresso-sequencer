@@ -35,7 +35,7 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
-use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
+use marketplace_builder_core::service::{self, GlobalState, ProxyGlobalState};
 use marketplace_builder_core::{hooks::BuilderHooks, service::EventServiceStream};
 use marketplace_builder_shared::block::ParentBlockReferences;
 use marketplace_solver::SolverError;
@@ -103,11 +103,9 @@ impl BuilderConfig {
         // spawn the builder service
         tracing::info!("Running builder against hotshot events API at {events_api_url}",);
 
-        let stream = marketplace_builder_core::service::EventServiceStream::<
-            SeqTypes,
-            SequencerApiVersion,
-        >::connect(events_api_url)
-        .await?;
+        let stream =
+            service::EventServiceStream::<SeqTypes, SequencerApiVersion>::connect(events_api_url)
+                .await?;
 
         spawn(async move {
             let res = global_state.start_event_loop(stream).await;
@@ -168,12 +166,15 @@ impl BuilderConfig {
 
         // create the global state
         let global_state: Arc<GlobalState<SeqTypes, DynamicHooks>> = GlobalState::new(
-            (builder_key_pair.fee_account(), builder_key_pair),
-            api_timeout,
-            maximize_txns_count_timeout_duration,
-            Duration::from_secs(60),
-            tx_channel_capacity.get(),
-            base_fee.as_u64().expect("Base fee too high"),
+            marketplace_builder_core::service::BuilderConfig {
+                builder_keys: (builder_key_pair.fee_account(), builder_key_pair),
+                api_timeout,
+                tx_capture_timeout: maximize_txns_count_timeout_duration,
+                txn_garbage_collect_duration: Duration::from_secs(60),
+                txn_channel_capacity: tx_channel_capacity.get(),
+                tx_status_cache_capacity: 81920,
+                base_fee: base_fee.as_u64().expect("Base fee too high"),
+            },
             hooks,
         );
 
