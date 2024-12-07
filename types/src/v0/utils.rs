@@ -286,12 +286,12 @@ impl BackoffParams {
     pub async fn retry<S, T>(
         &self,
         mut state: S,
-        f: impl for<'a> Fn(&'a mut S) -> BoxFuture<'a, anyhow::Result<T>>,
+        f: impl for<'a> Fn(&'a mut S, usize) -> BoxFuture<'a, anyhow::Result<T>>,
     ) -> anyhow::Result<T> {
         let mut delay = self.base;
-        loop {
-            match f(&mut state).await {
-                Ok(res) => break Ok(res),
+        for i in 0.. {
+            match f(&mut state, i).await {
+                Ok(res) => return Ok(res),
                 Err(err) if self.disable => {
                     return Err(err.context("Retryable operation failed; retries disabled"));
                 }
@@ -304,6 +304,7 @@ impl BackoffParams {
                 }
             }
         }
+        unreachable!()
     }
 
     #[must_use]

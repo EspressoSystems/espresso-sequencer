@@ -41,6 +41,7 @@ pub trait StateCatchup: Send + Sync {
     /// Try to fetch the given accounts state, failing without retrying if unable.
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -58,10 +59,18 @@ pub trait StateCatchup: Send + Sync {
         accounts: Vec<FeeAccount>,
     ) -> anyhow::Result<Vec<FeeAccountProof>> {
         self.backoff()
-            .retry(self, |provider| {
-                async {
+            .retry(self, |provider, retry| {
+                let accounts = &accounts;
+                async move {
                     let tree = provider
-                        .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, &accounts)
+                        .try_fetch_accounts(
+                            retry,
+                            instance,
+                            height,
+                            view,
+                            fee_merkle_tree_root,
+                            accounts,
+                        )
                         .await
                         .map_err(|err| {
                             err.context(format!(
@@ -85,6 +94,7 @@ pub trait StateCatchup: Send + Sync {
     /// Try to fetch and remember the blocks frontier, failing without retrying if unable.
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -100,8 +110,8 @@ pub trait StateCatchup: Send + Sync {
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         self.backoff()
-            .retry(mt, |mt| {
-                self.try_remember_blocks_merkle_tree(instance, height, view, mt)
+            .retry(mt, |mt, retry| {
+                self.try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
                     .map_err(|err| err.context("fetching frontier"))
                     .boxed()
             })
@@ -110,6 +120,7 @@ pub trait StateCatchup: Send + Sync {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig>;
 
@@ -118,9 +129,9 @@ pub trait StateCatchup: Send + Sync {
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         self.backoff()
-            .retry(self, |provider| {
+            .retry(self, |provider, retry| {
                 provider
-                    .try_fetch_chain_config(commitment)
+                    .try_fetch_chain_config(retry, commitment)
                     .map_err(|err| err.context("fetching chain config"))
                     .boxed()
             })
@@ -135,6 +146,7 @@ pub trait StateCatchup: Send + Sync {
 impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -142,7 +154,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
+            .try_fetch_accounts(
+                retry,
+                instance,
+                height,
+                view,
+                fee_merkle_tree_root,
+                accounts,
+            )
             .await
     }
 
@@ -161,13 +180,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(instance, height, view, mt)
+            .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
             .await
     }
 
@@ -185,9 +205,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
+        (**self).try_fetch_chain_config(retry, commitment).await
     }
 
     async fn fetch_chain_config(
@@ -210,6 +231,7 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
 impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -217,7 +239,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         accounts: &[FeeAccount],
     ) -> anyhow::Result<FeeMerkleTree> {
         (**self)
-            .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
+            .try_fetch_accounts(
+                retry,
+                instance,
+                height,
+                view,
+                fee_merkle_tree_root,
+                accounts,
+            )
             .await
     }
 
@@ -236,13 +265,14 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self)
-            .try_remember_blocks_merkle_tree(instance, height, view, mt)
+            .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
             .await
     }
 
@@ -260,9 +290,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
+        (**self).try_fetch_chain_config(retry, commitment).await
     }
 
     async fn fetch_chain_config(
@@ -287,6 +318,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     #[tracing::instrument(skip(self, instance))]
     async fn try_fetch_accounts(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -295,7 +327,14 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     ) -> anyhow::Result<FeeMerkleTree> {
         for provider in self {
             match provider
-                .try_fetch_accounts(instance, height, view, fee_merkle_tree_root, accounts)
+                .try_fetch_accounts(
+                    retry,
+                    instance,
+                    height,
+                    view,
+                    fee_merkle_tree_root,
+                    accounts,
+                )
                 .await
             {
                 Ok(tree) => return Ok(tree),
@@ -315,6 +354,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     #[tracing::instrument(skip(self, instance, mt))]
     async fn try_remember_blocks_merkle_tree(
         &self,
+        retry: usize,
         instance: &NodeState,
         height: u64,
         view: ViewNumber,
@@ -322,7 +362,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
     ) -> anyhow::Result<()> {
         for provider in self {
             match provider
-                .try_remember_blocks_merkle_tree(instance, height, view, mt)
+                .try_remember_blocks_merkle_tree(retry, instance, height, view, mt)
                 .await
             {
                 Ok(()) => return Ok(()),
@@ -340,10 +380,11 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 
     async fn try_fetch_chain_config(
         &self,
+        retry: usize,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         for provider in self {
-            match provider.try_fetch_chain_config(commitment).await {
+            match provider.try_fetch_chain_config(retry, commitment).await {
                 Ok(cf) => return Ok(cf),
                 Err(err) => {
                     tracing::info!(

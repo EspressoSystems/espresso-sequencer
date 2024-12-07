@@ -19,6 +19,7 @@ use hotshot_types::{
     data::{fake_commitment, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+        metrics::NoMetrics,
         node_implementation::Versions,
         EncodeBytes,
     },
@@ -53,6 +54,7 @@ pub async fn build_instance_state<V: Versions>(
         Arc::new(StatePeers::<SequencerApiVersion>::from_urls(
             state_peers,
             Default::default(),
+            &NoMetrics,
         )),
         V::Base::VERSION,
     );
