@@ -94,6 +94,7 @@ marketplace-builder-shared = { workspace = true, optional = true }
 marketplace-solver = { path = "../marketplace-solver" }
 num_enum = "0.7"
 parking_lot = "0.12"
+priority-queue = { workspace = true }
 portpicker = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
