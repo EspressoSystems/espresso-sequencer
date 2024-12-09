@@ -198,9 +198,8 @@ mod test {
     use super::*;
 
     impl NodeInfoJf {
-        fn random() -> Self {
+        fn random(rng: &mut impl RngCore) -> Self {
             let mut seed = [0u8; 32];
-            let mut rng = rand::thread_rng();
             rng.fill_bytes(&mut seed);
 
             let (stake_table_key, _) = BLSPubKey::generated_from_seed_indexed(seed, 0);
@@ -215,8 +214,9 @@ mod test {
 
     #[test]
     fn test_node_info_round_trip() {
+        let mut rng = rand::thread_rng();
         for _ in 0..20 {
-            let jf = NodeInfoJf::random();
+            let jf = NodeInfoJf::random(&mut rng);
             let sol: NodeInfo = jf.clone().into();
             let jf2: NodeInfoJf = sol.into();
             assert_eq!(jf2, jf);
