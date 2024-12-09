@@ -447,13 +447,11 @@ contract StakeTable is AbstractStakeTable {
     /// queue
     /// @dev The validator will need to give up either its old BLS key and/or old Schnorr key
     /// @dev The validator will need to provide a BLS signature over the new BLS key
-    /// @param currBlsVK The current BLS verification key
     /// @param newBlsVK The new BLS verification key
     /// @param newSchnorrVK The new Schnorr verification key
     /// @param newBlsSig The BLS signature that the account owns the new BLS key
     /// TODO: This function should be tested
     function updateConsensusKeys(
-        BN254.G2Point memory currBlsVK,
         BN254.G2Point memory newBlsVK,
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
         BN254.G1Point memory newBlsSig
@@ -472,7 +470,10 @@ contract StakeTable is AbstractStakeTable {
 
         // The staker does not provide a key change
         if (
-            (_isEqualBlsKey(newBlsVK, currBlsVK) && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK))
+            (
+                _isEqualBlsKey(newBlsVK, node.blsVK)
+                    && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK)
+            )
                 || (
                     _isEqualBlsKey(
                         newBlsVK,
@@ -498,7 +499,7 @@ contract StakeTable is AbstractStakeTable {
 
         // Update the node's bls key once it's not the same as the old one and it's nonzero
         if (
-            !_isEqualBlsKey(newBlsVK, currBlsVK)
+            !_isEqualBlsKey(newBlsVK, node.blsVK)
                 && !_isEqualBlsKey(
                     newBlsVK,
                     BN254.G2Point(
@@ -521,7 +522,7 @@ contract StakeTable is AbstractStakeTable {
         nodes[msg.sender] = node;
 
         // Emit the event
-        emit ConsensusKeysUpdated(msg.sender);
+        emit UpdatedConsensusKeys(msg.sender);
     }
 
     /// @notice Minimum stake amount
