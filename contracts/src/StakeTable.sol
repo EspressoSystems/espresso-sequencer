@@ -57,7 +57,7 @@ contract StakeTable is AbstractStakeTable {
     error NoKeyChange();
 
     /// Mapping from a hash of a BLS key to a node struct defined in the abstract contract.
-    mapping(bytes32 keyHash => Node node) public nodes;
+    mapping(address account => Node node) public nodes;
 
     /// Total stake locked;
     uint256 public totalStake;
@@ -128,21 +128,18 @@ contract StakeTable is AbstractStakeTable {
         return 0;
     }
 
-    /// @notice Look up the balance of `blsVK`g
-    /// @param blsVK BLS public key controlled by the user.
+    /// @notice Look up the balance of `account`
+    /// @param account account controlled by the user.
     /// @return Current balance owned by the user.
-    function lookupStake(BN254.G2Point memory blsVK) external view override returns (uint256) {
-        Node memory node = this.lookupNode(blsVK);
+    function lookupStake(address account) external view override returns (uint256) {
+        Node memory node = this.lookupNode(account);
         return node.balance;
     }
 
-    /// @notice Look up the full `Node` state associated with `blsVK`
-    /// @dev The lookup is achieved by hashing first the four field elements of blsVK using
-    /// keccak256.
-    /// @return Node indexed by blsVK
-    /// TODO modify this according to the current spec
-    function lookupNode(BN254.G2Point memory blsVK) external view override returns (Node memory) {
-        return nodes[_hashBlsKey(blsVK)];
+    /// @notice Look up the full `Node` state associated with `account`
+    /// @return Node indexed by account
+    function lookupNode(address account) external view override returns (Node memory) {
+        return nodes[account];
     }
 
     /// @notice Get the next available epoch and queue size in that epoch
@@ -278,8 +275,7 @@ contract StakeTable is AbstractStakeTable {
             revert InsufficientStakeAmount(amount);
         }
 
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+        Node memory node = nodes[msg.sender];
 
         // Verify that the node is not already registered.
         if (node.account != address(0x0)) {
@@ -323,28 +319,28 @@ contract StakeTable is AbstractStakeTable {
         // Create an entry for the node.
         node.account = msg.sender;
         node.balance = fixedStakeAmount;
+        node.blsVK = blsVK;
         node.schnorrVK = schnorrVK;
         node.registerEpoch = registerEpoch;
 
-        nodes[key] = node;
+        nodes[msg.sender] = node;
 
-        emit Registered(key, registerEpoch, fixedStakeAmount);
+        emit Registered(msg.sender, registerEpoch, fixedStakeAmount);
     }
 
     /// @notice Deposit more stakes to registered keys
     /// @dev TODO this implementation will be revisited later. See
     /// https://github.com/EspressoSystems/espresso-sequencer/issues/806
     /// @dev TODO modify this according to the current spec
-    /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(BN254.G2Point memory blsVK, uint256 amount)
-        external
-        override
-        returns (uint256, uint64)
-    {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    function deposit(uint256 amount) external override returns (uint256, uint64) {
+        Node memory node = nodes[msg.sender];
+
+        // if the node is not registered, revert
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
 
         // The deposit must come from the node's registered account.
         if (node.account != msg.sender) {
@@ -362,24 +358,26 @@ contract StakeTable is AbstractStakeTable {
             revert ExitRequestInProgress();
         }
 
-        nodes[key].balance += amount;
+        nodes[msg.sender].balance += amount;
         SafeTransferLib.safeTransferFrom(ERC20(tokenAddress), msg.sender, address(this), amount);
 
-        emit Deposit(_hashBlsKey(blsVK), uint256(amount));
+        emit Deposit(msg.sender, uint256(amount));
 
         uint64 effectiveEpoch = _currentEpoch + 1;
 
-        return (nodes[key].balance, effectiveEpoch);
+        return (nodes[msg.sender].balance, effectiveEpoch);
     }
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
     /// @dev TODO modify this according to the current spec
-    /// @dev TODO modify this according to the current spec
-    /// @param blsVK The BLS verification key to exit
-    function requestExit(BN254.G2Point memory blsVK) external override {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    function requestExit() external override {
+        Node memory node = nodes[msg.sender];
+
+        // if the node is not registered, revert
+        if (node.account == address(0)) {
+            revert NodeNotRegistered();
+        }
 
         // The exit request must come from the node's withdrawal account.
         if (node.account != msg.sender) {
@@ -399,25 +397,28 @@ contract StakeTable is AbstractStakeTable {
 
         // Prepare the node to exit.
         (uint64 exitEpoch, uint64 queueSize) = this.nextExitEpoch();
-        nodes[key].exitEpoch = exitEpoch;
+        nodes[msg.sender].exitEpoch = exitEpoch;
 
         appendExitQueue(exitEpoch, queueSize);
 
-        emit Exit(key, exitEpoch);
+        emit Exit(msg.sender, exitEpoch);
     }
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
     /// withdraw past their `exitEpoch`.
     ///
-    /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G2Point memory blsVK) external override returns (uint256) {
-        bytes32 key = _hashBlsKey(blsVK);
-        Node memory node = nodes[key];
+    function withdrawFunds() external override returns (uint256) {
+        Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
         if (node.account == address(0)) {
             revert NodeNotRegistered();
+        }
+
+        // The exit request must come from the node's withdrawal account.
+        if (node.account != msg.sender) {
+            revert Unauthenticated();
         }
 
         // Verify that the balance is greater than zero
@@ -432,9 +433,7 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Delete the node from the stake table.
-
-        // Delete the node from the stake table.
-        delete nodes[key];
+        delete nodes[msg.sender];
 
         // Transfer the balance to the node's account.
         SafeTransferLib.safeTransfer(ERC20(tokenAddress), node.account, balance);
@@ -459,14 +458,7 @@ contract StakeTable is AbstractStakeTable {
         EdOnBN254.EdOnBN254Point memory newSchnorrVK,
         BN254.G1Point memory newBlsSig
     ) external override {
-        bytes32 currBlsKey = _hashBlsKey(currBlsVK);
-        bytes32 newBlsKey = _hashBlsKey(newBlsVK);
-        Node memory node = nodes[currBlsKey];
-
-        // Verify that the msg.sender is the validator's staking address
-        if (msg.sender != node.account) {
-            revert Unauthenticated();
-        }
+        Node memory node = nodes[msg.sender];
 
         // Verify that the node is already registered.
         if (node.account == address(0)) {
@@ -505,7 +497,18 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Update the node's bls key once it's not the same as the old one and it's nonzero
-        if (newBlsKey != currBlsKey && newBlsKey != bytes32(0)) {
+        if (
+            !_isEqualBlsKey(newBlsVK, currBlsVK)
+                && !_isEqualBlsKey(
+                    newBlsVK,
+                    BN254.G2Point(
+                        BN254.BaseField.wrap(0),
+                        BN254.BaseField.wrap(0),
+                        BN254.BaseField.wrap(0),
+                        BN254.BaseField.wrap(0)
+                    )
+                )
+        ) {
             // Verify that the validator can sign for that blsVK
             bytes memory message = abi.encode(msg.sender);
             BLSSig.verifyBlsSig(message, newBlsSig, newBlsVK);
@@ -515,10 +518,7 @@ contract StakeTable is AbstractStakeTable {
         }
 
         // Update the node in the stake table
-        nodes[newBlsKey] = node;
-
-        // Delete the old node from the stake table
-        delete nodes[currBlsKey];
+        nodes[msg.sender] = node;
 
         // Emit the event
         emit ConsensusKeysUpdated(msg.sender);

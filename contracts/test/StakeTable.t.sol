@@ -25,8 +25,6 @@ import { ExampleToken } from "../src/ExampleToken.sol";
 import { StakeTable as S } from "../src/StakeTable.sol";
 
 contract StakeTable_register_Test is Test {
-    event Registered(bytes32, uint64, uint256);
-
     S public stakeTable;
     ExampleToken public token;
     LightClientMock public lcMock;
@@ -256,7 +254,7 @@ contract StakeTable_register_Test is Test {
 
         // Check event is emitted after calling successfully `register`
         vm.expectEmit(false, false, false, true, address(stakeTable));
-        emit Registered(stakeTable._hashBlsKey(blsVK), node.registerEpoch, node.balance);
+        emit AbstractStakeTable.Registered(exampleTokenCreator, node.registerEpoch, node.balance);
         vm.prank(exampleTokenCreator);
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
@@ -285,6 +283,9 @@ contract StakeTable_register_Test is Test {
         // Balances before registration
         assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
 
+        // Check event is emitted after calling successfully `register`
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
         stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
 
         // Step 2: generate a new blsVK and schnorrVK
@@ -296,35 +297,18 @@ contract StakeTable_register_Test is Test {
         ) = genClientWallet(exampleTokenCreator, seed);
 
         // assert that the new blsVK and schnorrVK are not the same as the old ones
-        assertNotEq(abi.encode(newBlsVK), abi.encode(blsVK));
-        assertNotEq(abi.encode(newSchnorrVK), abi.encode(schnorrVK));
+        assertFalse(stakeTable._isEqualBlsKey(newBlsVK, blsVK));
+        assertFalse(EdOnBN254.isEqual(newSchnorrVK, schnorrVK));
 
         // Step 3: update the consensus keys
         stakeTable.updateConsensusKeys(blsVK, newBlsVK, newSchnorrVK, newBlsSig);
 
         // Step 4: verify the update
-        AbstractStakeTable.Node memory node = stakeTable.lookupNode(newBlsVK);
-        assertEq(abi.encode(node.blsVK), abi.encode(newBlsVK));
-        assertEq(abi.encode(node.schnorrVK), abi.encode(newSchnorrVK));
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, newBlsVK));
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, newSchnorrVK));
         assertEq(node.balance, depositAmount);
         assertEq(node.account, exampleTokenCreator);
-
-        // Step 5: verify the old node is deleted / not accessible
-        node = stakeTable.lookupNode(blsVK);
-        assertEq(
-            abi.encode(node.blsVK),
-            abi.encode(
-                BN254.G2Point(
-                    BN254.BaseField.wrap(0),
-                    BN254.BaseField.wrap(0),
-                    BN254.BaseField.wrap(0),
-                    BN254.BaseField.wrap(0)
-                )
-            )
-        );
-        assertEq(abi.encode(node.schnorrVK), abi.encode(EdOnBN254.EdOnBN254Point(0, 0)));
-        assertEq(node.balance, 0);
-        assertEq(node.account, address(0));
 
         vm.stopPrank();
     }
@@ -522,4 +506,95 @@ contract StakeTable_register_Test is Test {
 
     //     vm.stopPrank();
     // }
+
+    function test_lookupNodeAndLookupStake_succeeds() public {
+        uint64 depositAmount = 10 ether;
+        uint64 validUntilEpoch = 5;
+        string memory seed = "123";
+
+        // Step 1: generate a new blsVK and schnorrVK and register this node
+        (
+            BN254.G2Point memory blsVK,
+            EdOnBN254.EdOnBN254Point memory schnorrVK,
+            BN254.G1Point memory sig
+        ) = genClientWallet(exampleTokenCreator, seed);
+
+        // Prepare for the token transfer
+        vm.prank(exampleTokenCreator);
+        token.approve(address(stakeTable), depositAmount);
+
+        // Balances before registration
+        assertEq(token.balanceOf(exampleTokenCreator), INITIAL_BALANCE);
+
+        uint256 totalStakeAmount;
+        totalStakeAmount = stakeTable.totalStake();
+        assertEq(totalStakeAmount, 0);
+
+        // Step 2: register the node
+        // Check event is emitted after calling successfully `register`
+        vm.expectEmit(false, false, false, true, address(stakeTable));
+        emit AbstractStakeTable.Registered(exampleTokenCreator, 1, depositAmount);
+        vm.prank(exampleTokenCreator);
+        stakeTable.register(blsVK, schnorrVK, depositAmount, sig, validUntilEpoch);
+
+        // Step 3: lookup the node and verify the data
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(exampleTokenCreator);
+        assertEq(node.account, exampleTokenCreator);
+        assertEq(node.balance, depositAmount);
+        assertEq(node.registerEpoch, 1);
+        assertTrue(stakeTable._isEqualBlsKey(node.blsVK, blsVK));
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, schnorrVK));
+
+        // Step 4: lookup the stake and verify the data
+        uint256 stakeAmount = stakeTable.lookupStake(exampleTokenCreator);
+        assertEq(stakeAmount, depositAmount);
+    }
+
+    function test_lookupNodeAndLookupStake_fails() public {
+        address randomUser = makeAddr("randomUser");
+
+        // lookup the stake for an address that is not registered and verify the data is empty
+        uint256 stakeAmount = stakeTable.lookupStake(randomUser);
+        assertEq(stakeAmount, 0);
+
+        // lookup the node for an address that is not registered and verify the data is empty
+        AbstractStakeTable.Node memory node = stakeTable.lookupNode(randomUser);
+        assertEq(node.account, address(0));
+        assertEq(node.balance, 0);
+        assertEq(node.registerEpoch, 0);
+        assertTrue(
+            stakeTable._isEqualBlsKey(
+                node.blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        );
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, EdOnBN254.EdOnBN254Point(0, 0)));
+
+        // look up the stake for the zero address and verify the data is empty
+        stakeAmount = stakeTable.lookupStake(address(0));
+        assertEq(stakeAmount, 0);
+
+        // look up the node for the zero address and verify the data is empty
+        node = stakeTable.lookupNode(address(0));
+        assertEq(node.account, address(0));
+        assertEq(node.balance, 0);
+        assertEq(node.registerEpoch, 0);
+        assertTrue(
+            stakeTable._isEqualBlsKey(
+                node.blsVK,
+                BN254.G2Point(
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0),
+                    BN254.BaseField.wrap(0)
+                )
+            )
+        );
+        assertTrue(EdOnBN254.isEqual(node.schnorrVK, EdOnBN254.EdOnBN254Point(0, 0)));
+    }
 }

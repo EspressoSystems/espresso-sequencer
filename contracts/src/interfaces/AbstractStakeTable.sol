@@ -24,24 +24,24 @@ abstract contract AbstractStakeTable {
     uint256 public totalVotingStake;
 
     /// @notice Signals a registration of a BLS public key.
-    /// @param blsVKhash hash of the BLS public key that is registered.
+    /// @param account the address of the validator
     /// @param registerEpoch epoch when the registration becomes effective.
     /// @param amountDeposited amount deposited when registering the new node.
-    event Registered(bytes32 blsVKhash, uint64 registerEpoch, uint256 amountDeposited);
+    event Registered(address account, uint64 registerEpoch, uint256 amountDeposited);
 
     /// @notice Signals an exit request has been granted.
-    /// @param blsVKhash hash of the BLS public key owned by the user who requested to exit.
+    /// @param account the address of the validator
     /// @param exitEpoch epoch when the user will be allowed to withdraw its funds.
-    event Exit(bytes32 blsVKhash, uint64 exitEpoch);
+    event Exit(address account, uint64 exitEpoch);
 
     /// @notice Signals a deposit to a BLS public key.
-    /// @param blsVKhash hash of the BLS public key that received the deposit.
+    /// @param account the address of the validator
     /// @param amount amount of the deposit
-    event Deposit(bytes32 blsVKhash, uint256 amount);
+    event Deposit(address account, uint256 amount);
 
     /// @notice Signals a consensus key update for a validator
-    /// @param stakingAddr the address of the validator
-    event ConsensusKeysUpdated(address stakingAddr);
+    /// @param account the address of the validator
+    event ConsensusKeysUpdated(address account);
 
     /// @dev (sadly, Solidity doesn't support type alias on non-primitive types)
     // We avoid declaring another struct even if the type info helps with readability,
@@ -73,11 +73,11 @@ abstract contract AbstractStakeTable {
 
     // === Table State & Stats ===
 
-    /// @notice Look up the balance of `blsVK`
-    function lookupStake(BN254.G2Point memory blsVK) external view virtual returns (uint256);
+    /// @notice Look up the balance of `account`
+    function lookupStake(address account) external view virtual returns (uint256);
 
-    /// @notice Look up the full `Node` state associated with `blsVK`
-    function lookupNode(BN254.G2Point memory blsVK) external view virtual returns (Node memory);
+    /// @notice Look up the full `Node` state associated with `account`
+    function lookupNode(address account) external view virtual returns (Node memory);
 
     // === Queuing Stats ===
 
@@ -115,25 +115,19 @@ abstract contract AbstractStakeTable {
 
     /// @notice Deposit more stakes to registered keys
     ///
-    /// @param blsVK The BLS verification key
     /// @param amount The amount to deposit
     /// @return (newBalance, effectiveEpoch) the new balance effective at a future epoch
-    function deposit(BN254.G2Point memory blsVK, uint256 amount)
-        external
-        virtual
-        returns (uint256, uint64);
+    function deposit(uint256 amount) external virtual returns (uint256, uint64);
 
     /// @notice Request to exit from the stake table, not immediately withdrawable!
     ///
-    /// @param blsVK The BLS verification key to exit
-    function requestExit(BN254.G2Point memory blsVK) external virtual;
+    function requestExit() external virtual;
 
     /// @notice Withdraw from the staking pool. Transfers occur! Only successfully exited keys can
     /// withdraw past their `exitEpoch`.
     ///
-    /// @param blsVK The BLS verification key to withdraw
     /// @return The total amount withdrawn, equal to `Node.balance` associated with `blsVK`
-    function withdrawFunds(BN254.G2Point memory blsVK) external virtual returns (uint256);
+    function withdrawFunds() external virtual returns (uint256);
 
     /// @notice Update the consensus keys for a validator
     /// @dev This function is used to update the consensus keys for a validator
