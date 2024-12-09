@@ -7,10 +7,7 @@ use espresso_types::{
 };
 use futures::future::pending;
 use hotshot::helpers::initialize_logging;
-use hotshot_types::{
-    data::ViewNumber,
-    traits::node_implementation::{ConsensusTime, Versions},
-};
+use hotshot_types::traits::node_implementation::Versions;
 use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
@@ -58,10 +55,6 @@ struct NonPermissionedBuilderOptions {
     /// Port to run the builder server on.
     #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
     port: u16,
-
-    /// Bootstrapping View number
-    #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
-    view_number: u64,
 
     /// BUILDER TRANSACTIONS CHANNEL CAPACITY
     #[clap(long, env = "ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY")]
@@ -155,7 +148,6 @@ async fn run<V: Versions>(
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
-    let bootstrapped_view = ViewNumber::new(opt.view_number);
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
@@ -175,7 +167,6 @@ async fn run<V: Versions>(
     let _builder_config = BuilderConfig::init(
         is_reserve,
         builder_key_pair,
-        bootstrapped_view,
         opt.tx_channel_capacity,
         opt.event_channel_capacity,
         instance_state.clone(),

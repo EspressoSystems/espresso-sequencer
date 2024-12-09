@@ -584,7 +584,10 @@ pub mod testing {
         traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
         HotShotConfig, PeerConfig,
     };
-    use marketplace_builder_core::{hooks::NoHooks, service::GlobalState};
+    use marketplace_builder_core::{
+        hooks::NoHooks,
+        service::{BuilderConfig, GlobalState},
+    };
 
     use portpicker::pick_unused_port;
     use tokio::spawn;
@@ -632,12 +635,15 @@ pub mod testing {
 
         // create the global state
         let global_state: Arc<GlobalState<SeqTypes, NoHooks<SeqTypes>>> = GlobalState::new(
-            (builder_key_pair.fee_account(), builder_key_pair),
-            Duration::from_secs(60),
-            Duration::from_millis(100),
-            Duration::from_secs(60),
-            BUILDER_CHANNEL_CAPACITY_FOR_TEST,
-            10,
+            BuilderConfig {
+                builder_keys: (builder_key_pair.fee_account(), builder_key_pair),
+                api_timeout: Duration::from_secs(60),
+                tx_capture_timeout: Duration::from_millis(100),
+                txn_garbage_collect_duration: Duration::from_secs(60),
+                txn_channel_capacity: BUILDER_CHANNEL_CAPACITY_FOR_TEST,
+                tx_status_cache_capacity: 81920,
+                base_fee: 10,
+            },
             hooks,
         );
 
