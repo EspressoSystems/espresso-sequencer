@@ -8319,7 +8319,7 @@ dependencies = [
  "anyhow",
  "ark-ff",
  "ark-serialize",
- "async-broadcast",
+ "async-channel 2.3.1",
  "async-lock 3.4.0",
  "async-once-cell",
  "async-trait",
