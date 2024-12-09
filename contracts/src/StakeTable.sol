@@ -106,6 +106,17 @@ contract StakeTable is AbstractStakeTable {
         return keccak256(abi.encode(blsVK.x0, blsVK.x1, blsVK.y0, blsVK.y1));
     }
 
+    function _isEqualBlsKey(BN254.G2Point memory a, BN254.G2Point memory b)
+        public
+        pure
+        returns (bool)
+    {
+        return BN254.BaseField.unwrap(a.x0) == BN254.BaseField.unwrap(b.x0)
+            && BN254.BaseField.unwrap(a.x1) == BN254.BaseField.unwrap(b.x1)
+            && BN254.BaseField.unwrap(a.y0) == BN254.BaseField.unwrap(b.y0)
+            && BN254.BaseField.unwrap(a.y1) == BN254.BaseField.unwrap(b.y1);
+    }
+
     /// TODO handle this logic more appropriately when epochs are re-introduced
     /// @dev Fetches the current epoch from the light client contract.
     /// @return current epoch (computed from the current block)
@@ -465,10 +476,17 @@ contract StakeTable is AbstractStakeTable {
 
         // The staker does not provide a key change
         if (
-            (newBlsKey == currBlsKey && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK))
+            (_isEqualBlsKey(newBlsVK, currBlsVK) && EdOnBN254.isEqual(newSchnorrVK, node.schnorrVK))
                 || (
-                    newBlsKey == bytes32(0)
-                        && EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
+                    _isEqualBlsKey(
+                        newBlsVK,
+                        BN254.G2Point(
+                            BN254.BaseField.wrap(0),
+                            BN254.BaseField.wrap(0),
+                            BN254.BaseField.wrap(0),
+                            BN254.BaseField.wrap(0)
+                        )
+                    ) && EdOnBN254.isEqual(newSchnorrVK, EdOnBN254.EdOnBN254Point(0, 0))
                 )
         ) {
             revert NoKeyChange();
