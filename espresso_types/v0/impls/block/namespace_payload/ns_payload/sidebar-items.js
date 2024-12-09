@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["ns_payload_owned"]};
