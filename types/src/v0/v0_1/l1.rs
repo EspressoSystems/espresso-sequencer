@@ -3,16 +3,13 @@ use async_broadcast::{InactiveReceiver, Sender};
 use clap::Parser;
 use ethers::{
     prelude::{H256, U256},
-    providers::{Http, Provider, Ws},
+    providers::{Http, Provider},
 };
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
-use tokio::{
-    sync::{Mutex, RwLock},
-    task::JoinHandle,
-};
+use tokio::{sync::Mutex, task::JoinHandle};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -88,6 +85,21 @@ pub struct L1ClientOptions {
     )]
     pub l1_events_max_block_range: u64,
 
+    /// Maximum time to wait for new heads before considering a stream invalid and reconnecting.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_SUBSCRIPTION_TIMEOUT",
+        default_value = "1m",
+        value_parser = parse_duration,
+    )]
+    pub subscription_timeout: Duration,
+
+    /// Separate provider to use for subscription feeds.
+    ///
+    /// Typically this would be a WebSockets endpoint while the main provider uses HTTP.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_WS_PROVIDER")]
+    pub ws_provider: Option<Url>,
+
     #[clap(skip = Arc::<Box<dyn Metrics>>::new(Box::new(NoMetrics)))]
     pub metrics: Arc<Box<dyn Metrics>>,
 }
@@ -102,8 +114,11 @@ pub struct L1ClientOptions {
 /// RPC calls we make.
 pub struct L1Client {
     pub(crate) retry_delay: Duration,
+    pub(crate) subscription_timeout: Duration,
     /// `Provider` from `ethers-provider`.
-    pub(crate) provider: Arc<Provider<RpcClient>>,
+    pub(crate) provider: Arc<Provider<Http>>,
+    /// Provider to use for subscriptions, if different from `provider`.
+    pub(crate) ws_provider: Option<Url>,
     /// Maximum number of L1 blocks that can be scanned for events in a single query.
     pub(crate) events_max_block_range: u64,
     /// Shared state updated by an asynchronous task which polls the L1.
@@ -114,22 +129,8 @@ pub struct L1Client {
     pub(crate) receiver: InactiveReceiver<L1Event>,
     /// Async task which updates the shared state.
     pub(crate) update_task: Arc<L1UpdateTask>,
-}
-
-/// An Ethereum RPC client over HTTP or WebSockets.
-#[derive(Clone, Debug)]
-pub(crate) enum RpcClient {
-    Http {
-        conn: Http,
-        metrics: Arc<L1ClientMetrics>,
-    },
-    Ws {
-        conn: Arc<RwLock<Ws>>,
-        reconnect: Arc<Mutex<L1ReconnectTask>>,
-        url: Url,
-        retry_delay: Duration,
-        metrics: Arc<L1ClientMetrics>,
-    },
+    /// Metrics
+    pub(crate) metrics: L1ClientMetrics,
 }
 
 /// In-memory view of the L1 state, updated asynchronously.
@@ -148,18 +149,9 @@ pub(crate) enum L1Event {
 #[derive(Debug, Default)]
 pub(crate) struct L1UpdateTask(pub(crate) Mutex<Option<JoinHandle<()>>>);
 
-#[derive(Debug, Default)]
-pub(crate) enum L1ReconnectTask {
-    Reconnecting(JoinHandle<()>),
-    #[default]
-    Idle,
-    Cancelled,
-}
-
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct L1ClientMetrics {
-    pub(crate) head: Box<dyn Gauge>,
-    pub(crate) finalized: Box<dyn Gauge>,
-    pub(crate) ws_reconnects: Box<dyn Counter>,
-    pub(crate) stream_reconnects: Box<dyn Counter>,
+    pub(crate) head: Arc<dyn Gauge>,
+    pub(crate) finalized: Arc<dyn Gauge>,
+    pub(crate) reconnects: Arc<dyn Counter>,
 }

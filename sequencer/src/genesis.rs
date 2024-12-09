@@ -86,9 +86,7 @@ impl Genesis {
 
 impl Genesis {
     pub async fn validate_fee_contract(&self, l1_rpc_url: String) -> anyhow::Result<()> {
-        let l1 = L1Client::new(l1_rpc_url.parse().context("invalid url")?)
-            .await
-            .context("connecting L1 client")?;
+        let l1 = L1Client::new(l1_rpc_url.parse().context("invalid url")?);
 
         if let Some(fee_contract_address) = self.chain_config.fee_contract {
             tracing::info!("validating fee contract at {fee_contract_address:x}");
