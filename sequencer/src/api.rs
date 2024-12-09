@@ -1,5 +1,3 @@
-use std::pin::Pin;
-
 use anyhow::{bail, Context};
 use async_lock::RwLock;
 use async_once_cell::Lazy;
@@ -9,8 +7,8 @@ use data_source::{CatchupDataSource, StakeTableDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     retain_accounts, v0::traits::SequencerPersistence, v0_99::ChainConfig, AccountQueryData,
-    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey, Transaction,
-    ValidatedState,
+    BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleTree, NodeState, PubKey,
+    StaticCommittee, Transaction, ValidatedState,
 };
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -34,6 +32,7 @@ use hotshot_types::{
 };
 use hotshot_types::{stake_table::StakeTableEntry, traits::election::Membership};
 use jf_merkle_tree::MerkleTreeScheme;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use self::data_source::{
@@ -188,12 +187,10 @@ impl<N: ConnectedNetwork<PubKey>, V: Versions, P: SequencerPersistence>
             self.consensus().await.read().await.cur_epoch().await
         };
 
-        self.consensus()
-            .await
-            .read()
-            .await
-            .memberships
-            .stake_table(epoch)
+        <StaticCommittee as Membership<SeqTypes>>::stake_table(
+            &self.consensus().await.read().await.memberships,
+            epoch,
+        )
     }
 }
 
