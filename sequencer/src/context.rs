@@ -1,7 +1,7 @@
 use std::{fmt::Display, sync::Arc};
 
 use anyhow::Context;
-use async_broadcast::{broadcast, Receiver, Sender};
+use async_channel::{Receiver, Sender};
 use async_lock::RwLock;
 use clap::Parser;
 use committable::Commitment;
@@ -63,13 +63,6 @@ pub struct ProposalFetcherConfig {
         default_value = "2"
     )]
     pub num_workers: usize,
-
-    #[clap(
-        long = "proposal-fetcher-channel-capacity",
-        env = "ESPRESSO_SEQUENCER_PROPOSAL_FETCHER_CHANNEL_CAPACITY",
-        default_value = "100"
-    )]
-    pub channel_capacity: usize,
 
     #[clap(
         long = "proposal-fetcher-fetch-timeout",
@@ -245,14 +238,18 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> Sequence
         };
 
         // Spawn proposal fetching tasks.
-        let (send, recv) = broadcast(proposal_fetcher_cfg.channel_capacity);
-        ctx.spawn("proposal scanner", scan_proposals(ctx.handle.clone(), send));
+        let (send, recv) = async_channel::unbounded();
+        ctx.spawn(
+            "proposal scanner",
+            scan_proposals(ctx.handle.clone(), send.clone()),
+        );
         for i in 0..proposal_fetcher_cfg.num_workers {
             ctx.spawn(
                 format!("proposal fetcher {i}"),
                 fetch_proposals(
                     ctx.handle.clone(),
                     persistence.clone(),
+                    send.clone(),
                     recv.clone(),
                     proposal_fetcher_cfg.fetch_timeout,
                 ),
@@ -493,10 +490,7 @@ async fn scan_proposals<N, P, V>(
         // to the anchor. This allows state replay from the decided state.
         let parent_view = proposal.data.justify_qc.view_number;
         let parent_leaf = proposal.data.justify_qc.data.leaf_commit;
-        fetcher
-            .broadcast_direct((parent_view, parent_leaf))
-            .await
-            .ok();
+        fetcher.send((parent_view, parent_leaf)).await.ok();
     }
 }
 
@@ -504,15 +498,16 @@ async fn scan_proposals<N, P, V>(
 async fn fetch_proposals<N, P, V>(
     consensus: Arc<RwLock<Consensus<N, P, V>>>,
     persistence: Arc<impl SequencerPersistence>,
-    mut scanner: Receiver<(ViewNumber, Commitment<Leaf2<SeqTypes>>)>,
+    sender: Sender<(ViewNumber, Commitment<Leaf2<SeqTypes>>)>,
+    receiver: Receiver<(ViewNumber, Commitment<Leaf2<SeqTypes>>)>,
     fetch_timeout: Duration,
 ) where
     N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     V: Versions,
 {
-    let sender = scanner.new_sender();
-    while let Some((view, leaf)) = scanner.next().await {
+    let mut receiver = std::pin::pin!(receiver);
+    while let Some((view, leaf)) = receiver.next().await {
         let span = tracing::warn_span!("fetch proposal", ?view, %leaf);
         let res: anyhow::Result<()> = async {
             let anchor_view = load_anchor_view(&*persistence).await;
@@ -527,7 +522,7 @@ async fn fetch_proposals<N, P, V>(
                     // parent.
                     let view = proposal.data.justify_qc.view_number;
                     let leaf = proposal.data.justify_qc.data.leaf_commit;
-                    sender.broadcast_direct((view, leaf)).await.ok();
+                    sender.send((view, leaf)).await.ok();
                     return Ok(());
                 }
                 Err(err) => {
@@ -579,7 +574,7 @@ async fn fetch_proposals<N, P, V>(
 
             // If we fail fetching the proposal, don't let it clog up the fetching task. Just push
             // it back onto the queue and move onto the next proposal.
-            sender.broadcast_direct((view, leaf)).await.ok();
+            sender.send((view, leaf)).await.ok();
         }
     }
 }
