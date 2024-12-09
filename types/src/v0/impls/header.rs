@@ -673,7 +673,7 @@ impl Header {
         &mut *field_mut!(self.l1_head)
     }
 
-    /// The Espresso block header includes information a bout the latest finalized L1 block.
+    /// The Espresso block header includes information about the latest finalized L1 block.
     ///
     /// Similar to [`l1_head`](Self::l1_head), rollups can use this information to implement a
     /// bridge between the L1 and L2 while retaining the finality of low-latency block confirmations
