@@ -789,7 +789,7 @@ impl L1Client {
     }
 
     /// Get `StakeTable` at block height.
-    pub async fn get_stake_table<TYPES: NodeType>(
+    pub async fn get_stake_table(
         &self,
         _block: u64,
         address: Address,
@@ -1314,7 +1314,7 @@ mod test {
         let new_nodes = vec![node];
         let x = stake_table_contract.update(v, new_nodes);
         x.send().await?;
-        let nodes = l1_client.get_stake_table::<SeqTypes>(0, address).await;
+        let nodes = l1_client.get_stake_table(0, address).await;
         dbg!(nodes);
 
         Ok(())

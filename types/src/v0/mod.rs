@@ -140,7 +140,7 @@ impl NodeType for SeqTypes {
     type Transaction = Transaction;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
-    type Membership = StaticCommittee<Self>;
+    type Membership = StaticCommittee;
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }

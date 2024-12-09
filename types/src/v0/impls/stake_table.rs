@@ -1,5 +1,5 @@
 use super::{L1Client, NodeState, PubKey, SeqTypes};
-use contract_bindings::permissioned_stake_table::{NodeInfo, StakersUpdatedFilter};
+use contract_bindings::permissioned_stake_table::StakersUpdatedFilter;
 use ethers::{abi::Address, types::U256};
 use hotshot::types::SignatureKey;
 use hotshot_contract_adapter::stake_table::NodeInfoJf;
@@ -12,7 +12,7 @@ use hotshot_types::{
 };
 use std::{
     cmp::max,
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     num::NonZeroU64,
     str::FromStr,
 };
@@ -20,25 +20,25 @@ use thiserror::Error;
 use url::Url;
 
 #[derive(Clone, Debug)]
-pub struct StaticCommittee<T: NodeType> {
+pub struct StaticCommittee {
     /// The nodes eligible for leadership.
     /// NOTE: This is currently a hack because the DA leader needs to be the quorum
     /// leader but without voting rights.
-    eligible_leaders: Vec<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
+    eligible_leaders: Vec<<PubKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake
-    stake_table: HashSet<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
+    stake_table: HashSet<<PubKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake
-    da_stake_table: HashSet<<T::SignatureKey as SignatureKey>::StakeTableEntry>,
+    da_stake_table: HashSet<<PubKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake, indexed by public key
     indexed_stake_table:
-        BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
+        BTreeMap<PubKey, <<SeqTypes as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry>,
 
     /// The nodes on the committee and their stake, indexed by public key
     indexed_da_stake_table:
-        BTreeMap<T::SignatureKey, <T::SignatureKey as SignatureKey>::StakeTableEntry>,
+        BTreeMap<PubKey, <<SeqTypes as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry>,
 
     /// Number of blocks in an epoch
     epoch_size: u64,
@@ -50,7 +50,7 @@ pub struct StaticCommittee<T: NodeType> {
     provider: L1Client,
 }
 
-impl<TYPES: NodeType> StaticCommittee<TYPES> {
+impl StaticCommittee {
     /// Updates `Self.stake_table` with stake_table for
     /// `Self.contract_address` at `l1_block_height`. This is intended
     /// to be called before calling `self.stake()` so that
@@ -60,7 +60,7 @@ impl<TYPES: NodeType> StaticCommittee<TYPES> {
         // TODO also deal w/ removed entries
         let updates: Vec<StakersUpdatedFilter> = self
             .provider
-            .get_stake_table::<TYPES>(l1_block_height, self.contract_address.unwrap())
+            .get_stake_table(l1_block_height, self.contract_address.unwrap())
             .await;
 
         let added: Vec<NodeInfoJf> = updates
@@ -69,11 +69,10 @@ impl<TYPES: NodeType> StaticCommittee<TYPES> {
             .collect();
         for node in added {
             if !node.da {
-                let entry: <TYPES::SignatureKey as SignatureKey>::StakeTableEntry =
-                    StakeTableEntry {
-                        stake_key: node.stake_table_key,
-                        stake_amount: U256::from(1),
-                    };
+                let entry: StakeTableEntry<PubKey> = StakeTableEntry {
+                    stake_key: node.stake_table_key,
+                    stake_amount: U256::from(1),
+                };
                 self.stake_table.insert(entry);
             }
         }
@@ -82,51 +81,47 @@ impl<TYPES: NodeType> StaticCommittee<TYPES> {
     pub fn new_stake(
         // TODO remove `new` from trait and rename this to `new`.
         // https://github.com/EspressoSystems/HotShot/commit/fcb7d54a4443e29d643b3bbc53761856aef4de8b
-        committee_members: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>,
-        da_members: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>,
+        committee_members: Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>>,
+        da_members: Vec<PeerConfig<<SeqTypes as NodeType>::SignatureKey>>,
         instance_state: &NodeState,
         epoch_size: u64,
     ) -> Self {
         // For each eligible leader, get the stake table entry
-        let eligible_leaders: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> =
-            committee_members
-                .iter()
-                .map(|member| member.stake_table_entry.clone())
-                .filter(|entry| entry.stake() > U256::zero())
-                .collect();
+        let eligible_leaders: Vec<
+            <<SeqTypes as NodeType>::SignatureKey as SignatureKey>::StakeTableEntry,
+        > = committee_members
+            .iter()
+            .map(|member| member.stake_table_entry.clone())
+            .filter(|entry| entry.stake() > U256::zero())
+            .collect();
 
         // For each member, get the stake table entry
-        let members: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> =
-            committee_members
-                .iter()
-                .map(|member| member.stake_table_entry.clone())
-                .filter(|entry| entry.stake() > U256::zero())
-                .collect();
+        let members: Vec<<PubKey as SignatureKey>::StakeTableEntry> = committee_members
+            .iter()
+            .map(|member| member.stake_table_entry.clone())
+            .filter(|entry| entry.stake() > U256::zero())
+            .collect();
 
         // For each member, get the stake table entry
-        let da_members: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> = da_members
+        let da_members: Vec<<PubKey as SignatureKey>::StakeTableEntry> = da_members
             .iter()
             .map(|member| member.stake_table_entry.clone())
             .filter(|entry| entry.stake() > U256::zero())
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<
-            TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        > = members
-            .iter()
-            .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
-            .collect();
+        let indexed_stake_table: BTreeMap<PubKey, <PubKey as SignatureKey>::StakeTableEntry> =
+            members
+                .iter()
+                .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
+                .collect();
 
         // Index the stake table by public key
-        let indexed_da_stake_table: BTreeMap<
-            TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        > = da_members
-            .iter()
-            .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
-            .collect();
+        let indexed_da_stake_table: BTreeMap<PubKey, <PubKey as SignatureKey>::StakeTableEntry> =
+            da_members
+                .iter()
+                .map(|entry| (SignatureKey::public_key(entry), entry.clone()))
+                .collect();
 
         Self {
             eligible_leaders,
@@ -145,7 +140,7 @@ impl<TYPES: NodeType> StaticCommittee<TYPES> {
 #[error("Could not lookup leader")] // TODO error variants? message?
 pub struct LeaderLookupError;
 
-impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
+impl<TYPES: NodeType<SignatureKey = PubKey>> Membership<TYPES> for StaticCommittee {
     type Error = LeaderLookupError;
 
     // DO NOT USE. Dummy constructor to comply w/ trait.
@@ -156,12 +151,11 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         da_members: Vec<PeerConfig<<TYPES as NodeType>::SignatureKey>>,
     ) -> Self {
         // For each eligible leader, get the stake table entry
-        let eligible_leaders: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> =
-            committee_members
-                .iter()
-                .map(|member| member.stake_table_entry.clone())
-                .filter(|entry| entry.stake() > U256::zero())
-                .collect();
+        let eligible_leaders: Vec<<PubKey as SignatureKey>::StakeTableEntry> = committee_members
+            .iter()
+            .map(|member| member.stake_table_entry.clone())
+            .filter(|entry| entry.stake() > U256::zero())
+            .collect();
 
         // For each member, get the stake table entry
         let members: Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> =
@@ -179,22 +173,18 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
             .collect();
 
         // Index the stake table by public key
-        let indexed_stake_table: BTreeMap<
-            TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        > = members
-            .iter()
-            .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
-            .collect();
+        let indexed_stake_table: BTreeMap<PubKey, <PubKey as SignatureKey>::StakeTableEntry> =
+            members
+                .iter()
+                .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
+                .collect();
 
         // Index the stake table by public key
-        let indexed_da_stake_table: BTreeMap<
-            TYPES::SignatureKey,
-            <TYPES::SignatureKey as SignatureKey>::StakeTableEntry,
-        > = da_members
-            .iter()
-            .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
-            .collect();
+        let indexed_da_stake_table: BTreeMap<PubKey, <PubKey as SignatureKey>::StakeTableEntry> =
+            da_members
+                .iter()
+                .map(|entry| (TYPES::SignatureKey::public_key(entry), entry.clone()))
+                .collect();
 
         Self {
             eligible_leaders,
@@ -227,7 +217,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         &self,
         _view_number: <TYPES as NodeType>::View,
         _epoch: <TYPES as NodeType>::Epoch,
-    ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
+    ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.stake_table
             .iter()
             .map(TYPES::SignatureKey::public_key)
@@ -239,7 +229,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         &self,
         _view_number: <TYPES as NodeType>::View,
         _epoch: <TYPES as NodeType>::Epoch,
-    ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
+    ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.da_stake_table
             .iter()
             .map(TYPES::SignatureKey::public_key)
@@ -251,7 +241,7 @@ impl<TYPES: NodeType> Membership<TYPES> for StaticCommittee<TYPES> {
         &self,
         _view_number: <TYPES as NodeType>::View,
         _epoch: <TYPES as NodeType>::Epoch,
-    ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
+    ) -> BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.eligible_leaders
             .iter()
             .map(TYPES::SignatureKey::public_key)
