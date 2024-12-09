@@ -285,11 +285,31 @@
 <a href="#284" id="284">284</a>
 <a href="#285" id="285">285</a>
 <a href="#286" id="286">286</a>
-<a href="#287" id="287">287</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, ensure, Context};
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a></pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>clap::{Parser, Subcommand};
 <span class="kw">use </span>client::SequencerClient;
 <span class="kw">use </span>contract_bindings::fee_contract::FeeContract;
-<span class="kw">use </span>espresso_types::{eth_signature_key::EthKeyPair, Header};
+<span class="kw">use </span>espresso_types::{eth_signature_key::EthKeyPair, parse_duration, Header};
 <span class="kw">use </span>ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
@@ -297,7 +317,7 @@
 };
 <span class="kw">use </span>futures::stream::StreamExt;
 <span class="kw">use </span>sequencer_utils::logging;
-<span class="kw">use </span>std::sync::Arc;
+<span class="kw">use </span>std::{sync::Arc, time::Duration};
 <span class="kw">use </span>surf_disco::Url;
 
 <span class="doccomment">/// Command-line utility for working with the Espresso bridge.
@@ -323,6 +343,16 @@
     <span class="doccomment">/// L1 JSON-RPC provider.
     </span><span class="attr">#[clap(short, long, env = <span class="string">"L1_PROVIDER"</span>)]
     </span>rpc_url: Url,
+
+    <span class="doccomment">/// Request rate when polling L1.
+    </span><span class="attr">#[clap(
+        short,
+        long,
+        env = <span class="string">"L1_POLLING_INTERVAL"</span>,
+        default_value = <span class="string">"7s"</span>,
+        value_parser = parse_duration
+    )]
+    </span>l1_interval: Duration,
 
     <span class="doccomment">/// Espresso query service provider.
     ///
@@ -393,6 +423,16 @@
     </span><span class="attr">#[clap(short, long, env = <span class="string">"L1_PROVIDER"</span>)]
     </span>rpc_url: Url,
 
+    <span class="doccomment">/// Request rate when polling L1.
+    </span><span class="attr">#[clap(
+        short,
+        long,
+        env = <span class="string">"L1_POLLING_INTERVAL"</span>,
+        default_value = <span class="string">"7s"</span>,
+        value_parser = parse_duration
+    )]
+    </span>l1_interval: Duration,
+
     <span class="doccomment">/// Account to check.
     </span><span class="attr">#[clap(short, long, env = <span class="string">"ADDRESS"</span>, required_unless_present = <span class="string">"mnemonic"</span>)]
     </span>address: <span class="prelude-ty">Option</span>&lt;Address&gt;,
@@ -421,7 +461,7 @@
     </span><span class="kw">let </span>key_pair = EthKeyPair::from_mnemonic(opt.mnemonic, opt.account_index)<span class="question-mark">?</span>;
 
     <span class="comment">// Connect to L1.
-    </span><span class="kw">let </span>rpc = Provider::try_from(opt.rpc_url.to_string())<span class="question-mark">?</span>;
+    </span><span class="kw">let </span>rpc = Provider::try_from(opt.rpc_url.to_string())<span class="question-mark">?</span>.interval(opt.l1_interval);
     <span class="kw">let </span>signer = key_pair.signer();
     <span class="kw">let </span>l1 = Arc::new(SignerMiddleware::new_with_provider_chain(rpc, signer).<span class="kw">await</span><span class="question-mark">?</span>);
     <span class="kw">let </span>contract = FeeContract::new(opt.contract_address, l1.clone());
@@ -485,7 +525,7 @@
         <span class="kw">let </span><span class="prelude-val">Some</span>(l1_finalized) = header.l1_finalized() <span class="kw">else </span>{
             <span class="kw">continue</span>;
         };
-        <span class="kw">if </span>l1_finalized.number &gt;= l1_block {
+        <span class="kw">if </span>l1_finalized.number() &gt;= l1_block {
             <span class="macro">tracing::info!</span>(block = header.height(), <span class="string">"deposit finalized on Espresso"</span>);
             <span class="kw">break </span>header.height();
         } <span class="kw">else </span>{
@@ -545,7 +585,7 @@
         <span class="macro">bail!</span>(<span class="string">"address or mnemonic must be provided"</span>);
     };
 
-    <span class="kw">let </span>l1 = Provider::try_from(opt.rpc_url.to_string())<span class="question-mark">?</span>;
+    <span class="kw">let </span>l1 = Provider::try_from(opt.rpc_url.to_string())<span class="question-mark">?</span>.interval(opt.l1_interval);
 
     <span class="kw">let </span>block = opt.block.map(BlockId::from);
     <span class="macro">tracing::debug!</span>(%address, <span class="question-mark">?</span>block, <span class="string">"fetching L1 balance"</span>);

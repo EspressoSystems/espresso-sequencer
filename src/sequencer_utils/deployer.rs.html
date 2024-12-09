@@ -637,8 +637,7 @@
 <span class="kw">use </span>hotshot_contract_adapter::light_client::{
     LightClientConstructorArgs, ParsedLightClientState, ParsedStakeTableState,
 };
-<span class="kw">use </span>std::sync::Arc;
-<span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref};
+<span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref, sync::Arc, time::Duration};
 <span class="kw">use </span>url::Url;
 
 <span class="doccomment">/// Set of predeployed contracts.
@@ -919,6 +918,7 @@
 <span class="attr">#[allow(clippy::too_many_arguments)]
 </span><span class="kw">pub async fn </span>deploy(
     l1url: Url,
+    l1_interval: Duration,
     mnemonic: String,
     account_index: u32,
     multisig_address: <span class="prelude-ty">Option</span>&lt;H160&gt;,
@@ -928,7 +928,7 @@
     permissioned_prover: <span class="prelude-ty">Option</span>&lt;Address&gt;,
     <span class="kw-2">mut </span>contracts: Contracts,
 ) -&gt; anyhow::Result&lt;Contracts&gt; {
-    <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(l1url.to_string())<span class="question-mark">?</span>;
+    <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(l1url.to_string())<span class="question-mark">?</span>.interval(l1_interval);
     <span class="kw">let </span>chain_id = provider.get_chainid().<span class="kw">await</span><span class="question-mark">?</span>.as_u64();
     <span class="kw">let </span>wallet = MnemonicBuilder::&lt;English&gt;::default()
         .phrase(mnemonic.as_str())

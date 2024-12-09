@@ -152,9 +152,21 @@
 <a href="#151" id="151">151</a>
 <a href="#152" id="152">152</a>
 <a href="#153" id="153">153</a>
-<a href="#154" id="154">154</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{fs::File, io::stdout, path::PathBuf};
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::{fs::File, io::stdout, path::PathBuf, time::Duration};
 
 <span class="kw">use </span>clap::Parser;
+<span class="kw">use </span>espresso_types::parse_duration;
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -191,6 +203,15 @@
         default_value = <span class="string">"http://localhost:8545"
     </span>)]
     </span>rpc_url: Url,
+
+    <span class="doccomment">/// Request rate when polling L1.
+    </span><span class="attr">#[clap(
+        long,
+        env = <span class="string">"ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL"</span>,
+        default_value = <span class="string">"7s"</span>,
+        value_parser = parse_duration,
+    )]
+    </span><span class="kw">pub </span>l1_polling_interval: Duration,
 
     <span class="doccomment">/// URL of a sequencer node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
@@ -282,6 +303,7 @@
 
     <span class="kw">let </span>contracts = deploy(
         opt.rpc_url,
+        opt.l1_polling_interval,
         opt.mnemonic,
         opt.account_index,
         opt.multisig_address,
