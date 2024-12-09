@@ -51,7 +51,7 @@ pub struct DeployedContracts {
     fee_contract_proxy: Option<Address>,
 
     /// Use an already-deployed PermissonedStakeTable.sol proxy instead of deploying a new one.
-    #[clap(long, env = Contract::FeeContractProxy)]
+    #[clap(long, env = Contract::PermissonedStakeTable)]
     permissioned_stake_table: Option<Address>,
 }
 
